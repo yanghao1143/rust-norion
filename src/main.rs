@@ -201,10 +201,12 @@ fn main() -> std::io::Result<()> {
         infini_counts.skipped_tokens
     );
     println!(
-        "recursive: required={} chunks={} merge_rounds={} prompt_tokens={} native_window={} chunk_tokens={} overlap_tokens={}",
+        "recursive: required={} chunks={} merge_rounds={} execution_waves={} max_parallel_chunks={} prompt_tokens={} native_window={} chunk_tokens={} overlap_tokens={}",
         outcome.recursive_schedule.requires_recursion,
         outcome.recursive_schedule.chunk_count(),
         outcome.recursive_schedule.merge_round_count(),
+        outcome.recursive_schedule.execution_wave_count(),
+        outcome.recursive_schedule.max_parallel_chunks,
         outcome.recursive_schedule.prompt_tokens,
         outcome.recursive_schedule.native_window_tokens,
         outcome.recursive_schedule.chunk_tokens,
@@ -391,7 +393,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} chunks={} used_memories={} stored_memories={} runtime_kv_exported={} runtime_kv_stored={} drift={}",
+            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} chunks={} waves={} used_memories={} stored_memories={} runtime_kv_exported={} runtime_kv_stored={} drift={}",
             result.name,
             result.profile,
             result.elapsed_ms,
@@ -399,6 +401,7 @@ fn print_benchmark_summary(
             result.process_reward,
             result.attention_fraction,
             result.recursive_chunks,
+            result.recursive_waves,
             result.used_memories,
             result.stored_memories,
             result.runtime_kv_exported,

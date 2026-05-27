@@ -46,7 +46,7 @@ pub fn trace_json_line_with_case(
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
-         \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
+         \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
          \"transformer\":{{\"global\":{},\"local\":{},\"convolution\":{}}},\
@@ -90,6 +90,8 @@ pub fn trace_json_line_with_case(
         outcome.recursive_schedule.native_window_tokens,
         outcome.recursive_schedule.chunk_count(),
         outcome.recursive_schedule.merge_round_count(),
+        outcome.recursive_schedule.execution_wave_count(),
+        outcome.recursive_schedule.max_parallel_chunks,
         outcome.recursive_schedule.chunk_tokens,
         outcome.recursive_schedule.overlap_tokens,
         tier_counts.hot_gpu,
@@ -237,6 +239,8 @@ mod tests {
         assert!(line.contains("\"hierarchy\":"));
         assert!(line.contains("\"primary_lane\":"));
         assert!(line.contains("\"adapter_hints\":"));
+        assert!(line.contains("\"execution_waves\":"));
+        assert!(line.contains("\"max_parallel_chunks\":"));
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));

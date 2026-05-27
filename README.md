@@ -145,7 +145,7 @@ Implemented modules:
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, embedding, generation, and KV import/export
-- `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler
+- `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, drift, reward, and memory counters
@@ -467,6 +467,14 @@ constrained devices can keep the runtime KV working set small while larger
 accelerator profiles can prefetch more memory.
 
 Runtime KV 导入数量会受 `DeviceExecutionPlan.kv_prefetch_blocks` 限制，因此低配设备可以保持较小 KV 工作集，高容量加速器设备则可以预取更多记忆。
+
+Recursive long-context schedules are also grouped into execution waves using
+`DeviceExecutionPlan.max_parallel_chunks`: constrained devices run fewer chunks
+at once, while accelerated and distributed profiles can expose wider parallel
+waves to the runtime.
+
+递归长上下文调度也会根据 `DeviceExecutionPlan.max_parallel_chunks` 分组成执行 wave：
+低配设备减少同时执行的 chunk，高容量加速器和分布式 profile 可以向 runtime 暴露更宽的并行 wave。
 
 Expected integration loop:
 

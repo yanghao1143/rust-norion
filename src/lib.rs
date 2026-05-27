@@ -58,7 +58,8 @@ pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };
 pub use recursive_scheduler::{
-    RecursiveChunk, RecursiveMergeRound, RecursiveSchedule, RecursiveScheduler,
+    RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,
+    RecursiveScheduler,
 };
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{

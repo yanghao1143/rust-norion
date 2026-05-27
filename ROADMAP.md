@@ -275,7 +275,8 @@ These are algorithmic references, not product dependencies:
   conservative device profile; each profile now emits execution-lane, memory
   mode, adapter-hint, KV-precision, prefetch, disk-spill, and recursive
   parallelism policies; runtime KV import now honors the device prefetch
-  budget; the CLI can print the full built-in device matrix and run a
+  budget; recursive schedules are now grouped into execution waves using the
+  device max-parallel-chunk budget; the CLI can print the full built-in device matrix and run a
   `--device-gate` compatibility check across every explicit device profile;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)

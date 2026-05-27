@@ -525,6 +525,18 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         })
         .collect::<Vec<_>>()
         .join(",");
+    let recursive_execution_waves = request
+        .recursive_schedule
+        .execution_waves
+        .iter()
+        .map(|wave| {
+            format!(
+                "{{\"wave\":{},\"start_chunk\":{},\"end_chunk\":{},\"chunk_count\":{}}}",
+                wave.wave, wave.start_chunk, wave.end_chunk, wave.chunk_count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
     let adapter_hints = request
         .hardware_plan
         .execution
@@ -571,8 +583,10 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"chunk_tokens\":{},\
          \"overlap_tokens\":{},\
          \"merge_fan_in\":{},\
+         \"max_parallel_chunks\":{},\
          \"chunks\":[{}],\
-         \"merge_rounds\":[{}]\
+         \"merge_rounds\":[{}],\
+         \"execution_waves\":[{}]\
          }},\
          \"hardware\":{{\
          \"device\":{},\
@@ -625,8 +639,10 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         request.recursive_schedule.chunk_tokens,
         request.recursive_schedule.overlap_tokens,
         request.recursive_schedule.merge_fan_in,
+        request.recursive_schedule.max_parallel_chunks,
         recursive_chunks,
         recursive_merge_rounds,
+        recursive_execution_waves,
         json_string(request.hardware_plan.device.as_str()),
         json_string(request.hardware_plan.tier.as_str()),
         request.hardware_plan.pressure,
@@ -1526,6 +1542,8 @@ mod tests {
             extract_json_string_field(&payload, "primary_lane").unwrap(),
             "cpu-vector"
         );
+        assert!(payload.contains("\"execution_waves\""));
+        assert!(payload.contains("\"max_parallel_chunks\""));
         assert!(payload.contains("\"memory_hints\":[\"memory hint\"]"));
         assert_eq!(extract_json_array_field(&payload, "layers").unwrap(), "[]");
     }

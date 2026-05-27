@@ -62,6 +62,7 @@ impl RecursiveScheduler {
         } else {
             Vec::new()
         };
+        let execution_waves = plan_execution_waves(chunks.len(), 1);
 
         RecursiveSchedule {
             prompt_tokens,
@@ -69,8 +70,10 @@ impl RecursiveScheduler {
             chunk_tokens: self.chunk_tokens,
             overlap_tokens: self.overlap_tokens,
             merge_fan_in: self.merge_fan_in,
+            max_parallel_chunks: 1,
             chunks,
             merge_rounds,
+            execution_waves,
             requires_recursion,
         }
     }
@@ -135,8 +138,10 @@ pub struct RecursiveSchedule {
     pub chunk_tokens: usize,
     pub overlap_tokens: usize,
     pub merge_fan_in: usize,
+    pub max_parallel_chunks: usize,
     pub chunks: Vec<RecursiveChunk>,
     pub merge_rounds: Vec<RecursiveMergeRound>,
+    pub execution_waves: Vec<RecursiveExecutionWave>,
     pub requires_recursion: bool,
 }
 
@@ -155,14 +160,33 @@ impl RecursiveSchedule {
         self.merge_rounds.len()
     }
 
+    pub fn execution_wave_count(&self) -> usize {
+        self.execution_waves.len()
+    }
+
+    pub fn with_parallel_budget(mut self, max_parallel_chunks: usize) -> Self {
+        self.max_parallel_chunks = max_parallel_chunks.max(1);
+        self.execution_waves = plan_execution_waves(
+            if self.requires_recursion {
+                self.chunks.len()
+            } else {
+                usize::from(!self.chunks.is_empty())
+            },
+            self.max_parallel_chunks,
+        );
+        self
+    }
+
     pub fn summary(&self) -> String {
         format!(
-            "required={} prompt_tokens={} native_window={} chunks={} merge_rounds={} chunk_tokens={} overlap_tokens={} merge_fan_in={}",
+            "required={} prompt_tokens={} native_window={} chunks={} merge_rounds={} execution_waves={} max_parallel_chunks={} chunk_tokens={} overlap_tokens={} merge_fan_in={}",
             self.requires_recursion,
             self.prompt_tokens,
             self.native_window_tokens,
             self.chunk_count(),
             self.merge_round_count(),
+            self.execution_wave_count(),
+            self.max_parallel_chunks,
             self.chunk_tokens,
             self.overlap_tokens,
             self.merge_fan_in
@@ -187,6 +211,14 @@ pub struct RecursiveMergeRound {
     pub output_units: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecursiveExecutionWave {
+    pub wave: usize,
+    pub start_chunk: usize,
+    pub end_chunk: usize,
+    pub chunk_count: usize,
+}
+
 fn plan_merge_rounds(chunks: usize, fan_in: usize) -> Vec<RecursiveMergeRound> {
     let mut rounds = Vec::new();
     let mut input_units = chunks;
@@ -203,6 +235,25 @@ fn plan_merge_rounds(chunks: usize, fan_in: usize) -> Vec<RecursiveMergeRound> {
     }
 
     rounds
+}
+
+fn plan_execution_waves(chunks: usize, max_parallel_chunks: usize) -> Vec<RecursiveExecutionWave> {
+    let max_parallel_chunks = max_parallel_chunks.max(1);
+    let mut waves = Vec::new();
+    let mut start_chunk = 0;
+
+    while start_chunk < chunks {
+        let end_chunk = (start_chunk + max_parallel_chunks).min(chunks);
+        waves.push(RecursiveExecutionWave {
+            wave: waves.len(),
+            start_chunk,
+            end_chunk,
+            chunk_count: end_chunk - start_chunk,
+        });
+        start_chunk = end_chunk;
+    }
+
+    waves
 }
 
 fn estimate_prompt_tokens(prompt: &str) -> usize {
@@ -233,6 +284,7 @@ mod tests {
         assert_eq!(schedule.prompt_tokens, 3);
         assert_eq!(schedule.chunk_count(), 1);
         assert_eq!(schedule.merge_round_count(), 0);
+        assert_eq!(schedule.execution_wave_count(), 1);
         assert_eq!(schedule.chunks[0].start_token, 0);
         assert_eq!(schedule.chunks[0].end_token, 3);
     }
@@ -291,6 +343,60 @@ mod tests {
                     round: 1,
                     input_units: 2,
                     output_units: 1,
+                },
+            ]
+        );
+        assert_eq!(
+            schedule.execution_waves,
+            vec![
+                RecursiveExecutionWave {
+                    wave: 0,
+                    start_chunk: 0,
+                    end_chunk: 1,
+                    chunk_count: 1,
+                },
+                RecursiveExecutionWave {
+                    wave: 1,
+                    start_chunk: 1,
+                    end_chunk: 2,
+                    chunk_count: 1,
+                },
+                RecursiveExecutionWave {
+                    wave: 2,
+                    start_chunk: 2,
+                    end_chunk: 3,
+                    chunk_count: 1,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parallel_budget_groups_recursive_chunks_into_waves() {
+        let scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+        let prompt = (0..14)
+            .map(|index| format!("t{index}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let schedule = scheduler.plan(&prompt).with_parallel_budget(2);
+
+        assert_eq!(schedule.max_parallel_chunks, 2);
+        assert_eq!(schedule.execution_wave_count(), 2);
+        assert_eq!(
+            schedule.execution_waves,
+            vec![
+                RecursiveExecutionWave {
+                    wave: 0,
+                    start_chunk: 0,
+                    end_chunk: 2,
+                    chunk_count: 2,
+                },
+                RecursiveExecutionWave {
+                    wave: 1,
+                    start_chunk: 2,
+                    end_chunk: 3,
+                    chunk_count: 1,
                 },
             ]
         );

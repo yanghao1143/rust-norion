@@ -53,6 +53,7 @@ pub struct BenchmarkCaseResult {
     pub process_reward: f32,
     pub attention_fraction: f32,
     pub recursive_chunks: usize,
+    pub recursive_waves: usize,
     pub used_memories: usize,
     pub stored_memories: usize,
     pub runtime_kv_exported: usize,
@@ -217,6 +218,7 @@ impl BenchmarkSummary {
             process_reward: outcome.process_reward.total,
             attention_fraction: outcome.route_budget.attention_fraction,
             recursive_chunks: outcome.recursive_schedule.chunk_count(),
+            recursive_waves: outcome.recursive_schedule.execution_wave_count(),
             used_memories: outcome.used_memories.len(),
             stored_memories,
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
@@ -296,6 +298,14 @@ impl BenchmarkSummary {
             .unwrap_or(0)
     }
 
+    pub fn max_recursive_waves(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.recursive_waves)
+            .max()
+            .unwrap_or(0)
+    }
+
     pub fn evaluate(&self, gate: &BenchmarkGate) -> BenchmarkGateReport {
         let mut failures = Vec::new();
 
@@ -367,12 +377,13 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} stored_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} max_recursive_waves={} stored_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
             self.average_reward(),
             self.average_attention_fraction(),
+            self.max_recursive_waves(),
             self.total_stored_memories(),
             self.total_runtime_kv_stored(),
             self.drift_watches(),
@@ -519,6 +530,7 @@ mod tests {
                 process_reward: 0.9,
                 attention_fraction: 0.5,
                 recursive_chunks: 1,
+                recursive_waves: 1,
                 used_memories: 0,
                 stored_memories: 0,
                 runtime_kv_exported: 0,

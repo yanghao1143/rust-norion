@@ -278,6 +278,8 @@ impl NoironEngine {
             recursive_schedule.prompt_tokens,
             base_hierarchy,
         );
+        let recursive_schedule =
+            recursive_schedule.with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         let tier_migrations = tier_plan.migrations_from(&self.last_tier_plan);
         let infini_memory_planner = self.infini_memory_planner.clone().with_token_budgets(
@@ -558,7 +560,7 @@ impl InferenceBackend for HeuristicBackend {
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
              Infini memory: {} local-window ({} tokens), {} global ({} tokens), {} sparse-skipped ({} tokens) memories. \
-             Recursive schedule: required={}, {} chunks, {} merge rounds, {} prompt tokens, native window {}. \
+             Recursive schedule: required={}, {} chunks, {} merge rounds, {} execution waves, max parallel {}, {} prompt tokens, native window {}. \
              Hardware plan: {}. \
              Transformer plan: {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
@@ -577,6 +579,8 @@ impl InferenceBackend for HeuristicBackend {
             recursive_schedule.requires_recursion,
             recursive_schedule.chunk_count(),
             recursive_schedule.merge_round_count(),
+            recursive_schedule.execution_wave_count(),
+            recursive_schedule.max_parallel_chunks,
             recursive_schedule.prompt_tokens,
             recursive_schedule.native_window_tokens,
             hardware_plan.summary(),
@@ -827,7 +831,42 @@ mod tests {
         assert!(outcome.recursive_schedule.requires_recursion);
         assert_eq!(outcome.recursive_schedule.chunk_count(), 3);
         assert_eq!(outcome.recursive_schedule.merge_round_count(), 2);
+        assert_eq!(
+            outcome.recursive_schedule.max_parallel_chunks,
+            outcome.hardware_plan.execution.max_parallel_chunks
+        );
+        assert_eq!(outcome.recursive_schedule.execution_wave_count(), 2);
         assert!(outcome.answer.contains("Recursive schedule"));
+    }
+
+    #[test]
+    fn hardware_parallel_budget_limits_recursive_execution_waves() {
+        let mut engine = NoironEngine::new();
+        engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::Embedded,
+            0.82,
+            0.0,
+            0.82,
+            0.55,
+        ));
+        let prompt = (0..14)
+            .map(|index| format!("edge_chunk_{index}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::LongDocument),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.hardware_plan.execution.max_parallel_chunks, 1);
+        assert_eq!(outcome.recursive_schedule.max_parallel_chunks, 1);
+        assert_eq!(
+            outcome.recursive_schedule.execution_wave_count(),
+            outcome.recursive_schedule.chunk_count()
+        );
     }
 
     #[test]

@@ -218,7 +218,9 @@ fn latency_reward(
     let cold_pressure = (tier_counts.cold_disk as f32 / 12.0).min(0.18);
     let sparse_bonus = if infini_counts.skipped > 0 { 0.08 } else { 0.0 };
     let recursion_pressure = if recursive_schedule.requires_recursion {
-        (recursive_schedule.chunk_count() as f32 / 32.0).min(0.18)
+        let wave_pressure = (recursive_schedule.execution_wave_count() as f32 / 32.0).min(0.14);
+        let chunk_overhead = (recursive_schedule.chunk_count() as f32 / 128.0).min(0.04);
+        wave_pressure + chunk_overhead
     } else {
         0.0
     };
@@ -280,9 +282,11 @@ fn reward_notes(
 
     if input.recursive_schedule.requires_recursion {
         notes.push(format!(
-            "recursive:chunks={}:merge_rounds={}",
+            "recursive:chunks={}:merge_rounds={}:waves={}:parallel={}",
             input.recursive_schedule.chunk_count(),
-            input.recursive_schedule.merge_round_count()
+            input.recursive_schedule.merge_round_count(),
+            input.recursive_schedule.execution_wave_count(),
+            input.recursive_schedule.max_parallel_chunks
         ));
     }
 
