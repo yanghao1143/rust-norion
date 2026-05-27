@@ -4,6 +4,7 @@ pub mod engine;
 pub mod experience;
 pub mod hierarchy;
 pub mod kv_cache;
+pub mod kv_quant;
 pub mod reflection;
 pub mod router;
 pub mod runtime;
@@ -20,6 +21,7 @@ pub use engine::{
 pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
 pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
+pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{
     GenerationMetrics, NoironRouter, Route, RouteBudget, RouterState, RoutingContext,

@@ -65,6 +65,7 @@ Implemented modules:
 - `src/adaptive_state.rs`: persisted router and hierarchy control state
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
+- `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/experience.rs`: structured reflection experience store
@@ -187,7 +188,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - replace heuristic embedding with model-side embeddings or compact vector
   encoders
 - implement a self-developed Transformer runtime adapter
-- add mixed-precision 4/8-bit KV quantization
+- expand mixed-precision 4/8-bit KV quantization benchmarks and policies
 - add Infini-style global/local KV separation and sparse context filtering
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
@@ -196,7 +197,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 - 用模型侧 embedding 或轻量向量编码器替换当前启发式 embedding
 - 实现自研 Transformer 运行时适配器
-- 增加 4/8-bit 混合精度 KV 量化
+- 扩展 4/8-bit 混合精度 KV 量化 benchmark 和策略
 - 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
 - 增加超过模型原生窗口输入的递归调度
 - 增加长上下文路由和记忆复用 benchmark

@@ -5,6 +5,7 @@ use std::io;
 use std::path::Path;
 
 use crate::disk_kv::DiskKvStore;
+use crate::kv_quant::{QuantizationBits, QuantizedVector};
 
 #[derive(Debug, Clone)]
 pub struct MemoryEntry {
@@ -183,7 +184,10 @@ impl KvFusionCache {
         for entry in &self.entries {
             let key = format!("memory/{}", entry.id);
             live_keys.insert(key.clone());
-            store.put(&key, serialize_entry(entry).as_bytes())?;
+            store.put(
+                &key,
+                serialize_entry_quantized(entry, QuantizationBits::Four).as_bytes(),
+            )?;
         }
 
         for stale_key in store.keys_with_prefix("memory/") {
@@ -270,6 +274,15 @@ fn serialize_entry(entry: &MemoryEntry) -> String {
         .collect::<Vec<_>>()
         .join(",");
 
+    serialize_entry_with_vector(entry, &vector)
+}
+
+fn serialize_entry_quantized(entry: &MemoryEntry, bits: QuantizationBits) -> String {
+    let vector = QuantizedVector::quantize(&entry.vector, bits).encode();
+    serialize_entry_with_vector(entry, &vector)
+}
+
+fn serialize_entry_with_vector(entry: &MemoryEntry, vector: &str) -> String {
     format!(
         "{}\t{:.6}\t{}\t{}\t{:.6}\t{}\t{}",
         entry.id,
@@ -293,10 +306,7 @@ fn deserialize_entry(line: &str) -> Option<MemoryEntry> {
     let hits = fields[2].parse::<u64>().ok()?;
     let failures = fields[3].parse::<u64>().ok()?;
     let last_score = fields[4].parse::<f32>().ok()?;
-    let vector = fields[6]
-        .split(',')
-        .filter_map(|value| value.parse::<f32>().ok())
-        .collect::<Vec<_>>();
+    let vector = deserialize_vector(fields[6])?;
 
     Some(MemoryEntry {
         id,
@@ -307,6 +317,25 @@ fn deserialize_entry(line: &str) -> Option<MemoryEntry> {
         failures,
         last_score,
     })
+}
+
+fn deserialize_vector(encoded: &str) -> Option<Vec<f32>> {
+    if encoded.starts_with('q') {
+        return QuantizedVector::decode(encoded)
+            .ok()
+            .map(|vector| vector.dequantize());
+    }
+
+    if encoded.is_empty() {
+        return Some(Vec::new());
+    }
+
+    Some(
+        encoded
+            .split(',')
+            .filter_map(|value| value.parse::<f32>().ok())
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn merge_key(existing: &str, incoming: &str) -> String {
@@ -430,6 +459,49 @@ mod tests {
         assert_eq!(loaded.entries()[0].id, id);
         assert_eq!(loaded.entries()[0].key, "durable memory");
         assert!(loaded.entries()[0].strength > 0.9);
+        cleanup(path);
+    }
+
+    #[test]
+    fn disk_kv_uses_quantized_vectors_and_loads_them() {
+        let path = temp_path("cache-quantized");
+        let mut cache = KvFusionCache::new();
+        let id = cache.store_or_fuse("compressed memory", vec![0.4, 0.7, 0.1], 0.9);
+
+        cache.save_to_disk_kv(&path).unwrap();
+        let store = DiskKvStore::open(&path).unwrap();
+        let stored = String::from_utf8(store.get(&format!("memory/{id}")).unwrap().unwrap())
+            .expect("memory record should be utf-8");
+
+        assert!(stored.contains("\tq4:"));
+
+        let loaded = KvFusionCache::load_from_disk_kv(&path).unwrap();
+        let restored = &loaded.entries()[0].vector;
+
+        assert_eq!(restored.len(), 3);
+        assert!((restored[0] - 0.4).abs() <= 0.05);
+        assert!((restored[1] - 0.7).abs() <= 0.05);
+        assert!((restored[2] - 0.1).abs() <= 0.05);
+        cleanup(path);
+    }
+
+    #[test]
+    fn disk_kv_loader_accepts_legacy_plain_vectors() {
+        let path = temp_path("cache-legacy");
+        let mut store = DiskKvStore::open(&path).unwrap();
+        store
+            .put(
+                "memory/42",
+                b"42\t0.900000\t1\t0\t1.000000\tlegacy\t0.100000,0.200000",
+            )
+            .unwrap();
+        store.put("meta/next_id", b"43").unwrap();
+
+        let loaded = KvFusionCache::load_from_disk_kv(&path).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded.entries()[0].id, 42);
+        assert_eq!(loaded.entries()[0].vector, vec![0.1, 0.2]);
         cleanup(path);
     }
 
