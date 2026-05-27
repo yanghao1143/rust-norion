@@ -64,6 +64,7 @@ Implemented modules:
 - `src/router.rs`: multi-factor adaptive router
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
 - `src/disk_kv.rs`: append-only disk-backed KV store
+- `src/infini_memory.rs`: Infini-style global/local memory planner with sparse filtering
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
@@ -124,6 +125,7 @@ cargo test
 flowchart LR
     Prompt[Prompt] --> Embed[Local Embedding]
     Embed --> Memory[KV Fusion Cache]
+    Memory --> Infini[Infini Memory Planner]
     Memory --> DiskKV[Append-Only Disk KV]
     Memory --> Tiers[Hot/Warm/Cold Tier Planner]
     Prompt --> Router[Adaptive Router]
@@ -131,6 +133,7 @@ flowchart LR
     Prompt --> Experience[Experience Store]
     Hierarchy --> Transformer[Transformer Refactor Plan]
     Memory --> Backend[InferenceBackend]
+    Infini --> Backend
     DiskKV --> Memory
     Tiers --> Backend
     Experience --> Backend

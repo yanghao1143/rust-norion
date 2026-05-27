@@ -15,6 +15,7 @@ pub struct RuntimeRequest {
     pub prompt: String,
     pub profile: TaskProfile,
     pub memory_hints: Vec<String>,
+    pub infini_memory_hints: Vec<String>,
     pub experience_hints: Vec<String>,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
@@ -34,6 +35,18 @@ impl RuntimeRequest {
                     format!(
                         "{} similarity={:.3} strength={:.3}",
                         memory.key, memory.similarity, memory.strength
+                    )
+                })
+                .collect(),
+            infini_memory_hints: context
+                .infini_memory_plan
+                .local_window()
+                .iter()
+                .chain(context.infini_memory_plan.global_memory())
+                .map(|memory| {
+                    format!(
+                        "{:?}:{} score={:.3} reason={}",
+                        memory.scope, memory.key, memory.score, memory.reason
                     )
                 })
                 .collect(),
@@ -174,6 +187,10 @@ impl CommandRuntime {
                 arg.replace("{prompt}", prompt)
                     .replace("{max_tokens}", &request.max_tokens.to_string())
                     .replace("{memory_hints}", &request.memory_hints.join("\n"))
+                    .replace(
+                        "{infini_memory_hints}",
+                        &request.infini_memory_hints.join("\n"),
+                    )
                     .replace("{experience_hints}", &request.experience_hints.join("\n"))
             })
             .collect()
@@ -239,6 +256,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
          transformer: global_layers={} local_layers={} convolution_layers={}\n\
          memory_hints:\n{}\n\
+         infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
          prompt:\n{}",
         request.profile,
@@ -254,6 +272,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         transformer_counts.local,
         transformer_counts.convolution,
         bullet_list(&request.memory_hints),
+        bullet_list(&request.infini_memory_hints),
         bullet_list(&request.experience_hints),
         request.prompt
     )
@@ -367,6 +386,7 @@ fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {
 mod tests {
     use super::*;
     use crate::experience::ExperienceMatch;
+    use crate::infini_memory::{InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryScope};
     use crate::kv_cache::MemoryMatch;
     use crate::tiered_cache::TieredCachePlan;
     use crate::transformer::TransformerRefactorPlan;
@@ -409,6 +429,17 @@ mod tests {
             score: 0.88,
         }];
         let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::new(
+            vec![InfiniMemoryItem {
+                id: 1,
+                key: "local kv memory".to_owned(),
+                scope: InfiniMemoryScope::LocalWindow,
+                score: 0.91,
+                reason: "test local".to_owned(),
+            }],
+            Vec::new(),
+            Vec::new(),
+        );
         let transformer_plan = TransformerRefactorPlan::default();
         let context = GenerationContext {
             prompt: "build runtime",
@@ -422,6 +453,7 @@ mod tests {
             },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
             experiences: &experiences,
             transformer_plan: &transformer_plan,
         };
@@ -433,6 +465,7 @@ mod tests {
         assert!(draft.answer.contains("1 memories and 1 experiences"));
         assert_eq!(seen.max_tokens, 128);
         assert_eq!(seen.memory_hints.len(), 1);
+        assert_eq!(seen.infini_memory_hints.len(), 1);
         assert_eq!(seen.experience_hints.len(), 1);
         assert!(seen.transformer_plan.is_empty());
     }
@@ -449,6 +482,7 @@ mod tests {
     #[test]
     fn runtime_errors_become_low_confidence_drafts() {
         let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
         let transformer_plan = TransformerRefactorPlan::default();
         let context = GenerationContext {
             prompt: "build runtime",
@@ -462,6 +496,7 @@ mod tests {
             },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
             experiences: &[],
             transformer_plan: &transformer_plan,
         };
@@ -490,6 +525,7 @@ mod tests {
         let args = runtime.expanded_args(&request, &prompt);
 
         assert!(prompt.contains("memory_hints"));
+        assert!(prompt.contains("infini_memory_hints"));
         assert!(prompt.contains("experience_hints"));
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
@@ -510,6 +546,7 @@ mod tests {
             prompt: "build a command runtime".to_owned(),
             profile: TaskProfile::Coding,
             memory_hints: vec!["memory hint".to_owned()],
+            infini_memory_hints: vec!["LocalWindow:memory hint score=0.900".to_owned()],
             experience_hints: vec!["experience hint".to_owned()],
             route_budget: RouteBudget {
                 threshold: 0.5,

@@ -3,6 +3,7 @@ pub mod disk_kv;
 pub mod engine;
 pub mod experience;
 pub mod hierarchy;
+pub mod infini_memory;
 pub mod kv_cache;
 pub mod kv_quant;
 pub mod reflection;
@@ -20,6 +21,9 @@ pub use engine::{
 };
 pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
+pub use infini_memory::{
+    InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
+};
 pub use kv_cache::{
     KvFusionCache, MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
 };

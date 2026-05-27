@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::adaptive_state::AdaptiveState;
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
+use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
@@ -34,6 +35,7 @@ pub struct GenerationContext<'a> {
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: &'a TieredCachePlan,
+    pub infini_memory_plan: &'a InfiniMemoryPlan,
     pub experiences: &'a [ExperienceMatch],
     pub transformer_plan: &'a TransformerRefactorPlan,
 }
@@ -51,6 +53,7 @@ pub struct InferenceOutcome {
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
     pub tier_migrations: Vec<TierMigration>,
+    pub infini_memory_plan: InfiniMemoryPlan,
     pub transformer_plan: TransformerRefactorPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
@@ -67,6 +70,7 @@ pub struct NoironEngine {
     pub cache: KvFusionCache,
     pub hierarchy: HierarchyController,
     pub tiered_cache: TieredCacheScheduler,
+    pub infini_memory_planner: InfiniMemoryPlanner,
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
@@ -82,6 +86,7 @@ impl Default for NoironEngine {
             cache: KvFusionCache::new(),
             hierarchy: HierarchyController::new(),
             tiered_cache: TieredCacheScheduler::new(),
+            infini_memory_planner: InfiniMemoryPlanner::new(),
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
@@ -167,6 +172,9 @@ impl NoironEngine {
                 .retrieve_lessons(&request.prompt, request.profile, 3);
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         let tier_migrations = tier_plan.migrations_from(&self.last_tier_plan);
+        let infini_memory_plan = self
+            .infini_memory_planner
+            .plan(self.cache.entries(), &used_memories);
         let routing_context = RoutingContext {
             profile: request.profile,
             context_tokens: approximate_token_count(&request.prompt),
@@ -188,6 +196,7 @@ impl NoironEngine {
             route_budget,
             hierarchy,
             tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
             experiences: &used_experiences,
             transformer_plan: &transformer_plan,
         });
@@ -250,6 +259,7 @@ impl NoironEngine {
             hierarchy,
             tier_plan,
             tier_migrations,
+            infini_memory_plan,
             transformer_plan,
             stream_reports,
             used_memories,
@@ -285,6 +295,7 @@ impl InferenceBackend for HeuristicBackend {
             TaskProfile::LongDocument => "strong convolutional fusion for long context compression",
         };
         let tier_counts = context.tier_plan.counts();
+        let infini_counts = context.infini_memory_plan.counts();
         let transformer_counts = context.transformer_plan.counts();
         let experience_summary = if context.experiences.is_empty() {
             "no prior experience".to_owned()
@@ -307,6 +318,7 @@ impl InferenceBackend for HeuristicBackend {
              Experience hints: {experience_summary}. \
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
+             Infini memory: {} local-window, {} global, {} sparse-skipped memories. \
              Transformer plan: {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
@@ -315,6 +327,9 @@ impl InferenceBackend for HeuristicBackend {
             tier_counts.hot_gpu,
             tier_counts.warm_ram,
             tier_counts.cold_disk,
+            infini_counts.local_window,
+            infini_counts.global_memory,
+            infini_counts.skipped,
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution
@@ -477,7 +492,9 @@ mod tests {
 
         assert_eq!(outcome.tier_plan.placements().len(), 1);
         assert_eq!(outcome.tier_migrations.len(), 1);
+        assert_eq!(outcome.infini_memory_plan.counts().local_window, 1);
         assert!(outcome.answer.contains("Tier plan"));
+        assert!(outcome.answer.contains("Infini memory"));
     }
 
     #[test]

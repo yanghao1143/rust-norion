@@ -72,6 +72,11 @@ fn main() -> std::io::Result<()> {
         count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::Retain),
         count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::Evict)
     );
+    let infini_counts = outcome.infini_memory_plan.counts();
+    println!(
+        "infini_memory: local_window={} global_memory={} sparse_skipped={}",
+        infini_counts.local_window, infini_counts.global_memory, infini_counts.skipped
+    );
     let transformer_counts = outcome.transformer_plan.counts();
     println!(
         "transformer: global={} local={} convolution={}",

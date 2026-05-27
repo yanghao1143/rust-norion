@@ -135,6 +135,7 @@ These are algorithmic references, not product dependencies:
   (initial local q4 disk-KV persistence, memory retention, and persisted tier
   migration tracing are in place)
 - v0.4: Infini-style global/local KV split and sparse context filtering
+  (initial control-plane memory planner is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
   allocation
