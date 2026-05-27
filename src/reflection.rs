@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use crate::kv_exchange::RuntimeKvBlock;
+
 #[derive(Debug, Clone)]
 pub struct ReasoningStep {
     pub label: String,
@@ -39,6 +41,7 @@ pub struct InferenceDraft {
     pub answer: String,
     pub trace: Vec<ReasoningStep>,
     pub tokens: Vec<DraftToken>,
+    pub exported_kv_blocks: Vec<RuntimeKvBlock>,
 }
 
 impl InferenceDraft {
@@ -47,11 +50,17 @@ impl InferenceDraft {
             answer: answer.into(),
             trace,
             tokens: Vec::new(),
+            exported_kv_blocks: Vec::new(),
         }
     }
 
     pub fn with_tokens(mut self, tokens: Vec<DraftToken>) -> Self {
         self.tokens = tokens;
+        self
+    }
+
+    pub fn with_exported_kv_blocks(mut self, blocks: Vec<RuntimeKvBlock>) -> Self {
+        self.exported_kv_blocks = blocks;
         self
     }
 }

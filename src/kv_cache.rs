@@ -26,6 +26,7 @@ pub struct MemoryMatch {
     pub key: String,
     pub similarity: f32,
     pub strength: f32,
+    pub vector: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -114,6 +115,7 @@ impl KvFusionCache {
                 key: entry.key.clone(),
                 similarity: cosine_similarity(query, &entry.vector),
                 strength: entry.strength,
+                vector: entry.vector.clone(),
             })
             .filter(|item| item.similarity > 0.05)
             .collect::<Vec<_>>();

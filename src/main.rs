@@ -140,6 +140,11 @@ fn main() -> std::io::Result<()> {
         outcome.stored_gist_memory_ids.len()
     );
     println!(
+        "runtime_kv: exported={} stored_ids={}",
+        outcome.exported_runtime_kv_blocks,
+        outcome.stored_runtime_kv_memory_ids.len()
+    );
+    println!(
         "retention: before={} after={} decayed={} removed={}",
         outcome.retention_report.before,
         outcome.retention_report.after,

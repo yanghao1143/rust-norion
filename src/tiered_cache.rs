@@ -284,6 +284,7 @@ mod tests {
             key: "hot".to_owned(),
             similarity: 0.9,
             strength: 1.4,
+            vector: vec![1.0, 1.4],
         }];
 
         let plan = scheduler.plan(&entries, &matches);

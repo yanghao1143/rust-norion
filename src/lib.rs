@@ -8,6 +8,7 @@ pub mod hardware;
 pub mod hierarchy;
 pub mod infini_memory;
 pub mod kv_cache;
+pub mod kv_exchange;
 pub mod kv_quant;
 pub mod process_reward;
 pub mod recursive_scheduler;
@@ -37,6 +38,7 @@ pub use infini_memory::{
 pub use kv_cache::{
     KvFusionCache, MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
 };
+pub use kv_exchange::RuntimeKvBlock;
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
@@ -51,8 +53,7 @@ pub use router::{
 };
 pub use runtime::{
     CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeEmbedding,
-    RuntimeError, RuntimeKvBlock, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
-    RuntimeTokenId,
+    RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken, RuntimeTokenId,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,

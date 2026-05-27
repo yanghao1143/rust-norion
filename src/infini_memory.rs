@@ -468,6 +468,7 @@ mod tests {
             key: key.to_owned(),
             similarity,
             strength,
+            vector: vec![similarity, strength],
         }
     }
 }

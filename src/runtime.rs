@@ -7,9 +7,11 @@ use std::process::{Command, Stdio};
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::hardware::HardwarePlan;
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::kv_exchange::RuntimeKvBlock;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
 use crate::router::RouteBudget;
+use crate::tiered_cache::MemoryTier;
 use crate::transformer::TransformerRefactorPlan;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,36 +104,6 @@ impl RuntimeEmbedding {
 
     pub fn empty() -> Self {
         Self::new(Vec::new())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RuntimeKvBlock {
-    pub layer: usize,
-    pub head: usize,
-    pub token_start: usize,
-    pub token_end: usize,
-    pub key: Vec<f32>,
-    pub value: Vec<f32>,
-}
-
-impl RuntimeKvBlock {
-    pub fn new(
-        layer: usize,
-        head: usize,
-        token_start: usize,
-        token_end: usize,
-        key: Vec<f32>,
-        value: Vec<f32>,
-    ) -> Self {
-        Self {
-            layer,
-            head,
-            token_start,
-            token_end,
-            key,
-            value,
-        }
     }
 }
 
@@ -527,7 +499,28 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
 
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
         let runtime_metadata = self.runtime.metadata();
-        let request = RuntimeRequest::from_context(&context, self.max_tokens, runtime_metadata);
+        let import_blocks = runtime_kv_blocks_from_context(&context, &runtime_metadata);
+        let imported_kv_blocks = if runtime_metadata.supports_kv_import && !import_blocks.is_empty()
+        {
+            match self.runtime.import_kv(&import_blocks) {
+                Ok(count) => count,
+                Err(error) => {
+                    self.last_error = Some(error.clone());
+                    return InferenceDraft::new(
+                        format!("Runtime backend error: {}", error.message()),
+                        vec![ReasoningStep::new(
+                            "runtime_kv_import_error",
+                            error.message(),
+                            0.0,
+                        )],
+                    );
+                }
+            }
+        } else {
+            0
+        };
+        let request =
+            RuntimeRequest::from_context(&context, self.max_tokens, runtime_metadata.clone());
 
         match self.runtime.generate(request) {
             Ok(response) => {
@@ -546,7 +539,40 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                         entropy: token.entropy,
                     })
                     .collect();
-                InferenceDraft::new(response.answer, trace).with_tokens(tokens)
+                let mut trace = trace;
+                if imported_kv_blocks > 0 {
+                    trace.push(ReasoningStep::new(
+                        "runtime_kv_import",
+                        format!("imported {imported_kv_blocks} KV blocks"),
+                        0.78,
+                    ));
+                }
+                let exported_kv_blocks = if runtime_metadata.supports_kv_export {
+                    match self.runtime.export_kv() {
+                        Ok(blocks) if !blocks.is_empty() => {
+                            trace.push(ReasoningStep::new(
+                                "runtime_kv_export",
+                                format!("exported {} KV blocks", blocks.len()),
+                                0.74,
+                            ));
+                            blocks
+                        }
+                        Ok(_) => Vec::new(),
+                        Err(error) => {
+                            trace.push(ReasoningStep::new(
+                                "runtime_kv_export_error",
+                                error.message(),
+                                0.22,
+                            ));
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                };
+                InferenceDraft::new(response.answer, trace)
+                    .with_tokens(tokens)
+                    .with_exported_kv_blocks(exported_kv_blocks)
             }
             Err(error) => {
                 self.last_error = Some(error.clone());
@@ -557,6 +583,55 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
             }
         }
     }
+}
+
+fn runtime_kv_blocks_from_context(
+    context: &GenerationContext<'_>,
+    metadata: &RuntimeMetadata,
+) -> Vec<RuntimeKvBlock> {
+    if !metadata.supports_kv_import {
+        return Vec::new();
+    }
+
+    let dimensions = if metadata.embedding_dimensions > 0 {
+        Some(metadata.embedding_dimensions)
+    } else {
+        None
+    };
+
+    context
+        .memories
+        .iter()
+        .filter(|memory| !memory.vector.is_empty())
+        .filter(|memory| {
+            context
+                .tier_plan
+                .placement_for(memory.id)
+                .map(|placement| placement.tier != MemoryTier::ColdDisk)
+                .unwrap_or(true)
+        })
+        .enumerate()
+        .map(|(index, memory)| {
+            let key = fit_runtime_vector(&memory.vector, dimensions);
+            let weighted = memory
+                .vector
+                .iter()
+                .map(|value| value * memory.strength)
+                .collect::<Vec<_>>();
+            let value = fit_runtime_vector(&weighted, dimensions);
+
+            RuntimeKvBlock::new(0, index, index, index + 1, key, value)
+        })
+        .collect()
+}
+
+fn fit_runtime_vector(vector: &[f32], dimensions: Option<usize>) -> Vec<f32> {
+    let Some(dimensions) = dimensions else {
+        return vector.to_vec();
+    };
+    let mut out = vector.iter().copied().take(dimensions).collect::<Vec<_>>();
+    out.resize(dimensions, 0.0);
+    out
 }
 
 fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {
@@ -626,6 +701,7 @@ mod tests {
             key: "kv memory".to_owned(),
             similarity: 0.8,
             strength: 1.2,
+            vector: vec![0.1, 0.2, 0.3],
         }];
         let experiences = vec![ExperienceMatch {
             id: 1,
@@ -764,6 +840,58 @@ mod tests {
         assert_eq!(runtime.imported_blocks, 1);
         assert_eq!(exported[0].layer, 1);
         assert_eq!(exported[0].head, 2);
+    }
+
+    #[test]
+    fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
+        let memories = vec![MemoryMatch {
+            id: 7,
+            key: "hot runtime memory".to_owned(),
+            similarity: 0.91,
+            strength: 1.25,
+            vector: vec![0.1, 0.2, 0.3],
+        }];
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let context = GenerationContext {
+            prompt: "use runtime kv",
+            profile: TaskProfile::Coding,
+            memories: &memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+        let draft = backend.generate(context);
+
+        assert_eq!(backend.runtime().imported_blocks, 1);
+        assert_eq!(draft.exported_kv_blocks.len(), 1);
+        assert!(
+            draft
+                .trace
+                .iter()
+                .any(|step| step.label == "runtime_kv_import")
+        );
+        assert!(
+            draft
+                .trace
+                .iter()
+                .any(|step| step.label == "runtime_kv_export")
+        );
     }
 
     #[test]

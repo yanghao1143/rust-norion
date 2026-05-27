@@ -11,6 +11,7 @@ use crate::hardware::{HardwareAllocator, HardwarePlan, HardwareSnapshot};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
+use crate::kv_exchange::RuntimeKvBlock;
 use crate::process_reward::{
     ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };
@@ -78,6 +79,8 @@ pub struct InferenceOutcome {
     pub gist_records: Vec<GistRecord>,
     pub stored_memory_id: Option<u64>,
     pub stored_gist_memory_ids: Vec<u64>,
+    pub exported_runtime_kv_blocks: usize,
+    pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub process_reward: ProcessRewardReport,
     pub retention_report: RetentionReport,
     pub experience_id: u64,
@@ -341,6 +344,26 @@ impl NoironEngine {
         } else {
             Vec::new()
         };
+        let exported_runtime_kv_blocks = draft.exported_kv_blocks.len();
+        let stored_runtime_kv_memory_ids = if report.store_as_memory {
+            let mut ids = draft
+                .exported_kv_blocks
+                .iter()
+                .filter(|block| !block.is_empty())
+                .map(|block| {
+                    self.cache.store_or_fuse(
+                        format_runtime_kv_key(&request.prompt, block),
+                        block.vector(),
+                        (report.quality * 0.86).clamp(0.05, 1.0),
+                    )
+                })
+                .collect::<Vec<_>>();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        } else {
+            Vec::new()
+        };
 
         for memory in &used_memories {
             if report.store_as_memory {
@@ -368,6 +391,7 @@ impl NoironEngine {
             stream_windows: stream_reports.len(),
             stored_memory: stored_memory_id.is_some(),
             stored_gist_memories: stored_gist_memory_ids.len(),
+            stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
             gist_records: gist_records.len(),
         });
         let experience_id = self.experience.record(ExperienceInput {
@@ -405,6 +429,8 @@ impl NoironEngine {
             gist_records,
             stored_memory_id,
             stored_gist_memory_ids,
+            exported_runtime_kv_blocks,
+            stored_runtime_kv_memory_ids,
             process_reward,
             retention_report,
             experience_id,
@@ -647,6 +673,17 @@ fn format_gist_key(prompt: &str, gist: &GistRecord) -> String {
     )
 }
 
+fn format_runtime_kv_key(prompt: &str, block: &RuntimeKvBlock) -> String {
+    format!(
+        "runtime_kv:l{}h{}:{}-{} :: {}",
+        block.layer,
+        block.head,
+        block.token_start,
+        block.token_end,
+        compact(prompt, 64)
+    )
+}
+
 fn compact(text: &str, max_chars: usize) -> String {
     let mut out = text.chars().take(max_chars).collect::<String>();
     if text.chars().count() > max_chars {
@@ -812,6 +849,46 @@ mod tests {
         assert_eq!(
             engine.experience.records()[0].gist_memory_ids,
             outcome.stored_gist_memory_ids
+        );
+    }
+
+    #[test]
+    fn inference_stores_high_quality_exported_runtime_kv() {
+        struct ExportingBackend;
+
+        impl InferenceBackend for ExportingBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "Rust runtime KV export memory should be stored as useful Noiron local memory for future routing.",
+                    vec![ReasoningStep::new("runtime", "exported reusable kv", 0.92)],
+                )
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    2,
+                    1,
+                    0,
+                    4,
+                    vec![0.1, 0.2],
+                    vec![0.3, 0.4],
+                )])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        let mut backend = ExportingBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust runtime KV export memory", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.exported_runtime_kv_blocks, 1);
+        assert_eq!(outcome.stored_runtime_kv_memory_ids.len(), 1);
+        assert!(
+            engine
+                .cache
+                .entries()
+                .iter()
+                .any(|entry| entry.key.contains("runtime_kv:l2h1"))
         );
     }
 

@@ -104,6 +104,7 @@ pub struct ProcessRewardInput {
     pub stream_windows: usize,
     pub stored_memory: bool,
     pub stored_gist_memories: usize,
+    pub stored_runtime_kv_memories: usize,
     pub gist_records: usize,
 }
 
@@ -141,6 +142,7 @@ impl ProcessRewarder {
                 input.contradiction_count,
                 input.stored_memory,
                 input.stored_gist_memories,
+                input.stored_runtime_kv_memories,
             ),
         };
         let total = weighted_total(components);
@@ -233,11 +235,14 @@ fn admission_reward(
     contradiction_count: usize,
     stored_memory: bool,
     stored_gist_memories: usize,
+    stored_runtime_kv_memories: usize,
 ) -> f32 {
-    let stored_any = stored_memory || stored_gist_memories > 0;
+    let stored_any = stored_memory || stored_gist_memories > 0 || stored_runtime_kv_memories > 0;
+    let store_bonus =
+        ((stored_gist_memories + stored_runtime_kv_memories) as f32 / 4.0).min(1.0) * 0.18;
 
     match (quality >= 0.60 && contradiction_count == 0, stored_any) {
-        (true, true) => (0.72 + (stored_gist_memories as f32 / 4.0).min(0.18)).clamp(0.0, 1.0),
+        (true, true) => (0.72 + store_bonus).clamp(0.0, 1.0),
         (true, false) => 0.44,
         (false, false) => 0.72,
         (false, true) => 0.24,
@@ -283,6 +288,12 @@ fn reward_notes(
 
     if components.admission <= 0.35 {
         notes.push("admission:stored_low_quality_memory".to_owned());
+    }
+    if input.stored_runtime_kv_memories > 0 {
+        notes.push(format!(
+            "runtime_kv:stored={}",
+            input.stored_runtime_kv_memories
+        ));
     }
 
     notes.push(format!(
@@ -375,6 +386,7 @@ mod tests {
             stream_windows: 4,
             stored_memory: quality > 0.45,
             stored_gist_memories: if quality > 0.45 { 1 } else { 0 },
+            stored_runtime_kv_memories: 0,
             gist_records: if quality > 0.45 { 3 } else { 0 },
         }
     }

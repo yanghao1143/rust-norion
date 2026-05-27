@@ -237,7 +237,8 @@ These are algorithmic references, not product dependencies:
   request, command runtime prompts expose the ABI boundary, and backend native
   context windows feed recursive scheduling; CLI command runtimes can pass
   model id, tokenizer, native window, embedding dimensions, and KV exchange
-  flags)
+  flags; active Noiron memory can now be imported into runtime KV and accepted
+  exported runtime KV can be written back into reinforced memory)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 

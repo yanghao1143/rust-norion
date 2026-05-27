@@ -139,6 +139,7 @@ Implemented modules:
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
+- `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
@@ -299,6 +300,13 @@ The CLI exposes this metadata through `--runtime-model-id`,
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 
+When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
+vectors as runtime KV blocks before generation. After generation, exported KV
+blocks are attached to the draft; the engine stores them back into reinforced
+memory only when reflection admits the answer as useful.
+
+启用 KV 交换后，`RuntimeBackend` 会在生成前把活跃且非冷层的记忆向量导入为 runtime KV block。生成后，runtime 导出的 KV block 会随草稿返回；只有当反思模块认为答案有价值时，引擎才会把这些 KV 写回强化记忆。
+
 Expected integration loop:
 
 预期接入流程：
@@ -313,11 +321,12 @@ Expected integration loop:
    multi-GPU, edge, or server devices
 6. optionally replay high/low reward experience into router, hierarchy, and KV state
 7. retrieve relevant reflection lessons from the experience store
-8. call the real model backend
+8. import active KV memory into the runtime, call the real model backend, and
+   collect exported runtime KV
 9. reflect on the draft
 10. generate document, section, and paragraph-level gist records
 11. score route, memory, hierarchy, latency, and admission with process rewards
-12. reinforce or penalize memory
+12. reinforce or penalize memory, including accepted exported runtime KV
 13. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
@@ -327,11 +336,11 @@ Expected integration loop:
 5. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重
 6. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
 7. 从经验库检索相关反思 lesson
-8. 调用真实模型后端
+8. 把活跃 KV 记忆导入 runtime，调用真实模型后端，并收集 runtime 导出的 KV
 9. 对草稿答案做反思评估
 10. 生成 document、section、paragraph 三级 gist 记忆
 11. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
-12. 强化或惩罚记忆
+12. 强化或惩罚记忆，包括通过反思准入的 runtime 导出 KV
 13. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
