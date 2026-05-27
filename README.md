@@ -447,6 +447,12 @@ memory only when reflection admits the answer as useful.
 
 启用 KV 交换后，`RuntimeBackend` 会在生成前把活跃且非冷层的记忆向量导入为 runtime KV block。生成后，runtime 导出的 KV block 会随草稿返回；只有当反思模块认为答案有价值时，引擎才会把这些 KV 写回强化记忆。
 
+Runtime KV import is capped by `DeviceExecutionPlan.kv_prefetch_blocks`, so
+constrained devices can keep the runtime KV working set small while larger
+accelerator profiles can prefetch more memory.
+
+Runtime KV 导入数量会受 `DeviceExecutionPlan.kv_prefetch_blocks` 限制，因此低配设备可以保持较小 KV 工作集，高容量加速器设备则可以预取更多记忆。
+
 Expected integration loop:
 
 预期接入流程：

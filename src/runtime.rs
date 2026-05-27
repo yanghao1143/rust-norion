@@ -1062,6 +1062,7 @@ fn runtime_kv_blocks_from_context(
     } else {
         None
     };
+    let prefetch_limit = context.hardware_plan.execution.kv_prefetch_blocks.max(1);
 
     context
         .memories
@@ -1074,6 +1075,7 @@ fn runtime_kv_blocks_from_context(
                 .map(|placement| placement.tier != MemoryTier::ColdDisk)
                 .unwrap_or(true)
         })
+        .take(prefetch_limit)
         .enumerate()
         .map(|(index, memory)| {
             let key = fit_runtime_vector(&memory.vector, dimensions);
@@ -1356,6 +1358,56 @@ mod tests {
                 .iter()
                 .any(|step| step.label == "runtime_kv_export")
         );
+    }
+
+    #[test]
+    fn runtime_kv_import_respects_device_prefetch_budget() {
+        let memories = vec![
+            MemoryMatch {
+                id: 7,
+                key: "hot runtime memory one".to_owned(),
+                similarity: 0.95,
+                strength: 1.25,
+                vector: vec![0.1, 0.2, 0.3],
+            },
+            MemoryMatch {
+                id: 8,
+                key: "hot runtime memory two".to_owned(),
+                similarity: 0.90,
+                strength: 1.10,
+                vector: vec![0.4, 0.5, 0.6],
+            },
+        ];
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let mut hardware_plan = HardwarePlan::default();
+        hardware_plan.execution.kv_prefetch_blocks = 1;
+        let context = GenerationContext {
+            prompt: "limit runtime kv",
+            profile: TaskProfile::Coding,
+            memories: &memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+        let draft = backend.generate(context);
+
+        assert_eq!(backend.runtime().imported_blocks, 1);
+        assert_eq!(draft.exported_kv_blocks.len(), 1);
     }
 
     #[test]

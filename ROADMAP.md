@@ -264,7 +264,8 @@ These are algorithmic references, not product dependencies:
   architecture, CPU parallelism, and common GPU/NPU environment hints into a
   conservative device profile; each profile now emits execution-lane, memory
   mode, adapter-hint, KV-precision, prefetch, disk-spill, and recursive
-  parallelism policies; the CLI can print the full built-in device matrix;
+  parallelism policies; runtime KV import now honors the device prefetch
+  budget; the CLI can print the full built-in device matrix;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
