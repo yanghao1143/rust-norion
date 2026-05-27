@@ -33,6 +33,15 @@ pub struct ExperienceRecord {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExperienceMatch {
+    pub id: u64,
+    pub prompt: String,
+    pub lesson: String,
+    pub quality: f32,
+    pub score: f32,
+}
+
+#[derive(Debug, Clone)]
 pub struct ExperienceStore {
     records: Vec<ExperienceRecord>,
     next_id: u64,
@@ -100,6 +109,48 @@ impl ExperienceStore {
         });
         records.truncate(limit);
         records
+    }
+
+    pub fn retrieve_lessons(
+        &self,
+        prompt: &str,
+        profile: TaskProfile,
+        limit: usize,
+    ) -> Vec<ExperienceMatch> {
+        let mut matches = self
+            .records
+            .iter()
+            .filter_map(|record| {
+                let overlap =
+                    lexical_overlap(prompt, &format!("{} {}", record.prompt, record.lesson));
+                let profile_bonus = if record.profile == profile { 0.16 } else { 0.0 };
+                let contradiction_penalty = (record.contradictions.len() as f32 * 0.08).min(0.32);
+                let score = (overlap * 0.52 + record.quality * 0.36 + profile_bonus
+                    - contradiction_penalty)
+                    .clamp(0.0, 1.0);
+
+                if score < 0.12 {
+                    return None;
+                }
+
+                Some(ExperienceMatch {
+                    id: record.id,
+                    prompt: record.prompt.clone(),
+                    lesson: record.lesson.clone(),
+                    quality: record.quality,
+                    score,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        matches.sort_by(|left, right| {
+            right
+                .score
+                .partial_cmp(&left.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        matches.truncate(limit);
+        matches
     }
 
     pub fn save_to_disk_kv(&self, path: impl AsRef<Path>) -> io::Result<()> {
@@ -245,6 +296,25 @@ fn str_to_profile(value: &str) -> Option<TaskProfile> {
     }
 }
 
+fn lexical_overlap(left: &str, right: &str) -> f32 {
+    let left_chars = left
+        .chars()
+        .filter(|ch| !ch.is_whitespace() && !ch.is_ascii_punctuation())
+        .collect::<HashSet<_>>();
+    let right_chars = right
+        .chars()
+        .filter(|ch| !ch.is_whitespace() && !ch.is_ascii_punctuation())
+        .collect::<HashSet<_>>();
+
+    if left_chars.is_empty() || right_chars.is_empty() {
+        return 0.0;
+    }
+
+    let shared = left_chars.intersection(&right_chars).count() as f32;
+    let denom = left_chars.len().min(right_chars.len()) as f32;
+    (shared / denom).clamp(0.0, 1.0)
+}
+
 fn escape_field(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -297,6 +367,27 @@ mod tests {
 
         assert_eq!(lessons.len(), 1);
         assert_eq!(lessons[0].lesson, "strong");
+    }
+
+    #[test]
+    fn retrieves_relevant_lessons() {
+        let mut store = ExperienceStore::new();
+        store.record(ExperienceInput {
+            prompt: "Rust adaptive router".to_owned(),
+            lesson: "prefer token-window feedback for router stability".to_owned(),
+            ..input("router", 0.9)
+        });
+        store.record(ExperienceInput {
+            prompt: "long form story writing".to_owned(),
+            profile: TaskProfile::Writing,
+            lesson: "prefer global continuity".to_owned(),
+            ..input("writing", 0.9)
+        });
+
+        let matches = store.retrieve_lessons("Rust router feedback", TaskProfile::Coding, 2);
+
+        assert!(!matches.is_empty());
+        assert!(matches[0].lesson.contains("router"));
     }
 
     #[test]

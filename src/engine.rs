@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::experience::{ExperienceInput, ExperienceStore};
+use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::kv_cache::{KvFusionCache, MemoryMatch};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
@@ -32,6 +32,7 @@ pub struct GenerationContext<'a> {
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: &'a TieredCachePlan,
+    pub experiences: &'a [ExperienceMatch],
 }
 
 pub trait InferenceBackend {
@@ -48,6 +49,7 @@ pub struct InferenceOutcome {
     pub tier_plan: TieredCachePlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
+    pub used_experiences: Vec<ExperienceMatch>,
     pub stored_memory_id: Option<u64>,
     pub experience_id: u64,
     pub router_threshold_after: f32,
@@ -120,6 +122,9 @@ impl NoironEngine {
     ) -> InferenceOutcome {
         let query_vector = self.embedder.embed(&request.prompt);
         let used_memories = self.cache.lookup(&query_vector, 4);
+        let used_experiences =
+            self.experience
+                .retrieve_lessons(&request.prompt, request.profile, 3);
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         let route_budget = self.router.budget_for_prompt(&request.prompt);
         let hierarchy = self.hierarchy.adapt_to_profile(request.profile);
@@ -131,6 +136,7 @@ impl NoironEngine {
             route_budget,
             hierarchy,
             tier_plan: &tier_plan,
+            experiences: &used_experiences,
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
         let metrics = metrics_from_report(&draft, &report, route_budget);
@@ -190,6 +196,7 @@ impl NoironEngine {
             tier_plan,
             stream_reports,
             used_memories,
+            used_experiences,
             stored_memory_id,
             experience_id,
             router_threshold_after,
@@ -220,12 +227,24 @@ impl InferenceBackend for HeuristicBackend {
             TaskProfile::LongDocument => "strong convolutional fusion for long context compression",
         };
         let tier_counts = context.tier_plan.counts();
+        let experience_summary = if context.experiences.is_empty() {
+            "no prior experience".to_owned()
+        } else {
+            context
+                .experiences
+                .iter()
+                .take(2)
+                .map(|item| format!("{} ({:.2})", item.lesson, item.score))
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
 
         let answer = format!(
             "Prototype inference result: keep Noiron as a control layer around the model backend. \
              Use entropy routing for attention decisions, reinforced KV fusion for local memory, \
              task-aware hierarchy weights for compute allocation, and reflection to score each draft \
              before storing it. Profile hint: {profile_hint}. Prompt anchor: {}. Memory hints: {memory_summary}. \
+             Experience hints: {experience_summary}. \
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories.",
             compact(&context.prompt, 120),
@@ -391,5 +410,30 @@ mod tests {
 
         assert_eq!(outcome.tier_plan.placements().len(), 1);
         assert!(outcome.answer.contains("Tier plan"));
+    }
+
+    #[test]
+    fn inference_uses_relevant_experience() {
+        let mut engine = NoironEngine::new();
+        engine.experience.record(ExperienceInput {
+            prompt: "Rust router feedback".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "reuse token-window feedback lessons".to_owned(),
+            quality: 0.9,
+            contradictions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 2,
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        });
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust router feedback", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.used_experiences.len(), 1);
+        assert!(outcome.answer.contains("Experience hints"));
     }
 }

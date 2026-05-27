@@ -43,9 +43,10 @@ fn main() -> std::io::Result<()> {
     );
     println!("stream_windows={}", outcome.stream_reports.len());
     println!(
-        "memory: used={} stored={:?} experience={}",
+        "memory: used={} stored={:?} experience_used={} experience={}",
         outcome.used_memories.len(),
         outcome.stored_memory_id,
+        outcome.used_experiences.len(),
         outcome.experience_id
     );
 

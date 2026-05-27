@@ -97,9 +97,11 @@ flowchart LR
     Memory --> Tiers[Hot/Warm/Cold Tier Planner]
     Prompt --> Router[Adaptive Router]
     Prompt --> Hierarchy[Hierarchy Controller]
+    Prompt --> Experience[Experience Store]
     Memory --> Backend[InferenceBackend]
     DiskKV --> Memory
     Tiers --> Backend
+    Experience --> Backend
     Router --> Backend
     Hierarchy --> Backend
     Backend --> Draft[Draft Answer]
@@ -126,17 +128,19 @@ Expected integration loop:
 
 1. embed prompt and retrieve local memory
 2. compute route budget and hierarchy weights
-3. call the real model backend
-4. reflect on the draft
-5. reinforce or penalize memory
-6. update routing threshold and hierarchy weights
+3. retrieve relevant reflection lessons from the experience store
+4. call the real model backend
+5. reflect on the draft
+6. reinforce or penalize memory
+7. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
 2. 计算路由预算和层级权重
-3. 调用真实模型后端
-4. 对草稿答案做反思评估
-5. 强化或惩罚记忆
-6. 更新路由阈值和层级权重
+3. 从经验库检索相关反思 lesson
+4. 调用真实模型后端
+5. 对草稿答案做反思评估
+6. 强化或惩罚记忆
+7. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 
