@@ -5,6 +5,7 @@ use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::kv_cache::{KvFusionCache, MemoryMatch};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget};
+use crate::tiered_cache::{TieredCachePlan, TieredCacheScheduler};
 
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
@@ -28,6 +29,7 @@ pub struct GenerationContext<'a> {
     pub memories: &'a [MemoryMatch],
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
+    pub tier_plan: &'a TieredCachePlan,
 }
 
 pub trait InferenceBackend {
@@ -41,6 +43,7 @@ pub struct InferenceOutcome {
     pub metrics: GenerationMetrics,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
+    pub tier_plan: TieredCachePlan,
     pub used_memories: Vec<MemoryMatch>,
     pub stored_memory_id: Option<u64>,
     pub router_threshold_after: f32,
@@ -51,6 +54,7 @@ pub struct NoironEngine {
     pub router: NoironRouter,
     pub cache: KvFusionCache,
     pub hierarchy: HierarchyController,
+    pub tiered_cache: TieredCacheScheduler,
     pub reflector: Reflector,
     embedder: TextEmbedder,
 }
@@ -61,6 +65,7 @@ impl Default for NoironEngine {
             router: NoironRouter::new(),
             cache: KvFusionCache::new(),
             hierarchy: HierarchyController::new(),
+            tiered_cache: TieredCacheScheduler::new(),
             reflector: Reflector::new(),
             embedder: TextEmbedder::default(),
         }
@@ -94,6 +99,7 @@ impl NoironEngine {
     ) -> InferenceOutcome {
         let query_vector = self.embedder.embed(&request.prompt);
         let used_memories = self.cache.lookup(&query_vector, 4);
+        let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         let route_budget = self.router.budget_for_prompt(&request.prompt);
         let hierarchy = self.hierarchy.adapt_to_profile(request.profile);
 
@@ -103,6 +109,7 @@ impl NoironEngine {
             memories: &used_memories,
             route_budget,
             hierarchy,
+            tier_plan: &tier_plan,
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
         let metrics = metrics_from_report(&draft, &report, route_budget);
@@ -139,6 +146,7 @@ impl NoironEngine {
             metrics,
             route_budget,
             hierarchy,
+            tier_plan,
             used_memories,
             stored_memory_id,
             router_threshold_after: self.router.threshold(),
@@ -168,17 +176,22 @@ impl InferenceBackend for HeuristicBackend {
             TaskProfile::Writing => "strong global attention for long-range continuity",
             TaskProfile::LongDocument => "strong convolutional fusion for long context compression",
         };
+        let tier_counts = context.tier_plan.counts();
 
         let answer = format!(
             "Prototype inference result: keep Noiron as a control layer around the model backend. \
              Use entropy routing for attention decisions, reinforced KV fusion for local memory, \
              task-aware hierarchy weights for compute allocation, and reflection to score each draft \
              before storing it. Profile hint: {profile_hint}. Prompt anchor: {}. Memory hints: {memory_summary}. \
-             Route budget: {:.0}% attention, {} fast tokens, {} attention tokens.",
+             Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
+             Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
             context.route_budget.fast_tokens,
-            context.route_budget.attention_tokens
+            context.route_budget.attention_tokens,
+            tier_counts.hot_gpu,
+            tier_counts.warm_ram,
+            tier_counts.cold_disk
         );
 
         InferenceDraft::new(
@@ -313,5 +326,21 @@ mod tests {
         assert!(outcome.stored_memory_id.is_some());
         assert_eq!(engine.router.observations(), 1);
         assert!(!engine.cache.is_empty());
+    }
+
+    #[test]
+    fn inference_exposes_tiered_cache_plan() {
+        let mut cache = KvFusionCache::new();
+        cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
+        let mut engine = NoironEngine::with_cache(cache);
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust Noiron tiered memory", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.tier_plan.placements().len(), 1);
+        assert!(outcome.answer.contains("Tier plan"));
     }
 }

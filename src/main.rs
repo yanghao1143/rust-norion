@@ -34,6 +34,11 @@ fn main() -> std::io::Result<()> {
         "hierarchy: global={:.2} local={:.2} conv={:.2}",
         outcome.hierarchy.global, outcome.hierarchy.local, outcome.hierarchy.convolution
     );
+    let tier_counts = outcome.tier_plan.counts();
+    println!(
+        "tiers: hot_gpu={} warm_ram={} cold_disk={}",
+        tier_counts.hot_gpu, tier_counts.warm_ram, tier_counts.cold_disk
+    );
     println!(
         "memory: used={} stored={:?}",
         outcome.used_memories.len(),

@@ -48,6 +48,7 @@ Implemented modules:
 - `src/router.rs`: adaptive entropy router
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
+- `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
@@ -89,10 +90,12 @@ flowchart LR
     Prompt[Prompt] --> Embed[Local Embedding]
     Embed --> Memory[KV Fusion Cache]
     Memory --> DiskKV[Append-Only Disk KV]
+    Memory --> Tiers[Hot/Warm/Cold Tier Planner]
     Prompt --> Router[Adaptive Router]
     Prompt --> Hierarchy[Hierarchy Controller]
     Memory --> Backend[InferenceBackend]
     DiskKV --> Memory
+    Tiers --> Backend
     Router --> Backend
     Hierarchy --> Backend
     Backend --> Draft[Draft Answer]
