@@ -53,6 +53,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -117,10 +118,11 @@ flowchart LR
 
 ## Backend Integration / 后端接入
 
-To connect a real model, implement `InferenceBackend` and replace
-`HeuristicBackend`.
+To connect a real model, implement `ModelRuntime` and wrap it in
+`RuntimeBackend`, or implement `InferenceBackend` directly for a custom control
+surface.
 
-要接入真实模型，需要实现 `InferenceBackend`，并替换当前 demo 使用的 `HeuristicBackend`。
+要接入真实模型，可以实现 `ModelRuntime` 并用 `RuntimeBackend` 包装，也可以为更定制的控制面直接实现 `InferenceBackend`，替换当前 demo 使用的 `HeuristicBackend`。
 
 Expected integration loop:
 
