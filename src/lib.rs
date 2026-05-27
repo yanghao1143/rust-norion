@@ -1,6 +1,7 @@
 pub mod adaptive_state;
 pub mod benchmark;
 pub mod disk_kv;
+pub mod drift;
 pub mod engine;
 pub mod experience;
 pub mod experience_replay;
@@ -28,6 +29,7 @@ pub use benchmark::{
     default_benchmark_cases,
 };
 pub use disk_kv::DiskKvStore;
+pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest,
     NoironEngine,

@@ -113,13 +113,14 @@ The target algorithm stack is model-weight independent:
   reinforced KV-Fusion, time decay, semantic clustering, and Hot/Warm/Cold
   storage
 - self-evolution loop: test-time scaling, RLVR-style rewards for control
-  decisions, reflection scoring, drift gates, and experience replay
+  decisions, reflection scoring, drift gates, adaptive rollback, and experience
+  replay
 - Rust Transformer refactor: explicit layer templates for local-window,
   global-memory, and convolutional-fusion compute paths
 
 - 超长上下文：Infini 风格全局/局部 KV 分离、递归长上下文调度、层级 gist 记忆、SpeContext 风格稀疏 KV 筛选
 - 轻量 KV 系统：自研 4/8-bit uniform KV 量化、强化式 KV-Fusion、时间衰减、语义聚类和 Hot/Warm/Cold 分层存储
-- 自进化闭环：Test-time Scaling、针对控制决策的 RLVR 风格奖励、反思评分、漂移门控和经验回放
+- 自进化闭环：Test-time Scaling、针对控制决策的 RLVR 风格奖励、反思评分、漂移门控、自适应回滚和经验回放
 - Rust Transformer 重构：用显式层模板表达局部窗口、全局记忆、卷积融合等计算路径
 
 ## Current Status / 当前状态
@@ -137,6 +138,7 @@ Implemented modules:
 - `src/router.rs`: multi-factor adaptive router
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
 - `src/disk_kv.rs`: append-only disk-backed KV store
+- `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
@@ -145,7 +147,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reward, and memory counters
+- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, drift, reward, and memory counters
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -315,11 +317,14 @@ flowchart LR
     Backend --> Draft[Draft Answer]
     Draft --> Stream[Token Stream Monitor]
     Draft --> Reflect[Reflection Loop]
+    Reflect --> Drift[Drift Guard]
     Reflect --> Gist[Hierarchical Gist Memory]
     Reflect --> Reward[Process Reward]
     Stream --> Router
     Reflect --> Experience[Experience Store]
-    Reflect --> Memory
+    Drift --> Experience
+    Drift --> Memory
+    Drift --> Adaptive
     Gist --> Experience
     Gist --> Memory
     Reward --> Experience
@@ -387,9 +392,10 @@ Expected integration loop:
    collect exported runtime KV
 9. reflect on the draft
 10. generate document, section, and paragraph-level gist records
-11. score route, memory, hierarchy, latency, and admission with process rewards
-12. reinforce or penalize memory, including accepted exported runtime KV
-13. update routing threshold, hierarchy weights, and experience records
+11. run drift gates before durable memory or runtime KV admission
+12. score route, memory, hierarchy, latency, and admission with process rewards
+13. reinforce or penalize memory, including accepted exported runtime KV
+14. update or roll back routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
 2. 读取模型 id、tokenizer、原生上下文窗口、embedding 维度和 KV 交换能力等 runtime metadata
@@ -401,9 +407,10 @@ Expected integration loop:
 8. 把活跃 KV 记忆导入 runtime，调用真实模型后端，并收集 runtime 导出的 KV
 9. 对草稿答案做反思评估
 10. 生成 document、section、paragraph 三级 gist 记忆
-11. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
-12. 强化或惩罚记忆，包括通过反思准入的 runtime 导出 KV
-13. 更新路由阈值、层级权重和经验记录
+11. 在持久记忆或 runtime KV 准入前执行漂移门控
+12. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
+13. 强化或惩罚记忆，包括通过反思准入的 runtime 导出 KV
+14. 更新或回滚路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 

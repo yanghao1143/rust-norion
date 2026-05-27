@@ -2,6 +2,7 @@ use std::io;
 use std::path::Path;
 
 use crate::adaptive_state::AdaptiveState;
+use crate::drift::{DriftGuard, DriftInput, DriftReport};
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlanner, ExperienceReplayReport,
@@ -81,6 +82,7 @@ pub struct InferenceOutcome {
     pub stored_gist_memory_ids: Vec<u64>,
     pub exported_runtime_kv_blocks: usize,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
+    pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
     pub retention_report: RetentionReport,
     pub experience_id: u64,
@@ -103,6 +105,7 @@ pub struct NoironEngine {
     pub experience_replay_planner: ExperienceReplayPlanner,
     pub gist_generator: GistGenerator,
     pub process_rewarder: ProcessRewarder,
+    pub drift_guard: DriftGuard,
     pub reflector: Reflector,
     last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
@@ -125,6 +128,7 @@ impl Default for NoironEngine {
             experience_replay_planner: ExperienceReplayPlanner::new(),
             gist_generator: GistGenerator::new(),
             process_rewarder: ProcessRewarder::new(),
+            drift_guard: DriftGuard::new(),
             reflector: Reflector::new(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
@@ -247,6 +251,7 @@ impl NoironEngine {
         request: InferenceRequest,
         backend: &mut B,
     ) -> InferenceOutcome {
+        let adaptive_before_inference = self.adaptive_state();
         let query_vector = self.embedder.embed(&request.prompt);
         let used_memories = self.cache.lookup(&query_vector, 4);
         let used_experiences =
@@ -307,8 +312,20 @@ impl NoironEngine {
             report.quality,
             report.contradictions.len(),
         );
+        let exported_runtime_kv_blocks = draft.exported_kv_blocks.len();
+        let drift_report = self.drift_guard.evaluate(DriftInput {
+            quality: report.quality,
+            contradiction_count: report.contradictions.len(),
+            metrics,
+            route_budget,
+            used_memories: used_memories.len(),
+            exported_runtime_kv_blocks,
+            stream_windows: stream_reports.len(),
+        });
+        let admit_memory = report.store_as_memory && drift_report.allow_memory_write;
+        let admit_runtime_kv = admit_memory && drift_report.allow_runtime_kv_write;
 
-        let stored_memory_id = if report.store_as_memory {
+        let stored_memory_id = if admit_memory {
             let memory_text = format!(
                 "prompt:{}\nanswer:{}\nlesson:{}",
                 request.prompt.as_str(),
@@ -325,7 +342,7 @@ impl NoironEngine {
             None
         };
 
-        let stored_gist_memory_ids = if report.store_as_memory {
+        let stored_gist_memory_ids = if admit_memory {
             let mut ids = gist_records
                 .iter()
                 .filter(|gist| gist.importance >= 0.54)
@@ -344,8 +361,7 @@ impl NoironEngine {
         } else {
             Vec::new()
         };
-        let exported_runtime_kv_blocks = draft.exported_kv_blocks.len();
-        let stored_runtime_kv_memory_ids = if report.store_as_memory {
+        let stored_runtime_kv_memory_ids = if admit_runtime_kv {
             let mut ids = draft
                 .exported_kv_blocks
                 .iter()
@@ -366,7 +382,7 @@ impl NoironEngine {
         };
 
         for memory in &used_memories {
-            if report.store_as_memory {
+            if admit_memory && !drift_report.penalize_used_memory {
                 self.cache.reinforce(memory.id, report.quality);
             } else {
                 self.cache.penalize(memory.id, 1.0 - report.quality);
@@ -374,7 +390,11 @@ impl NoironEngine {
         }
 
         self.router.observe(metrics);
-        let hierarchy = self.hierarchy.observe(request.profile, metrics);
+        let mut hierarchy = self.hierarchy.observe(request.profile, metrics);
+        if drift_report.rollback_adaptive {
+            self.restore_adaptive_state(adaptive_before_inference);
+            hierarchy = self.hierarchy.current();
+        }
         let router_threshold_after = self.router.threshold();
         let process_reward = self.process_rewarder.score(ProcessRewardInput {
             profile: request.profile,
@@ -409,7 +429,9 @@ impl NoironEngine {
             process_reward: process_reward.clone(),
         });
         let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
-        self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
+        if !drift_report.rollback_adaptive {
+            self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
+        }
 
         InferenceOutcome {
             answer: report.revised_answer.clone(),
@@ -431,6 +453,7 @@ impl NoironEngine {
             stored_gist_memory_ids,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memory_ids,
+            drift_report,
             process_reward,
             retention_report,
             experience_id,
@@ -890,6 +913,75 @@ mod tests {
                 .iter()
                 .any(|entry| entry.key.contains("runtime_kv:l2h1"))
         );
+    }
+
+    #[test]
+    fn drift_guard_blocks_contradictory_runtime_kv_memory() {
+        struct ContradictingBackend;
+
+        impl InferenceBackend for ContradictingBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "Rust Noiron drift guard is certain about this answer, but it is also uncertain in the same claim, so the self-evolving memory path should treat it as unsafe.",
+                    vec![ReasoningStep::new("runtime", "contradictory draft", 0.92)],
+                )
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    2,
+                    vec![0.2, 0.4],
+                    vec![0.3, 0.5],
+                )])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        let mut backend = ContradictingBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust Noiron drift guard", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.exported_runtime_kv_blocks, 1);
+        assert_eq!(
+            outcome.drift_report.severity,
+            crate::drift::DriftSeverity::Block
+        );
+        assert!(outcome.report.store_as_memory);
+        assert!(outcome.stored_memory_id.is_none());
+        assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
+    }
+
+    #[test]
+    fn drift_guard_rolls_back_adaptive_state_for_bad_draft() {
+        struct BadBackend;
+
+        impl InferenceBackend for BadBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new("", vec![ReasoningStep::new("runtime", "empty", 0.0)])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        let threshold_before = engine.router.threshold();
+        let hierarchy_before = engine.hierarchy.current();
+        let mut backend = BadBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust Noiron rollback bad draft", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(
+            outcome.drift_report.severity,
+            crate::drift::DriftSeverity::Rollback
+        );
+        assert!((outcome.router_threshold_after - threshold_before).abs() < 0.0001);
+        assert!((engine.router.threshold() - threshold_before).abs() < 0.0001);
+        assert!((engine.hierarchy.current().local - hierarchy_before.local).abs() < 0.0001);
+        assert!(outcome.stored_memory_id.is_none());
     }
 
     #[test]

@@ -45,6 +45,7 @@ pub fn trace_json_line_with_case(
          \"transformer\":{{\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
+         \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"retention\":{{\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -93,6 +94,12 @@ pub fn trace_json_line_with_case(
         outcome.stored_gist_memory_ids.len(),
         outcome.exported_runtime_kv_blocks,
         outcome.stored_runtime_kv_memory_ids.len(),
+        outcome.drift_report.severity.as_str(),
+        outcome.drift_report.allow_memory_write,
+        outcome.drift_report.allow_runtime_kv_write,
+        outcome.drift_report.penalize_used_memory,
+        outcome.drift_report.rollback_adaptive,
+        string_array_json(&outcome.drift_report.notes),
         outcome.process_reward.total,
         outcome.process_reward.action.as_str(),
         outcome.process_reward.components.route,
@@ -211,6 +218,7 @@ mod tests {
         assert!(line.contains("\"case\":null"));
         assert!(line.contains("\"route\":"));
         assert!(line.contains("\"hierarchy\":"));
+        assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
         assert!(line.ends_with('}'));

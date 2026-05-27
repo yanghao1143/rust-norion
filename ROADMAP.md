@@ -77,7 +77,8 @@ The north star is now explicitly scoped around five core requirements:
 2. `rust-norion` control plane / 控制平面
    Multi-factor router, hierarchy controller, recursive scheduler,
    Hot/Warm/Cold cache scheduler, sparse KV filter, reflection loop, RLVR-style
-   process rewards, experience replay, and persisted adaptive state.
+   process rewards, drift guard, experience replay, and persisted adaptive
+   state.
 
 3. Memory system / 记忆系统
    Infini-attention-style global/local KV split, hierarchical gist memory,
@@ -180,6 +181,10 @@ modules, not external product dependencies:
 - Experience replay:
   the experience store should become replayable training data for the control
   plane state while leaving model weights untouched.
+- Drift guard:
+  contradiction, low-confidence, or high-perplexity drafts should gate durable
+  memory writes, block unsafe runtime KV admission, penalize contaminated
+  memory reuse, and roll back adaptive state when the drift is severe.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -239,7 +244,8 @@ These are algorithmic references, not product dependencies:
   accelerator, multi-GPU, edge, and server devices, with capability tiers and
   common device aliases covered by tests; best-effort auto probing now maps OS,
   architecture, CPU parallelism, and common GPU/NPU environment hints into a
-  conservative device profile)
+  conservative device profile; drift guard now gates memory writes, runtime KV
+  admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
   (initial runtime metadata, tokenizer, embedding, and KV import/export trait
@@ -263,7 +269,7 @@ These are algorithmic references, not product dependencies:
 
 - The default build can run without external model weights or closed services.
 - Every control decision can be traced: route, memory, hierarchy, reflection,
-  reward, and adaptive-state update.
+  drift, reward, and adaptive-state update.
 - KV compression has accuracy and latency benchmarks before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, not marketing
   language.

@@ -143,6 +143,7 @@ fn main() -> std::io::Result<()> {
         outcome.report.quality, outcome.metrics.perplexity, outcome.router_threshold_after
     );
     println!("process_reward: {}", outcome.process_reward.summary());
+    println!("drift: {}", outcome.drift_report.summary());
     println!("hardware: {}", outcome.hardware_plan.summary());
     println!(
         "route: attention={} fast={} attention_fraction={:.2}",
