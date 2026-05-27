@@ -305,7 +305,8 @@ These are algorithmic references, not product dependencies:
   structured reflection issue severity, latency, and memory admission is in
   place and persisted with experience;
   reward-ranked experience replay can now update router, hierarchy, and KV
-  memory state before inference; device-agnostic hardware pressure planning now
+  memory state before inference, including a default low-pressure automatic
+  replay pass over prior experience; device-agnostic hardware pressure planning now
   adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
   integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI
   accelerator, multi-GPU, edge, and server devices, with capability tiers and

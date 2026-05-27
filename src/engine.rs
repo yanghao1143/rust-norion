@@ -68,6 +68,7 @@ pub trait InferenceBackend {
 pub struct InferenceOutcome {
     pub answer: String,
     pub report: ReflectionReport,
+    pub auto_replay_report: Option<ExperienceReplayReport>,
     pub metrics: GenerationMetrics,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
@@ -111,6 +112,7 @@ pub struct NoironEngine {
     pub process_rewarder: ProcessRewarder,
     pub drift_guard: DriftGuard,
     pub reflector: Reflector,
+    pub auto_replay_limit: usize,
     last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
 }
@@ -134,6 +136,7 @@ impl Default for NoironEngine {
             process_rewarder: ProcessRewarder::new(),
             drift_guard: DriftGuard::new(),
             reflector: Reflector::new(),
+            auto_replay_limit: 2,
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
         }
@@ -218,6 +221,10 @@ impl NoironEngine {
         self.hardware_snapshot = snapshot;
     }
 
+    pub fn set_auto_replay_limit(&mut self, limit: usize) {
+        self.auto_replay_limit = limit;
+    }
+
     pub fn replay_experience(&mut self, limit: usize) -> ExperienceReplayReport {
         let plan = self
             .experience_replay_planner
@@ -269,6 +276,7 @@ impl NoironEngine {
         request: InferenceRequest,
         backend: &mut B,
     ) -> InferenceOutcome {
+        let auto_replay_report = self.maybe_auto_replay();
         let adaptive_before_inference = self.adaptive_state();
         let query_vector = self.embedder.embed(&request.prompt);
         let used_memories = self.cache.lookup(&query_vector, 4);
@@ -478,6 +486,7 @@ impl NoironEngine {
         InferenceOutcome {
             answer: report.revised_answer.clone(),
             report,
+            auto_replay_report,
             metrics,
             route_budget,
             hierarchy,
@@ -524,6 +533,22 @@ impl NoironEngine {
             self.recursive_scheduler.overlap_tokens(),
             self.recursive_scheduler.merge_fan_in(),
         )
+    }
+
+    fn maybe_auto_replay(&mut self) -> Option<ExperienceReplayReport> {
+        if self.auto_replay_limit == 0 || self.experience.is_empty() {
+            return None;
+        }
+        if self.hardware_snapshot.pressure() >= 0.72 {
+            return None;
+        }
+
+        let report = self.replay_experience(self.auto_replay_limit);
+        if report.applied == 0 {
+            None
+        } else {
+            Some(report)
+        }
     }
 }
 
@@ -889,6 +914,50 @@ mod tests {
         assert!(outcome.stored_memory_id.is_some());
         assert_eq!(outcome.exported_runtime_kv_blocks, 1);
         assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
+    }
+
+    #[test]
+    fn inference_auto_replays_prior_experience_before_next_run() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+
+        let first = engine.infer(
+            InferenceRequest::new("build a Rust Noiron replay loop", TaskProfile::Coding),
+            &mut backend,
+        );
+        let second = engine.infer(
+            InferenceRequest::new("build a Rust Noiron replay loop", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(first.auto_replay_report.is_none());
+        let report = second.auto_replay_report.as_ref().unwrap();
+        assert!(report.applied >= 1);
+        assert!(report.reinforced >= 1 || report.penalized >= 1);
+    }
+
+    #[test]
+    fn auto_replay_skips_when_hardware_pressure_is_high() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+
+        engine.infer(
+            InferenceRequest::new("build a Rust Noiron replay loop", TaskProfile::Coding),
+            &mut backend,
+        );
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.98,
+            0.90,
+            0.96,
+            0.80,
+        ));
+        let second = engine.infer(
+            InferenceRequest::new("build a Rust Noiron replay loop", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(second.auto_replay_report.is_none());
     }
 
     #[test]

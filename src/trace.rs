@@ -32,6 +32,7 @@ pub fn trace_json_line_with_case(
         .map(|adapter| adapter.as_str().to_owned())
         .collect::<Vec<_>>();
     let reflection_issue_codes = outcome.report.issue_codes();
+    let auto_replay = outcome.auto_replay_report.as_ref();
 
     format!(
         "{{\
@@ -56,6 +57,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
+         \"auto_replay\":{{\"applied\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{}}},\
          \"retention\":{{\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -138,6 +140,12 @@ pub fn trace_json_line_with_case(
         outcome.process_reward.components.latency,
         outcome.process_reward.components.admission,
         string_array_json(&outcome.process_reward.notes),
+        auto_replay.map(|report| report.applied).unwrap_or(0),
+        auto_replay.map(|report| report.reinforced).unwrap_or(0),
+        auto_replay.map(|report| report.penalized).unwrap_or(0),
+        auto_replay
+            .map(|report| report.touched_memories)
+            .unwrap_or(0),
         outcome.retention_report.before,
         outcome.retention_report.after,
         outcome.retention_report.decayed,
@@ -261,6 +269,7 @@ mod tests {
         assert!(line.contains("\"template\":\"coding_local\""));
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
+        assert!(line.contains("\"auto_replay\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
         assert!(line.contains("\"memory_compaction\":"));
         assert!(line.ends_with('}'));

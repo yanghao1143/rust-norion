@@ -154,7 +154,7 @@ Implemented modules:
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reflection diagnostics, drift, reward, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
-- `src/experience_replay.rs`: reward-ranked experience replay planner that can reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
+- `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties
@@ -195,6 +195,13 @@ Replay high/low reward experience before the next inference:
 ```powershell
 cargo run -- --replay 4 --profile coding "Improve Rust Noiron routing from prior experience"
 ```
+
+By default, the engine also performs a small automatic replay pass before
+inference when prior experience exists and local hardware pressure is not high.
+Use `--auto-replay 0` to disable it or `--auto-replay n` to change the limit.
+
+默认情况下，只要已有历史经验且本地硬件压力不高，引擎会在推理前自动执行一次小规模 experience replay。
+可以用 `--auto-replay 0` 关闭，或用 `--auto-replay n` 调整上限。
 
 Inspect persisted local state without running inference:
 

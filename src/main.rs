@@ -174,6 +174,9 @@ fn main() -> std::io::Result<()> {
     if let Some(replay_report) = &replay_report {
         println!("experience_replay: {}", replay_report.summary());
     }
+    if let Some(auto_replay_report) = &outcome.auto_replay_report {
+        println!("auto_experience_replay: {}", auto_replay_report.summary());
+    }
     println!();
     println!("{}", outcome.answer);
     println!();
@@ -403,6 +406,7 @@ fn configure_engine(engine: &mut NoironEngine, args: &Args) {
         args.chunk_overlap_tokens,
         args.merge_fan_in,
     );
+    engine.set_auto_replay_limit(args.auto_replay_limit);
     engine.set_hardware_snapshot(HardwareSnapshot::new(
         args.device,
         args.cpu_load,
@@ -685,6 +689,7 @@ struct Args {
     chunk_overlap_tokens: usize,
     merge_fan_in: usize,
     replay_limit: usize,
+    auto_replay_limit: usize,
     device: DeviceClass,
     cpu_load: f32,
     gpu_load: f32,
@@ -727,6 +732,7 @@ impl Args {
         let mut chunk_overlap_tokens = default_scheduler.overlap_tokens();
         let mut merge_fan_in = default_scheduler.merge_fan_in();
         let mut replay_limit = 0;
+        let mut auto_replay_limit = 2;
         let default_hardware = HardwareSnapshot::default();
         let mut device = default_hardware.device;
         let mut cpu_load = default_hardware.cpu_load;
@@ -912,6 +918,10 @@ impl Args {
                     replay_limit = parse_usize(&raw[index + 1], replay_limit);
                     index += 2;
                 }
+                "--auto-replay" if index + 1 < raw.len() => {
+                    auto_replay_limit = parse_usize(&raw[index + 1], auto_replay_limit);
+                    index += 2;
+                }
                 "--device" if index + 1 < raw.len() => {
                     device = parse_device_or_generic(&raw[index + 1]);
                     index += 2;
@@ -1003,6 +1013,7 @@ impl Args {
             chunk_overlap_tokens,
             merge_fan_in,
             replay_limit,
+            auto_replay_limit,
             device,
             cpu_load,
             gpu_load,
@@ -1087,7 +1098,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1111,6 +1122,8 @@ mod tests {
             "2".to_owned(),
             "--replay".to_owned(),
             "3".to_owned(),
+            "--auto-replay".to_owned(),
+            "4".to_owned(),
             "--trace".to_owned(),
             "trace.jsonl".to_owned(),
             "--benchmark".to_owned(),
@@ -1162,6 +1175,7 @@ mod tests {
         assert_eq!(args.chunk_overlap_tokens, 2);
         assert_eq!(args.merge_fan_in, 2);
         assert_eq!(args.replay_limit, 3);
+        assert_eq!(args.auto_replay_limit, 4);
         assert_eq!(args.trace_path.unwrap(), PathBuf::from("trace.jsonl"));
         assert_eq!(
             args.benchmark_path.unwrap(),
