@@ -141,7 +141,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
@@ -233,6 +233,19 @@ Run the same suite as a regression gate:
 cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
+Require the benchmark suite to prove at least one real recursive long-context
+case by constraining the demo native window:
+
+```powershell
+cargo run -- --benchmark target/noiron-recursive-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-min-recursive-cases 1 --native-window 64 --chunk-tokens 32 --chunk-overlap 8 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
+通过缩小演示用原生窗口，要求 benchmark 至少有一个真实触发递归长上下文调度的 case：
+
+```powershell
+cargo run -- --benchmark target/noiron-recursive-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-min-recursive-cases 1 --native-window 64 --chunk-tokens 32 --chunk-overlap 8 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
 Run the KV quantization gate for reproducible 4/8-bit compression accuracy,
 payload ratio, and latency checks:
 
@@ -261,12 +274,12 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
-Benchmark summaries include compacted memory counts and drift
-watch/block/rollback counts, so memory-growth or safety regressions in the
-self-evolution loop can fail the gate even when average quality still looks
-acceptable.
+Benchmark summaries include recursive case counts, compacted memory counts, and
+drift watch/block/rollback counts, so long-context coverage, memory-growth, or
+safety regressions in the self-evolution loop can fail the gate even when
+average quality still looks acceptable.
 
-Benchmark 汇总会包含 memory compaction 计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、memory compaction 计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

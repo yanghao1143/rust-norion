@@ -353,8 +353,8 @@ These are algorithmic references, not product dependencies:
   built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
-  latency ceilings, recursive chunk ceilings, and maximum drift block/rollback
-  counts; a persistent roundtrip gate now verifies memory, experience, and
+  latency ceilings, minimum recursive-case coverage, recursive chunk ceilings,
+  and maximum drift block/rollback counts; a persistent roundtrip gate now verifies memory, experience, and
   runtime KV reuse after full-state reload; a deterministic Rust-native local
   runtime prototype now implements
   tokenizer, embedding, generation, token trace, and KV import/export through
@@ -372,7 +372,8 @@ These are algorithmic references, not product dependencies:
   drift, reward, and adaptive-state update.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
   before it becomes default.
-- Long-context claims are tied to reproducible benchmarks, not marketing
+- Long-context claims are tied to reproducible benchmarks, including gates that
+  require at least one truly recursive scheduling case instead of marketing
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
   rollback, protected-id memory compaction, and inspectable local state.
@@ -392,5 +393,5 @@ These are algorithmic references, not product dependencies:
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
-  recursive scheduling budgets, drift block/rollback counts, or persistent
-  state reuse regress.
+  recursive scheduling coverage, recursive scheduling budgets, drift
+  block/rollback counts, or persistent state reuse regress.

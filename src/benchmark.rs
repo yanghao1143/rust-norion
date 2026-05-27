@@ -31,7 +31,7 @@ pub fn default_benchmark_cases() -> Vec<BenchmarkCase> {
         BenchmarkCase::new(
             "long_context_scheduler",
             TaskProfile::LongDocument,
-            "Summarize a local technical document about FHT-DKE, Noiron reflection, recursive scheduling, and persistent KV memory. Identify the control decisions that reduce wasted compute.",
+            long_context_benchmark_prompt(),
         ),
         BenchmarkCase::new(
             "reflection_memory",
@@ -46,6 +46,21 @@ pub fn default_benchmark_cases() -> Vec<BenchmarkCase> {
     ]
 }
 
+fn long_context_benchmark_prompt() -> String {
+    let repeated_sections = (0..96)
+        .map(|index| {
+            format!(
+                "section_{index}: FHT-DKE keeps local KV memory on disk, Noiron reflection scores drafts, recursive scheduling merges chunks, and adaptive routing avoids wasted attention."
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    format!(
+        "Summarize this local technical document and identify the control decisions that reduce wasted compute. {repeated_sections}"
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct BenchmarkCaseResult {
     pub name: String,
@@ -54,6 +69,7 @@ pub struct BenchmarkCaseResult {
     pub quality: f32,
     pub process_reward: f32,
     pub attention_fraction: f32,
+    pub requires_recursion: bool,
     pub recursive_chunks: usize,
     pub recursive_waves: usize,
     pub used_memories: usize,
@@ -70,6 +86,7 @@ pub struct BenchmarkGate {
     pub min_average_reward: f32,
     pub max_total_elapsed_ms: Option<u128>,
     pub max_case_recursive_chunks: Option<usize>,
+    pub min_recursive_cases: Option<usize>,
     pub max_drift_blocks: Option<usize>,
     pub max_drift_rollbacks: Option<usize>,
 }
@@ -81,6 +98,7 @@ impl Default for BenchmarkGate {
             min_average_reward: 0.45,
             max_total_elapsed_ms: None,
             max_case_recursive_chunks: None,
+            min_recursive_cases: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         }
@@ -434,6 +452,7 @@ impl BenchmarkSummary {
             quality: outcome.report.quality,
             process_reward: outcome.process_reward.total,
             attention_fraction: outcome.route_budget.attention_fraction,
+            requires_recursion: outcome.recursive_schedule.requires_recursion,
             recursive_chunks: outcome.recursive_schedule.chunk_count(),
             recursive_waves: outcome.recursive_schedule.execution_wave_count(),
             used_memories: outcome.used_memories.len(),
@@ -523,6 +542,13 @@ impl BenchmarkSummary {
             .unwrap_or(0)
     }
 
+    pub fn recursive_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.requires_recursion)
+            .count()
+    }
+
     pub fn max_recursive_waves(&self) -> usize {
         self.results
             .iter()
@@ -574,6 +600,16 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_recursive_cases) = gate.min_recursive_cases {
+            let recursive_cases = self.recursive_cases();
+            if recursive_cases < min_recursive_cases {
+                failures.push(format!(
+                    "recursive_cases {} below minimum {}",
+                    recursive_cases, min_recursive_cases
+                ));
+            }
+        }
+
         if let Some(max_drift_blocks) = gate.max_drift_blocks {
             let drift_blocks = self.drift_blocks();
             if drift_blocks > max_drift_blocks {
@@ -602,12 +638,13 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} max_recursive_waves={} stored_memories={} compacted_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} stored_memories={} compacted_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
             self.average_reward(),
             self.average_attention_fraction(),
+            self.recursive_cases(),
             self.max_recursive_waves(),
             self.total_stored_memories(),
             self.total_compacted_memories(),
@@ -692,6 +729,7 @@ fn quantization_error(original: &[f32], decoded: &[f32]) -> (f32, f32) {
 mod tests {
     use super::*;
     use crate::engine::{HeuristicBackend, InferenceRequest, NoironEngine};
+    use crate::recursive_scheduler::RecursiveScheduler;
 
     #[test]
     fn default_cases_cover_core_profiles() {
@@ -716,6 +754,17 @@ mod tests {
     }
 
     #[test]
+    fn default_long_context_case_can_trigger_small_window_recursion() {
+        let cases = default_benchmark_cases();
+        let long_context = cases
+            .iter()
+            .find(|case| case.name == "long_context_scheduler")
+            .expect("long-context benchmark case");
+
+        assert!(long_context.prompt.split_whitespace().count() > 128);
+    }
+
+    #[test]
     fn summary_records_case_outcomes() {
         let mut engine = NoironEngine::new();
         let mut backend = HeuristicBackend;
@@ -731,6 +780,29 @@ mod tests {
         assert_eq!(summary.len(), 1);
         assert!(summary.average_quality() > 0.0);
         assert!(summary.summary_line().contains("cases=1"));
+    }
+
+    #[test]
+    fn summary_records_recursive_case_outcomes() {
+        let mut engine = NoironEngine::new();
+        engine.recursive_scheduler = RecursiveScheduler::new(64, 32, 8, 2);
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new(
+            "long_context_scheduler",
+            TaskProfile::LongDocument,
+            long_context_benchmark_prompt(),
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+
+        summary.record(&case, 7, &outcome);
+
+        assert_eq!(summary.recursive_cases(), 1);
+        assert!(summary.max_recursive_chunks() > 1);
+        assert!(summary.summary_line().contains("recursive_cases=1"));
     }
 
     #[test]
@@ -770,6 +842,7 @@ mod tests {
             min_average_reward: 1.10,
             max_total_elapsed_ms: Some(1),
             max_case_recursive_chunks: Some(0),
+            min_recursive_cases: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         };
@@ -799,6 +872,31 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_recursive_coverage() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new("short", TaskProfile::General, "Short benchmark");
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+        let mut gate = BenchmarkGate::default();
+        gate.min_recursive_cases = Some(1);
+
+        summary.record(&case, 1, &outcome);
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("recursive_cases"))
+        );
+    }
+
+    #[test]
     fn gate_reports_drift_failures() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
@@ -808,6 +906,7 @@ mod tests {
                 quality: 0.9,
                 process_reward: 0.9,
                 attention_fraction: 0.5,
+                requires_recursion: false,
                 recursive_chunks: 1,
                 recursive_waves: 1,
                 used_memories: 0,
