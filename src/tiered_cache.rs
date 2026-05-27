@@ -334,6 +334,8 @@ mod tests {
             hits,
             failures,
             last_score,
+            created_at: 0,
+            last_access: hits + failures,
         }
     }
 

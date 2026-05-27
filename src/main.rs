@@ -85,6 +85,13 @@ fn main() -> std::io::Result<()> {
         outcome.used_experiences.len(),
         outcome.experience_id
     );
+    println!(
+        "retention: before={} after={} decayed={} removed={}",
+        outcome.retention_report.before,
+        outcome.retention_report.after,
+        outcome.retention_report.decayed,
+        outcome.retention_report.removed.len()
+    );
 
     Ok(())
 }

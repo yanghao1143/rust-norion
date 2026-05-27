@@ -64,7 +64,7 @@ Implemented modules:
 - `src/router.rs`: multi-factor adaptive router
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
 - `src/disk_kv.rs`: append-only disk-backed KV store
-- `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
+- `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback

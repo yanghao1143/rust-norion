@@ -20,7 +20,9 @@ pub use engine::{
 };
 pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
-pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
+pub use kv_cache::{
+    KvFusionCache, MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
+};
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{

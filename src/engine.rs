@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::adaptive_state::AdaptiveState;
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
-use crate::kv_cache::{KvFusionCache, MemoryMatch};
+use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
 use crate::tiered_cache::{TierMigration, TieredCachePlan, TieredCacheScheduler};
@@ -56,6 +56,7 @@ pub struct InferenceOutcome {
     pub used_memories: Vec<MemoryMatch>,
     pub used_experiences: Vec<ExperienceMatch>,
     pub stored_memory_id: Option<u64>,
+    pub retention_report: RetentionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
 }
@@ -238,6 +239,7 @@ impl NoironEngine {
             stream_windows: stream_reports.len(),
             hierarchy,
         });
+        let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
         self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
 
         InferenceOutcome {
@@ -253,6 +255,7 @@ impl NoironEngine {
             used_memories,
             used_experiences,
             stored_memory_id,
+            retention_report,
             experience_id,
             router_threshold_after,
         }

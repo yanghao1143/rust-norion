@@ -16,6 +16,8 @@ pub struct MemoryEntry {
     pub hits: u64,
     pub failures: u64,
     pub last_score: f32,
+    pub created_at: u64,
+    pub last_access: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -26,12 +28,40 @@ pub struct MemoryMatch {
     pub strength: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MemoryRetentionPolicy {
+    pub stale_after: u64,
+    pub decay_rate: f32,
+    pub remove_below_strength: f32,
+    pub remove_after_failures: u64,
+}
+
+impl Default for MemoryRetentionPolicy {
+    fn default() -> Self {
+        Self {
+            stale_after: 64,
+            decay_rate: 0.04,
+            remove_below_strength: 0.04,
+            remove_after_failures: 4,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RetentionReport {
+    pub before: usize,
+    pub after: usize,
+    pub decayed: usize,
+    pub removed: Vec<u64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct KvFusionCache {
     entries: Vec<MemoryEntry>,
     similarity_threshold: f32,
     max_entries: usize,
     next_id: u64,
+    clock: u64,
 }
 
 impl Default for KvFusionCache {
@@ -41,6 +71,7 @@ impl Default for KvFusionCache {
             similarity_threshold: 0.78,
             max_entries: 4096,
             next_id: 1,
+            clock: 0,
         }
     }
 }
@@ -68,6 +99,10 @@ impl KvFusionCache {
 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    pub fn clock(&self) -> u64 {
+        self.clock
     }
 
     pub fn lookup(&self, query: &[f32], limit: usize) -> Vec<MemoryMatch> {
@@ -100,6 +135,7 @@ impl KvFusionCache {
     ) -> u64 {
         let key = key.into();
         let usefulness = usefulness.clamp(0.05, 1.0);
+        let now = self.tick();
 
         if let Some((index, score)) = self.best_match_index(&vector) {
             if score >= self.similarity_threshold {
@@ -109,6 +145,7 @@ impl KvFusionCache {
                 entry.strength = (entry.strength + usefulness * 0.28).clamp(0.01, 3.0);
                 entry.hits += 1;
                 entry.last_score = score;
+                entry.last_access = now;
                 return entry.id;
             }
         }
@@ -123,25 +160,78 @@ impl KvFusionCache {
             hits: 0,
             failures: 0,
             last_score: 1.0,
+            created_at: now,
+            last_access: now,
         });
         self.prune_if_needed();
         id
     }
 
     pub fn reinforce(&mut self, id: u64, amount: f32) {
-        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
+        if let Some(index) = self.entries.iter().position(|entry| entry.id == id) {
+            let now = self.tick();
+            let entry = &mut self.entries[index];
             entry.strength = (entry.strength + amount.clamp(0.0, 1.0) * 0.18).clamp(0.01, 3.0);
             entry.hits += 1;
+            entry.last_access = now;
         }
     }
 
     pub fn penalize(&mut self, id: u64, amount: f32) {
-        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
+        if let Some(index) = self.entries.iter().position(|entry| entry.id == id) {
+            let now = self.tick();
+            let entry = &mut self.entries[index];
             entry.strength = (entry.strength - amount.clamp(0.0, 1.0) * 0.22).clamp(0.0, 3.0);
             entry.failures += 1;
+            entry.last_access = now;
         }
         self.entries
             .retain(|entry| entry.strength > 0.03 || entry.hits > entry.failures);
+    }
+
+    pub fn apply_retention(&mut self, policy: MemoryRetentionPolicy) -> RetentionReport {
+        let before = self.entries.len();
+        let now = self.tick();
+        let stale_after = policy.stale_after.max(1);
+        let decay_rate = policy.decay_rate.clamp(0.0, 0.95);
+        let mut decayed = 0;
+
+        for entry in &mut self.entries {
+            let idle = now.saturating_sub(entry.last_access);
+            if idle <= policy.stale_after {
+                continue;
+            }
+
+            let periods = (idle - policy.stale_after) as f32 / stale_after as f32;
+            let decay = (decay_rate * periods.max(1.0)).clamp(0.0, 0.95);
+            let before_strength = entry.strength;
+            entry.strength = (entry.strength * (1.0 - decay)).clamp(0.0, 3.0);
+            if entry.strength < before_strength {
+                decayed += 1;
+            }
+        }
+
+        let mut removed = Vec::new();
+        self.entries.retain(|entry| {
+            let idle = now.saturating_sub(entry.last_access);
+            let weak_and_stale = entry.strength <= policy.remove_below_strength
+                && idle > policy.stale_after
+                && entry.failures >= entry.hits;
+            let repeatedly_failed =
+                entry.failures >= policy.remove_after_failures && entry.hits == 0;
+            let remove = weak_and_stale || repeatedly_failed;
+            if remove {
+                removed.push(entry.id);
+            }
+            !remove
+        });
+
+        RetentionReport {
+            before,
+            after: self.entries.len(),
+            decayed,
+            removed,
+        }
     }
 
     pub fn save_to_disk(&self, path: impl AsRef<Path>) -> io::Result<()> {
@@ -170,9 +260,11 @@ impl KvFusionCache {
                 continue;
             };
             let id = entry.id;
+            cache.clock = cache.clock.max(entry.created_at).max(entry.last_access);
             cache.entries.push(entry);
             cache.next_id = cache.next_id.max(id + 1);
         }
+        cache.clock = cache.clock.saturating_add(1);
 
         Ok(cache)
     }
@@ -215,6 +307,7 @@ impl KvFusionCache {
                 continue;
             };
             cache.next_id = cache.next_id.max(entry.id + 1);
+            cache.clock = cache.clock.max(entry.created_at).max(entry.last_access);
             cache.entries.push(entry);
         }
 
@@ -223,8 +316,14 @@ impl KvFusionCache {
                 cache.next_id = cache.next_id.max(next_id);
             }
         }
+        cache.clock = cache.clock.saturating_add(1);
 
         Ok(cache)
+    }
+
+    fn tick(&mut self) -> u64 {
+        self.clock = self.clock.saturating_add(1);
+        self.clock
     }
 
     fn best_match_index(&self, vector: &[f32]) -> Option<(usize, f32)> {
@@ -241,8 +340,8 @@ impl KvFusionCache {
         }
 
         self.entries.sort_by(|a, b| {
-            let left = a.strength - a.failures as f32 * 0.08 + a.hits as f32 * 0.02;
-            let right = b.strength - b.failures as f32 * 0.08 + b.hits as f32 * 0.02;
+            let left = memory_value_score(a, self.clock);
+            let right = memory_value_score(b, self.clock);
             right.partial_cmp(&left).unwrap_or(Ordering::Equal)
         });
         self.entries.truncate(self.max_entries);
@@ -284,12 +383,14 @@ fn serialize_entry_quantized(entry: &MemoryEntry, bits: QuantizationBits) -> Str
 
 fn serialize_entry_with_vector(entry: &MemoryEntry, vector: &str) -> String {
     format!(
-        "{}\t{:.6}\t{}\t{}\t{:.6}\t{}\t{}",
+        "{}\t{:.6}\t{}\t{}\t{:.6}\t{}\t{}\t{}\t{}",
         entry.id,
         entry.strength,
         entry.hits,
         entry.failures,
         entry.last_score,
+        entry.created_at,
+        entry.last_access,
         escape_field(&entry.key),
         vector
     )
@@ -297,7 +398,7 @@ fn serialize_entry_with_vector(entry: &MemoryEntry, vector: &str) -> String {
 
 fn deserialize_entry(line: &str) -> Option<MemoryEntry> {
     let fields = line.split('\t').collect::<Vec<_>>();
-    if fields.len() != 7 {
+    if fields.len() != 7 && fields.len() != 9 {
         return None;
     }
 
@@ -306,16 +407,32 @@ fn deserialize_entry(line: &str) -> Option<MemoryEntry> {
     let hits = fields[2].parse::<u64>().ok()?;
     let failures = fields[3].parse::<u64>().ok()?;
     let last_score = fields[4].parse::<f32>().ok()?;
-    let vector = deserialize_vector(fields[6])?;
+    let (created_at, last_access, key, vector) = match fields.len() {
+        7 => (
+            0,
+            hits.saturating_add(failures),
+            unescape_field(fields[5]),
+            deserialize_vector(fields[6])?,
+        ),
+        9 => (
+            fields[5].parse::<u64>().ok()?,
+            fields[6].parse::<u64>().ok()?,
+            unescape_field(fields[7]),
+            deserialize_vector(fields[8])?,
+        ),
+        _ => return None,
+    };
 
     Some(MemoryEntry {
         id,
-        key: unescape_field(fields[5]),
+        key,
         vector,
         strength,
         hits,
         failures,
         last_score,
+        created_at,
+        last_access,
     })
 }
 
@@ -383,6 +500,12 @@ fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
     }
 }
 
+fn memory_value_score(entry: &MemoryEntry, now: u64) -> f32 {
+    let idle = now.saturating_sub(entry.last_access) as f32;
+    let idle_drag = (idle / 256.0).min(0.35);
+    entry.strength - entry.failures as f32 * 0.08 + entry.hits as f32 * 0.02 - idle_drag
+}
+
 fn escape_field(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -446,6 +569,49 @@ mod tests {
     }
 
     #[test]
+    fn retention_decays_stale_memory() {
+        let mut cache = KvFusionCache::new();
+        cache.store_or_fuse("stale but useful", vec![0.3, 0.4], 0.8);
+        cache.entries[0].hits = 3;
+        cache.entries[0].last_access = 1;
+        cache.clock = 16;
+
+        let report = cache.apply_retention(MemoryRetentionPolicy {
+            stale_after: 4,
+            decay_rate: 0.20,
+            remove_below_strength: 0.01,
+            remove_after_failures: 8,
+        });
+
+        assert_eq!(report.before, 1);
+        assert_eq!(report.after, 1);
+        assert_eq!(report.decayed, 1);
+        assert!(cache.entries()[0].strength < 0.8);
+    }
+
+    #[test]
+    fn retention_removes_stale_failed_memory() {
+        let mut cache = KvFusionCache::new();
+        let id = cache.store_or_fuse("stale failed", vec![0.1, 0.2], 0.05);
+        cache.entries[0].strength = 0.02;
+        cache.entries[0].failures = 4;
+        cache.entries[0].last_access = 1;
+        cache.clock = 16;
+
+        let report = cache.apply_retention(MemoryRetentionPolicy {
+            stale_after: 4,
+            decay_rate: 0.10,
+            remove_below_strength: 0.04,
+            remove_after_failures: 4,
+        });
+
+        assert_eq!(report.before, 1);
+        assert_eq!(report.after, 0);
+        assert_eq!(report.removed, vec![id]);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
     fn disk_kv_roundtrip_preserves_entries() {
         let path = temp_path("cache-roundtrip");
         let mut cache = KvFusionCache::new();
@@ -502,6 +668,8 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded.entries()[0].id, 42);
         assert_eq!(loaded.entries()[0].vector, vec![0.1, 0.2]);
+        assert_eq!(loaded.entries()[0].created_at, 0);
+        assert_eq!(loaded.entries()[0].last_access, 1);
         cleanup(path);
     }
 
