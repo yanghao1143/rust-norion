@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::engine::{GenerationContext, InferenceBackend};
+use crate::hardware::HardwarePlan;
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
@@ -22,6 +23,7 @@ pub struct RuntimeRequest {
     pub hierarchy: HierarchyWeights,
     pub transformer_plan: TransformerRefactorPlan,
     pub recursive_schedule: RecursiveSchedule,
+    pub hardware_plan: HardwarePlan,
     pub max_tokens: usize,
 }
 
@@ -80,6 +82,7 @@ impl RuntimeRequest {
             hierarchy: context.hierarchy,
             transformer_plan: context.transformer_plan.clone(),
             recursive_schedule: context.recursive_schedule.clone(),
+            hardware_plan: context.hardware_plan.clone(),
             max_tokens,
         }
     }
@@ -277,6 +280,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
          transformer: global_layers={} local_layers={} convolution_layers={}\n\
          recursive: {}\n\
+         hardware: {}\n\
          memory_hints:\n{}\n\
          infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
@@ -294,6 +298,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         transformer_counts.local,
         transformer_counts.convolution,
         request.recursive_schedule.summary(),
+        request.hardware_plan.summary(),
         bullet_list(&request.memory_hints),
         bullet_list(&request.infini_memory_hints),
         bullet_list(&request.experience_hints),
@@ -469,6 +474,7 @@ mod tests {
         );
         let transformer_plan = TransformerRefactorPlan::default();
         let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
         let context = GenerationContext {
             prompt: "build runtime",
             profile: TaskProfile::Coding,
@@ -483,6 +489,7 @@ mod tests {
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
             recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
             experiences: &experiences,
             transformer_plan: &transformer_plan,
         };
@@ -497,6 +504,7 @@ mod tests {
         assert_eq!(seen.infini_memory_hints.len(), 1);
         assert_eq!(seen.experience_hints.len(), 1);
         assert!(!seen.recursive_schedule.requires_recursion);
+        assert!(seen.hardware_plan.local_kv_token_budget > 0);
         assert!(seen.transformer_plan.is_empty());
     }
 
@@ -515,6 +523,7 @@ mod tests {
         let infini_memory_plan = InfiniMemoryPlan::default();
         let transformer_plan = TransformerRefactorPlan::default();
         let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
         let context = GenerationContext {
             prompt: "build runtime",
             profile: TaskProfile::Coding,
@@ -529,6 +538,7 @@ mod tests {
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
             recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
             experiences: &[],
             transformer_plan: &transformer_plan,
         };
@@ -560,6 +570,7 @@ mod tests {
         assert!(prompt.contains("infini_memory_hints"));
         assert!(prompt.contains("experience_hints"));
         assert!(prompt.contains("recursive:"));
+        assert!(prompt.contains("hardware:"));
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
     }
@@ -590,6 +601,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             transformer_plan: TransformerRefactorPlan::default(),
             recursive_schedule: RecursiveSchedule::default(),
+            hardware_plan: HardwarePlan::default(),
             max_tokens: 64,
         }
     }

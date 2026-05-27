@@ -208,7 +208,9 @@ These are algorithmic references, not product dependencies:
   (initial process reward scoring for route, memory, hierarchy, reflection,
   latency, and memory admission is in place and persisted with experience;
   reward-ranked experience replay can now update router, hierarchy, and KV
-  memory state before inference)
+  memory state before inference; device-agnostic hardware pressure planning now
+  adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
+  integrated GPU, discrete GPU, unified-memory, edge, and server devices)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
 - v1.0: production-grade local Agent Harness and test-time scaling inference

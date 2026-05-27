@@ -2,8 +2,9 @@ use std::env;
 use std::path::PathBuf;
 
 use rust_norion::{
-    CommandPromptMode, CommandRuntime, GistLevel, HeuristicBackend, InferenceRequest, NoironEngine,
-    RecursiveScheduler, RuntimeBackend, TaskProfile, TierMigrationAction,
+    CommandPromptMode, CommandRuntime, DeviceClass, GistLevel, HardwareSnapshot, HeuristicBackend,
+    InferenceRequest, NoironEngine, RecursiveScheduler, RuntimeBackend, TaskProfile,
+    TierMigrationAction,
 };
 
 fn main() -> std::io::Result<()> {
@@ -19,6 +20,13 @@ fn main() -> std::io::Result<()> {
         args.chunk_overlap_tokens,
         args.merge_fan_in,
     );
+    engine.set_hardware_snapshot(HardwareSnapshot::new(
+        args.device,
+        args.cpu_load,
+        args.gpu_load,
+        args.ram_load,
+        args.disk_load,
+    ));
     let replay_report = if args.replay_limit > 0 {
         Some(engine.replay_experience(args.replay_limit))
     } else {
@@ -64,6 +72,7 @@ fn main() -> std::io::Result<()> {
         outcome.report.quality, outcome.metrics.perplexity, outcome.router_threshold_after
     );
     println!("process_reward: {}", outcome.process_reward.summary());
+    println!("hardware: {}", outcome.hardware_plan.summary());
     println!(
         "route: attention={} fast={} attention_fraction={:.2}",
         outcome.route_budget.attention_tokens,
@@ -171,6 +180,11 @@ struct Args {
     chunk_overlap_tokens: usize,
     merge_fan_in: usize,
     replay_limit: usize,
+    device: DeviceClass,
+    cpu_load: f32,
+    gpu_load: f32,
+    ram_load: f32,
+    disk_load: f32,
 }
 
 impl Args {
@@ -189,6 +203,12 @@ impl Args {
         let mut chunk_overlap_tokens = default_scheduler.overlap_tokens();
         let mut merge_fan_in = default_scheduler.merge_fan_in();
         let mut replay_limit = 0;
+        let default_hardware = HardwareSnapshot::default();
+        let mut device = default_hardware.device;
+        let mut cpu_load = default_hardware.cpu_load;
+        let mut gpu_load = default_hardware.gpu_load;
+        let mut ram_load = default_hardware.ram_load;
+        let mut disk_load = default_hardware.disk_load;
         let mut index = 0;
 
         while index < raw.len() {
@@ -244,6 +264,26 @@ impl Args {
                     replay_limit = parse_usize(&raw[index + 1], replay_limit);
                     index += 2;
                 }
+                "--device" if index + 1 < raw.len() => {
+                    device = raw[index + 1].parse::<DeviceClass>().unwrap_or(device);
+                    index += 2;
+                }
+                "--cpu-load" if index + 1 < raw.len() => {
+                    cpu_load = parse_f32(&raw[index + 1], cpu_load);
+                    index += 2;
+                }
+                "--gpu-load" if index + 1 < raw.len() => {
+                    gpu_load = parse_f32(&raw[index + 1], gpu_load);
+                    index += 2;
+                }
+                "--ram-load" if index + 1 < raw.len() => {
+                    ram_load = parse_f32(&raw[index + 1], ram_load);
+                    index += 2;
+                }
+                "--disk-load" if index + 1 < raw.len() => {
+                    disk_load = parse_f32(&raw[index + 1], disk_load);
+                    index += 2;
+                }
                 "--help" | "-h" => {
                     print_help_and_exit();
                 }
@@ -276,12 +316,21 @@ impl Args {
             chunk_overlap_tokens,
             merge_fan_in,
             replay_limit,
+            device,
+            cpu_load,
+            gpu_load,
+            ram_load,
+            disk_load,
         }
     }
 }
 
 fn parse_usize(value: &str, fallback: usize) -> usize {
     value.parse::<usize>().unwrap_or(fallback)
+}
+
+fn parse_f32(value: &str, fallback: f32) -> f32 {
+    value.parse::<f32>().unwrap_or(fallback)
 }
 
 fn detect_profile(prompt: &str) -> TaskProfile {
@@ -308,7 +357,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -332,6 +381,12 @@ mod tests {
             "2".to_owned(),
             "--replay".to_owned(),
             "3".to_owned(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+            "--cpu-load".to_owned(),
+            "75".to_owned(),
+            "--ram-load".to_owned(),
+            "0.5".to_owned(),
             "one two three four five six seven eight nine".to_owned(),
         ]);
 
@@ -341,6 +396,9 @@ mod tests {
         assert_eq!(args.chunk_overlap_tokens, 2);
         assert_eq!(args.merge_fan_in, 2);
         assert_eq!(args.replay_limit, 3);
+        assert_eq!(args.device, DeviceClass::CpuOnly);
+        assert_eq!(args.cpu_load, 75.0);
+        assert_eq!(args.ram_load, 0.5);
         assert!(args.prompt.contains("nine"));
     }
 }

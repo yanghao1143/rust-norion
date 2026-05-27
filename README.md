@@ -140,6 +140,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
+- `src/hardware.rs`: device-agnostic hardware pressure and compute allocation planner
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
@@ -178,6 +179,12 @@ Replay high/low reward experience before the next inference:
 cargo run -- --replay 4 --profile coding "Improve Rust Noiron routing from prior experience"
 ```
 
+Apply device-agnostic hardware pressure hints:
+
+```powershell
+cargo run -- --device cpu --cpu-load 85 --ram-load 70 --disk-load 40 --profile long "Summarize a long local document"
+```
+
 Run through a local command runtime:
 
 ```powershell
@@ -214,11 +221,16 @@ flowchart LR
     Prompt --> Router[Adaptive Router]
     Prompt --> Hierarchy[Hierarchy Controller]
     Prompt --> Recursive[Recursive Scheduler]
+    Prompt --> Hardware[Hardware Allocator]
     Prompt --> Experience[Experience Store]
     Hierarchy --> Transformer[Transformer Refactor Plan]
     Memory --> Backend[InferenceBackend]
     Infini --> Backend
     Recursive --> Backend
+    Hardware --> Router
+    Hardware --> Infini
+    Hardware --> Hierarchy
+    Hardware --> Backend
     DiskKV --> Memory
     Tiers --> Backend
     Experience --> Backend
@@ -263,26 +275,29 @@ Expected integration loop:
 1. embed prompt and retrieve local memory
 2. compute route budget and hierarchy weights
 3. plan single-pass or recursive chunk/merge scheduling for the native model window
-4. optionally replay high/low reward experience into router, hierarchy, and KV state
-5. retrieve relevant reflection lessons from the experience store
-6. call the real model backend
-7. reflect on the draft
-8. generate document, section, and paragraph-level gist records
-9. score route, memory, hierarchy, latency, and admission with process rewards
-10. reinforce or penalize memory
-11. update routing threshold, hierarchy weights, and experience records
+4. adapt latency, KV budgets, and hierarchy weights to CPU-only, integrated GPU,
+   discrete GPU, unified-memory, edge, or server devices
+5. optionally replay high/low reward experience into router, hierarchy, and KV state
+6. retrieve relevant reflection lessons from the experience store
+7. call the real model backend
+8. reflect on the draft
+9. generate document, section, and paragraph-level gist records
+10. score route, memory, hierarchy, latency, and admission with process rewards
+11. reinforce or penalize memory
+12. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
 2. 计算路由预算和层级权重
 3. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
-4. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
-5. 从经验库检索相关反思 lesson
-6. 调用真实模型后端
-7. 对草稿答案做反思评估
-8. 生成 document、section、paragraph 三级 gist 记忆
-9. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
-10. 强化或惩罚记忆
-11. 更新路由阈值、层级权重和经验记录
+4. 根据 CPU-only、集显、独显、统一内存、边缘设备或服务器压力调整延迟、KV budget 和层级权重
+5. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
+6. 从经验库检索相关反思 lesson
+7. 调用真实模型后端
+8. 对草稿答案做反思评估
+9. 生成 document、section、paragraph 三级 gist 记忆
+10. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
+11. 强化或惩罚记忆
+12. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 

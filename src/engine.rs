@@ -7,6 +7,7 @@ use crate::experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlanner, ExperienceReplayReport,
 };
 use crate::gist_memory::{GistGenerator, GistRecord};
+use crate::hardware::{HardwareAllocator, HardwarePlan, HardwareSnapshot};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
@@ -45,6 +46,7 @@ pub struct GenerationContext<'a> {
     pub tier_plan: &'a TieredCachePlan,
     pub infini_memory_plan: &'a InfiniMemoryPlan,
     pub recursive_schedule: &'a RecursiveSchedule,
+    pub hardware_plan: &'a HardwarePlan,
     pub experiences: &'a [ExperienceMatch],
     pub transformer_plan: &'a TransformerRefactorPlan,
 }
@@ -64,6 +66,7 @@ pub struct InferenceOutcome {
     pub tier_migrations: Vec<TierMigration>,
     pub infini_memory_plan: InfiniMemoryPlan,
     pub recursive_schedule: RecursiveSchedule,
+    pub hardware_plan: HardwarePlan,
     pub transformer_plan: TransformerRefactorPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
@@ -84,6 +87,8 @@ pub struct NoironEngine {
     pub hierarchy: HierarchyController,
     pub tiered_cache: TieredCacheScheduler,
     pub infini_memory_planner: InfiniMemoryPlanner,
+    pub hardware_allocator: HardwareAllocator,
+    pub hardware_snapshot: HardwareSnapshot,
     pub recursive_scheduler: RecursiveScheduler,
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
@@ -104,6 +109,8 @@ impl Default for NoironEngine {
             hierarchy: HierarchyController::new(),
             tiered_cache: TieredCacheScheduler::new(),
             infini_memory_planner: InfiniMemoryPlanner::new(),
+            hardware_allocator: HardwareAllocator::new(),
+            hardware_snapshot: HardwareSnapshot::default(),
             recursive_scheduler: RecursiveScheduler::default(),
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
@@ -181,6 +188,10 @@ impl NoironEngine {
         self.adaptive_state().save_to_disk_kv(path)
     }
 
+    pub fn set_hardware_snapshot(&mut self, snapshot: HardwareSnapshot) {
+        self.hardware_snapshot = snapshot;
+    }
+
     pub fn replay_experience(&mut self, limit: usize) -> ExperienceReplayReport {
         let plan = self
             .experience_replay_planner
@@ -234,22 +245,31 @@ impl NoironEngine {
         let used_experiences =
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
+        let recursive_schedule = self.recursive_scheduler.plan(&request.prompt);
+        let base_hierarchy = self.hierarchy.adapt_to_profile(request.profile);
+        let hardware_plan = self.hardware_allocator.plan(
+            self.hardware_snapshot,
+            request.profile,
+            recursive_schedule.prompt_tokens,
+            base_hierarchy,
+        );
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         let tier_migrations = tier_plan.migrations_from(&self.last_tier_plan);
-        let infini_memory_plan = self
-            .infini_memory_planner
-            .plan(self.cache.entries(), &used_memories);
-        let recursive_schedule = self.recursive_scheduler.plan(&request.prompt);
+        let infini_memory_planner = self.infini_memory_planner.clone().with_token_budgets(
+            hardware_plan.local_kv_token_budget,
+            hardware_plan.global_kv_token_budget,
+        );
+        let infini_memory_plan = infini_memory_planner.plan(self.cache.entries(), &used_memories);
         let routing_context = RoutingContext {
             profile: request.profile,
             context_tokens: recursive_schedule.prompt_tokens,
             cache_hit_rate: used_memories.len() as f32 / 4.0,
-            latency_budget_ms: None,
+            latency_budget_ms: hardware_plan.latency_budget_ms,
         };
         let route_budget = self
             .router
             .budget_for_prompt_with_context(&request.prompt, routing_context);
-        let hierarchy = self.hierarchy.adapt_to_profile(request.profile);
+        let hierarchy = hardware_plan.hierarchy;
         let transformer_plan =
             self.transformer_planner
                 .plan(request.profile, hierarchy, route_budget);
@@ -263,6 +283,7 @@ impl NoironEngine {
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
             recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
             experiences: &used_experiences,
             transformer_plan: &transformer_plan,
         });
@@ -370,6 +391,7 @@ impl NoironEngine {
             tier_migrations,
             infini_memory_plan,
             recursive_schedule,
+            hardware_plan,
             transformer_plan,
             stream_reports,
             used_memories,
@@ -410,6 +432,7 @@ impl InferenceBackend for HeuristicBackend {
         let tier_counts = context.tier_plan.counts();
         let infini_counts = context.infini_memory_plan.counts();
         let recursive_schedule = context.recursive_schedule;
+        let hardware_plan = context.hardware_plan;
         let transformer_counts = context.transformer_plan.counts();
         let experience_summary = if context.experiences.is_empty() {
             "no prior experience".to_owned()
@@ -448,6 +471,7 @@ impl InferenceBackend for HeuristicBackend {
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
              Infini memory: {} local-window ({} tokens), {} global ({} tokens), {} sparse-skipped ({} tokens) memories. \
              Recursive schedule: required={}, {} chunks, {} merge rounds, {} prompt tokens, native window {}. \
+             Hardware plan: {}. \
              Transformer plan: {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
@@ -467,6 +491,7 @@ impl InferenceBackend for HeuristicBackend {
             recursive_schedule.merge_round_count(),
             recursive_schedule.prompt_tokens,
             recursive_schedule.native_window_tokens,
+            hardware_plan.summary(),
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution
@@ -629,6 +654,7 @@ fn char_weight(ch: char) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hardware::DeviceClass;
     use crate::process_reward::ProcessRewardComponents;
     use crate::reflection::DraftToken;
     use crate::tiered_cache::TierMigrationAction;
@@ -724,6 +750,31 @@ mod tests {
             engine.experience.records()[0].gist_memory_ids,
             outcome.stored_gist_memory_ids
         );
+    }
+
+    #[test]
+    fn inference_uses_hardware_pressure_for_latency_and_kv_budget() {
+        let mut cache = KvFusionCache::new();
+        cache.store_or_fuse("hardware constrained memory", vec![1.0, 0.0, 0.0], 1.0);
+        let mut engine = NoironEngine::with_cache(cache);
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.95,
+            0.0,
+            0.90,
+            0.50,
+        ));
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("hardware constrained memory", TaskProfile::LongDocument),
+            &mut backend,
+        );
+
+        assert!(outcome.hardware_plan.latency_budget_ms.is_some());
+        assert!(outcome.hardware_plan.local_kv_token_budget < 512);
+        assert!(outcome.hardware_plan.global_kv_token_budget < 4096);
+        assert!(outcome.answer.contains("Hardware plan"));
     }
 
     #[test]

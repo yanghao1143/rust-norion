@@ -4,6 +4,7 @@ pub mod engine;
 pub mod experience;
 pub mod experience_replay;
 pub mod gist_memory;
+pub mod hardware;
 pub mod hierarchy;
 pub mod infini_memory;
 pub mod kv_cache;
@@ -28,6 +29,7 @@ pub use experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlan, ExperienceReplayPlanner, ExperienceReplayReport,
 };
 pub use gist_memory::{GistGenerator, GistLevel, GistRecord};
+pub use hardware::{DeviceClass, HardwareAllocator, HardwarePlan, HardwareSnapshot};
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
