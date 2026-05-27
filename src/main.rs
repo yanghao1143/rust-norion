@@ -52,9 +52,11 @@ fn main() -> std::io::Result<()> {
             let mut backend = HeuristicBackend;
             run_benchmark(&mut engine, &mut backend, &benchmark_path)?
         };
-        engine.save_memory(&args.memory_path)?;
-        engine.save_experience(&args.experience_path)?;
-        engine.save_adaptive_state(&args.adaptive_path)?;
+        engine.save_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )?;
         let gate_report = if args.benchmark_gate_enabled {
             Some(summary.evaluate(&args.benchmark_gate()))
         } else {
@@ -107,9 +109,11 @@ fn main() -> std::io::Result<()> {
     };
     let outcome = timed_outcome.outcome;
     let elapsed_ms = timed_outcome.elapsed_ms;
-    engine.save_memory(&args.memory_path)?;
-    engine.save_experience(&args.experience_path)?;
-    engine.save_adaptive_state(&args.adaptive_path)?;
+    engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
 
     println!("Noiron Rust prototype");
     println!("profile: {:?}", args.profile);

@@ -199,6 +199,17 @@ impl NoironEngine {
         self.adaptive_state().save_to_disk_kv(path)
     }
 
+    pub fn save_full_state(
+        &self,
+        memory_path: impl AsRef<Path>,
+        experience_path: impl AsRef<Path>,
+        adaptive_path: impl AsRef<Path>,
+    ) -> io::Result<()> {
+        self.save_memory(memory_path)?;
+        self.save_experience(experience_path)?;
+        self.save_adaptive_state(adaptive_path)
+    }
+
     pub fn set_hardware_snapshot(&mut self, snapshot: HardwareSnapshot) {
         self.hardware_snapshot = snapshot;
     }
@@ -743,9 +754,13 @@ fn char_weight(ch: char) -> f32 {
 mod tests {
     use super::*;
     use crate::hardware::DeviceClass;
+    use crate::local_runtime::LocalTransformerRuntime;
     use crate::process_reward::ProcessRewardComponents;
     use crate::reflection::DraftToken;
+    use crate::runtime::RuntimeBackend;
     use crate::tiered_cache::TierMigrationAction;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn inference_updates_router_and_memory() {
@@ -1109,6 +1124,44 @@ mod tests {
     }
 
     #[test]
+    fn full_state_roundtrip_reuses_memory_experience_and_runtime_kv() {
+        let memory_path = temp_path("full-state-memory", "ndkv");
+        let experience_path = temp_path("full-state-experience", "ndkv");
+        let adaptive_path = temp_path("full-state-adaptive", "ndkv");
+        let prompt = "Rust Noiron persistent runtime KV memory";
+
+        let mut engine = NoironEngine::new();
+        let mut first_backend = RuntimeBackend::new(LocalTransformerRuntime::default());
+        let first = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding),
+            &mut first_backend,
+        );
+        assert!(first.stored_memory_id.is_some());
+        assert!(!first.stored_runtime_kv_memory_ids.is_empty());
+
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+
+        let mut restored =
+            NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+        let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::default());
+        let second = restored.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding),
+            &mut second_backend,
+        );
+
+        assert!(!second.used_memories.is_empty());
+        assert!(!second.used_experiences.is_empty());
+        assert!(!second_backend.runtime().imported_kv_blocks().is_empty());
+        assert!(second.answer.contains("imported"));
+
+        cleanup(memory_path);
+        cleanup(experience_path);
+        cleanup(adaptive_path);
+    }
+
+    #[test]
     fn inference_stream_monitor_uses_backend_tokens() {
         struct TokenBackend;
 
@@ -1167,5 +1220,20 @@ mod tests {
         assert!(
             (restored.hierarchy.current().local - engine.hierarchy.current().local).abs() < 0.0001
         );
+    }
+
+    fn temp_path(label: &str, extension: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-{label}-{}-{nanos}.{extension}",
+            std::process::id()
+        ))
+    }
+
+    fn cleanup(path: std::path::PathBuf) {
+        let _ = fs::remove_file(path);
     }
 }

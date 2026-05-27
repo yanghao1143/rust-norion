@@ -293,6 +293,12 @@ as `.legacy.tsv` backups when migrated to disk KV.
 记忆文件使用追加式 `DiskKvStore` 格式，并保存量化后的 KV 向量。旧版
 `noiron-memory.tsv` 仍可读取；迁移到磁盘 KV 时会保留为 `.legacy.tsv` 备份。
 
+`NoironEngine::save_full_state` and `NoironEngine::load_full_state` round-trip
+memory, experience, and adaptive state together, so a later run can retrieve
+prior lessons and import persisted KV into the runtime.
+
+`NoironEngine::save_full_state` 与 `NoironEngine::load_full_state` 会把记忆、经验和自适应状态一起往返保存，因此后续运行可以检索旧经验，并把持久化 KV 导入 runtime。
+
 ## Test / 测试
 
 ```powershell
