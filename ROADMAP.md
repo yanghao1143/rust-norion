@@ -329,6 +329,9 @@ These are algorithmic references, not product dependencies:
   the hardware plan;
   experience records now persist route budgets plus used/stored/gist/runtime-KV
   memory ids, structured reflection issues, and revision actions for replay;
+  reflection now performs one low-risk repair pass for non-critical weak drafts
+  and blocks stale runtime-KV admission when the final answer came from a
+  repaired draft;
   the CLI can inspect persisted local state without running inference;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)

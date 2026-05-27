@@ -43,7 +43,7 @@ pub fn trace_json_line_with_case(
          \"elapsed_ms\":{},\
          \"quality\":{:.6},\
          \"perplexity\":{:.6},\
-         \"reflection\":{{\"issues\":{},\"critical_issues\":{},\"max_severity\":\"{}\",\"issue_codes\":{},\"revision_actions\":{}}},\
+         \"reflection\":{{\"issues\":{},\"critical_issues\":{},\"max_severity\":\"{}\",\"issue_codes\":{},\"revision_actions\":{},\"revision_passes\":{}}},\
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
@@ -72,6 +72,7 @@ pub fn trace_json_line_with_case(
         outcome.report.max_severity().as_str(),
         string_array_json(&reflection_issue_codes),
         string_array_json(&outcome.report.revision_actions),
+        outcome.report.revision_passes,
         outcome.router_threshold_after,
         outcome.route_budget.threshold,
         outcome.route_budget.attention_fraction,
@@ -250,6 +251,7 @@ mod tests {
         assert!(line.contains("\"case\":null"));
         assert!(line.contains("\"reflection\":"));
         assert!(line.contains("\"issue_codes\":"));
+        assert!(line.contains("\"revision_passes\":"));
         assert!(line.contains("\"route\":"));
         assert!(line.contains("\"hierarchy\":"));
         assert!(line.contains("\"primary_lane\":"));

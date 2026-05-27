@@ -346,7 +346,8 @@ impl NoironEngine {
             stream_windows: stream_reports.len(),
         });
         let admit_memory = report.store_as_memory && drift_report.allow_memory_write;
-        let admit_runtime_kv = admit_memory && drift_report.allow_runtime_kv_write;
+        let admit_runtime_kv =
+            admit_memory && drift_report.allow_runtime_kv_write && report.revision_passes == 0;
 
         let stored_memory_id = if admit_memory {
             let memory_text = format!(
@@ -679,7 +680,8 @@ fn metrics_from_report(
     report: &ReflectionReport,
     route_budget: RouteBudget,
 ) -> GenerationMetrics {
-    let token_count = approximate_token_count(&draft.answer);
+    let token_count =
+        approximate_token_count(&report.revised_answer).max(approximate_token_count(&draft.answer));
     let route_pressure = (1.0 - route_budget.attention_fraction).max(0.0) * 2.5;
     let perplexity = 4.0
         + (1.0 - report.quality) * 24.0
@@ -848,6 +850,45 @@ mod tests {
         );
         assert!(!outcome.transformer_plan.is_empty());
         assert!(!engine.cache.is_empty());
+    }
+
+    #[derive(Debug, Clone)]
+    struct ShortRepairBackend;
+
+    impl InferenceBackend for ShortRepairBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust routes.",
+                vec![ReasoningStep::new("draft", "short but grounded", 0.86)],
+            )
+            .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                0,
+                0,
+                0,
+                1,
+                vec![0.1, 0.2, 0.3],
+                vec![0.3, 0.2, 0.1],
+            )])
+        }
+    }
+
+    #[test]
+    fn reflection_repair_rechecks_answer_without_admitting_stale_runtime_kv() {
+        let mut engine = NoironEngine::new();
+        let mut backend = ShortRepairBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "Explain Rust Noiron adaptive routing decisions",
+                TaskProfile::Coding,
+            ),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.report.revision_passes, 1);
+        assert!(outcome.answer.contains("Reflection repair"));
+        assert!(outcome.stored_memory_id.is_some());
+        assert_eq!(outcome.exported_runtime_kv_blocks, 1);
+        assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
     }
 
     #[test]

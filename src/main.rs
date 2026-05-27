@@ -178,8 +178,11 @@ fn main() -> std::io::Result<()> {
     println!("{}", outcome.answer);
     println!();
     println!(
-        "quality={:.3} perplexity={:.2} threshold_after={:.3}",
-        outcome.report.quality, outcome.metrics.perplexity, outcome.router_threshold_after
+        "quality={:.3} perplexity={:.2} threshold_after={:.3} revision_passes={}",
+        outcome.report.quality,
+        outcome.metrics.perplexity,
+        outcome.router_threshold_after,
+        outcome.report.revision_passes
     );
     println!("process_reward: {}", outcome.process_reward.summary());
     println!("drift: {}", outcome.drift_report.summary());

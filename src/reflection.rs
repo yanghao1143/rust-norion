@@ -71,6 +71,7 @@ pub struct ReflectionReport {
     pub contradictions: Vec<String>,
     pub issues: Vec<ReflectionIssue>,
     pub revision_actions: Vec<String>,
+    pub revision_passes: usize,
     pub revised_answer: String,
     pub store_as_memory: bool,
     pub lesson: String,
@@ -179,6 +180,54 @@ impl Reflector {
     }
 
     pub fn reflect(&self, prompt: &str, draft: &InferenceDraft) -> ReflectionReport {
+        let initial = self.reflect_once(prompt, draft, 0);
+        if !should_attempt_repair(&initial) {
+            return initial;
+        }
+
+        let repaired_answer = repair_answer(prompt, draft.answer.trim(), &initial);
+        let mut repaired_trace = draft.trace.clone();
+        repaired_trace.push(ReasoningStep::new(
+            "reflection_repair",
+            format!(
+                "applied revision actions: {}",
+                initial.revision_actions.join(",")
+            ),
+            0.74,
+        ));
+        let repaired_draft =
+            InferenceDraft::new(repaired_answer, repaired_trace).with_tokens(draft.tokens.clone());
+        let mut repaired = self.reflect_once(prompt, &repaired_draft, 1);
+
+        if repaired.quality >= initial.quality {
+            repaired.revision_actions =
+                merged_actions(&initial.revision_actions, &repaired.revision_actions);
+            repaired
+                .revision_actions
+                .push("reflection_repair_applied".to_owned());
+            repaired.lesson = format!(
+                "{} revision_passes={} initial_quality={:.3} initial_issues={}",
+                repaired.lesson,
+                repaired.revision_passes,
+                initial.quality,
+                initial.issues.len()
+            );
+            repaired
+        } else {
+            let mut rejected = initial;
+            rejected
+                .revision_actions
+                .push("reflection_repair_rejected".to_owned());
+            rejected
+        }
+    }
+
+    fn reflect_once(
+        &self,
+        prompt: &str,
+        draft: &InferenceDraft,
+        revision_passes: usize,
+    ) -> ReflectionReport {
         let mut issues = Vec::new();
         let mut revision_actions = Vec::new();
         let answer = draft.answer.trim();
@@ -331,11 +380,45 @@ impl Reflector {
             contradictions,
             issues,
             revision_actions,
+            revision_passes,
             revised_answer,
             store_as_memory,
             lesson,
         }
     }
+}
+
+fn should_attempt_repair(report: &ReflectionReport) -> bool {
+    report.revision_passes == 0
+        && report.critical_issue_count() == 0
+        && !report.revision_actions.is_empty()
+        && report.quality < 0.72
+}
+
+fn repair_answer(prompt: &str, answer: &str, report: &ReflectionReport) -> String {
+    let base = if answer.is_empty() {
+        "The draft did not produce a reliable answer.".to_owned()
+    } else {
+        dedupe_repeated_words(answer)
+    };
+    let prompt_anchor = compact(prompt, 96);
+    let action_summary = report.revision_actions.join(",");
+
+    format!(
+        "{base}\n\nReflection repair: ground the answer in `{prompt_anchor}`; address actions `{action_summary}`; keep the conclusion tentative where confidence is limited."
+    )
+}
+
+fn merged_actions(left: &[String], right: &[String]) -> Vec<String> {
+    let mut actions = Vec::new();
+
+    for action in left.iter().chain(right) {
+        if !actions.iter().any(|existing| existing == action) {
+            actions.push(action.clone());
+        }
+    }
+
+    actions
 }
 
 fn add_issue(
@@ -414,6 +497,32 @@ fn token_uncertainty(tokens: &[DraftToken]) -> Option<f32> {
     }
 }
 
+fn dedupe_repeated_words(text: &str) -> String {
+    let mut out = Vec::new();
+    let mut previous = "";
+
+    for word in text.split_whitespace() {
+        if word != previous {
+            out.push(word);
+        }
+        previous = word;
+    }
+
+    if out.is_empty() {
+        text.to_owned()
+    } else {
+        out.join(" ")
+    }
+}
+
+fn compact(text: &str, max_chars: usize) -> String {
+    let mut out = text.chars().take(max_chars).collect::<String>();
+    if text.chars().count() > max_chars {
+        out.push_str("...");
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,6 +567,33 @@ mod tests {
     }
 
     #[test]
+    fn short_low_risk_answer_gets_repaired_and_rechecked() {
+        let draft = InferenceDraft::new(
+            "Rust routes.",
+            vec![ReasoningStep::new("draft", "short but grounded", 0.86)],
+        );
+
+        let report =
+            Reflector::new().reflect("Explain Rust Noiron adaptive routing decisions", &draft);
+
+        assert_eq!(report.revision_passes, 1);
+        assert!(report.revised_answer.contains("Reflection repair"));
+        assert!(
+            report
+                .revision_actions
+                .iter()
+                .any(|action| action == "expand_short_answer")
+        );
+        assert!(
+            report
+                .revision_actions
+                .iter()
+                .any(|action| action == "reflection_repair_applied")
+        );
+        assert!(report.quality > 0.46);
+    }
+
+    #[test]
     fn conflicting_and_uncertain_draft_gets_structured_actions() {
         let mut token = DraftToken::new("maybe");
         token.entropy = Some(3.6);
@@ -471,6 +607,7 @@ mod tests {
         let report = Reflector::new().reflect("verify result carefully", &draft);
 
         assert!(!report.store_as_memory);
+        assert_eq!(report.revision_passes, 0);
         assert!(report.critical_issue_count() >= 2);
         assert!(
             report
