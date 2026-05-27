@@ -58,6 +58,11 @@ fn main() -> std::io::Result<()> {
         "tiers: hot_gpu={} warm_ram={} cold_disk={}",
         tier_counts.hot_gpu, tier_counts.warm_ram, tier_counts.cold_disk
     );
+    let transformer_counts = outcome.transformer_plan.counts();
+    println!(
+        "transformer: global={} local={} convolution={}",
+        transformer_counts.global, transformer_counts.local, transformer_counts.convolution
+    );
     println!("stream_windows={}", outcome.stream_reports.len());
     println!(
         "memory: used={} stored={:?} experience_used={} experience={}",

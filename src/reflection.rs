@@ -18,9 +18,27 @@ impl ReasoningStep {
 }
 
 #[derive(Debug, Clone)]
+pub struct DraftToken {
+    pub text: String,
+    pub logprob: Option<f32>,
+    pub entropy: Option<f32>,
+}
+
+impl DraftToken {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            logprob: None,
+            entropy: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct InferenceDraft {
     pub answer: String,
     pub trace: Vec<ReasoningStep>,
+    pub tokens: Vec<DraftToken>,
 }
 
 impl InferenceDraft {
@@ -28,7 +46,13 @@ impl InferenceDraft {
         Self {
             answer: answer.into(),
             trace,
+            tokens: Vec::new(),
         }
+    }
+
+    pub fn with_tokens(mut self, tokens: Vec<DraftToken>) -> Self {
+        self.tokens = tokens;
+        self
     }
 }
 

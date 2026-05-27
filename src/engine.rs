@@ -8,6 +8,7 @@ use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflect
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget};
 use crate::tiered_cache::{TieredCachePlan, TieredCacheScheduler};
 use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
+use crate::transformer::{TransformerPlanner, TransformerRefactorPlan};
 
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
@@ -33,6 +34,7 @@ pub struct GenerationContext<'a> {
     pub hierarchy: HierarchyWeights,
     pub tier_plan: &'a TieredCachePlan,
     pub experiences: &'a [ExperienceMatch],
+    pub transformer_plan: &'a TransformerRefactorPlan,
 }
 
 pub trait InferenceBackend {
@@ -47,6 +49,7 @@ pub struct InferenceOutcome {
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
+    pub transformer_plan: TransformerRefactorPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
     pub used_experiences: Vec<ExperienceMatch>,
@@ -62,6 +65,7 @@ pub struct NoironEngine {
     pub hierarchy: HierarchyController,
     pub tiered_cache: TieredCacheScheduler,
     pub stream_monitor: TokenStreamMonitor,
+    pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
     pub reflector: Reflector,
     embedder: TextEmbedder,
@@ -75,6 +79,7 @@ impl Default for NoironEngine {
             hierarchy: HierarchyController::new(),
             tiered_cache: TieredCacheScheduler::new(),
             stream_monitor: TokenStreamMonitor::default(),
+            transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
             reflector: Reflector::new(),
             embedder: TextEmbedder::default(),
@@ -128,6 +133,9 @@ impl NoironEngine {
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         let route_budget = self.router.budget_for_prompt(&request.prompt);
         let hierarchy = self.hierarchy.adapt_to_profile(request.profile);
+        let transformer_plan =
+            self.transformer_planner
+                .plan(request.profile, hierarchy, route_budget);
 
         let draft = backend.generate(GenerationContext {
             prompt: &request.prompt,
@@ -137,12 +145,13 @@ impl NoironEngine {
             hierarchy,
             tier_plan: &tier_plan,
             experiences: &used_experiences,
+            transformer_plan: &transformer_plan,
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
         let metrics = metrics_from_report(&draft, &report, route_budget);
-        let stream_reports = self.stream_monitor.observe_generated(
+        let stream_reports = self.stream_monitor.observe_draft(
             &mut self.router,
-            &draft.answer,
+            &draft,
             report.quality,
             report.contradictions.len(),
         );
@@ -194,6 +203,7 @@ impl NoironEngine {
             route_budget,
             hierarchy,
             tier_plan,
+            transformer_plan,
             stream_reports,
             used_memories,
             used_experiences,
@@ -227,6 +237,7 @@ impl InferenceBackend for HeuristicBackend {
             TaskProfile::LongDocument => "strong convolutional fusion for long context compression",
         };
         let tier_counts = context.tier_plan.counts();
+        let transformer_counts = context.transformer_plan.counts();
         let experience_summary = if context.experiences.is_empty() {
             "no prior experience".to_owned()
         } else {
@@ -246,14 +257,18 @@ impl InferenceBackend for HeuristicBackend {
              before storing it. Profile hint: {profile_hint}. Prompt anchor: {}. Memory hints: {memory_summary}. \
              Experience hints: {experience_summary}. \
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
-             Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories.",
+             Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
+             Transformer plan: {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
             context.route_budget.fast_tokens,
             context.route_budget.attention_tokens,
             tier_counts.hot_gpu,
             tier_counts.warm_ram,
-            tier_counts.cold_disk
+            tier_counts.cold_disk,
+            transformer_counts.global,
+            transformer_counts.local,
+            transformer_counts.convolution
         );
 
         InferenceDraft::new(
@@ -374,6 +389,7 @@ fn char_weight(ch: char) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reflection::DraftToken;
 
     #[test]
     fn inference_updates_router_and_memory() {
@@ -393,6 +409,7 @@ mod tests {
         );
         assert_eq!(engine.experience.len(), 1);
         assert_eq!(outcome.experience_id, 1);
+        assert!(!outcome.transformer_plan.is_empty());
         assert!(!engine.cache.is_empty());
     }
 
@@ -435,5 +452,44 @@ mod tests {
 
         assert_eq!(outcome.used_experiences.len(), 1);
         assert!(outcome.answer.contains("Experience hints"));
+    }
+
+    #[test]
+    fn inference_stream_monitor_uses_backend_tokens() {
+        struct TokenBackend;
+
+        impl InferenceBackend for TokenBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "easy hard",
+                    vec![ReasoningStep::new("tokens", "runtime token metadata", 0.9)],
+                )
+                .with_tokens(vec![
+                    DraftToken {
+                        text: "easy".to_owned(),
+                        logprob: Some(-0.1),
+                        entropy: Some(0.1),
+                    },
+                    DraftToken {
+                        text: "hard".to_owned(),
+                        logprob: Some(-1.2),
+                        entropy: Some(0.9),
+                    },
+                ])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.stream_monitor = TokenStreamMonitor::new(2);
+        let mut backend = TokenBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("runtime token metadata", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.stream_reports.len(), 1);
+        assert_eq!(outcome.stream_reports[0].observations[0].entropy, 0.1);
+        assert_eq!(outcome.stream_reports[0].observations[1].entropy, 0.9);
     }
 }

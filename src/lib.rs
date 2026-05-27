@@ -8,6 +8,7 @@ pub mod router;
 pub mod runtime;
 pub mod tiered_cache;
 pub mod token_stream;
+pub mod transformer;
 
 pub use disk_kv::DiskKvStore;
 pub use engine::{
@@ -17,7 +18,7 @@ pub use engine::{
 pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
 pub use hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
-pub use reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
+pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{GenerationMetrics, NoironRouter, Route, RouteBudget, RoutingDecision};
 pub use runtime::{
     CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeError, RuntimeRequest,
@@ -27,3 +28,7 @@ pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TieredCachePlan, TieredCacheScheduler,
 };
 pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};
+pub use transformer::{
+    AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
+    TransformerRefactorPlan,
+};

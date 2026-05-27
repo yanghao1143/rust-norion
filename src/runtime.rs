@@ -6,8 +6,9 @@ use std::process::{Command, Stdio};
 
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
-use crate::reflection::{InferenceDraft, ReasoningStep};
+use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
 use crate::router::RouteBudget;
+use crate::transformer::TransformerRefactorPlan;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeRequest {
@@ -17,6 +18,7 @@ pub struct RuntimeRequest {
     pub experience_hints: Vec<String>,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
+    pub transformer_plan: TransformerRefactorPlan,
     pub max_tokens: usize,
 }
 
@@ -47,6 +49,7 @@ impl RuntimeRequest {
                 .collect(),
             route_budget: context.route_budget,
             hierarchy: context.hierarchy,
+            transformer_plan: context.transformer_plan.clone(),
             max_tokens,
         }
     }
@@ -227,12 +230,14 @@ impl ModelRuntime for CommandRuntime {
 }
 
 fn format_runtime_prompt(request: &RuntimeRequest) -> String {
+    let transformer_counts = request.transformer_plan.counts();
     format!(
         "Noiron runtime request\n\
          profile: {:?}\n\
          max_tokens: {}\n\
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
          hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
+         transformer: global_layers={} local_layers={} convolution_layers={}\n\
          memory_hints:\n{}\n\
          experience_hints:\n{}\n\
          prompt:\n{}",
@@ -245,6 +250,9 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         request.hierarchy.global,
         request.hierarchy.local,
         request.hierarchy.convolution,
+        transformer_counts.global,
+        transformer_counts.local,
+        transformer_counts.convolution,
         bullet_list(&request.memory_hints),
         bullet_list(&request.experience_hints),
         request.prompt
@@ -309,7 +317,16 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                 } else {
                     response.trace
                 };
-                InferenceDraft::new(response.answer, trace)
+                let tokens = response
+                    .tokens
+                    .into_iter()
+                    .map(|token| DraftToken {
+                        text: token.text,
+                        logprob: token.logprob,
+                        entropy: token.entropy,
+                    })
+                    .collect();
+                InferenceDraft::new(response.answer, trace).with_tokens(tokens)
             }
             Err(error) => {
                 self.last_error = Some(error.clone());
@@ -352,6 +369,7 @@ mod tests {
     use crate::experience::ExperienceMatch;
     use crate::kv_cache::MemoryMatch;
     use crate::tiered_cache::TieredCachePlan;
+    use crate::transformer::TransformerRefactorPlan;
 
     #[derive(Debug, Default, Clone)]
     struct MockRuntime {
@@ -391,6 +409,7 @@ mod tests {
             score: 0.88,
         }];
         let tier_plan = TieredCachePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
         let context = GenerationContext {
             prompt: "build runtime",
             profile: TaskProfile::Coding,
@@ -404,6 +423,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             tier_plan: &tier_plan,
             experiences: &experiences,
+            transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(MockRuntime::default()).with_max_tokens(128);
 
@@ -414,6 +434,7 @@ mod tests {
         assert_eq!(seen.max_tokens, 128);
         assert_eq!(seen.memory_hints.len(), 1);
         assert_eq!(seen.experience_hints.len(), 1);
+        assert!(seen.transformer_plan.is_empty());
     }
 
     #[derive(Debug, Default, Clone)]
@@ -428,6 +449,7 @@ mod tests {
     #[test]
     fn runtime_errors_become_low_confidence_drafts() {
         let tier_plan = TieredCachePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
         let context = GenerationContext {
             prompt: "build runtime",
             profile: TaskProfile::Coding,
@@ -441,6 +463,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             tier_plan: &tier_plan,
             experiences: &[],
+            transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(FailingRuntime);
 
@@ -495,6 +518,7 @@ mod tests {
                 attention_fraction: 0.66,
             },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            transformer_plan: TransformerRefactorPlan::default(),
             max_tokens: 64,
         }
     }

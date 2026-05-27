@@ -91,6 +91,11 @@ impl NoironRouter {
 
     pub fn route_token(&self, token: &str) -> RoutingDecision {
         let entropy = estimate_token_entropy(token);
+        self.route_entropy(token, entropy)
+    }
+
+    pub fn route_entropy(&self, token: &str, entropy: f32) -> RoutingDecision {
+        let entropy = entropy.clamp(0.0, 1.0);
         let route = if entropy >= self.threshold {
             Route::Attention
         } else {

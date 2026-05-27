@@ -23,6 +23,8 @@ The project focuses on the control loop around inference:
   memories, and persist local state
 - task-aware hierarchy: shift global, local, and convolution-style compute
   weights for coding, writing, general reasoning, or long-document tasks
+- Rust-native Transformer refactor planning: express global, local-window, and
+  convolutional-fusion layer plans as explicit Rust data structures
 - reflection loop: score drafts, detect weak outputs, revise confidence, and
   decide what should become reusable memory
 - backend abstraction: keep the control layer independent from the actual model
@@ -31,6 +33,7 @@ The project focuses on the control loop around inference:
 - 自适应路由：判断 token 应该走低成本投影还是更重的注意力路径
 - 强化式 KV 记忆：保存有用上下文，融合相似记忆，削弱错误记忆，并持久化到本地
 - 任务感知层级调度：针对代码、写作、通用推理、长文档任务调整全局/局部/卷积式计算权重
+- Rust 原生 Transformer 重构规划：用明确的 Rust 数据结构表达全局注意力、局部窗口注意力和卷积融合层计划
 - 反思闭环：评估草稿质量，发现薄弱输出，修正置信度，并决定是否写入可复用记忆
 - 后端抽象：让控制层与真实模型运行时解耦
 
@@ -51,6 +54,7 @@ Implemented modules:
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/experience.rs`: structured reflection experience store
+- `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends
@@ -108,10 +112,12 @@ flowchart LR
     Prompt --> Router[Adaptive Router]
     Prompt --> Hierarchy[Hierarchy Controller]
     Prompt --> Experience[Experience Store]
+    Hierarchy --> Transformer[Transformer Refactor Plan]
     Memory --> Backend[InferenceBackend]
     DiskKV --> Memory
     Tiers --> Backend
     Experience --> Backend
+    Transformer --> Backend
     Router --> Backend
     Hierarchy --> Backend
     Backend --> Draft[Draft Answer]
