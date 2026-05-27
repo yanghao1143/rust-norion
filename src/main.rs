@@ -374,7 +374,7 @@ impl Args {
     fn parse(raw: Vec<String>) -> Self {
         let mut prompt_parts = Vec::new();
         let mut profile = None;
-        let mut memory_path = PathBuf::from("noiron-memory.tsv");
+        let mut memory_path = PathBuf::from("noiron-memory.ndkv");
         let mut experience_path = PathBuf::from("noiron-experience.ndkv");
         let mut adaptive_path = PathBuf::from("noiron-adaptive.ndkv");
         let mut trace_path = None;

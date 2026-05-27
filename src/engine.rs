@@ -149,7 +149,7 @@ impl NoironEngine {
     }
 
     pub fn load_memory(path: impl AsRef<Path>) -> io::Result<Self> {
-        Ok(Self::with_cache(KvFusionCache::load_from_disk(path)?))
+        Ok(Self::with_cache(KvFusionCache::load_persistent(path)?))
     }
 
     pub fn load_state(
@@ -174,7 +174,7 @@ impl NoironEngine {
     }
 
     pub fn save_memory(&self, path: impl AsRef<Path>) -> io::Result<()> {
-        self.cache.save_to_disk(path)
+        self.cache.save_persistent(path)
     }
 
     pub fn save_experience(&self, path: impl AsRef<Path>) -> io::Result<()> {

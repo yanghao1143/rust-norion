@@ -277,14 +277,21 @@ window, KV import/export, token trace, and generation.
 Transformer runtime 将要实现的同一套 ABI：tokenizer、embedding、原生上下文窗口、KV
 导入/导出、token trace 和生成接口。
 
-By default, the demo writes local memory to `noiron-memory.tsv`, structured
+By default, the demo writes local memory to `noiron-memory.ndkv`, structured
 reflection experience to `noiron-experience.ndkv`, and adaptive router/hierarchy
 state to `noiron-adaptive.ndkv`. These files are ignored by Git because they are
 local runtime state.
 
-demo 默认会把本地记忆写入 `noiron-memory.tsv`，并把结构化反思经验写入
+demo 默认会把本地记忆写入 `noiron-memory.ndkv`，并把结构化反思经验写入
 `noiron-experience.ndkv`，同时把自适应路由和层级权重状态写入
 `noiron-adaptive.ndkv`。这些文件属于本地运行状态，已被 Git 忽略。
+
+The memory file uses the append-only `DiskKvStore` format with quantized KV
+vectors. Legacy `noiron-memory.tsv` files can still be loaded and are preserved
+as `.legacy.tsv` backups when migrated to disk KV.
+
+记忆文件使用追加式 `DiskKvStore` 格式，并保存量化后的 KV 向量。旧版
+`noiron-memory.tsv` 仍可读取；迁移到磁盘 KV 时会保留为 `.legacy.tsv` 备份。
 
 ## Test / 测试
 

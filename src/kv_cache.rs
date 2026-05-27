@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fs;
-use std::io;
-use std::path::Path;
+use std::io::{self, ErrorKind};
+use std::path::{Path, PathBuf};
 
 use crate::disk_kv::DiskKvStore;
 use crate::kv_quant::{QuantizationBits, QuantizedVector};
@@ -271,6 +271,30 @@ impl KvFusionCache {
         Ok(cache)
     }
 
+    pub fn save_persistent(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        let path = path.as_ref();
+
+        match self.save_to_disk_kv(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == ErrorKind::InvalidData && path.exists() => {
+                let backup_path = legacy_backup_path(path);
+                fs::rename(path, &backup_path)?;
+                self.save_to_disk_kv(path)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub fn load_persistent(path: impl AsRef<Path>) -> io::Result<Self> {
+        let path = path.as_ref();
+
+        match Self::load_from_disk_kv(path) {
+            Ok(cache) => Ok(cache),
+            Err(error) if error.kind() == ErrorKind::InvalidData => Self::load_from_disk(path),
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn save_to_disk_kv(&self, path: impl AsRef<Path>) -> io::Result<()> {
         let mut store = DiskKvStore::open(path)?;
         let mut live_keys = HashSet::new();
@@ -508,6 +532,22 @@ fn memory_value_score(entry: &MemoryEntry, now: u64) -> f32 {
     entry.strength - entry.failures as f32 * 0.08 + entry.hits as f32 * 0.02 - idle_drag
 }
 
+fn legacy_backup_path(path: &Path) -> PathBuf {
+    for index in 0..1024 {
+        let extension = if index == 0 {
+            "legacy.tsv".to_owned()
+        } else {
+            format!("legacy.{index}.tsv")
+        };
+        let candidate = path.with_extension(extension);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    path.with_extension("legacy.tsv")
+}
+
 fn escape_field(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -673,6 +713,46 @@ mod tests {
         assert_eq!(loaded.entries()[0].created_at, 0);
         assert_eq!(loaded.entries()[0].last_access, 1);
         cleanup(path);
+    }
+
+    #[test]
+    fn persistent_save_uses_append_only_disk_kv() {
+        let path = temp_path("persistent-disk-kv");
+        let mut cache = KvFusionCache::new();
+        cache.store_or_fuse("persistent disk kv", vec![0.2, 0.4, 0.6], 0.9);
+
+        cache.save_persistent(&path).unwrap();
+
+        let bytes = fs::read(&path).unwrap();
+        assert!(bytes.starts_with(b"NDK1"));
+
+        let loaded = KvFusionCache::load_persistent(&path).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded.entries()[0].key, "persistent disk kv");
+        cleanup(path);
+    }
+
+    #[test]
+    fn persistent_load_accepts_legacy_tsv_and_migrates_on_save() {
+        let path = temp_path("persistent-legacy").with_extension("tsv");
+        let mut legacy = KvFusionCache::new();
+        legacy.store_or_fuse("legacy tsv memory", vec![0.1, 0.8], 0.85);
+        legacy.save_to_disk(&path).unwrap();
+        let backup_path = legacy_backup_path(&path);
+
+        let loaded = KvFusionCache::load_persistent(&path).unwrap();
+        loaded.save_persistent(&path).unwrap();
+
+        let bytes = fs::read(&path).unwrap();
+        assert!(bytes.starts_with(b"NDK1"));
+        assert!(backup_path.exists());
+
+        let migrated = KvFusionCache::load_persistent(&path).unwrap();
+        assert_eq!(migrated.len(), 1);
+        assert!(migrated.entries()[0].key.contains("legacy tsv memory"));
+
+        cleanup(path);
+        cleanup(backup_path);
     }
 
     fn temp_path(label: &str) -> std::path::PathBuf {

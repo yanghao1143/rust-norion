@@ -226,7 +226,8 @@ These are algorithmic references, not product dependencies:
   sovereignty constraints
 - v0.3: 4/8-bit KV quantization, retention policy, automatic tier migration
   (initial local q4 disk-KV persistence, memory retention, and persisted tier
-  migration tracing are in place)
+  migration tracing are in place; engine memory now defaults to append-only
+  DiskKvStore persistence with legacy TSV migration)
 - v0.4: Infini-style global/local KV split and sparse context filtering
   (initial control-plane memory planner with token-budget filtering is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
