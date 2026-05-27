@@ -45,7 +45,8 @@ The project focuses on the control loop around inference:
 
 - multi-factor adaptive routing: decide when a token should use projection,
   local-window attention, global attention, or convolutional fusion based on
-  entropy, task profile, context length, cache hit rate, and latency pressure
+  entropy, task profile, context length, cache hit rate, and latency pressure;
+  each task profile keeps its own adaptive threshold
 - reinforced KV memory: store useful context, fuse similar memories, weaken bad
   memories, and persist local state
 - task-aware hierarchy: shift global, local, and convolution-style compute
@@ -57,7 +58,7 @@ The project focuses on the control loop around inference:
 - backend abstraction: keep the control layer independent from the actual model
   runtime
 
-- 多因子自适应路由：基于熵、任务类型、上下文长度、缓存命中率和延迟压力，判断 token 应该走投影、局部窗口注意力、全局注意力还是卷积融合
+- 多因子自适应路由：基于熵、任务类型、上下文长度、缓存命中率和延迟压力，判断 token 应该走投影、局部窗口注意力、全局注意力还是卷积融合，并为不同任务 profile 分别维护自适应阈值
 - 强化式 KV 记忆：保存有用上下文，融合相似记忆，削弱错误记忆，并持久化到本地
 - 任务感知层级调度：针对代码、写作、通用推理、长文档任务调整全局/局部/卷积式计算权重
 - Rust 原生 Transformer 重构规划：用明确的 Rust 数据结构表达全局注意力、局部窗口注意力和卷积融合层计划
@@ -135,7 +136,7 @@ Implemented modules:
 
 已实现模块：
 
-- `src/router.rs`: multi-factor adaptive router
+- `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
 - `src/benchmark.rs`: built-in benchmark cases, regression gates, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store

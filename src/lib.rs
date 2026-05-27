@@ -65,8 +65,8 @@ pub use recursive_scheduler::{
 };
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{
-    GenerationMetrics, NoironRouter, Route, RouteBudget, RouterState, RoutingContext,
-    RoutingDecision,
+    GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds, Route, RouteBudget,
+    RouterState, RoutingContext, RoutingDecision,
 };
 pub use runtime::{
     CommandPromptMode, CommandRuntime, CommandWireFormat, ModelRuntime, RuntimeBackend,

@@ -114,7 +114,9 @@ The north star is now explicitly scoped around five core requirements:
 1. Multi-factor routing / 多因子路由
    Entropy, task profile, context length, cache hit rate, latency budget, and
    future hardware pressure choose among projection, local-window attention,
-   global attention, and convolutional fusion.
+   global attention, and convolutional fusion. Router thresholds should evolve
+   per task profile so coding, writing, general reasoning, and long-document
+   runs do not overwrite each other's compute strategy.
 
 2. Self-owned Transformer boundary / 自研 Transformer 边界
    Strengthen the runtime trait so the self-developed model exposes tokenizer,
@@ -211,8 +213,9 @@ modules, not external product dependencies:
   memory writes, block unsafe runtime KV admission, penalize contaminated
   memory reuse, and roll back adaptive state when the drift is severe.
 - State inspection:
-  persisted memory, experience, router threshold, hierarchy weights, and tier
-  counts should be inspectable from the CLI without running a new inference.
+  persisted memory, experience, global/profile router thresholds, hierarchy
+  weights, and tier counts should be inspectable from the CLI without running a
+  new inference.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -292,6 +295,8 @@ These are algorithmic references, not product dependencies:
   coverage descriptor with common aliases; the CLI can print the full built-in
   device matrix and run a `--device-gate` compatibility check across every
   explicit device profile, including alias roundtrips;
+  router thresholds now persist separately for general, coding, writing, and
+  long-document profiles;
   the CLI can inspect persisted local state without running inference;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
@@ -330,9 +335,9 @@ These are algorithmic references, not product dependencies:
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
   rollback, protected-id memory compaction, and inspectable local state.
-- The CLI can inspect memory count, experience count, adaptive router state,
-  hierarchy weights, tier counts, and top memories/lessons from persisted local
-  files without invoking a model runtime.
+- The CLI can inspect memory count, experience count, adaptive global/profile
+  router state, hierarchy weights, tier counts, and top memories/lessons from
+  persisted local files without invoking a model runtime.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves the runtime ABI end to end before

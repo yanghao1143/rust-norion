@@ -1,5 +1,6 @@
+use crate::hierarchy::TaskProfile;
 use crate::reflection::{DraftToken, InferenceDraft};
-use crate::router::{GenerationMetrics, NoironRouter, Route, RoutingDecision};
+use crate::router::{GenerationMetrics, NoironRouter, Route, RoutingContext, RoutingDecision};
 
 #[derive(Debug, Clone)]
 pub struct TokenObservation {
@@ -49,14 +50,40 @@ impl TokenStreamMonitor {
         semantic_consistency: f32,
         contradiction_count: usize,
     ) -> Vec<TokenWindowReport> {
+        self.observe_generated_with_profile(
+            router,
+            TaskProfile::General,
+            generated,
+            semantic_consistency,
+            contradiction_count,
+        )
+    }
+
+    pub fn observe_generated_with_profile(
+        &self,
+        router: &mut NoironRouter,
+        profile: TaskProfile,
+        generated: &str,
+        semantic_consistency: f32,
+        contradiction_count: usize,
+    ) -> Vec<TokenWindowReport> {
         let tokens = tokenize_generated(generated);
         let mut reports = Vec::new();
+        let routing_context = RoutingContext {
+            profile,
+            ..RoutingContext::default()
+        };
 
         for (window_index, chunk) in tokens.chunks(self.window_size).enumerate() {
             let start_token = window_index * self.window_size;
             let observations = chunk
                 .iter()
-                .map(|token| observe_token(router.route_token(token), semantic_consistency))
+                .map(|token| {
+                    observe_token(
+                        router.route_token_with_context(token, routing_context),
+                        semantic_consistency,
+                    )
+                })
                 .collect::<Vec<_>>();
             let attention_count = observations
                 .iter()
@@ -81,13 +108,13 @@ impl TokenStreamMonitor {
                 token_count,
             };
 
-            router.observe(metrics);
+            router.observe_with_profile(profile, metrics);
             reports.push(TokenWindowReport {
                 start_token,
                 end_token: start_token + token_count,
                 metrics,
                 attention_fraction: attention_count as f32 / token_count as f32,
-                threshold_after: router.threshold(),
+                threshold_after: router.threshold_for(profile),
                 observations,
             });
         }
@@ -102,16 +129,35 @@ impl TokenStreamMonitor {
         semantic_consistency: f32,
         contradiction_count: usize,
     ) -> Vec<TokenWindowReport> {
+        self.observe_draft_with_profile(
+            router,
+            TaskProfile::General,
+            draft,
+            semantic_consistency,
+            contradiction_count,
+        )
+    }
+
+    pub fn observe_draft_with_profile(
+        &self,
+        router: &mut NoironRouter,
+        profile: TaskProfile,
+        draft: &InferenceDraft,
+        semantic_consistency: f32,
+        contradiction_count: usize,
+    ) -> Vec<TokenWindowReport> {
         if draft.tokens.is_empty() {
-            self.observe_generated(
+            self.observe_generated_with_profile(
                 router,
+                profile,
                 &draft.answer,
                 semantic_consistency,
                 contradiction_count,
             )
         } else {
-            self.observe_tokens(
+            self.observe_tokens_with_profile(
                 router,
+                profile,
                 &draft.tokens,
                 semantic_consistency,
                 contradiction_count,
@@ -126,17 +172,41 @@ impl TokenStreamMonitor {
         semantic_consistency: f32,
         contradiction_count: usize,
     ) -> Vec<TokenWindowReport> {
+        self.observe_tokens_with_profile(
+            router,
+            TaskProfile::General,
+            tokens,
+            semantic_consistency,
+            contradiction_count,
+        )
+    }
+
+    pub fn observe_tokens_with_profile(
+        &self,
+        router: &mut NoironRouter,
+        profile: TaskProfile,
+        tokens: &[DraftToken],
+        semantic_consistency: f32,
+        contradiction_count: usize,
+    ) -> Vec<TokenWindowReport> {
         let mut reports = Vec::new();
+        let routing_context = RoutingContext {
+            profile,
+            ..RoutingContext::default()
+        };
 
         for (window_index, chunk) in tokens.chunks(self.window_size).enumerate() {
             let start_token = window_index * self.window_size;
             let observations = chunk
                 .iter()
                 .map(|token| {
-                    let entropy = token
-                        .entropy
-                        .unwrap_or_else(|| router.route_token(&token.text).entropy);
-                    let decision = router.route_entropy(&token.text, entropy);
+                    let entropy = token.entropy.unwrap_or_else(|| {
+                        router
+                            .route_token_with_context(&token.text, routing_context)
+                            .entropy
+                    });
+                    let decision =
+                        router.route_entropy_with_context(&token.text, entropy, routing_context);
                     let mut observation = observe_token(decision, semantic_consistency);
                     if let Some(logprob) = token.logprob {
                         let logprob_loss = (-logprob).max(0.0);
@@ -168,13 +238,13 @@ impl TokenStreamMonitor {
                 token_count,
             };
 
-            router.observe(metrics);
+            router.observe_with_profile(profile, metrics);
             reports.push(TokenWindowReport {
                 start_token,
                 end_token: start_token + token_count,
                 metrics,
                 attention_fraction: attention_count as f32 / token_count as f32,
-                threshold_after: router.threshold(),
+                threshold_after: router.threshold_for(profile),
                 observations,
             });
         }
@@ -278,5 +348,23 @@ mod tests {
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].observations[0].route, Route::FastProjection);
         assert!(reports[0].observations[1].route.uses_attention_budget());
+    }
+
+    #[test]
+    fn stream_feedback_updates_selected_profile() {
+        let mut router = NoironRouter::new();
+        let monitor = TokenStreamMonitor::new(4);
+
+        monitor.observe_generated_with_profile(
+            &mut router,
+            TaskProfile::Coding,
+            "fn main value compute branch return",
+            0.97,
+            0,
+        );
+
+        let state = router.state();
+        assert_eq!(state.profile_observations.get(TaskProfile::General), 0);
+        assert_eq!(state.profile_observations.get(TaskProfile::Coding), 2);
     }
 }

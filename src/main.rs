@@ -456,6 +456,13 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
     println!("experience_file: {}", args.experience_path.display());
     println!("adaptive_file: {}", args.adaptive_path.display());
     println!("{}", report.summary_line());
+    println!(
+        "profile_observations: general={} coding={} writing={} long={}",
+        report.profile_observations.general,
+        report.profile_observations.coding,
+        report.profile_observations.writing,
+        report.profile_observations.long_document
+    );
 
     println!("top_memories:");
     if report.top_memories.is_empty() {

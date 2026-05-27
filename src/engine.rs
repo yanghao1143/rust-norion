@@ -226,7 +226,7 @@ impl NoironEngine {
 
         for item in plan.items {
             let metrics = replay_metrics(&item);
-            self.router.observe(metrics);
+            self.router.observe_with_profile(item.profile, metrics);
             self.hierarchy.observe(item.profile, metrics);
 
             match item.action {
@@ -323,8 +323,9 @@ impl NoironEngine {
         let gist_records =
             self.gist_generator
                 .generate(&request.prompt, &report.revised_answer, report.quality);
-        let stream_reports = self.stream_monitor.observe_draft(
+        let stream_reports = self.stream_monitor.observe_draft_with_profile(
             &mut self.router,
+            request.profile,
             &draft,
             report.quality,
             report.contradictions.len(),
@@ -406,7 +407,7 @@ impl NoironEngine {
             }
         }
 
-        self.router.observe(metrics);
+        self.router.observe_with_profile(request.profile, metrics);
         let mut hierarchy = self.hierarchy.observe(request.profile, metrics);
         if drift_report.rollback_adaptive {
             self.restore_adaptive_state(adaptive_before_inference);

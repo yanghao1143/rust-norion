@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use crate::engine::NoironEngine;
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::process_reward::RewardAction;
+use crate::router::{ProfileObservations, ProfileThresholds};
 use crate::tiered_cache::TierCounts;
 
 #[derive(Debug, Clone)]
@@ -31,6 +32,8 @@ pub struct StateInspectionReport {
     pub experience_count: usize,
     pub router_threshold: f32,
     pub router_observations: u64,
+    pub profile_thresholds: ProfileThresholds,
+    pub profile_observations: ProfileObservations,
     pub hierarchy: HierarchyWeights,
     pub tier_counts: TierCounts,
     pub top_memories: Vec<StateMemorySummary>,
@@ -106,6 +109,8 @@ impl StateInspectionReport {
             experience_count: engine.experience.len(),
             router_threshold: adaptive_state.router.threshold,
             router_observations: adaptive_state.router.observations,
+            profile_thresholds: adaptive_state.router.profile_thresholds,
+            profile_observations: adaptive_state.router.profile_observations,
             hierarchy: adaptive_state.hierarchy.current,
             tier_counts: adaptive_state.tier_plan.counts(),
             top_memories,
@@ -115,11 +120,15 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} experiences={} router_threshold={:.3} router_observations={} hierarchy=({:.2},{:.2},{:.2}) tiers=({},{},{})",
+            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) tiers=({},{},{})",
             self.memory_count,
             self.experience_count,
             self.router_threshold,
             self.router_observations,
+            self.profile_thresholds.general,
+            self.profile_thresholds.coding,
+            self.profile_thresholds.writing,
+            self.profile_thresholds.long_document,
             self.hierarchy.global,
             self.hierarchy.local,
             self.hierarchy.convolution,

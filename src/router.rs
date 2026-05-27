@@ -88,26 +88,118 @@ impl RouteBudget {
 #[derive(Debug, Clone)]
 pub struct NoironRouter {
     threshold: f32,
+    profile_thresholds: ProfileThresholds,
     min_threshold: f32,
     max_threshold: f32,
     learning_rate: f32,
     observations: u64,
+    profile_observations: ProfileObservations,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterState {
     pub threshold: f32,
     pub observations: u64,
+    pub profile_thresholds: ProfileThresholds,
+    pub profile_observations: ProfileObservations,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProfileThresholds {
+    pub general: f32,
+    pub coding: f32,
+    pub writing: f32,
+    pub long_document: f32,
+}
+
+impl ProfileThresholds {
+    pub fn from_single(threshold: f32) -> Self {
+        Self {
+            general: threshold,
+            coding: threshold,
+            writing: threshold,
+            long_document: threshold,
+        }
+    }
+
+    pub fn get(self, profile: TaskProfile) -> f32 {
+        match profile {
+            TaskProfile::General => self.general,
+            TaskProfile::Coding => self.coding,
+            TaskProfile::Writing => self.writing,
+            TaskProfile::LongDocument => self.long_document,
+        }
+    }
+
+    pub fn set(&mut self, profile: TaskProfile, threshold: f32) {
+        match profile {
+            TaskProfile::General => self.general = threshold,
+            TaskProfile::Coding => self.coding = threshold,
+            TaskProfile::Writing => self.writing = threshold,
+            TaskProfile::LongDocument => self.long_document = threshold,
+        }
+    }
+
+    pub fn clamp(self, min_threshold: f32, max_threshold: f32) -> Self {
+        Self {
+            general: self.general.clamp(min_threshold, max_threshold),
+            coding: self.coding.clamp(min_threshold, max_threshold),
+            writing: self.writing.clamp(min_threshold, max_threshold),
+            long_document: self.long_document.clamp(min_threshold, max_threshold),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProfileObservations {
+    pub general: u64,
+    pub coding: u64,
+    pub writing: u64,
+    pub long_document: u64,
+}
+
+impl ProfileObservations {
+    pub fn from_single(observations: u64) -> Self {
+        Self {
+            general: observations,
+            coding: 0,
+            writing: 0,
+            long_document: 0,
+        }
+    }
+
+    pub fn get(self, profile: TaskProfile) -> u64 {
+        match profile {
+            TaskProfile::General => self.general,
+            TaskProfile::Coding => self.coding,
+            TaskProfile::Writing => self.writing,
+            TaskProfile::LongDocument => self.long_document,
+        }
+    }
+
+    pub fn bump(&mut self, profile: TaskProfile) {
+        match profile {
+            TaskProfile::General => self.general = self.general.saturating_add(1),
+            TaskProfile::Coding => self.coding = self.coding.saturating_add(1),
+            TaskProfile::Writing => self.writing = self.writing.saturating_add(1),
+            TaskProfile::LongDocument => {
+                self.long_document = self.long_document.saturating_add(1);
+            }
+        }
+    }
 }
 
 impl Default for NoironRouter {
     fn default() -> Self {
+        let threshold = 0.52;
         Self {
-            threshold: 0.52,
+            threshold,
+            profile_thresholds: ProfileThresholds::from_single(threshold),
             min_threshold: 0.18,
             max_threshold: 0.88,
             learning_rate: 0.08,
             observations: 0,
+            profile_observations: ProfileObservations::default(),
         }
     }
 }
@@ -121,6 +213,12 @@ impl NoironRouter {
         self.threshold
     }
 
+    pub fn threshold_for(&self, profile: TaskProfile) -> f32 {
+        self.profile_thresholds
+            .get(profile)
+            .clamp(self.min_threshold, self.max_threshold)
+    }
+
     pub fn observations(&self) -> u64 {
         self.observations
     }
@@ -129,6 +227,8 @@ impl NoironRouter {
         RouterState {
             threshold: self.threshold,
             observations: self.observations,
+            profile_thresholds: self.profile_thresholds,
+            profile_observations: self.profile_observations,
         }
     }
 
@@ -136,7 +236,11 @@ impl NoironRouter {
         self.threshold = state
             .threshold
             .clamp(self.min_threshold, self.max_threshold);
+        self.profile_thresholds = state
+            .profile_thresholds
+            .clamp(self.min_threshold, self.max_threshold);
         self.observations = state.observations;
+        self.profile_observations = state.profile_observations;
     }
 
     pub fn route_token(&self, token: &str) -> RoutingDecision {
@@ -165,10 +269,11 @@ impl NoironRouter {
     ) -> RoutingDecision {
         let entropy = entropy.clamp(0.0, 1.0);
         let score = routing_score(entropy, context);
-        let route = if score < self.threshold {
+        let threshold = self.threshold_for(context.profile);
+        let route = if score < threshold {
             Route::FastProjection
         } else {
-            choose_route(score, self.threshold, context)
+            choose_route(score, threshold, context)
         };
 
         RoutingDecision {
@@ -204,23 +309,31 @@ impl NoironRouter {
         context: RoutingContext,
     ) -> RouteBudget {
         let decisions = self.route_prompt_with_context(prompt, context);
-        RouteBudget::from_decisions(self.threshold, &decisions)
+        RouteBudget::from_decisions(self.threshold_for(context.profile), &decisions)
     }
 
     pub fn observe(&mut self, metrics: GenerationMetrics) {
+        self.observe_with_profile(TaskProfile::General, metrics);
+    }
+
+    pub fn observe_with_profile(&mut self, profile: TaskProfile, metrics: GenerationMetrics) {
         let quality = metrics.quality_score();
         let contradiction_pressure = (metrics.contradiction_count as f32 * 0.025).min(0.12);
+        let mut threshold = self.threshold_for(profile);
 
         if quality < 0.58 {
             let delta = self.learning_rate * (0.58 - quality) + contradiction_pressure;
-            self.threshold -= delta;
+            threshold -= delta;
         } else if quality > 0.82 && metrics.perplexity <= 9.0 {
             let delta = self.learning_rate * (quality - 0.82);
-            self.threshold += delta;
+            threshold += delta;
         }
 
-        self.threshold = self.threshold.clamp(self.min_threshold, self.max_threshold);
+        threshold = threshold.clamp(self.min_threshold, self.max_threshold);
+        self.profile_thresholds.set(profile, threshold);
+        self.threshold = threshold;
         self.observations += 1;
+        self.profile_observations.bump(profile);
     }
 }
 
@@ -335,6 +448,60 @@ mod tests {
         });
 
         assert!(router.threshold() > before);
+    }
+
+    #[test]
+    fn profile_specific_observations_update_only_that_threshold() {
+        let mut router = NoironRouter::new();
+        let coding_before = router.threshold_for(TaskProfile::Coding);
+        let writing_before = router.threshold_for(TaskProfile::Writing);
+
+        router.observe_with_profile(
+            TaskProfile::Writing,
+            GenerationMetrics {
+                perplexity: 30.0,
+                semantic_consistency: 0.2,
+                contradiction_count: 2,
+                token_count: 32,
+            },
+        );
+
+        assert_eq!(router.threshold_for(TaskProfile::Coding), coding_before);
+        assert!(router.threshold_for(TaskProfile::Writing) < writing_before);
+        assert_eq!(
+            router
+                .state()
+                .profile_observations
+                .get(TaskProfile::Writing),
+            1
+        );
+    }
+
+    #[test]
+    fn route_budget_uses_profile_specific_threshold() {
+        let mut router = NoironRouter::new();
+        router.observe_with_profile(
+            TaskProfile::LongDocument,
+            GenerationMetrics {
+                perplexity: 30.0,
+                semantic_consistency: 0.2,
+                contradiction_count: 2,
+                token_count: 64,
+            },
+        );
+
+        let budget = router.budget_for_prompt_with_context(
+            "long document memory routing",
+            RoutingContext {
+                profile: TaskProfile::LongDocument,
+                ..RoutingContext::default()
+            },
+        );
+
+        assert_eq!(
+            budget.threshold,
+            router.threshold_for(TaskProfile::LongDocument)
+        );
     }
 
     #[test]
