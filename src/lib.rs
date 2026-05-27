@@ -40,7 +40,8 @@ pub use experience_replay::{
 };
 pub use gist_memory::{GistGenerator, GistLevel, GistRecord};
 pub use hardware::{
-    DeviceClass, DeviceTier, HardwareAllocator, HardwarePlan, HardwareProbe, HardwareSnapshot,
+    ComputeLane, DeviceClass, DeviceExecutionPlan, DeviceMemoryMode, DeviceTier, HardwareAllocator,
+    HardwarePlan, HardwareProbe, HardwareSnapshot, RuntimeAdapterHint,
 };
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
 pub use infini_memory::{

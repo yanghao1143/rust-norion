@@ -110,7 +110,7 @@ impl ModelRuntime for LocalTransformerRuntime {
             TaskProfile::LongDocument => "convolutional compression plus global memory recall",
         };
         let answer = format!(
-            "Local Transformer runtime result for '{}'. The self-developed runtime used {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It followed a layer plan with {} global, {} local-window, and {} convolutional-fusion layers. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
+            "Local Transformer runtime result for '{}'. The self-developed runtime used {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It followed a layer plan with {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
             compact(&request.prompt, 96),
             tokens.len(),
             self.imported_kv_blocks.len(),
@@ -119,6 +119,9 @@ impl ModelRuntime for LocalTransformerRuntime {
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution,
+            request.hardware_plan.execution.primary_lane.as_str(),
+            request.hardware_plan.execution.memory_mode.as_str(),
+            request.hardware_plan.execution.fallback_lane.as_str(),
         );
         let mut response = RuntimeResponse::new(answer.clone());
         response.tokens = answer
@@ -144,6 +147,16 @@ impl ModelRuntime for LocalTransformerRuntime {
                     transformer_counts.convolution
                 ),
                 0.82,
+            ),
+            crate::reflection::ReasoningStep::new(
+                "local_device_execution",
+                format!(
+                    "primary {} fallback {} memory {}",
+                    request.hardware_plan.execution.primary_lane.as_str(),
+                    request.hardware_plan.execution.fallback_lane.as_str(),
+                    request.hardware_plan.execution.memory_mode.as_str()
+                ),
+                0.80,
             ),
             crate::reflection::ReasoningStep::new(
                 "local_kv_exchange",

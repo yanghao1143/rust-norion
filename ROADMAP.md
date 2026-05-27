@@ -44,7 +44,8 @@ The north star is now explicitly scoped around five core requirements:
    The control plane must run across CPU-only PCs, integrated-GPU laptops,
    discrete-GPU desktops, unified-memory machines, phones, tablets, embedded
    boards, NPU/AI accelerator devices, multi-GPU workstations, edge gateways,
-   and servers through explicit hardware profiles instead of vendor lock-in.
+   and servers through explicit hardware profiles and portable execution plans
+   instead of vendor lock-in.
 
 ## Sovereignty Contract / 自主可控约束
 
@@ -91,7 +92,10 @@ The north star is now explicitly scoped around five core requirements:
    budgets, routing constraints, and hierarchy weights. Profiles also map into
    capability tiers from tiny devices through distributed accelerators. The CLI
    should use best-effort local probing when no explicit profile is provided,
-   while preserving manual overrides.
+   while preserving manual overrides. Each plan should also emit a device
+   execution profile: primary compute lane, portable fallback lane, memory mode,
+   candidate runtime adapters, KV precision policy, prefetch budget, disk-spill
+   policy, and recursive parallelism budget.
 
 5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
@@ -150,6 +154,14 @@ The north star is now explicitly scoped around five core requirements:
     lower compute, shrink windows, evict memory, or spend extra attention on
     hard tasks.
 
+11. Universal execution planning / 全设备执行计划
+    Map every supported device profile to a primary compute lane, fallback lane,
+    memory mode, runtime adapter hints, KV precision, prefetch count, disk-spill
+    policy, and recursive parallel chunk budget. These hints must remain optional
+    so the self-developed runtime can choose CUDA, ROCm, Metal, Vulkan, WGPU,
+    DirectML, CoreML, NNAPI, QNN, OpenVINO, portable Rust, or future adapters
+    without making any one runtime mandatory.
+
 ## Target Module Fusion / 目标模块融合
 
 The following algorithmic ideas are merged into the project goal as owned local
@@ -197,6 +209,11 @@ modules, not external product dependencies:
   such as laptop, RTX, MacBook, iPhone, Snapdragon, Jetson, and datacenter
   should resolve into stable profiles instead of adding vendor-specific code
   paths.
+- Universal execution plans:
+  every hardware profile should produce portable runtime adapter hints and
+  fallback policies so the same control plane can run on CPU-only machines,
+  GPUs, unified-memory systems, phones, embedded boards, NPUs, edge devices, and
+  multi-accelerator servers without assuming one vendor stack.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -245,7 +262,10 @@ These are algorithmic references, not product dependencies:
   accelerator, multi-GPU, edge, and server devices, with capability tiers and
   common device aliases covered by tests; best-effort auto probing now maps OS,
   architecture, CPU parallelism, and common GPU/NPU environment hints into a
-  conservative device profile; drift guard now gates memory writes, runtime KV
+  conservative device profile; each profile now emits execution-lane, memory
+  mode, adapter-hint, KV-precision, prefetch, disk-spill, and recursive
+  parallelism policies; the CLI can print the full built-in device matrix;
+  drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
@@ -282,7 +302,8 @@ These are algorithmic references, not product dependencies:
 - A built-in local runtime prototype proves the runtime ABI end to end before
   production Transformer kernels are connected.
 - Hardware adaptation is profile-driven and test-covered across constrained
-  devices and high-capacity accelerator targets.
+  devices and high-capacity accelerator targets, including execution-plan
+  fallbacks for each device class.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,

@@ -28,7 +28,7 @@ The optimized target combines five non-negotiable requirements:
   phones, tablets, embedded boards, NPU/AI accelerator devices, and
   heterogeneous multi-GPU machines should all map into explicit hardware
   profiles that tune latency, KV budgets, routing pressure, and hierarchy
-  weights
+  weights, then into execution plans with portable fallbacks
 - frontier algorithms as owned implementations: use public papers as
   inspiration, but implement attention, memory, quantization, routing,
   reflection, and scheduling locally in Rust
@@ -36,7 +36,7 @@ The optimized target combines five non-negotiable requirements:
 - 自研模型栈：默认后端是自主训练的 Transformer 系列模型，而不是外部权重
 - 规避卡脖子：核心引擎不绑定闭源模型服务、厂商专用运行时或不透明量化路径
 - 极致本地化部署：离线优先、轻量化、磁盘记忆、面向消费级/边缘硬件的超长上下文控制
-- 全设备适配：笔记本、台式机、工作站、服务器、手机、平板、嵌入式板卡、NPU/AI 加速器设备以及异构多 GPU 机器，都应映射到明确的硬件 profile，用于调整延迟、KV budget、路由压力和层级权重
+- 全设备适配：笔记本、台式机、工作站、服务器、手机、平板、嵌入式板卡、NPU/AI 加速器设备以及异构多 GPU 机器，都应映射到明确的硬件 profile，用于调整延迟、KV budget、路由压力、层级权重，并生成带可移植降级路径的执行计划
 - 前沿算法自主实现：公开论文只作为思想来源，注意力、记忆、量化、路由、反思和调度都在 Rust 中本地实现
 
 The project focuses on the control loop around inference:
@@ -151,7 +151,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, and compute allocation planner for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles, with capability tiers and common device aliases
+- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, compute allocation, and execution-plan selection for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles, with capability tiers, common device aliases, portable fallbacks, memory modes, adapter hints, KV precision, prefetch, and parallel chunk budgets
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
@@ -220,6 +220,18 @@ Apply universal device-profile hardware pressure hints:
 cargo run -- --device cpu --cpu-load 85 --ram-load 70 --disk-load 40 --profile long "Summarize a long local document"
 ```
 
+Print the built-in device execution matrix:
+
+```powershell
+cargo run -- --list-devices
+```
+
+打印内置全设备执行矩阵：
+
+```powershell
+cargo run -- --list-devices
+```
+
 If `--device auto` is used, or no device is provided, the CLI performs a
 best-effort local probe using OS, architecture, CPU parallelism, and common
 GPU/NPU environment variables. Manual flags such as `--device`, `--cpu-load`,
@@ -242,6 +254,15 @@ without binding to one vendor device.
 `rtx`、`macbook`、`iphone`、`snapdragon`、`jetson` 和 `datacenter` 会映射到这些
 profile。内部还会按 `tiny`、`constrained`、`balanced`、`accelerated`、
 `distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
+
+Every hardware plan also emits a `DeviceExecutionPlan`: primary compute lane,
+fallback lane, memory mode, candidate runtime adapters, hot/cold KV precision,
+prefetch count, disk-spill policy, and recursive parallel chunk budget. These
+are policy hints, not hard dependencies; a real self-developed runtime can pick
+the first supported adapter and still fall back to portable Rust/CPU paths.
+
+每个硬件计划还会生成 `DeviceExecutionPlan`：主计算通道、降级通道、内存模式、候选
+runtime adapter、冷热 KV 精度、预取数量、磁盘溢出策略和递归 chunk 并行预算。这些是策略提示，不是硬依赖；真实自研 runtime 可以选择第一个已支持 adapter，同时始终保留 Rust/CPU 可移植降级路径。
 
 Probe override environment variables include `NOIRON_DEVICE_PROFILE`,
 `NOIRON_CPU_LOAD`, `NOIRON_GPU_LOAD`, `NOIRON_RAM_LOAD`, `NOIRON_DISK_LOAD`,
@@ -318,6 +339,7 @@ flowchart LR
     Prompt --> Hierarchy[Hierarchy Controller]
     Prompt --> Recursive[Recursive Scheduler]
     Prompt --> Hardware[Hardware Allocator]
+    Hardware --> DeviceExec[Device Execution Plan]
     Prompt --> Experience[Experience Store]
     Hierarchy --> Transformer[Transformer Refactor Plan]
     Memory --> Backend[InferenceBackend]
@@ -326,7 +348,7 @@ flowchart LR
     Hardware --> Router
     Hardware --> Infini
     Hardware --> Hierarchy
-    Hardware --> Backend
+    DeviceExec --> Backend
     DiskKV --> Memory
     Tiers --> Backend
     Experience --> Backend
@@ -404,7 +426,7 @@ Expected integration loop:
 4. plan single-pass or recursive chunk/merge scheduling for the native model window
 5. adapt latency, KV budgets, and hierarchy weights to CPU-only, integrated GPU,
    discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator,
-   multi-GPU, edge, or server devices
+   multi-GPU, edge, or server devices, then select a portable execution plan
 6. optionally replay high/low reward experience into router, hierarchy, and KV state
 7. retrieve relevant reflection lessons from the experience store
 8. import active KV memory into the runtime, call the real model backend, and
@@ -420,7 +442,7 @@ Expected integration loop:
 2. 读取模型 id、tokenizer、原生上下文窗口、embedding 维度和 KV 交换能力等 runtime metadata
 3. 计算路由预算和层级权重
 4. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
-5. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重
+5. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重，并选择带降级路径的执行计划
 6. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
 7. 从经验库检索相关反思 lesson
 8. 把活跃 KV 记忆导入 runtime，调用真实模型后端，并收集 runtime 导出的 KV
@@ -445,7 +467,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
 - add configurable memory retention policies
-- expand real-device probing beyond explicit profiles and aliases
+- expand real-device probing and execution-plan calibration beyond explicit profiles and aliases
 - expand the built-in benchmark suite into regression gates
 
 - 用模型侧 embedding 或轻量向量编码器替换当前启发式 embedding
@@ -455,5 +477,5 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 增加超过模型原生窗口输入的递归调度
 - 增加长上下文路由和记忆复用 benchmark
 - 增加可配置的记忆保留策略
-- 扩展全设备硬件 profile 和真实设备探测适配
+- 扩展全设备硬件 profile、执行计划和真实设备探测适配
 - 把内置 benchmark 套件扩展成回归门禁

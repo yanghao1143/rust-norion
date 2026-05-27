@@ -29,6 +29,91 @@ pub enum DeviceTier {
     Distributed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComputeLane {
+    CpuPortable,
+    CpuVector,
+    IntegratedGpu,
+    DiscreteGpu,
+    UnifiedMemoryGpu,
+    NeuralAccelerator,
+    MultiAccelerator,
+    DiskBackedStreaming,
+}
+
+impl ComputeLane {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CpuPortable => "cpu-portable",
+            Self::CpuVector => "cpu-vector",
+            Self::IntegratedGpu => "integrated-gpu",
+            Self::DiscreteGpu => "discrete-gpu",
+            Self::UnifiedMemoryGpu => "unified-memory-gpu",
+            Self::NeuralAccelerator => "neural-accelerator",
+            Self::MultiAccelerator => "multi-accelerator",
+            Self::DiskBackedStreaming => "disk-backed-streaming",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceMemoryMode {
+    MinimalDisk,
+    TieredDisk,
+    UnifiedMemory,
+    GpuResident,
+    DistributedSharded,
+}
+
+impl DeviceMemoryMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MinimalDisk => "minimal-disk",
+            Self::TieredDisk => "tiered-disk",
+            Self::UnifiedMemory => "unified-memory",
+            Self::GpuResident => "gpu-resident",
+            Self::DistributedSharded => "distributed-sharded",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeAdapterHint {
+    PortableRust,
+    CpuSimd,
+    Wgpu,
+    Vulkan,
+    Metal,
+    Cuda,
+    Rocm,
+    DirectMl,
+    CoreMl,
+    Nnapi,
+    Qnn,
+    OpenVino,
+    MultiDevice,
+}
+
+impl RuntimeAdapterHint {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PortableRust => "portable-rust",
+            Self::CpuSimd => "cpu-simd",
+            Self::Wgpu => "wgpu",
+            Self::Vulkan => "vulkan",
+            Self::Metal => "metal",
+            Self::Cuda => "cuda",
+            Self::Rocm => "rocm",
+            Self::DirectMl => "directml",
+            Self::CoreMl => "coreml",
+            Self::Nnapi => "nnapi",
+            Self::Qnn => "qnn",
+            Self::OpenVino => "openvino",
+            Self::MultiDevice => "multi-device",
+        }
+    }
+}
+
 impl DeviceTier {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -388,6 +473,42 @@ struct ProbeLoads {
 }
 
 #[derive(Debug, Clone)]
+pub struct DeviceExecutionPlan {
+    pub primary_lane: ComputeLane,
+    pub fallback_lane: ComputeLane,
+    pub memory_mode: DeviceMemoryMode,
+    pub adapter_hints: Vec<RuntimeAdapterHint>,
+    pub max_parallel_chunks: usize,
+    pub kv_prefetch_blocks: usize,
+    pub hot_kv_precision_bits: u8,
+    pub cold_kv_precision_bits: u8,
+    pub allow_disk_spill: bool,
+}
+
+impl DeviceExecutionPlan {
+    pub fn summary(&self) -> String {
+        let adapters = self
+            .adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join("+");
+        format!(
+            "primary={} fallback={} memory={} adapters={} parallel_chunks={} kv_prefetch={} kv_bits={}/{} disk_spill={}",
+            self.primary_lane.as_str(),
+            self.fallback_lane.as_str(),
+            self.memory_mode.as_str(),
+            adapters,
+            self.max_parallel_chunks,
+            self.kv_prefetch_blocks,
+            self.hot_kv_precision_bits,
+            self.cold_kv_precision_bits,
+            self.allow_disk_spill
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct HardwarePlan {
     pub device: DeviceClass,
     pub tier: DeviceTier,
@@ -396,6 +517,7 @@ pub struct HardwarePlan {
     pub local_kv_token_budget: usize,
     pub global_kv_token_budget: usize,
     pub hierarchy: HierarchyWeights,
+    pub execution: DeviceExecutionPlan,
     pub notes: Vec<String>,
 }
 
@@ -413,7 +535,7 @@ impl Default for HardwarePlan {
 impl HardwarePlan {
     pub fn summary(&self) -> String {
         format!(
-            "device={} tier={} pressure={:.3} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2})",
+            "device={} tier={} pressure={:.3} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2}) execution=({})",
             self.device.as_str(),
             self.tier.as_str(),
             self.pressure,
@@ -424,7 +546,8 @@ impl HardwarePlan {
             self.global_kv_token_budget,
             self.hierarchy.global,
             self.hierarchy.local,
-            self.hierarchy.convolution
+            self.hierarchy.convolution,
+            self.execution.summary()
         )
     }
 }
@@ -476,7 +599,8 @@ impl HardwareAllocator {
         );
         let latency_budget_ms = latency_budget(snapshot.device, pressure);
         let hierarchy = adapt_hierarchy(base_hierarchy, snapshot.device, profile, pressure);
-        let notes = notes(snapshot, profile, pressure, prompt_tokens);
+        let execution = device_execution_plan(snapshot.device, pressure);
+        let notes = notes(snapshot, profile, pressure, prompt_tokens, &execution);
 
         HardwarePlan {
             device: snapshot.device,
@@ -486,6 +610,7 @@ impl HardwareAllocator {
             local_kv_token_budget,
             global_kv_token_budget,
             hierarchy,
+            execution,
             notes,
         }
     }
@@ -641,6 +766,195 @@ fn latency_budget(device: DeviceClass, pressure: f32) -> Option<u64> {
     Some(base.saturating_sub(pressure_discount).max(80))
 }
 
+fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionPlan {
+    let tier = device.tier();
+    let base_parallel_chunks = match tier {
+        DeviceTier::Tiny => 1,
+        DeviceTier::Constrained => 1,
+        DeviceTier::Balanced => 2,
+        DeviceTier::Accelerated => 4,
+        DeviceTier::Distributed => 8,
+        DeviceTier::Auto => 2,
+    };
+    let max_parallel_chunks = if pressure >= 0.72 {
+        1
+    } else if pressure >= 0.45 {
+        (base_parallel_chunks / 2).max(1)
+    } else {
+        base_parallel_chunks
+    };
+    let kv_prefetch_blocks = if pressure >= 0.72 {
+        1
+    } else {
+        match tier {
+            DeviceTier::Tiny => 1,
+            DeviceTier::Constrained => 2,
+            DeviceTier::Balanced => 3,
+            DeviceTier::Accelerated => 5,
+            DeviceTier::Distributed => 8,
+            DeviceTier::Auto => 3,
+        }
+    };
+    let hot_kv_precision_bits = if matches!(device, DeviceClass::Embedded) || pressure >= 0.88 {
+        4
+    } else {
+        8
+    };
+
+    let (primary_lane, fallback_lane, memory_mode, adapter_hints, allow_disk_spill) = match device {
+        DeviceClass::CpuOnly => (
+            ComputeLane::CpuVector,
+            ComputeLane::CpuPortable,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::PortableRust,
+                RuntimeAdapterHint::CpuSimd,
+                RuntimeAdapterHint::OpenVino,
+            ],
+            true,
+        ),
+        DeviceClass::IntegratedGpu => (
+            ComputeLane::IntegratedGpu,
+            ComputeLane::CpuVector,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::DirectMl,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::DiscreteGpu => (
+            ComputeLane::DiscreteGpu,
+            ComputeLane::CpuVector,
+            DeviceMemoryMode::GpuResident,
+            vec![
+                RuntimeAdapterHint::Cuda,
+                RuntimeAdapterHint::Rocm,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::DirectMl,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::UnifiedMemory => (
+            ComputeLane::UnifiedMemoryGpu,
+            ComputeLane::CpuVector,
+            DeviceMemoryMode::UnifiedMemory,
+            vec![
+                RuntimeAdapterHint::Metal,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::Mobile => (
+            ComputeLane::IntegratedGpu,
+            ComputeLane::CpuVector,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::CoreMl,
+                RuntimeAdapterHint::Nnapi,
+                RuntimeAdapterHint::Qnn,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::Embedded => (
+            ComputeLane::DiskBackedStreaming,
+            ComputeLane::CpuPortable,
+            DeviceMemoryMode::MinimalDisk,
+            vec![
+                RuntimeAdapterHint::PortableRust,
+                RuntimeAdapterHint::Nnapi,
+                RuntimeAdapterHint::Qnn,
+            ],
+            true,
+        ),
+        DeviceClass::NpuAccelerator => (
+            ComputeLane::NeuralAccelerator,
+            ComputeLane::IntegratedGpu,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::CoreMl,
+                RuntimeAdapterHint::Nnapi,
+                RuntimeAdapterHint::Qnn,
+                RuntimeAdapterHint::OpenVino,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::MultiGpu => (
+            ComputeLane::MultiAccelerator,
+            ComputeLane::DiscreteGpu,
+            DeviceMemoryMode::DistributedSharded,
+            vec![
+                RuntimeAdapterHint::MultiDevice,
+                RuntimeAdapterHint::Cuda,
+                RuntimeAdapterHint::Rocm,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::Wgpu,
+            ],
+            false,
+        ),
+        DeviceClass::Edge => (
+            ComputeLane::CpuVector,
+            ComputeLane::CpuPortable,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::PortableRust,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::Nnapi,
+                RuntimeAdapterHint::Qnn,
+            ],
+            true,
+        ),
+        DeviceClass::Server => (
+            ComputeLane::DiscreteGpu,
+            ComputeLane::CpuVector,
+            DeviceMemoryMode::GpuResident,
+            vec![
+                RuntimeAdapterHint::Cuda,
+                RuntimeAdapterHint::Rocm,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::OpenVino,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::Auto => (
+            ComputeLane::CpuVector,
+            ComputeLane::CpuPortable,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::PortableRust,
+                RuntimeAdapterHint::CpuSimd,
+                RuntimeAdapterHint::Wgpu,
+            ],
+            true,
+        ),
+    };
+
+    DeviceExecutionPlan {
+        primary_lane,
+        fallback_lane,
+        memory_mode,
+        adapter_hints,
+        max_parallel_chunks,
+        kv_prefetch_blocks,
+        hot_kv_precision_bits,
+        cold_kv_precision_bits: 4,
+        allow_disk_spill,
+    }
+}
+
 fn adapt_hierarchy(
     mut hierarchy: HierarchyWeights,
     device: DeviceClass,
@@ -692,10 +1006,14 @@ fn notes(
     profile: TaskProfile,
     pressure: f32,
     prompt_tokens: usize,
+    execution: &DeviceExecutionPlan,
 ) -> Vec<String> {
     let mut notes = vec![
         format!("device:{}", snapshot.device.as_str()),
         format!("tier:{}", snapshot.device.tier().as_str()),
+        format!("execution:{}", execution.primary_lane.as_str()),
+        format!("fallback:{}", execution.fallback_lane.as_str()),
+        format!("memory_mode:{}", execution.memory_mode.as_str()),
     ];
 
     if pressure >= 0.72 {
@@ -943,10 +1261,127 @@ mod tests {
             assert_eq!(plan.tier, device.tier());
             assert!(plan.local_kv_token_budget >= 32);
             assert!(plan.global_kv_token_budget >= 32);
+            assert!(plan.execution.max_parallel_chunks >= 1);
+            assert!(plan.execution.kv_prefetch_blocks >= 1);
+            assert!(!plan.execution.adapter_hints.is_empty());
+            assert!(matches!(plan.execution.hot_kv_precision_bits, 4 | 8));
+            assert_eq!(plan.execution.cold_kv_precision_bits, 4);
             assert!((hierarchy_total - 1.0).abs() < 0.001);
             assert!(plan.notes.iter().any(|note| note.starts_with("device:")));
             assert!(plan.notes.iter().any(|note| note.starts_with("tier:")));
+            assert!(plan.notes.iter().any(|note| note.starts_with("execution:")));
+            assert!(
+                plan.notes
+                    .iter()
+                    .any(|note| note.starts_with("memory_mode:"))
+            );
         }
+    }
+
+    #[test]
+    fn execution_profiles_map_devices_to_portable_fallbacks() {
+        let allocator = HardwareAllocator::new();
+        let base = HierarchyWeights::new(0.30, 0.40, 0.30);
+
+        let embedded = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Embedded, 0.40, 0.0, 0.70, 0.30),
+            TaskProfile::General,
+            2048,
+            base,
+        );
+        let mobile = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Mobile, 0.30, 0.20, 0.50, 0.10),
+            TaskProfile::General,
+            2048,
+            base,
+        );
+        let multi_gpu = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::MultiGpu, 0.12, 0.20, 0.20, 0.10),
+            TaskProfile::Coding,
+            2048,
+            base,
+        );
+        let uma = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::UnifiedMemory, 0.16, 0.20, 0.26, 0.10),
+            TaskProfile::LongDocument,
+            2048,
+            base,
+        );
+
+        assert_eq!(
+            embedded.execution.primary_lane,
+            ComputeLane::DiskBackedStreaming
+        );
+        assert_eq!(embedded.execution.fallback_lane, ComputeLane::CpuPortable);
+        assert_eq!(
+            embedded.execution.memory_mode,
+            DeviceMemoryMode::MinimalDisk
+        );
+        assert_eq!(embedded.execution.hot_kv_precision_bits, 4);
+        assert!(embedded.execution.allow_disk_spill);
+
+        assert_eq!(mobile.execution.primary_lane, ComputeLane::IntegratedGpu);
+        assert!(
+            mobile
+                .execution
+                .adapter_hints
+                .contains(&RuntimeAdapterHint::Nnapi)
+        );
+        assert!(
+            mobile
+                .execution
+                .adapter_hints
+                .contains(&RuntimeAdapterHint::Qnn)
+        );
+
+        assert_eq!(
+            multi_gpu.execution.primary_lane,
+            ComputeLane::MultiAccelerator
+        );
+        assert_eq!(
+            multi_gpu.execution.memory_mode,
+            DeviceMemoryMode::DistributedSharded
+        );
+        assert!(
+            multi_gpu
+                .execution
+                .adapter_hints
+                .contains(&RuntimeAdapterHint::MultiDevice)
+        );
+        assert!(!multi_gpu.execution.allow_disk_spill);
+
+        assert_eq!(uma.execution.primary_lane, ComputeLane::UnifiedMemoryGpu);
+        assert_eq!(uma.execution.memory_mode, DeviceMemoryMode::UnifiedMemory);
+        assert!(
+            uma.execution
+                .adapter_hints
+                .contains(&RuntimeAdapterHint::Metal)
+        );
+    }
+
+    #[test]
+    fn execution_budget_degrades_under_pressure() {
+        let allocator = HardwareAllocator::new();
+        let base = HierarchyWeights::new(0.30, 0.40, 0.30);
+
+        let calm = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Server, 0.10, 0.15, 0.20, 0.10),
+            TaskProfile::Coding,
+            1024,
+            base,
+        );
+        let overloaded = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Server, 0.95, 0.95, 0.90, 0.80),
+            TaskProfile::Coding,
+            1024,
+            base,
+        );
+
+        assert!(calm.execution.max_parallel_chunks > overloaded.execution.max_parallel_chunks);
+        assert!(calm.execution.kv_prefetch_blocks > overloaded.execution.kv_prefetch_blocks);
+        assert_eq!(overloaded.execution.max_parallel_chunks, 1);
+        assert_eq!(overloaded.execution.kv_prefetch_blocks, 1);
+        assert_eq!(overloaded.execution.hot_kv_precision_bits, 4);
     }
 
     #[test]

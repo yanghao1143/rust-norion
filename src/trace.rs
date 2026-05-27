@@ -24,6 +24,13 @@ pub fn trace_json_line_with_case(
     let tier_counts = outcome.tier_plan.counts();
     let infini_counts = outcome.infini_memory_plan.counts();
     let transformer_counts = outcome.transformer_plan.counts();
+    let adapter_hints = outcome
+        .hardware_plan
+        .execution
+        .adapter_hints
+        .iter()
+        .map(|adapter| adapter.as_str().to_owned())
+        .collect::<Vec<_>>();
 
     format!(
         "{{\
@@ -38,7 +45,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
-         \"hardware\":{{\"device\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{}}},\
+         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
@@ -66,8 +73,18 @@ pub fn trace_json_line_with_case(
         outcome.hierarchy.local,
         outcome.hierarchy.convolution,
         outcome.hardware_plan.device.as_str(),
+        outcome.hardware_plan.tier.as_str(),
         outcome.hardware_plan.pressure,
         option_u64_json(outcome.hardware_plan.latency_budget_ms),
+        outcome.hardware_plan.execution.primary_lane.as_str(),
+        outcome.hardware_plan.execution.fallback_lane.as_str(),
+        outcome.hardware_plan.execution.memory_mode.as_str(),
+        outcome.hardware_plan.execution.max_parallel_chunks,
+        outcome.hardware_plan.execution.kv_prefetch_blocks,
+        outcome.hardware_plan.execution.hot_kv_precision_bits,
+        outcome.hardware_plan.execution.cold_kv_precision_bits,
+        outcome.hardware_plan.execution.allow_disk_spill,
+        string_array_json(&adapter_hints),
         outcome.recursive_schedule.requires_recursion,
         outcome.recursive_schedule.prompt_tokens,
         outcome.recursive_schedule.native_window_tokens,
@@ -218,6 +235,8 @@ mod tests {
         assert!(line.contains("\"case\":null"));
         assert!(line.contains("\"route\":"));
         assert!(line.contains("\"hierarchy\":"));
+        assert!(line.contains("\"primary_lane\":"));
+        assert!(line.contains("\"adapter_hints\":"));
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));

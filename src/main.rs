@@ -4,14 +4,19 @@ use std::time::Instant;
 
 use rust_norion::{
     BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
-    DeviceClass, GistLevel, HardwareSnapshot, HeuristicBackend, InferenceBackend, InferenceOutcome,
-    InferenceRequest, LocalTransformerRuntime, ModelRuntime, NoironEngine, RecursiveScheduler,
-    RuntimeBackend, RuntimeMetadata, TaskProfile, TierMigrationAction, append_trace_jsonl,
+    DeviceClass, GistLevel, HardwareAllocator, HardwareSnapshot, HeuristicBackend,
+    HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest,
+    LocalTransformerRuntime, ModelRuntime, NoironEngine, RecursiveScheduler, RuntimeBackend,
+    RuntimeMetadata, TaskProfile, TierMigrationAction, append_trace_jsonl,
     append_trace_jsonl_with_case, default_benchmark_cases,
 };
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse(env::args().skip(1).collect());
+    if args.list_devices {
+        print_device_matrix_and_exit();
+    }
+
     let mut engine = NoironEngine::load_full_state(
         &args.memory_path,
         &args.experience_path,
@@ -149,6 +154,10 @@ fn main() -> std::io::Result<()> {
     println!("process_reward: {}", outcome.process_reward.summary());
     println!("drift: {}", outcome.drift_report.summary());
     println!("hardware: {}", outcome.hardware_plan.summary());
+    println!(
+        "device_execution: {}",
+        outcome.hardware_plan.execution.summary()
+    );
     println!(
         "route: attention={} fast={} attention_fraction={:.2}",
         outcome.route_budget.attention_tokens,
@@ -324,6 +333,48 @@ fn print_benchmark_summary(
     }
 }
 
+fn print_device_matrix_and_exit() -> ! {
+    let allocator = HardwareAllocator::new();
+    let base_hierarchy = HierarchyWeights::default();
+
+    println!("Noiron device matrix");
+    println!(
+        "profile,tier,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill"
+    );
+
+    for device in DeviceClass::explicit_profiles() {
+        let plan = allocator.plan(
+            HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20),
+            TaskProfile::General,
+            4096,
+            base_hierarchy,
+        );
+        let adapters = plan
+            .execution
+            .adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join("+");
+        println!(
+            "{},{},{},{},{},{},{},{},{}/{},{}",
+            device.as_str(),
+            plan.tier.as_str(),
+            plan.execution.primary_lane.as_str(),
+            plan.execution.fallback_lane.as_str(),
+            plan.execution.memory_mode.as_str(),
+            adapters,
+            plan.execution.max_parallel_chunks,
+            plan.execution.kv_prefetch_blocks,
+            plan.execution.hot_kv_precision_bits,
+            plan.execution.cold_kv_precision_bits,
+            plan.execution.allow_disk_spill
+        );
+    }
+
+    std::process::exit(0);
+}
+
 fn count_gists(records: &[rust_norion::GistRecord], level: GistLevel) -> usize {
     records
         .iter()
@@ -357,6 +408,7 @@ struct Args {
     benchmark_max_recursive_chunks: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
     benchmark_max_drift_rollbacks: Option<usize>,
+    list_devices: bool,
     local_runtime: bool,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
@@ -390,6 +442,7 @@ impl Args {
         let mut benchmark_max_recursive_chunks = None;
         let mut benchmark_max_drift_blocks = None;
         let mut benchmark_max_drift_rollbacks = None;
+        let mut list_devices = false;
         let mut local_runtime = false;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
@@ -472,6 +525,10 @@ impl Args {
                     benchmark_max_drift_rollbacks = Some(parse_usize(&raw[index + 1], usize::MAX));
                     benchmark_gate_enabled = true;
                     index += 2;
+                }
+                "--list-devices" => {
+                    list_devices = true;
+                    index += 1;
                 }
                 "--local-runtime" => {
                     local_runtime = true;
@@ -618,6 +675,7 @@ impl Args {
             benchmark_max_recursive_chunks,
             benchmark_max_drift_blocks,
             benchmark_max_drift_rollbacks,
+            list_devices,
             local_runtime,
             runtime_command,
             runtime_args,
@@ -698,7 +756,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -738,6 +796,7 @@ mod tests {
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
             "0".to_owned(),
+            "--list-devices".to_owned(),
             "--local-runtime".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
@@ -775,6 +834,7 @@ mod tests {
         assert_eq!(args.benchmark_max_recursive_chunks, Some(8));
         assert_eq!(args.benchmark_max_drift_blocks, Some(0));
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
+        assert!(args.list_devices);
         assert!(args.local_runtime);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
