@@ -1,6 +1,7 @@
 use std::io;
 use std::path::Path;
 
+use crate::experience::{ExperienceInput, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::kv_cache::{KvFusionCache, MemoryMatch};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
@@ -48,6 +49,7 @@ pub struct InferenceOutcome {
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
     pub stored_memory_id: Option<u64>,
+    pub experience_id: u64,
     pub router_threshold_after: f32,
 }
 
@@ -58,6 +60,7 @@ pub struct NoironEngine {
     pub hierarchy: HierarchyController,
     pub tiered_cache: TieredCacheScheduler,
     pub stream_monitor: TokenStreamMonitor,
+    pub experience: ExperienceStore,
     pub reflector: Reflector,
     embedder: TextEmbedder,
 }
@@ -70,6 +73,7 @@ impl Default for NoironEngine {
             hierarchy: HierarchyController::new(),
             tiered_cache: TieredCacheScheduler::new(),
             stream_monitor: TokenStreamMonitor::default(),
+            experience: ExperienceStore::new(),
             reflector: Reflector::new(),
             embedder: TextEmbedder::default(),
         }
@@ -92,8 +96,21 @@ impl NoironEngine {
         Ok(Self::with_cache(KvFusionCache::load_from_disk(path)?))
     }
 
+    pub fn load_state(
+        memory_path: impl AsRef<Path>,
+        experience_path: impl AsRef<Path>,
+    ) -> io::Result<Self> {
+        let mut engine = Self::load_memory(memory_path)?;
+        engine.experience = ExperienceStore::load_from_disk_kv(experience_path)?;
+        Ok(engine)
+    }
+
     pub fn save_memory(&self, path: impl AsRef<Path>) -> io::Result<()> {
         self.cache.save_to_disk(path)
+    }
+
+    pub fn save_experience(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        self.experience.save_to_disk_kv(path)
     }
 
     pub fn infer<B: InferenceBackend>(
@@ -127,7 +144,9 @@ impl NoironEngine {
         let stored_memory_id = if report.store_as_memory {
             let memory_text = format!(
                 "prompt:{}\nanswer:{}\nlesson:{}",
-                request.prompt, report.revised_answer, report.lesson
+                request.prompt.as_str(),
+                report.revised_answer,
+                report.lesson
             );
             let memory_vector = self.embedder.embed(&memory_text);
             Some(self.cache.store_or_fuse(
@@ -149,6 +168,18 @@ impl NoironEngine {
 
         self.router.observe(metrics);
         let hierarchy = self.hierarchy.observe(request.profile, metrics);
+        let router_threshold_after = self.router.threshold();
+        let experience_id = self.experience.record(ExperienceInput {
+            prompt: request.prompt.clone(),
+            profile: request.profile,
+            lesson: report.lesson.clone(),
+            quality: report.quality,
+            contradictions: report.contradictions.clone(),
+            stored_memory_id,
+            router_threshold_after,
+            stream_windows: stream_reports.len(),
+            hierarchy,
+        });
 
         InferenceOutcome {
             answer: report.revised_answer.clone(),
@@ -160,7 +191,8 @@ impl NoironEngine {
             stream_reports,
             used_memories,
             stored_memory_id,
-            router_threshold_after: self.router.threshold(),
+            experience_id,
+            router_threshold_after,
         }
     }
 }
@@ -340,6 +372,8 @@ mod tests {
             engine.router.observations(),
             outcome.stream_reports.len() as u64 + 1
         );
+        assert_eq!(engine.experience.len(), 1);
+        assert_eq!(outcome.experience_id, 1);
         assert!(!engine.cache.is_empty());
     }
 

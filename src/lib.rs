@@ -1,5 +1,6 @@
 pub mod disk_kv;
 pub mod engine;
+pub mod experience;
 pub mod hierarchy;
 pub mod kv_cache;
 pub mod reflection;
@@ -12,6 +13,7 @@ pub use engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest,
     NoironEngine,
 };
+pub use experience::{ExperienceInput, ExperienceRecord, ExperienceStore};
 pub use hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
 pub use reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};

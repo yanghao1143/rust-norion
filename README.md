@@ -50,6 +50,7 @@ Implemented modules:
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
 - `src/token_stream.rs`: generated-token window monitor for router feedback
+- `src/experience.rs`: structured reflection experience store
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
@@ -73,10 +74,12 @@ testable, and replaceable before connecting a real model backend.
 cargo run -- --profile coding "Build a Rust Noiron inference engine"
 ```
 
-By default, the demo writes local memory to `noiron-memory.tsv`. That file is
-ignored by Git because it is local runtime state.
+By default, the demo writes local memory to `noiron-memory.tsv` and structured
+reflection experience to `noiron-experience.ndkv`. Both files are ignored by Git
+because they are local runtime state.
 
-demo 默认会把本地记忆写入 `noiron-memory.tsv`。该文件属于本地运行状态，已被 Git 忽略。
+demo 默认会把本地记忆写入 `noiron-memory.tsv`，并把结构化反思经验写入
+`noiron-experience.ndkv`。这些文件属于本地运行状态，已被 Git 忽略。
 
 ## Test / 测试
 
@@ -103,7 +106,9 @@ flowchart LR
     Draft --> Stream[Token Stream Monitor]
     Draft --> Reflect[Reflection Loop]
     Stream --> Router
+    Reflect --> Experience[Experience Store]
     Reflect --> Memory
+    Experience --> DiskKV
     Reflect --> Router
     Reflect --> Hierarchy
 ```

@@ -5,7 +5,7 @@ use rust_norion::{HeuristicBackend, InferenceRequest, NoironEngine, TaskProfile}
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse(env::args().skip(1).collect());
-    let mut engine = NoironEngine::load_memory(&args.memory_path)?;
+    let mut engine = NoironEngine::load_state(&args.memory_path, &args.experience_path)?;
     let mut backend = HeuristicBackend;
 
     let outcome = engine.infer(
@@ -13,10 +13,12 @@ fn main() -> std::io::Result<()> {
         &mut backend,
     );
     engine.save_memory(&args.memory_path)?;
+    engine.save_experience(&args.experience_path)?;
 
     println!("Noiron Rust prototype");
     println!("profile: {:?}", args.profile);
     println!("memory_file: {}", args.memory_path.display());
+    println!("experience_file: {}", args.experience_path.display());
     println!();
     println!("{}", outcome.answer);
     println!();
@@ -41,9 +43,10 @@ fn main() -> std::io::Result<()> {
     );
     println!("stream_windows={}", outcome.stream_reports.len());
     println!(
-        "memory: used={} stored={:?}",
+        "memory: used={} stored={:?} experience={}",
         outcome.used_memories.len(),
-        outcome.stored_memory_id
+        outcome.stored_memory_id,
+        outcome.experience_id
     );
 
     Ok(())
@@ -54,6 +57,7 @@ struct Args {
     prompt: String,
     profile: TaskProfile,
     memory_path: PathBuf,
+    experience_path: PathBuf,
 }
 
 impl Args {
@@ -61,6 +65,7 @@ impl Args {
         let mut prompt_parts = Vec::new();
         let mut profile = None;
         let mut memory_path = PathBuf::from("noiron-memory.tsv");
+        let mut experience_path = PathBuf::from("noiron-experience.ndkv");
         let mut index = 0;
 
         while index < raw.len() {
@@ -71,6 +76,10 @@ impl Args {
                 }
                 "--memory" | "-m" if index + 1 < raw.len() => {
                     memory_path = PathBuf::from(&raw[index + 1]);
+                    index += 2;
+                }
+                "--experience" | "-e" if index + 1 < raw.len() => {
+                    experience_path = PathBuf::from(&raw[index + 1]);
                     index += 2;
                 }
                 "--help" | "-h" => {
@@ -95,6 +104,7 @@ impl Args {
             prompt,
             profile,
             memory_path,
+            experience_path,
         }
     }
 }
@@ -122,6 +132,8 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    println!("Usage: rust-norion [--profile coding|writing|long|general] [--memory path] <prompt>");
+    println!(
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] <prompt>"
+    );
     std::process::exit(0);
 }
