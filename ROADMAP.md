@@ -42,10 +42,11 @@ The north star is now explicitly scoped around five core requirements:
 
 5. Universal device adaptation / 全设备适配
    The control plane must run across CPU-only PCs, integrated-GPU laptops,
-   discrete-GPU desktops, unified-memory machines, phones, tablets, embedded
-   boards, NPU/AI accelerator devices, multi-GPU workstations, edge gateways,
-   and servers through explicit hardware profiles and portable execution plans
-   instead of vendor lock-in.
+   discrete-GPU desktops, unified-memory machines, phones, tablets,
+   wearable/XR/TV targets, embedded boards, browser-WASM,
+   microcontroller-class tiny targets, NPU/AI accelerator devices, multi-GPU
+   workstations, edge/robot/vehicle gateways, and servers through explicit
+   hardware profiles and portable execution plans instead of vendor lock-in.
 
 ## Sovereignty Contract / 自主可控约束
 
@@ -88,17 +89,17 @@ The north star is now explicitly scoped around five core requirements:
 
 4. Hardware abstraction / 硬件抽象
    Device profiles convert heterogeneous CPU, GPU, unified-memory, mobile,
-   embedded, NPU, multi-GPU, edge, and server pressure into latency budgets, KV
-   budgets, routing constraints, and hierarchy weights. Profiles also map into
-   capability tiers from tiny devices through distributed accelerators. The CLI
-   should use best-effort local probing when no explicit profile is provided,
-   while preserving manual overrides. Each plan should also emit a device
-   execution profile: primary compute lane, portable fallback lane, memory mode,
-   candidate runtime adapters, KV precision policy, prefetch budget, disk-spill
-   policy, and recursive parallelism budget. Every explicit profile should also
-   carry a coverage descriptor with common aliases so new device names map into
-   stable policy classes instead of fragmenting the runtime into one-off vendor
-   paths.
+   wearable/XR/TV, browser-WASM, embedded/tiny, NPU, multi-GPU, edge/robot/
+   vehicle, and server pressure into latency budgets, KV budgets, routing
+   constraints, and hierarchy weights. Profiles also map into capability tiers
+   from tiny devices through distributed accelerators. The CLI should use
+   best-effort local probing when no explicit profile is provided, while
+   preserving manual overrides. Each plan should also emit a device execution
+   profile: primary compute lane, portable fallback lane, memory mode, candidate
+   runtime adapters, KV precision policy, prefetch budget, disk-spill policy,
+   and recursive parallelism budget. Every explicit profile should also carry a
+   coverage descriptor with common aliases so new device names map into stable
+   policy classes instead of fragmenting the runtime into one-off vendor paths.
 
 5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
@@ -233,10 +234,12 @@ modules, not external product dependencies:
 - Universal hardware profiles:
   hardware allocation should stay device-agnostic while supporting explicit
   policy profiles for PC, laptop, workstation, server, mobile, embedded,
-  NPU/AI accelerator, and heterogeneous multi-GPU deployments. Common aliases
-  such as x86_64, laptop, Steam Deck, RTX, MacBook, iPhone, wearable,
-  Snapdragon, Hailo, Jetson, NAS, datacenter, and HPC should resolve into stable
-  profiles instead of adding vendor-specific code paths.
+  browser-WASM, microcontroller-class tiny targets, NPU/AI accelerator, edge,
+  vehicle, robotics, and heterogeneous multi-GPU deployments. Common aliases
+  such as unknown, generic, x86_64, arm64, LoongArch64, laptop, Steam Deck,
+  DirectML, RTX, MacBook, iPhone, HarmonyOS, wearable, Snapdragon, Hailo,
+  microcontroller, Jetson, automotive, NAS, datacenter, EPYC, and HPC should
+  resolve into stable profiles instead of adding vendor-specific code paths.
 - Universal execution plans:
   every hardware profile should produce portable runtime adapter hints and
   fallback policies so the same control plane can run on CPU-only machines,
@@ -295,15 +298,17 @@ These are algorithmic references, not product dependencies:
   integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI
   accelerator, multi-GPU, edge, and server devices, with capability tiers and
   common device aliases covered by tests; best-effort auto probing now maps OS,
-  architecture, CPU parallelism, and common GPU/NPU environment hints into a
-  conservative device profile; each profile now emits execution-lane, memory
-  mode, adapter-hint, KV-precision, prefetch, disk-spill, and recursive
-  parallelism policies; runtime KV import now honors the device prefetch
-  budget; recursive schedules are now grouped into execution waves using the
-  device max-parallel-chunk budget; every explicit device profile now carries a
-  coverage descriptor with common aliases; the CLI can print the full built-in
-  device matrix and run a `--device-gate` compatibility check across every
-  explicit device profile, including alias roundtrips;
+  architecture, CPU parallelism, common GPU/NPU environment hints, edge device
+  hints, WASM/tiny targets, and discrete GPU adapter names into a conservative
+  device profile; each profile now emits execution-lane, memory mode,
+  adapter-hint, KV-precision, prefetch, disk-spill, and recursive parallelism
+  policies; runtime KV import now honors the device prefetch budget; recursive
+  schedules are now grouped into execution waves using the device
+  max-parallel-chunk budget; every explicit device profile now carries a
+  coverage descriptor with broad aliases and a generic CPU fallback class; the
+  CLI can print the full built-in device matrix and run a `--device-gate`
+  compatibility check across every explicit device profile, including alias
+  roundtrips;
   router thresholds now persist separately for general, coding, writing, and
   long-document profiles;
   hierarchy weights now persist separately for general, coding, writing, and

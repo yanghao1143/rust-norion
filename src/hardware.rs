@@ -219,11 +219,20 @@ impl DeviceClass {
                     "cpu-only",
                     "pc-cpu",
                     "desktop-cpu",
+                    "generic",
+                    "fallback",
+                    "unknown",
+                    "unknown-device",
                     "x86",
                     "x86_64",
                     "amd64",
+                    "arm64",
+                    "aarch64",
+                    "loongarch64",
                     "avx2",
                     "avx512",
+                    "sse4",
+                    "neon",
                     "portable",
                 ],
             },
@@ -241,9 +250,16 @@ impl DeviceClass {
                     "mini-pc",
                     "handheld-pc",
                     "steamdeck",
+                    "handheld-console",
+                    "portable-console",
                     "intel-iris",
                     "intel-xe",
+                    "intel-uhd",
+                    "intel-hd",
                     "amd-apu",
+                    "apu",
+                    "amd-radeon-graphics",
+                    "rdna-apu",
                 ],
             },
             Self::DiscreteGpu => DeviceProfileDescriptor {
@@ -255,13 +271,20 @@ impl DeviceClass {
                     "dgpu",
                     "discrete-gpu",
                     "desktop-gpu",
+                    "gpu",
                     "cuda",
                     "rtx",
                     "nvidia",
+                    "nvidia-gpu",
                     "radeon",
+                    "amd-gpu",
                     "arc",
                     "intel-arc",
                     "vulkan-gpu",
+                    "opencl",
+                    "directml",
+                    "dml",
+                    "egpu",
                 ],
             },
             Self::UnifiedMemory => DeviceProfileDescriptor {
@@ -297,13 +320,21 @@ impl DeviceClass {
                     "handheld",
                     "iphone",
                     "ipad",
+                    "harmonyos",
+                    "ohos",
+                    "visionos",
                     "smartphone",
                     "wearable",
+                    "wear-os",
+                    "wearos",
                     "watch",
                     "xr",
                     "vr",
                     "ar",
+                    "quest",
+                    "mobile-vr",
                     "smart-tv",
+                    "tvos",
                     "android-tv",
                 ],
             },
@@ -318,16 +349,27 @@ impl DeviceClass {
                     "raspberry-pi",
                     "raspberry_pi",
                     "micro",
+                    "microcontroller",
+                    "mcu",
+                    "esp32",
+                    "stm32",
+                    "arduino",
+                    "cortex-m",
                     "sbc",
                     "arm-sbc",
                     "riscv",
+                    "riscv64",
                     "risc-v",
+                    "no-std",
+                    "wasi",
                     "wasm",
                     "browser",
                     "web",
                     "webgpu",
                     "wasip1",
                     "wasm32",
+                    "wasm32-wasip1",
+                    "esp-idf",
                 ],
             },
             Self::NpuAccelerator => DeviceProfileDescriptor {
@@ -339,10 +381,13 @@ impl DeviceClass {
                     "ane",
                     "tpu",
                     "ai-accelerator",
+                    "npu-accelerator",
                     "neural",
+                    "neural-engine",
                     "snapdragon",
                     "qualcomm",
                     "hexagon",
+                    "qnn-htp",
                     "apple-neural-engine",
                     "ascend",
                     "cann",
@@ -356,6 +401,10 @@ impl DeviceClass {
                     "horizon-bpu",
                     "hailo",
                     "ethos",
+                    "directml-npu",
+                    "vitis-ai",
+                    "npu-smi",
+                    "mediatek-apu",
                 ],
             },
             Self::MultiGpu => DeviceProfileDescriptor {
@@ -367,11 +416,17 @@ impl DeviceClass {
                     "multi_gpu",
                     "multi",
                     "multi-accelerator",
+                    "multi-accel",
+                    "multi-npu",
                     "multi-device",
                     "heterogeneous",
                     "distributed",
                     "cluster",
                     "nvlink",
+                    "tensor-parallel",
+                    "pipeline-parallel",
+                    "mpi",
+                    "slurm-cluster",
                 ],
             },
             Self::Edge => DeviceProfileDescriptor {
@@ -388,6 +443,16 @@ impl DeviceClass {
                     "router",
                     "industrial-pc",
                     "ipc",
+                    "robot",
+                    "robotics",
+                    "drone",
+                    "vehicle",
+                    "automotive",
+                    "car",
+                    "camera",
+                    "nvr",
+                    "edge-box",
+                    "smart-camera",
                 ],
             },
             Self::Server => DeviceProfileDescriptor {
@@ -401,10 +466,17 @@ impl DeviceClass {
                     "datacenter",
                     "local-cloud",
                     "hpc",
+                    "hpc-node",
                     "k8s",
                     "kubernetes",
                     "bare-metal",
                     "cloud-host",
+                    "epyc",
+                    "xeon",
+                    "threadripper",
+                    "rackmount",
+                    "slurm",
+                    "pbs",
                 ],
             },
         }
@@ -430,30 +502,56 @@ impl FromStr for DeviceClass {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "auto" => Ok(Self::Auto),
-            "cpu" | "cpu-only" | "cpu_only" | "pc-cpu" | "desktop-cpu" | "x86" | "x86_64"
-            | "amd64" | "avx2" | "avx512" | "portable" => Ok(Self::CpuOnly),
-            "integrated" | "igpu" | "integrated-gpu" | "laptop" | "notebook" | "intel-gpu"
-            | "intel-iris" | "intel-xe" | "amd-apu" | "apu" | "ultrabook" | "mini-pc"
-            | "handheld-pc" | "steamdeck" => Ok(Self::IntegratedGpu),
-            "discrete" | "dgpu" | "discrete-gpu" | "desktop-gpu" | "cuda" | "rtx" | "nvidia"
-            | "radeon" | "arc" | "intel-arc" | "vulkan-gpu" => Ok(Self::DiscreteGpu),
+            "cpu" | "cpu-only" | "cpu_only" | "pc-cpu" | "desktop-cpu" | "generic" | "fallback"
+            | "unknown" | "unknown-device" | "x86" | "x86_64" | "amd64" | "arm64" | "aarch64"
+            | "loongarch64" | "avx2" | "avx512" | "sse4" | "neon" | "portable" => Ok(Self::CpuOnly),
+            "integrated"
+            | "igpu"
+            | "integrated-gpu"
+            | "laptop"
+            | "notebook"
+            | "intel-gpu"
+            | "intel-iris"
+            | "intel-xe"
+            | "intel-uhd"
+            | "intel-hd"
+            | "amd-apu"
+            | "apu"
+            | "amd-radeon-graphics"
+            | "rdna-apu"
+            | "ultrabook"
+            | "mini-pc"
+            | "handheld-pc"
+            | "steamdeck"
+            | "handheld-console"
+            | "portable-console" => Ok(Self::IntegratedGpu),
+            "discrete" | "dgpu" | "discrete-gpu" | "desktop-gpu" | "gpu" | "cuda" | "rtx"
+            | "nvidia" | "nvidia-gpu" | "radeon" | "amd-gpu" | "arc" | "intel-arc"
+            | "vulkan-gpu" | "opencl" | "directml" | "dml" | "egpu" => Ok(Self::DiscreteGpu),
             "uma" | "unified" | "unified-memory" | "apple" | "mac" | "macbook" | "m-series"
             | "apple-silicon" | "m1" | "m2" | "m3" | "m4" | "m5" => Ok(Self::UnifiedMemory),
             "mobile" | "phone" | "tablet" | "android" | "ios" | "handheld" | "iphone" | "ipad"
-            | "smartphone" | "wearable" | "watch" | "xr" | "vr" | "ar" | "smart-tv"
-            | "android-tv" => Ok(Self::Mobile),
-            "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro" | "sbc"
-            | "arm-sbc" | "riscv" | "risc-v" | "wasm" | "browser" | "web" | "webgpu" | "wasip1"
-            | "wasm32" => Ok(Self::Embedded),
+            | "harmonyos" | "ohos" | "visionos" | "smartphone" | "wearable" | "wear-os"
+            | "wearos" | "watch" | "xr" | "vr" | "ar" | "quest" | "mobile-vr" | "smart-tv"
+            | "tvos" | "android-tv" => Ok(Self::Mobile),
+            "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro"
+            | "microcontroller" | "mcu" | "esp32" | "stm32" | "arduino" | "cortex-m" | "sbc"
+            | "arm-sbc" | "riscv" | "riscv64" | "risc-v" | "no-std" | "wasi" | "wasm"
+            | "browser" | "web" | "webgpu" | "wasip1" | "wasm32" | "wasm32-wasip1" | "esp-idf" => {
+                Ok(Self::Embedded)
+            }
             "npu"
             | "ane"
             | "tpu"
             | "ai-accelerator"
             | "ai_accelerator"
+            | "npu-accelerator"
             | "neural"
+            | "neural-engine"
             | "snapdragon"
             | "qualcomm"
             | "hexagon"
+            | "qnn-htp"
             | "apple-neural-engine"
             | "ascend"
             | "cann"
@@ -466,13 +564,24 @@ impl FromStr for DeviceClass {
             | "rknn"
             | "horizon-bpu"
             | "hailo"
-            | "ethos" => Ok(Self::NpuAccelerator),
-            "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "distributed"
-            | "multi-device" | "heterogeneous" | "cluster" | "nvlink" => Ok(Self::MultiGpu),
+            | "ethos"
+            | "directml-npu"
+            | "vitis-ai"
+            | "npu-smi"
+            | "mediatek-apu" => Ok(Self::NpuAccelerator),
+            "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "multi-accel"
+            | "multi-npu" | "distributed" | "multi-device" | "heterogeneous" | "cluster"
+            | "nvlink" | "tensor-parallel" | "pipeline-parallel" | "mpi" | "slurm-cluster" => {
+                Ok(Self::MultiGpu)
+            }
             "edge" | "gateway" | "edge-gateway" | "jetson" | "nas" | "home-server" | "router"
-            | "industrial-pc" | "ipc" => Ok(Self::Edge),
+            | "industrial-pc" | "ipc" | "robot" | "robotics" | "drone" | "vehicle"
+            | "automotive" | "car" | "camera" | "nvr" | "edge-box" | "smart-camera" => {
+                Ok(Self::Edge)
+            }
             "server" | "workstation" | "rack" | "datacenter" | "local-cloud" | "hpc" | "k8s"
-            | "kubernetes" | "bare-metal" | "cloud-host" => Ok(Self::Server),
+            | "hpc-node" | "kubernetes" | "bare-metal" | "cloud-host" | "epyc" | "xeon"
+            | "threadripper" | "rackmount" | "slurm" | "pbs" => Ok(Self::Server),
             other => Err(format!("unknown device class: {other}")),
         }
     }
@@ -603,14 +712,20 @@ impl HardwareProbe {
         let os = self.os.to_ascii_lowercase();
         let arch = self.arch.to_ascii_lowercase();
 
-        if os == "android" || os == "ios" {
+        if matches!(
+            os.as_str(),
+            "android" | "ios" | "tvos" | "visionos" | "watchos"
+        ) {
             return DeviceClass::Mobile;
         }
-        if arch.starts_with("wasm") {
+        if arch.starts_with("wasm") || matches!(os.as_str(), "wasi" | "espidf" | "none") {
             return DeviceClass::Embedded;
         }
         if self.has_npu_hint() {
             return DeviceClass::NpuAccelerator;
+        }
+        if self.has_edge_hint() {
+            return DeviceClass::Edge;
         }
 
         let accelerator_count = self.accelerator_count();
@@ -632,6 +747,9 @@ impl HardwareProbe {
         }
         if self.has_integrated_gpu_hint() {
             return DeviceClass::IntegratedGpu;
+        }
+        if self.has_discrete_gpu_hint() {
+            return DeviceClass::DiscreteGpu;
         }
         if os == "linux" && is_arm_arch(&arch) {
             return if self.cpu_count <= 4 {
@@ -672,9 +790,13 @@ impl HardwareProbe {
                     "HEXAGON_SDK_ROOT",
                     "COREML_ENABLE_NEURAL_ENGINE",
                     "ANDROID_NNAPI_DEVICE",
+                    "NPU_VISIBLE_DEVICES",
+                    "DIRECTML_NPU_DEVICE",
                     "ASCEND_HOME_PATH",
                     "ASCEND_TOOLKIT_HOME",
+                    "ASCEND_RT_VISIBLE_DEVICES",
                     "CAMBRICON_HOME",
+                    "MLU_VISIBLE_DEVICES",
                     "KUNLUN_HOME",
                     "SOPHGO_SDK_ROOT",
                     "RKNN_TOOLKIT2",
@@ -682,6 +804,7 @@ impl HardwareProbe {
                     "VITIS_AI_HOME",
                     "ETHOS_U_HOME",
                     "ETHOS_N_HOME",
+                    "MTK_NEUROPILOT_SDK",
                 ])
                 .is_some()
             || self.adapter_hint_contains(&[
@@ -704,6 +827,50 @@ impl HardwareProbe {
                 "hailo",
                 "ethos",
                 "vitis",
+            ])
+    }
+
+    fn has_discrete_gpu_hint(&self) -> bool {
+        self.env_flag("NOIRON_DISCRETE_GPU")
+            || self.adapter_hint_contains(&[
+                "nvidia",
+                "geforce",
+                "rtx",
+                "tesla",
+                "quadro",
+                "cuda",
+                "radeon rx",
+                "radeon pro",
+                "amd gpu",
+                "arc",
+                "discrete",
+                "dgpu",
+                "opencl",
+                "directml",
+            ])
+    }
+
+    fn has_edge_hint(&self) -> bool {
+        self.env_flag("NOIRON_EDGE_DEVICE")
+            || self
+                .env_value_any(&[
+                    "JETSON_MODEL_NAME",
+                    "NVIDIA_JETSON_MODEL",
+                    "BALENA_DEVICE_TYPE",
+                    "RPI_MODEL",
+                    "ROCKCHIP_SOC",
+                    "NOIRON_EDGE_CLASS",
+                ])
+                .is_some()
+            || self.adapter_hint_contains(&[
+                "jetson",
+                "tegra",
+                "rk3588",
+                "rk356",
+                "raspberry",
+                "edge",
+                "gateway",
+                "industrial",
             ])
     }
 
@@ -773,11 +940,16 @@ impl HardwareProbe {
     fn accelerator_count(&self) -> usize {
         self.env_value_any(&[
             "NOIRON_ACCELERATOR_DEVICES",
+            "NOIRON_GPU_DEVICES",
             "CUDA_VISIBLE_DEVICES",
             "NVIDIA_VISIBLE_DEVICES",
             "HIP_VISIBLE_DEVICES",
             "ROCR_VISIBLE_DEVICES",
             "HSA_VISIBLE_DEVICES",
+            "GPU_VISIBLE_DEVICES",
+            "VULKAN_VISIBLE_DEVICES",
+            "DIRECTML_VISIBLE_DEVICES",
+            "METAL_VISIBLE_DEVICES",
             "GPU_DEVICE_ORDINAL",
             "ONEAPI_DEVICE_SELECTOR",
             "ZE_AFFINITY_MASK",
@@ -1773,7 +1945,19 @@ mod tests {
     #[test]
     fn common_device_aliases_parse_to_profiles() {
         assert_eq!(
+            "unknown".parse::<DeviceClass>().unwrap(),
+            DeviceClass::CpuOnly
+        );
+        assert_eq!(
+            "loongarch64".parse::<DeviceClass>().unwrap(),
+            DeviceClass::CpuOnly
+        );
+        assert_eq!(
             "laptop".parse::<DeviceClass>().unwrap(),
+            DeviceClass::IntegratedGpu
+        );
+        assert_eq!(
+            "handheld-console".parse::<DeviceClass>().unwrap(),
             DeviceClass::IntegratedGpu
         );
         assert_eq!(
@@ -1785,11 +1969,19 @@ mod tests {
             DeviceClass::DiscreteGpu
         );
         assert_eq!(
+            "directml".parse::<DeviceClass>().unwrap(),
+            DeviceClass::DiscreteGpu
+        );
+        assert_eq!(
             "macbook".parse::<DeviceClass>().unwrap(),
             DeviceClass::UnifiedMemory
         );
         assert_eq!(
             "iphone".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Mobile
+        );
+        assert_eq!(
+            "harmonyos".parse::<DeviceClass>().unwrap(),
             DeviceClass::Mobile
         );
         assert_eq!(
@@ -1813,6 +2005,10 @@ mod tests {
             DeviceClass::Embedded
         );
         assert_eq!(
+            "microcontroller".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Embedded
+        );
+        assert_eq!(
             "riscv".parse::<DeviceClass>().unwrap(),
             DeviceClass::Embedded
         );
@@ -1821,12 +2017,21 @@ mod tests {
             DeviceClass::Mobile
         );
         assert_eq!("jetson".parse::<DeviceClass>().unwrap(), DeviceClass::Edge);
+        assert_eq!(
+            "automotive".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Edge
+        );
         assert_eq!("nas".parse::<DeviceClass>().unwrap(), DeviceClass::Edge);
         assert_eq!(
             "datacenter".parse::<DeviceClass>().unwrap(),
             DeviceClass::Server
         );
+        assert_eq!("epyc".parse::<DeviceClass>().unwrap(), DeviceClass::Server);
         assert_eq!("hpc".parse::<DeviceClass>().unwrap(), DeviceClass::Server);
+        assert_eq!(
+            "tensor-parallel".parse::<DeviceClass>().unwrap(),
+            DeviceClass::MultiGpu
+        );
     }
 
     #[test]
@@ -1901,7 +2106,7 @@ mod tests {
 
         assert!(report.passed(), "{:?}", report.rows);
         assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
-        assert!(report.alias_count() >= 80);
+        assert!(report.alias_count() >= 175);
         assert!(report.summary_line().contains("passed=true"));
     }
 
@@ -2055,11 +2260,13 @@ mod tests {
     #[test]
     fn probe_detects_mobile_arm_and_multi_gpu_targets() {
         let mobile = HardwareProbe::new("ios", "aarch64", 6).detect_device();
+        let vision = HardwareProbe::new("visionos", "aarch64", 8).detect_device();
         let multi_gpu = HardwareProbe::new("linux", "x86_64", 32)
             .with_env("CUDA_VISIBLE_DEVICES", "0,1")
             .detect_device();
 
         assert_eq!(mobile, DeviceClass::Mobile);
+        assert_eq!(vision, DeviceClass::Mobile);
         assert_eq!(multi_gpu, DeviceClass::MultiGpu);
     }
 
@@ -2074,5 +2281,21 @@ mod tests {
         assert_eq!(uma, DeviceClass::UnifiedMemory);
         assert_eq!(integrated, DeviceClass::IntegratedGpu);
         assert_eq!(edge, DeviceClass::Edge);
+    }
+
+    #[test]
+    fn probe_detects_discrete_edge_and_tiny_fallback_targets() {
+        let discrete = HardwareProbe::new("windows", "x86_64", 16)
+            .with_env("WGPU_ADAPTER_NAME", "NVIDIA GeForce RTX 4090")
+            .detect_device();
+        let jetson = HardwareProbe::new("linux", "aarch64", 8)
+            .with_env("JETSON_MODEL_NAME", "Jetson Orin")
+            .with_env("CUDA_VISIBLE_DEVICES", "0")
+            .detect_device();
+        let tiny = HardwareProbe::new("espidf", "xtensa", 2).detect_device();
+
+        assert_eq!(discrete, DeviceClass::DiscreteGpu);
+        assert_eq!(jetson, DeviceClass::Edge);
+        assert_eq!(tiny, DeviceClass::Embedded);
     }
 }

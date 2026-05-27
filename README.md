@@ -25,10 +25,11 @@ The optimized target combines five non-negotiable requirements:
 - extreme local deployment: offline-first, lightweight, disk-backed memory,
   and ultra-long-context control for consumer or edge hardware
 - universal device adaptation: laptops, desktops, workstations, servers,
-  phones, tablets, embedded boards, NPU/AI accelerator devices, and
-  heterogeneous multi-GPU machines should all map into explicit hardware
-  profiles that tune latency, KV budgets, routing pressure, and hierarchy
-  weights, then into execution plans with portable fallbacks
+  phones, tablets, wearable/XR/TV targets, embedded boards, browser-WASM,
+  microcontroller-class tiny targets, edge/robot/vehicle devices, NPU/AI
+  accelerator devices, and heterogeneous multi-GPU machines should all map into
+  explicit hardware profiles that tune latency, KV budgets, routing pressure,
+  and hierarchy weights, then into execution plans with portable fallbacks
 - frontier algorithms as owned implementations: use public papers as
   inspiration, but implement attention, memory, quantization, routing,
   reflection, and scheduling locally in Rust
@@ -36,7 +37,7 @@ The optimized target combines five non-negotiable requirements:
 - 自研模型栈：默认后端是自主训练的 Transformer 系列模型，而不是外部权重
 - 规避卡脖子：核心引擎不绑定闭源模型服务、厂商专用运行时或不透明量化路径
 - 极致本地化部署：离线优先、轻量化、磁盘记忆、面向消费级/边缘硬件的超长上下文控制
-- 全设备适配：笔记本、台式机、工作站、服务器、手机、平板、嵌入式板卡、NPU/AI 加速器设备以及异构多 GPU 机器，都应映射到明确的硬件 profile，用于调整延迟、KV budget、路由压力、层级权重，并生成带可移植降级路径的执行计划
+- 全设备适配：笔记本、台式机、工作站、服务器、手机、平板、可穿戴/XR/TV、嵌入式板卡、浏览器 WASM、微控制器级 tiny 目标、边缘/机器人/车载设备、NPU/AI 加速器设备以及异构多 GPU 机器，都应映射到明确的硬件 profile，用于调整延迟、KV budget、路由压力、层级权重，并生成带可移植降级路径的执行计划
 - 前沿算法自主实现：公开论文只作为思想来源，注意力、记忆、量化、路由、反思和调度都在 Rust 中本地实现
 
 The project focuses on the control loop around inference:
@@ -298,19 +299,23 @@ GPU/NPU 环境变量做保守本地探测。`--device`、`--cpu-load`、`--gpu-l
 
 Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
 `uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.
-Common aliases such as `x86_64`, `laptop`, `steamdeck`, `rtx`, `macbook`,
-`iphone`, `wearable`, `snapdragon`, `hailo`, `ascend`, `rknn`, `wasm`, `riscv`,
-`jetson`, `nas`, `datacenter`, and `hpc` map into those profiles. Internally,
-profiles are also grouped into `tiny`, `constrained`, `balanced`,
-`accelerated`, and `distributed` capability tiers so the same control loop can
-scale down or up without binding to one vendor device.
+Common aliases such as `unknown`, `generic`, `x86_64`, `arm64`, `loongarch64`,
+`laptop`, `steamdeck`, `directml`, `rtx`, `macbook`, `iphone`, `harmonyos`,
+`wearable`, `snapdragon`, `hailo`, `ascend`, `rknn`, `microcontroller`, `wasm`,
+`riscv`, `jetson`, `automotive`, `nas`, `datacenter`, `epyc`, and `hpc` map
+into those profiles. Internally, profiles are also grouped into `tiny`,
+`constrained`, `balanced`, `accelerated`, and `distributed` capability tiers so
+the same control loop can scale down or up without binding to one vendor
+device.
 
 可用设备 profile 包括 `cpu`、`integrated`、`discrete`、`uma`、`mobile`、
-`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。常见别名如 `x86_64`、
-`laptop`、`steamdeck`、`rtx`、`macbook`、`iphone`、`wearable`、`snapdragon`、
-`hailo`、`ascend`、`rknn`、`wasm`、`riscv`、`jetson`、`nas`、`datacenter` 和
-`hpc` 会映射到这些 profile。内部还会按 `tiny`、`constrained`、`balanced`、
-`accelerated`、`distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
+`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。常见别名如 `unknown`、
+`generic`、`x86_64`、`arm64`、`loongarch64`、`laptop`、`steamdeck`、
+`directml`、`rtx`、`macbook`、`iphone`、`harmonyos`、`wearable`、
+`snapdragon`、`hailo`、`ascend`、`rknn`、`microcontroller`、`wasm`、`riscv`、
+`jetson`、`automotive`、`nas`、`datacenter`、`epyc` 和 `hpc` 会映射到这些
+profile。内部还会按 `tiny`、`constrained`、`balanced`、`accelerated`、
+`distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
 
 Every hardware plan also emits a `DeviceExecutionPlan`: primary compute lane,
 fallback lane, memory mode, candidate runtime adapters, hot/cold KV precision,
@@ -323,13 +328,16 @@ runtime adapter、冷热 KV 精度、预取数量、磁盘溢出策略和递归 
 
 Probe override environment variables include `NOIRON_DEVICE_PROFILE`,
 `NOIRON_CPU_LOAD`, `NOIRON_GPU_LOAD`, `NOIRON_RAM_LOAD`, `NOIRON_DISK_LOAD`,
-`CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`, `WGPU_ADAPTER_NAME`, and
-NPU hints such as `NOIRON_NPU`.
+GPU hints such as `CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`,
+`HIP_VISIBLE_DEVICES`, `DIRECTML_VISIBLE_DEVICES`, and `WGPU_ADAPTER_NAME`,
+edge hints such as `JETSON_MODEL_NAME`, and NPU hints such as `NOIRON_NPU` or
+`NPU_VISIBLE_DEVICES`.
 
 可用于覆盖探测结果的环境变量包括 `NOIRON_DEVICE_PROFILE`、`NOIRON_CPU_LOAD`、
-`NOIRON_GPU_LOAD`、`NOIRON_RAM_LOAD`、`NOIRON_DISK_LOAD`、
-`CUDA_VISIBLE_DEVICES`、`NVIDIA_VISIBLE_DEVICES`、`WGPU_ADAPTER_NAME`，以及
-`NOIRON_NPU` 等 NPU 提示。
+`NOIRON_GPU_LOAD`、`NOIRON_RAM_LOAD`、`NOIRON_DISK_LOAD`，GPU 提示如
+`CUDA_VISIBLE_DEVICES`、`NVIDIA_VISIBLE_DEVICES`、`HIP_VISIBLE_DEVICES`、
+`DIRECTML_VISIBLE_DEVICES`、`WGPU_ADAPTER_NAME`，边缘设备提示如
+`JETSON_MODEL_NAME`，以及 `NOIRON_NPU`、`NPU_VISIBLE_DEVICES` 等 NPU 提示。
 
 Run through a local command runtime:
 
