@@ -344,9 +344,11 @@ These are algorithmic references, not product dependencies:
   initial runtime metadata, tokenizer, embedding, and KV import/export trait
   hooks are in place; `RuntimeBackend` now exposes model-side embeddings to the
   control plane for memory lookup and writes when a self-developed runtime
-  provides them, while preserving the portable Rust fallback; `RuntimeBackend`
-  now injects runtime metadata into each request, command runtime prompts
-  expose the ABI boundary, and backend native context windows feed recursive scheduling; CLI command runtimes can pass
+  provides them, while preserving the portable Rust fallback; KV-Fusion
+  similarity now penalizes mismatched vector dimensions so memories from
+  different runtime embedding spaces do not over-fuse; `RuntimeBackend` now
+  injects runtime metadata into each request, command runtime prompts expose
+  the ABI boundary, and backend native context windows feed recursive scheduling; CLI command runtimes can pass
   model id, tokenizer, native window, embedding dimensions, and KV exchange
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
@@ -387,6 +389,8 @@ These are algorithmic references, not product dependencies:
 - A built-in local runtime prototype proves tokenizer, model-side embedding,
   generation, KV exchange, and control-plane memory integration end to end
   before production Transformer kernels are connected.
+- Mixed runtime versions or fallback/runtime embedding spaces do not silently
+  over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets, including execution-plan
   fallbacks and alias coverage for each device class.

@@ -727,7 +727,22 @@ fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
     if left_norm == 0.0 || right_norm == 0.0 {
         0.0
     } else {
-        (dot / (left_norm.sqrt() * right_norm.sqrt())).clamp(-1.0, 1.0)
+        let raw = (dot / (left_norm.sqrt() * right_norm.sqrt())).clamp(-1.0, 1.0);
+        (raw * dimension_compatibility(left, right)).clamp(-1.0, 1.0)
+    }
+}
+
+fn dimension_compatibility(left: &[f32], right: &[f32]) -> f32 {
+    if left.len() == right.len() {
+        return 1.0;
+    }
+
+    let shorter = left.len().min(right.len()) as f32;
+    let longer = left.len().max(right.len()) as f32;
+    if shorter == 0.0 || longer == 0.0 {
+        0.0
+    } else {
+        (shorter / longer).powi(2)
     }
 }
 
@@ -801,6 +816,28 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(cache.len(), 1);
         assert!(cache.entries()[0].strength > 0.8);
+    }
+
+    #[test]
+    fn dimension_mismatched_vectors_do_not_fuse() {
+        let mut cache = KvFusionCache::with_limits(0.7, 16);
+        let first = cache.store_or_fuse("old fallback embedding", vec![1.0], 0.9);
+        let second = cache.store_or_fuse("runtime embedding", vec![1.0, 0.0, 0.0, 0.0], 0.9);
+
+        assert_ne!(first, second);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn lookup_penalizes_mismatched_embedding_dimensions() {
+        let mut cache = KvFusionCache::with_limits(0.7, 16);
+        cache.store_or_fuse("short embedding", vec![1.0], 0.9);
+        let compatible = cache.store_or_fuse("runtime embedding", vec![1.0, 0.0, 0.0, 0.0], 0.6);
+
+        let matches = cache.lookup(&[1.0, 0.0, 0.0, 0.0], 2);
+
+        assert_eq!(matches[0].id, compatible);
+        assert!(matches.iter().any(|item| item.similarity < 0.5));
     }
 
     #[test]

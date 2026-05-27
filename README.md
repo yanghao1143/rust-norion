@@ -145,7 +145,7 @@ Implemented modules:
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
-- `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence, retention policy, and batch semantic compaction for near-duplicate memories
+- `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence, retention policy, embedding-dimension-aware similarity, and batch semantic compaction for near-duplicate memories
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, model-side embedding, generation, and KV import/export

@@ -974,7 +974,8 @@ mod tests {
     #[test]
     fn inference_exposes_tiered_cache_plan() {
         let mut cache = KvFusionCache::new();
-        cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
+        let vector = TextEmbedder::default().embed("Rust Noiron tiered memory");
+        cache.store_or_fuse("Rust Noiron tiered memory", vector, 1.0);
         let mut engine = NoironEngine::with_cache(cache);
         let mut backend = HeuristicBackend;
 
