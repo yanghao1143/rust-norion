@@ -443,9 +443,12 @@ impl NoironEngine {
             stored_memory_id,
             router_threshold_after,
             stream_windows: stream_reports.len(),
+            route_budget,
             hierarchy,
+            used_memory_ids: used_memories.iter().map(|memory| memory.id).collect(),
             gist_records: gist_records.clone(),
             gist_memory_ids: stored_gist_memory_ids.clone(),
+            stored_runtime_kv_memory_ids: stored_runtime_kv_memory_ids.clone(),
             process_reward: process_reward.clone(),
         });
         let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
@@ -683,26 +686,27 @@ fn metrics_from_report(
 }
 
 fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
+    let token_count = (item.route_budget.attention_tokens + item.route_budget.fast_tokens).max(1);
     match item.action {
         RewardAction::Reinforce => GenerationMetrics {
             perplexity: (6.0 + (1.0 - item.reward) * 8.0 + item.stream_windows as f32 * 0.03)
                 .clamp(3.0, 18.0),
             semantic_consistency: item.quality.max(item.reward).clamp(0.0, 1.0),
             contradiction_count: item.contradiction_count,
-            token_count: 64,
+            token_count,
         },
         RewardAction::Penalize => GenerationMetrics {
             perplexity: (18.0 + (1.0 - item.reward) * 18.0 + item.stream_windows as f32 * 0.05)
                 .clamp(12.0, 48.0),
             semantic_consistency: item.quality.min(item.reward).clamp(0.0, 1.0),
             contradiction_count: item.contradiction_count.max(1),
-            token_count: 64,
+            token_count,
         },
         RewardAction::Hold => GenerationMetrics {
             perplexity: 10.0,
             semantic_consistency: item.quality.clamp(0.0, 1.0),
             contradiction_count: item.contradiction_count,
-            token_count: 64,
+            token_count,
         },
     }
 }
@@ -1158,9 +1162,17 @@ mod tests {
             stored_memory_id: Some(memory_id),
             router_threshold_after: 0.55,
             stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: vec![memory_id],
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
             process_reward: ProcessRewardReport {
                 total: 0.91,
                 action: RewardAction::Reinforce,
@@ -1176,6 +1188,47 @@ mod tests {
         assert_eq!(report.reinforced, 1);
         assert!(engine.cache.entries()[0].hits > before_hits);
         assert!(engine.router.observations() > 0);
+    }
+
+    #[test]
+    fn replay_experience_reinforces_used_memory_ids() {
+        let mut engine = NoironEngine::new();
+        let memory_id = engine
+            .cache
+            .store_or_fuse("used replay memory", vec![1.0, 0.0, 0.0], 0.8);
+        engine.experience.record(ExperienceInput {
+            prompt: "Rust replay used memory".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "reinforce memories that helped a high reward answer".to_owned(),
+            quality: 0.93,
+            contradictions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 1,
+                fast_tokens: 3,
+                attention_fraction: 0.25,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: vec![memory_id],
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            process_reward: ProcessRewardReport {
+                total: 0.90,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
+        let before_hits = engine.cache.entries()[0].hits;
+
+        let report = engine.replay_experience(4);
+
+        assert_eq!(report.touched_memories, 1);
+        assert!(engine.cache.entries()[0].hits > before_hits);
     }
 
     #[test]
@@ -1226,9 +1279,17 @@ mod tests {
             stored_memory_id: None,
             router_threshold_after: 0.55,
             stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 1,
+                fast_tokens: 3,
+                attention_fraction: 0.25,
+            },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: Vec::new(),
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
             process_reward: ProcessRewardReport::default(),
         });
         let mut backend = HeuristicBackend;

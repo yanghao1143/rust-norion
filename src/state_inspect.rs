@@ -164,6 +164,7 @@ mod tests {
     use crate::experience::ExperienceInput;
     use crate::hierarchy::{HierarchyWeights, TaskProfile};
     use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
+    use crate::router::RouteBudget;
 
     #[test]
     fn inspection_report_summarizes_memory_experience_and_adaptive_state() {
@@ -182,9 +183,17 @@ mod tests {
             stored_memory_id: Some(memory_id),
             router_threshold_after: 0.62,
             stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.62,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: vec![memory_id],
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
             process_reward: ProcessRewardReport {
                 total: 0.88,
                 action: RewardAction::Reinforce,

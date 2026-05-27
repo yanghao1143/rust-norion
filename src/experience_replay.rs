@@ -1,6 +1,7 @@
 use crate::experience::ExperienceRecord;
 use crate::hierarchy::TaskProfile;
 use crate::process_reward::RewardAction;
+use crate::router::RouteBudget;
 
 #[derive(Debug, Clone)]
 pub struct ExperienceReplayPlanner {
@@ -55,9 +56,12 @@ impl ExperienceReplayPlanner {
             RewardAction::Hold => 0.0,
         };
         let mut memory_ids = record
-            .stored_memory_id
-            .into_iter()
+            .used_memory_ids
+            .iter()
+            .copied()
+            .chain(record.stored_memory_id)
             .chain(record.gist_memory_ids.iter().copied())
+            .chain(record.stored_runtime_kv_memory_ids.iter().copied())
             .collect::<Vec<_>>();
         memory_ids.sort_unstable();
         memory_ids.dedup();
@@ -70,6 +74,7 @@ impl ExperienceReplayPlanner {
             quality: record.quality,
             contradiction_count: record.contradictions.len(),
             stream_windows: record.stream_windows,
+            route_budget: record.route_budget,
             memory_ids,
             priority,
             lesson: record.lesson.clone(),
@@ -97,6 +102,7 @@ pub struct ExperienceReplayItem {
     pub quality: f32,
     pub contradiction_count: usize,
     pub stream_windows: usize,
+    pub route_budget: RouteBudget,
     pub memory_ids: Vec<u64>,
     pub priority: f32,
     pub lesson: String,
@@ -165,6 +171,15 @@ mod tests {
                 .iter()
                 .any(|item| item.action == RewardAction::Reinforce)
         );
+        let reinforced = plan
+            .items
+            .iter()
+            .find(|item| item.action == RewardAction::Reinforce)
+            .unwrap();
+        assert!(reinforced.memory_ids.contains(&1));
+        assert!(reinforced.memory_ids.contains(&11));
+        assert!(reinforced.memory_ids.contains(&21));
+        assert!(reinforced.memory_ids.contains(&31));
         assert!(
             plan.items
                 .iter()
@@ -202,9 +217,17 @@ mod tests {
             stored_memory_id: Some(id),
             router_threshold_after: 0.5,
             stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: vec![id + 20],
             gist_records: Vec::new(),
             gist_memory_ids: vec![id + 10],
+            stored_runtime_kv_memory_ids: vec![id + 30],
             process_reward: ProcessRewardReport {
                 total: reward,
                 action,
@@ -223,9 +246,12 @@ mod tests {
             stored_memory_id: input.stored_memory_id,
             router_threshold_after: input.router_threshold_after,
             stream_windows: input.stream_windows,
+            route_budget: input.route_budget,
             hierarchy: input.hierarchy,
+            used_memory_ids: input.used_memory_ids,
             gist_records: input.gist_records,
             gist_memory_ids: input.gist_memory_ids,
+            stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
             process_reward: input.process_reward,
         }
     }

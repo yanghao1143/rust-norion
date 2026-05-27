@@ -152,8 +152,8 @@ Implemented modules:
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, drift, reward, and memory counters
-- `src/experience.rs`: structured reflection experience store
-- `src/experience_replay.rs`: reward-ranked experience replay planner
+- `src/experience.rs`: structured reflection experience store with route budget and KV usage traces
+- `src/experience_replay.rs`: reward-ranked experience replay planner that can reinforce or penalize used, stored, gist, and runtime-KV memories
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions

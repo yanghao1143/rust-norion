@@ -214,7 +214,9 @@ modules, not external product dependencies:
   KV reads, hierarchy weights, latency, contradictions, and memory admission.
 - Experience replay:
   the experience store should become replayable training data for the control
-  plane state while leaving model weights untouched.
+  plane state while leaving model weights untouched. Records should preserve
+  route budgets, used KV memory ids, gist memory ids, and runtime-KV memory ids
+  so replay can reinforce or penalize the actual memory path used by an answer.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
@@ -308,6 +310,8 @@ These are algorithmic references, not product dependencies:
   long-document profiles;
   route scoring now consumes hardware pressure and device compute headroom from
   the hardware plan;
+  experience records now persist route budgets plus used/stored/gist/runtime-KV
+  memory ids for replay;
   the CLI can inspect persisted local state without running inference;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)

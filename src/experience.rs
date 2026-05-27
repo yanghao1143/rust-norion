@@ -6,6 +6,7 @@ use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
+use crate::router::RouteBudget;
 
 #[derive(Debug, Clone)]
 pub struct ExperienceInput {
@@ -17,9 +18,12 @@ pub struct ExperienceInput {
     pub stored_memory_id: Option<u64>,
     pub router_threshold_after: f32,
     pub stream_windows: usize,
+    pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
+    pub used_memory_ids: Vec<u64>,
     pub gist_records: Vec<GistRecord>,
     pub gist_memory_ids: Vec<u64>,
+    pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub process_reward: ProcessRewardReport,
 }
 
@@ -34,9 +38,12 @@ pub struct ExperienceRecord {
     pub stored_memory_id: Option<u64>,
     pub router_threshold_after: f32,
     pub stream_windows: usize,
+    pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
+    pub used_memory_ids: Vec<u64>,
     pub gist_records: Vec<GistRecord>,
     pub gist_memory_ids: Vec<u64>,
+    pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub process_reward: ProcessRewardReport,
 }
 
@@ -97,9 +104,12 @@ impl ExperienceStore {
             stored_memory_id: input.stored_memory_id,
             router_threshold_after: input.router_threshold_after,
             stream_windows: input.stream_windows,
+            route_budget: input.route_budget,
             hierarchy: input.hierarchy,
+            used_memory_ids: input.used_memory_ids,
             gist_records: input.gist_records,
             gist_memory_ids: input.gist_memory_ids,
+            stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
             process_reward: input.process_reward,
         });
         id
@@ -259,10 +269,13 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         .join("|");
     let gist_records = serialize_gists(&record.gist_records);
     let gist_memory_ids = serialize_ids(&record.gist_memory_ids);
+    let used_memory_ids = serialize_ids(&record.used_memory_ids);
+    let stored_runtime_kv_memory_ids = serialize_ids(&record.stored_runtime_kv_memory_ids);
     let process_reward = serialize_process_reward(&record.process_reward);
+    let route_budget = serialize_route_budget(record.route_budget);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -277,7 +290,10 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         contradictions,
         escape_field(&gist_records),
         escape_field(&gist_memory_ids),
-        escape_field(&process_reward)
+        escape_field(&process_reward),
+        escape_field(&route_budget),
+        escape_field(&used_memory_ids),
+        escape_field(&stored_runtime_kv_memory_ids)
     )
 }
 
@@ -321,6 +337,23 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(14)
         .and_then(|value| deserialize_process_reward(&unescape_field(value)))
         .unwrap_or_default();
+    let route_budget = fields
+        .get(15)
+        .and_then(|value| deserialize_route_budget(&unescape_field(value)))
+        .unwrap_or(RouteBudget {
+            threshold: router_threshold_after,
+            attention_tokens: 0,
+            fast_tokens: 0,
+            attention_fraction: 0.0,
+        });
+    let used_memory_ids = fields
+        .get(16)
+        .map(|value| deserialize_ids(&unescape_field(value)))
+        .unwrap_or_default();
+    let stored_runtime_kv_memory_ids = fields
+        .get(17)
+        .map(|value| deserialize_ids(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -332,10 +365,37 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         stored_memory_id,
         router_threshold_after,
         stream_windows,
+        route_budget,
         hierarchy,
+        used_memory_ids,
         gist_records,
         gist_memory_ids,
+        stored_runtime_kv_memory_ids,
         process_reward,
+    })
+}
+
+fn serialize_route_budget(route_budget: RouteBudget) -> String {
+    format!(
+        "{:.6},{},{},{:.6}",
+        route_budget.threshold,
+        route_budget.attention_tokens,
+        route_budget.fast_tokens,
+        route_budget.attention_fraction
+    )
+}
+
+fn deserialize_route_budget(value: &str) -> Option<RouteBudget> {
+    let fields = value.split(',').collect::<Vec<_>>();
+    if fields.len() != 4 {
+        return None;
+    }
+
+    Some(RouteBudget {
+        threshold: fields[0].parse::<f32>().ok()?,
+        attention_tokens: fields[1].parse::<usize>().ok()?,
+        fast_tokens: fields[2].parse::<usize>().ok()?,
+        attention_fraction: fields[3].parse::<f32>().ok()?.clamp(0.0, 1.0),
     })
 }
 
@@ -589,6 +649,9 @@ mod tests {
         assert_eq!(loaded.records()[0].profile, TaskProfile::Coding);
         assert_eq!(loaded.records()[0].gist_records.len(), 1);
         assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
+        assert_eq!(loaded.records()[0].used_memory_ids, vec![3, 5]);
+        assert_eq!(loaded.records()[0].stored_runtime_kv_memory_ids, vec![11]);
+        assert!((loaded.records()[0].route_budget.attention_fraction - 0.4).abs() < 0.0001);
         assert!((loaded.records()[0].process_reward.total - 0.5).abs() < 0.0001);
         cleanup(path);
     }
@@ -625,9 +688,17 @@ mod tests {
             stored_memory_id: Some(42),
             router_threshold_after: 0.55,
             stream_windows: 3,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 2,
+                fast_tokens: 3,
+                attention_fraction: 0.4,
+            },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: vec![3, 5],
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: vec![11],
             process_reward: ProcessRewardReport::default(),
         }
     }
