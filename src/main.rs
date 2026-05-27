@@ -245,6 +245,13 @@ fn main() -> std::io::Result<()> {
         outcome.retention_report.decayed,
         outcome.retention_report.removed.len()
     );
+    println!(
+        "memory_compaction: before={} after={} merged={} removed={}",
+        outcome.memory_compaction_report.before,
+        outcome.memory_compaction_report.after,
+        outcome.memory_compaction_report.merged.len(),
+        outcome.memory_compaction_report.removed.len()
+    );
 
     Ok(())
 }
@@ -393,7 +400,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} chunks={} waves={} used_memories={} stored_memories={} runtime_kv_exported={} runtime_kv_stored={} drift={}",
+            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} chunks={} waves={} used_memories={} stored_memories={} compacted_memories={} runtime_kv_exported={} runtime_kv_stored={} drift={}",
             result.name,
             result.profile,
             result.elapsed_ms,
@@ -404,6 +411,7 @@ fn print_benchmark_summary(
             result.recursive_waves,
             result.used_memories,
             result.stored_memories,
+            result.compacted_memories,
             result.runtime_kv_exported,
             result.runtime_kv_stored,
             result.drift_severity.as_str()

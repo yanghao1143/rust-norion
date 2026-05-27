@@ -55,6 +55,7 @@ pub fn trace_json_line_with_case(
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"retention\":{{\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
+         \"memory_compaction\":{{\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
          }}",
         option_string_json(case_name),
@@ -132,6 +133,10 @@ pub fn trace_json_line_with_case(
         outcome.retention_report.after,
         outcome.retention_report.decayed,
         outcome.retention_report.removed.len(),
+        outcome.memory_compaction_report.before,
+        outcome.memory_compaction_report.after,
+        outcome.memory_compaction_report.merged.len(),
+        outcome.memory_compaction_report.removed.len(),
         outcome.experience_id
     )
 }
@@ -244,6 +249,7 @@ mod tests {
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
+        assert!(line.contains("\"memory_compaction\":"));
         assert!(line.ends_with('}'));
     }
 

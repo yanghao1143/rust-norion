@@ -197,6 +197,9 @@ modules, not external product dependencies:
 - Mixed-precision KV compression:
   hot local KV uses safer precision, cold disk KV can use more aggressive 4-bit
   storage, and both paths require benchmark gates before production defaults.
+  Reinforced KV-Fusion also includes batch compaction so older near-duplicate
+  memories merge into stronger entries instead of expanding the local state
+  forever.
 - Test-time scaling and RLVR-style rewards:
   reflection should score not only the final answer but also routing choices,
   KV reads, hierarchy weights, latency, contradictions, and memory admission.
@@ -258,7 +261,9 @@ These are algorithmic references, not product dependencies:
 - v0.3: 4/8-bit KV quantization, retention policy, automatic tier migration
   (initial local q4 disk-KV persistence, memory retention, and persisted tier
   migration tracing are in place; engine memory now defaults to append-only
-  DiskKvStore persistence with legacy TSV migration)
+  DiskKvStore persistence with legacy TSV migration; batch KV-Fusion compaction
+  can merge near-duplicate persistent memories while protecting ids used by the
+  current inference)
 - v0.4: Infini-style global/local KV split and sparse context filtering
   (initial control-plane memory planner with token-budget filtering is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
@@ -320,7 +325,7 @@ These are algorithmic references, not product dependencies:
 - Long-context claims are tied to reproducible benchmarks, not marketing
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
-  rollback, and inspectable local state.
+  rollback, protected-id memory compaction, and inspectable local state.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves the runtime ABI end to end before

@@ -49,6 +49,49 @@ impl Default for MemoryRetentionPolicy {
 }
 
 #[derive(Debug, Clone)]
+pub struct MemoryCompactionPolicy {
+    pub similarity_threshold: f32,
+    pub max_candidates: usize,
+    pub max_merges: usize,
+}
+
+impl Default for MemoryCompactionPolicy {
+    fn default() -> Self {
+        Self {
+            similarity_threshold: 0.92,
+            max_candidates: 512,
+            max_merges: 32,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryCompactionMerge {
+    pub primary_id: u64,
+    pub removed_id: u64,
+    pub similarity: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryCompactionReport {
+    pub before: usize,
+    pub after: usize,
+    pub merged: Vec<MemoryCompactionMerge>,
+    pub removed: Vec<u64>,
+}
+
+impl MemoryCompactionReport {
+    pub fn skipped(current_len: usize) -> Self {
+        Self {
+            before: current_len,
+            after: current_len,
+            merged: Vec::new(),
+            removed: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RetentionReport {
     pub before: usize,
     pub after: usize,
@@ -236,6 +279,112 @@ impl KvFusionCache {
         }
     }
 
+    pub fn compact_similar(&mut self, policy: MemoryCompactionPolicy) -> MemoryCompactionReport {
+        self.compact_similar_with_protected(policy, &[])
+    }
+
+    pub fn compact_similar_with_protected(
+        &mut self,
+        policy: MemoryCompactionPolicy,
+        protected_ids: &[u64],
+    ) -> MemoryCompactionReport {
+        let before = self.entries.len();
+        if before < 2 || policy.max_merges == 0 || policy.max_candidates < 2 {
+            return MemoryCompactionReport::skipped(before);
+        }
+
+        let now = self.tick();
+        let threshold = policy.similarity_threshold.clamp(0.10, 0.999);
+        let protected = protected_ids.iter().copied().collect::<HashSet<_>>();
+        let mut candidates = self
+            .entries
+            .iter()
+            .map(|entry| (entry.id, memory_value_score(entry, now)))
+            .collect::<Vec<_>>();
+
+        candidates.sort_by(|left, right| {
+            right
+                .1
+                .partial_cmp(&left.1)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| left.0.cmp(&right.0))
+        });
+        candidates.truncate(policy.max_candidates.min(candidates.len()));
+
+        let candidate_ids = candidates.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+        let mut removed = HashSet::new();
+        let mut merges = Vec::new();
+
+        'outer: for left_pos in 0..candidate_ids.len() {
+            for right_pos in (left_pos + 1)..candidate_ids.len() {
+                if merges.len() >= policy.max_merges {
+                    break 'outer;
+                }
+
+                let left_id = candidate_ids[left_pos];
+                let right_id = candidate_ids[right_pos];
+                if removed.contains(&left_id) || removed.contains(&right_id) {
+                    continue;
+                }
+
+                let Some(left_index) = self.entry_index(left_id) else {
+                    continue;
+                };
+                let Some(right_index) = self.entry_index(right_id) else {
+                    continue;
+                };
+                let similarity = cosine_similarity(
+                    &self.entries[left_index].vector,
+                    &self.entries[right_index].vector,
+                );
+                if similarity < threshold {
+                    continue;
+                }
+
+                let Some((primary_id, removed_id)) = choose_compaction_pair(
+                    &self.entries[left_index],
+                    &self.entries[right_index],
+                    &protected,
+                    now,
+                ) else {
+                    continue;
+                };
+                let Some(primary_index) = self.entry_index(primary_id) else {
+                    continue;
+                };
+                let Some(removed_index) = self.entry_index(removed_id) else {
+                    continue;
+                };
+
+                let duplicate = self.entries[removed_index].clone();
+                merge_memory_entry(
+                    &mut self.entries[primary_index],
+                    &duplicate,
+                    similarity,
+                    now,
+                );
+                removed.insert(removed_id);
+                merges.push(MemoryCompactionMerge {
+                    primary_id,
+                    removed_id,
+                    similarity,
+                });
+            }
+        }
+
+        let mut removed_ids = removed.into_iter().collect::<Vec<_>>();
+        removed_ids.sort_unstable();
+        self.entries
+            .retain(|entry| removed_ids.binary_search(&entry.id).is_err());
+
+        MemoryCompactionReport {
+            before,
+            after: self.entries.len(),
+            merged: merges,
+            removed: removed_ids,
+        }
+    }
+
     pub fn save_to_disk(&self, path: impl AsRef<Path>) -> io::Result<()> {
         let mut content = String::new();
         content.push_str("# noiron-kv-cache-v1\n");
@@ -360,6 +509,10 @@ impl KvFusionCache {
             .max_by(|(_, left), (_, right)| left.partial_cmp(right).unwrap_or(Ordering::Equal))
     }
 
+    fn entry_index(&self, id: u64) -> Option<usize> {
+        self.entries.iter().position(|entry| entry.id == id)
+    }
+
     fn prune_if_needed(&mut self) {
         if self.entries.len() <= self.max_entries {
             return;
@@ -372,6 +525,58 @@ impl KvFusionCache {
         });
         self.entries.truncate(self.max_entries);
     }
+}
+
+fn choose_compaction_pair(
+    left: &MemoryEntry,
+    right: &MemoryEntry,
+    protected: &HashSet<u64>,
+    now: u64,
+) -> Option<(u64, u64)> {
+    let left_protected = protected.contains(&left.id);
+    let right_protected = protected.contains(&right.id);
+
+    match (left_protected, right_protected) {
+        (true, true) => None,
+        (true, false) => Some((left.id, right.id)),
+        (false, true) => Some((right.id, left.id)),
+        (false, false) => {
+            let left_score = memory_value_score(left, now);
+            let right_score = memory_value_score(right, now);
+            if left_score > right_score
+                || ((left_score - right_score).abs() < 0.0001 && left.id < right.id)
+            {
+                Some((left.id, right.id))
+            } else {
+                Some((right.id, left.id))
+            }
+        }
+    }
+}
+
+fn merge_memory_entry(
+    primary: &mut MemoryEntry,
+    duplicate: &MemoryEntry,
+    similarity: f32,
+    now: u64,
+) {
+    let duplicate_weight = duplicate.strength.max(0.05);
+    fuse_vector(
+        &mut primary.vector,
+        &duplicate.vector,
+        primary.strength.max(0.05),
+        duplicate_weight,
+    );
+    primary.key = merge_key(&primary.key, &duplicate.key);
+    primary.strength = (primary.strength + duplicate.strength * 0.35).clamp(0.01, 3.0);
+    primary.hits = primary
+        .hits
+        .saturating_add(duplicate.hits)
+        .saturating_add(1);
+    primary.failures = primary.failures.saturating_add(duplicate.failures);
+    primary.last_score = primary.last_score.max(similarity);
+    primary.created_at = primary.created_at.min(duplicate.created_at);
+    primary.last_access = now.max(primary.last_access).max(duplicate.last_access);
 }
 
 fn fuse_vector(
@@ -651,6 +856,63 @@ mod tests {
         assert_eq!(report.after, 0);
         assert_eq!(report.removed, vec![id]);
         assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn compaction_merges_existing_near_duplicate_memories() {
+        let mut cache = KvFusionCache::with_limits(0.99, 16);
+        let weaker = cache.store_or_fuse("old duplicate", vec![1.0, 0.0, 0.0], 0.35);
+        let stronger = cache.store_or_fuse("strong duplicate", vec![0.93, 0.37, 0.0], 0.90);
+        let unrelated = cache.store_or_fuse("unrelated memory", vec![0.0, 1.0, 0.0], 0.85);
+
+        assert_eq!(cache.len(), 3);
+
+        let report = cache.compact_similar(MemoryCompactionPolicy {
+            similarity_threshold: 0.90,
+            max_candidates: 16,
+            max_merges: 8,
+        });
+
+        assert_eq!(report.before, 3);
+        assert_eq!(report.after, 2);
+        assert_eq!(report.merged.len(), 1);
+        assert_eq!(report.merged[0].primary_id, stronger);
+        assert_eq!(report.merged[0].removed_id, weaker);
+        assert_eq!(report.removed, vec![weaker]);
+        assert!(cache.entries().iter().any(|entry| entry.id == stronger));
+        assert!(cache.entries().iter().any(|entry| entry.id == unrelated));
+        assert!(cache.entries().iter().all(|entry| entry.id != weaker));
+        assert!(
+            cache
+                .entries()
+                .iter()
+                .find(|entry| entry.id == stronger)
+                .unwrap()
+                .key
+                .contains("old duplicate")
+        );
+    }
+
+    #[test]
+    fn compaction_preserves_protected_current_memory_ids() {
+        let mut cache = KvFusionCache::with_limits(0.99, 16);
+        let protected = cache.store_or_fuse("protected current memory", vec![1.0, 0.0], 0.30);
+        let duplicate = cache.store_or_fuse("strong duplicate", vec![0.94, 0.34], 0.95);
+
+        let report = cache.compact_similar_with_protected(
+            MemoryCompactionPolicy {
+                similarity_threshold: 0.90,
+                max_candidates: 16,
+                max_merges: 8,
+            },
+            &[protected],
+        );
+
+        assert_eq!(report.after, 1);
+        assert_eq!(report.merged[0].primary_id, protected);
+        assert_eq!(report.merged[0].removed_id, duplicate);
+        assert!(cache.entries().iter().any(|entry| entry.id == protected));
+        assert!(cache.entries().iter().all(|entry| entry.id != duplicate));
     }
 
     #[test]

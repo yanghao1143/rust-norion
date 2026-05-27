@@ -141,7 +141,7 @@ Implemented modules:
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
-- `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
+- `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence, retention policy, and batch semantic compaction for near-duplicate memories
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
 - `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, embedding, generation, and KV import/export
@@ -224,11 +224,12 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
-Benchmark summaries include drift watch/block/rollback counts, so safety
-regressions in the self-evolution loop can fail the gate even when average
-quality still looks acceptable.
+Benchmark summaries include compacted memory counts and drift
+watch/block/rollback counts, so memory-growth or safety regressions in the
+self-evolution loop can fail the gate even when average quality still looks
+acceptable.
 
-Benchmark 汇总会包含 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含 memory compaction 计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 
@@ -375,6 +376,14 @@ memory, experience, and adaptive state together, so a later run can retrieve
 prior lessons and import persisted KV into the runtime.
 
 `NoironEngine::save_full_state` 与 `NoironEngine::load_full_state` 会把记忆、经验和自适应状态一起往返保存，因此后续运行可以检索旧经验，并把持久化 KV 导入 runtime。
+
+After each inference, the engine now applies retention and then batch
+KV-Fusion compaction. Current-run memory ids are protected, while older
+near-duplicate records can merge into the stronger entry to keep long-lived
+local memory useful without growing indefinitely.
+
+每次推理后，引擎会先执行 retention，再执行批量 KV-Fusion compaction。本轮正在使用或刚写入的
+memory id 会被保护，旧的近重复记忆会合并到更强的条目里，避免长期本地记忆无限膨胀。
 
 ## Test / 测试
 

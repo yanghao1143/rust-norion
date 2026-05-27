@@ -11,7 +11,10 @@ use crate::gist_memory::{GistGenerator, GistRecord};
 use crate::hardware::{HardwareAllocator, HardwarePlan, HardwareSnapshot};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
-use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
+use crate::kv_cache::{
+    KvFusionCache, MemoryCompactionPolicy, MemoryCompactionReport, MemoryMatch,
+    MemoryRetentionPolicy, RetentionReport,
+};
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::process_reward::{
     ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
@@ -85,6 +88,7 @@ pub struct InferenceOutcome {
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
     pub retention_report: RetentionReport,
+    pub memory_compaction_report: MemoryCompactionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
 }
@@ -442,6 +446,16 @@ impl NoironEngine {
             process_reward: process_reward.clone(),
         });
         let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
+        let protected_memory_ids = protected_memory_ids(
+            &used_memories,
+            stored_memory_id,
+            &stored_gist_memory_ids,
+            &stored_runtime_kv_memory_ids,
+        );
+        let memory_compaction_report = self.cache.compact_similar_with_protected(
+            MemoryCompactionPolicy::default(),
+            &protected_memory_ids,
+        );
         if !drift_report.rollback_adaptive {
             self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
         }
@@ -469,6 +483,7 @@ impl NoironEngine {
             drift_report,
             process_reward,
             retention_report,
+            memory_compaction_report,
             experience_id,
             router_threshold_after,
         }
@@ -720,6 +735,26 @@ fn format_runtime_kv_key(prompt: &str, block: &RuntimeKvBlock) -> String {
         block.token_end,
         compact(prompt, 64)
     )
+}
+
+fn protected_memory_ids(
+    used_memories: &[MemoryMatch],
+    stored_memory_id: Option<u64>,
+    stored_gist_memory_ids: &[u64],
+    stored_runtime_kv_memory_ids: &[u64],
+) -> Vec<u64> {
+    let mut ids = used_memories
+        .iter()
+        .map(|memory| memory.id)
+        .collect::<Vec<_>>();
+    if let Some(id) = stored_memory_id {
+        ids.push(id);
+    }
+    ids.extend_from_slice(stored_gist_memory_ids);
+    ids.extend_from_slice(stored_runtime_kv_memory_ids);
+    ids.sort_unstable();
+    ids.dedup();
+    ids
 }
 
 fn compact(text: &str, max_chars: usize) -> String {

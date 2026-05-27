@@ -49,7 +49,8 @@ pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
 };
 pub use kv_cache::{
-    KvFusionCache, MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
+    KvFusionCache, MemoryCompactionMerge, MemoryCompactionPolicy, MemoryCompactionReport,
+    MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
 };
 pub use kv_exchange::RuntimeKvBlock;
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};

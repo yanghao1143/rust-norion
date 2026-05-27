@@ -56,6 +56,7 @@ pub struct BenchmarkCaseResult {
     pub recursive_waves: usize,
     pub used_memories: usize,
     pub stored_memories: usize,
+    pub compacted_memories: usize,
     pub runtime_kv_exported: usize,
     pub runtime_kv_stored: usize,
     pub drift_severity: DriftSeverity,
@@ -221,6 +222,7 @@ impl BenchmarkSummary {
             recursive_waves: outcome.recursive_schedule.execution_wave_count(),
             used_memories: outcome.used_memories.len(),
             stored_memories,
+            compacted_memories: outcome.memory_compaction_report.merged.len(),
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
             runtime_kv_stored: outcome.stored_runtime_kv_memory_ids.len(),
             drift_severity: outcome.drift_report.severity,
@@ -266,6 +268,13 @@ impl BenchmarkSummary {
         self.results
             .iter()
             .map(|result| result.stored_memories)
+            .sum()
+    }
+
+    pub fn total_compacted_memories(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.compacted_memories)
             .sum()
     }
 
@@ -377,7 +386,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} max_recursive_waves={} stored_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} max_recursive_waves={} stored_memories={} compacted_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -385,6 +394,7 @@ impl BenchmarkSummary {
             self.average_attention_fraction(),
             self.max_recursive_waves(),
             self.total_stored_memories(),
+            self.total_compacted_memories(),
             self.total_runtime_kv_stored(),
             self.drift_watches(),
             self.drift_blocks(),
@@ -533,6 +543,7 @@ mod tests {
                 recursive_waves: 1,
                 used_memories: 0,
                 stored_memories: 0,
+                compacted_memories: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 drift_severity: DriftSeverity::Rollback,
