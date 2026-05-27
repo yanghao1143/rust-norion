@@ -141,7 +141,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
@@ -224,6 +224,19 @@ Run the same suite as a regression gate:
 
 ```powershell
 cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
+Run the KV quantization gate for reproducible 4/8-bit compression accuracy,
+payload ratio, and latency checks:
+
+```powershell
+cargo run -- --kv-quant-gate
+```
+
+运行 KV 量化门禁，检查 4/8-bit 压缩误差、payload 压缩比和耗时：
+
+```powershell
+cargo run -- --kv-quant-gate
 ```
 
 Run a persistence roundtrip gate that writes state, reloads it, and verifies the

@@ -6,9 +6,10 @@ use rust_norion::{
     BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
     CommandWireFormat, DeviceClass, DevicePlanGateReport, GistLevel, HardwareAllocator,
     HardwareSnapshot, HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome,
-    InferenceRequest, LocalTransformerRuntime, ModelRuntime, NoironEngine,
-    PersistentRoundtripInput, PersistentRoundtripReport, RecursiveScheduler, RuntimeBackend,
-    RuntimeMetadata, StateInspectionReport, TaskProfile, TierMigrationAction, append_trace_jsonl,
+    InferenceRequest, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary,
+    LocalTransformerRuntime, ModelRuntime, NoironEngine, PersistentRoundtripInput,
+    PersistentRoundtripReport, RecursiveScheduler, RuntimeBackend, RuntimeMetadata,
+    StateInspectionReport, TaskProfile, TierMigrationAction, append_trace_jsonl,
     append_trace_jsonl_with_case, default_benchmark_cases,
 };
 
@@ -21,6 +22,15 @@ fn main() -> std::io::Result<()> {
         let report = DevicePlanGateReport::evaluate();
         print_device_gate_report(&report);
         if !report.passed() {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+    if args.kv_quant_gate {
+        let summary = KvQuantBenchmarkSummary::run_default();
+        let gate_report = summary.evaluate(&args.kv_quant_gate());
+        print_kv_quant_gate_report(&summary, &gate_report);
+        if !gate_report.passed {
             std::process::exit(2);
         }
         return Ok(());
@@ -591,6 +601,33 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
     }
 }
 
+fn print_kv_quant_gate_report(
+    summary: &KvQuantBenchmarkSummary,
+    report: &KvQuantBenchmarkGateReport,
+) {
+    println!("Noiron KV quantization benchmark");
+    println!("{}", summary.summary_line());
+    println!("{}", report.summary_line());
+    println!("case,bits,len,max_abs_error,mean_abs_error,compression_ratio,elapsed_us");
+
+    for result in summary.results() {
+        println!(
+            "{},q{},{},{:.6},{:.6},{:.3},{}",
+            result.name,
+            result.bits.width(),
+            result.len,
+            result.max_abs_error,
+            result.mean_abs_error,
+            result.compression_ratio,
+            result.elapsed_us
+        );
+    }
+
+    for failure in &report.failures {
+        println!("kv_quant_gate_failure: {failure}");
+    }
+}
+
 fn count_gists(records: &[rust_norion::GistRecord], level: GistLevel) -> usize {
     records
         .iter()
@@ -627,6 +664,8 @@ struct Args {
     benchmark_roundtrip: bool,
     list_devices: bool,
     device_gate: bool,
+    kv_quant_gate: bool,
+    kv_quant_max_total_us: Option<u128>,
     inspect_state: bool,
     inspect_limit: usize,
     local_runtime: bool,
@@ -666,6 +705,8 @@ impl Args {
         let mut benchmark_roundtrip = false;
         let mut list_devices = false;
         let mut device_gate = false;
+        let mut kv_quant_gate = false;
+        let mut kv_quant_max_total_us = None;
         let mut inspect_state = false;
         let mut inspect_limit = 5;
         let mut local_runtime = false;
@@ -763,6 +804,15 @@ impl Args {
                 "--device-gate" => {
                     device_gate = true;
                     index += 1;
+                }
+                "--kv-quant-gate" => {
+                    kv_quant_gate = true;
+                    index += 1;
+                }
+                "--kv-quant-max-total-us" if index + 1 < raw.len() => {
+                    kv_quant_max_total_us = Some(parse_u128(&raw[index + 1], u128::MAX));
+                    kv_quant_gate = true;
+                    index += 2;
                 }
                 "--inspect-state" => {
                     inspect_state = true;
@@ -932,6 +982,8 @@ impl Args {
             benchmark_roundtrip,
             list_devices,
             device_gate,
+            kv_quant_gate,
+            kv_quant_max_total_us,
             inspect_state,
             inspect_limit,
             local_runtime,
@@ -973,6 +1025,16 @@ impl Args {
         }
         if let Some(value) = self.benchmark_max_drift_rollbacks {
             gate.max_drift_rollbacks = Some(value);
+        }
+
+        gate
+    }
+
+    fn kv_quant_gate(&self) -> KvQuantBenchmarkGate {
+        let mut gate = KvQuantBenchmarkGate::default();
+
+        if let Some(value) = self.kv_quant_max_total_us {
+            gate.max_total_elapsed_us = Some(value);
         }
 
         gate
@@ -1019,7 +1081,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1062,6 +1124,8 @@ mod tests {
             "--benchmark-roundtrip".to_owned(),
             "--list-devices".to_owned(),
             "--device-gate".to_owned(),
+            "--kv-quant-max-total-us".to_owned(),
+            "100000".to_owned(),
             "--inspect-state".to_owned(),
             "--inspect-limit".to_owned(),
             "2".to_owned(),
@@ -1107,6 +1171,8 @@ mod tests {
         assert!(args.benchmark_roundtrip);
         assert!(args.list_devices);
         assert!(args.device_gate);
+        assert!(args.kv_quant_gate);
+        assert_eq!(args.kv_quant_max_total_us, Some(100000));
         assert!(args.inspect_state);
         assert_eq!(args.inspect_limit, 2);
         assert!(args.local_runtime);

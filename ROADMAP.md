@@ -290,7 +290,9 @@ These are algorithmic references, not product dependencies:
   migration tracing are in place; engine memory now defaults to append-only
   DiskKvStore persistence with legacy TSV migration; batch KV-Fusion compaction
   can merge near-duplicate persistent memories while protecting ids used by the
-  current inference)
+  current inference; a KV quantization benchmark gate now checks deterministic
+  q4/q8 accuracy, compression ratio, and elapsed time before compression policy
+  changes are accepted)
 - v0.4: Infini-style global/local KV split and sparse context filtering
   (initial control-plane memory planner with token-budget filtering is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
@@ -361,7 +363,8 @@ These are algorithmic references, not product dependencies:
 - The default build can run without external model weights or closed services.
 - Every control decision can be traced: route, memory, hierarchy, reflection,
   drift, reward, and adaptive-state update.
-- KV compression has accuracy and latency benchmarks before it becomes default.
+- KV compression has an accuracy, compression-ratio, and latency benchmark gate
+  before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, not marketing
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
