@@ -26,7 +26,7 @@ pub mod transformer;
 pub use adaptive_state::AdaptiveState;
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport, BenchmarkSummary,
-    default_benchmark_cases,
+    PersistentRoundtripInput, PersistentRoundtripReport, default_benchmark_cases,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};

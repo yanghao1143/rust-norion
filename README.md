@@ -137,6 +137,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
@@ -206,6 +207,21 @@ Run the same suite as a regression gate:
 
 ```powershell
 cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
+Run a persistence roundtrip gate that writes state, reloads it, and verifies the
+second local-runtime pass uses persisted memory, persisted experience, and
+imported runtime KV:
+
+```powershell
+cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
+```
+
+运行持久化 roundtrip 门禁：第一轮写入状态，第二轮重新加载，并验证 local runtime
+确实使用了持久化 memory、experience 和导入的 runtime KV：
+
+```powershell
+cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
 Benchmark summaries include drift watch/block/rollback counts, so safety

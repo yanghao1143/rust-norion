@@ -99,6 +99,101 @@ impl BenchmarkGateReport {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct PersistentRoundtripInput {
+    pub first_stored_memory: bool,
+    pub first_runtime_kv_stored: usize,
+    pub second_used_memories: usize,
+    pub second_used_experiences: usize,
+    pub second_imported_runtime_kv_blocks: usize,
+    pub second_quality: f32,
+    pub first_drift_severity: DriftSeverity,
+    pub second_drift_severity: DriftSeverity,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PersistentRoundtripReport {
+    pub passed: bool,
+    pub first_stored_memory: bool,
+    pub first_runtime_kv_stored: usize,
+    pub second_used_memories: usize,
+    pub second_used_experiences: usize,
+    pub second_imported_runtime_kv_blocks: usize,
+    pub second_quality: f32,
+    pub first_drift_severity: DriftSeverity,
+    pub second_drift_severity: DriftSeverity,
+    pub failures: Vec<String>,
+}
+
+impl PersistentRoundtripReport {
+    pub fn evaluate(input: PersistentRoundtripInput) -> Self {
+        let mut failures = Vec::new();
+
+        if !input.first_stored_memory {
+            failures.push("first run did not store durable memory".to_owned());
+        }
+        if input.first_runtime_kv_stored == 0 {
+            failures.push("first run did not store runtime KV memory".to_owned());
+        }
+        if input.second_used_memories == 0 {
+            failures.push("second run did not retrieve persisted memory".to_owned());
+        }
+        if input.second_used_experiences == 0 {
+            failures.push("second run did not retrieve persisted experience".to_owned());
+        }
+        if input.second_imported_runtime_kv_blocks == 0 {
+            failures.push("second run did not import persisted runtime KV".to_owned());
+        }
+        if input.second_quality < 0.50 {
+            failures.push(format!(
+                "second_quality {:.3} below minimum 0.500",
+                input.second_quality
+            ));
+        }
+        if input.first_drift_severity == DriftSeverity::Rollback {
+            failures.push("first run triggered drift rollback".to_owned());
+        }
+        if matches!(
+            input.second_drift_severity,
+            DriftSeverity::Block | DriftSeverity::Rollback
+        ) {
+            failures.push(format!(
+                "second run drift severity was {}",
+                input.second_drift_severity.as_str()
+            ));
+        }
+
+        Self {
+            passed: failures.is_empty(),
+            first_stored_memory: input.first_stored_memory,
+            first_runtime_kv_stored: input.first_runtime_kv_stored,
+            second_used_memories: input.second_used_memories,
+            second_used_experiences: input.second_used_experiences,
+            second_imported_runtime_kv_blocks: input.second_imported_runtime_kv_blocks,
+            second_quality: input.second_quality,
+            first_drift_severity: input.first_drift_severity,
+            second_drift_severity: input.second_drift_severity,
+            failures,
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} second_used_memories={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            self.passed,
+            self.first_stored_memory,
+            self.first_runtime_kv_stored,
+            self.second_used_memories,
+            self.second_used_experiences,
+            self.second_imported_runtime_kv_blocks,
+            self.second_quality,
+            self.first_drift_severity.as_str(),
+            self.second_drift_severity.as_str(),
+            self.failures.len()
+        )
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct BenchmarkSummary {
     results: Vec<BenchmarkCaseResult>,
@@ -440,5 +535,36 @@ mod tests {
                 .iter()
                 .any(|failure| failure.contains("drift_rollbacks"))
         );
+    }
+
+    #[test]
+    fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
+        let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+            first_stored_memory: true,
+            first_runtime_kv_stored: 1,
+            second_used_memories: 2,
+            second_used_experiences: 1,
+            second_imported_runtime_kv_blocks: 2,
+            second_quality: 0.82,
+            first_drift_severity: DriftSeverity::Watch,
+            second_drift_severity: DriftSeverity::Stable,
+        });
+
+        assert!(report.passed);
+        assert!(report.summary_line().contains("passed=true"));
+
+        let failed = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+            first_stored_memory: false,
+            first_runtime_kv_stored: 0,
+            second_used_memories: 0,
+            second_used_experiences: 0,
+            second_imported_runtime_kv_blocks: 0,
+            second_quality: 0.2,
+            first_drift_severity: DriftSeverity::Stable,
+            second_drift_severity: DriftSeverity::Block,
+        });
+
+        assert!(!failed.passed);
+        assert!(failed.failures.len() >= 5);
     }
 }

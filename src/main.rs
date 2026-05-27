@@ -6,9 +6,9 @@ use rust_norion::{
     BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
     CommandWireFormat, DeviceClass, GistLevel, HardwareAllocator, HardwareSnapshot,
     HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest,
-    LocalTransformerRuntime, ModelRuntime, NoironEngine, RecursiveScheduler, RuntimeBackend,
-    RuntimeMetadata, TaskProfile, TierMigrationAction, append_trace_jsonl,
-    append_trace_jsonl_with_case, default_benchmark_cases,
+    LocalTransformerRuntime, ModelRuntime, NoironEngine, PersistentRoundtripInput,
+    PersistentRoundtripReport, RecursiveScheduler, RuntimeBackend, RuntimeMetadata, TaskProfile,
+    TierMigrationAction, append_trace_jsonl, append_trace_jsonl_with_case, default_benchmark_cases,
 };
 
 fn main() -> std::io::Result<()> {
@@ -17,24 +17,21 @@ fn main() -> std::io::Result<()> {
         print_device_matrix_and_exit();
     }
 
+    if args.benchmark_roundtrip {
+        let report = run_persistent_roundtrip(&args)?;
+        print_persistent_roundtrip_report(&args, &report);
+        if !report.passed {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+
     let mut engine = NoironEngine::load_full_state(
         &args.memory_path,
         &args.experience_path,
         &args.adaptive_path,
     )?;
-    engine.recursive_scheduler = RecursiveScheduler::new(
-        args.native_window_tokens,
-        args.chunk_tokens,
-        args.chunk_overlap_tokens,
-        args.merge_fan_in,
-    );
-    engine.set_hardware_snapshot(HardwareSnapshot::new(
-        args.device,
-        args.cpu_load,
-        args.gpu_load,
-        args.ram_load,
-        args.disk_load,
-    ));
+    configure_engine(&mut engine, &args);
     let replay_report = if args.replay_limit > 0 {
         Some(engine.replay_experience(args.replay_limit))
     } else {
@@ -297,6 +294,79 @@ fn run_benchmark<B: InferenceBackend>(
     Ok(summary)
 }
 
+fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripReport> {
+    let mut first_engine = NoironEngine::load_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    configure_engine(&mut first_engine, args);
+    if args.replay_limit > 0 {
+        first_engine.replay_experience(args.replay_limit);
+    }
+    let mut first_backend = RuntimeBackend::new(LocalTransformerRuntime::with_metadata(
+        args.runtime_metadata.clone(),
+    ));
+    let first = first_engine.infer(
+        InferenceRequest::new(args.prompt.clone(), args.profile),
+        &mut first_backend,
+    );
+    first_engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+
+    let mut second_engine = NoironEngine::load_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    configure_engine(&mut second_engine, args);
+    let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::with_metadata(
+        args.runtime_metadata.clone(),
+    ));
+    let second = second_engine.infer(
+        InferenceRequest::new(args.prompt.clone(), args.profile),
+        &mut second_backend,
+    );
+    let second_imported_runtime_kv_blocks = second_backend.runtime().imported_kv_blocks().len();
+    second_engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+
+    Ok(PersistentRoundtripReport::evaluate(
+        PersistentRoundtripInput {
+            first_stored_memory: first.stored_memory_id.is_some(),
+            first_runtime_kv_stored: first.stored_runtime_kv_memory_ids.len(),
+            second_used_memories: second.used_memories.len(),
+            second_used_experiences: second.used_experiences.len(),
+            second_imported_runtime_kv_blocks,
+            second_quality: second.report.quality,
+            first_drift_severity: first.drift_report.severity,
+            second_drift_severity: second.drift_report.severity,
+        },
+    ))
+}
+
+fn configure_engine(engine: &mut NoironEngine, args: &Args) {
+    engine.recursive_scheduler = RecursiveScheduler::new(
+        args.native_window_tokens,
+        args.chunk_tokens,
+        args.chunk_overlap_tokens,
+        args.merge_fan_in,
+    );
+    engine.set_hardware_snapshot(HardwareSnapshot::new(
+        args.device,
+        args.cpu_load,
+        args.gpu_load,
+        args.ram_load,
+        args.disk_load,
+    ));
+}
+
 fn print_benchmark_summary(
     args: &Args,
     benchmark_path: &PathBuf,
@@ -333,6 +403,19 @@ fn print_benchmark_summary(
         for failure in &report.failures {
             println!("benchmark_gate_failure: {failure}");
         }
+    }
+}
+
+fn print_persistent_roundtrip_report(args: &Args, report: &PersistentRoundtripReport) {
+    println!("Noiron persistent roundtrip benchmark");
+    println!("memory_file: {}", args.memory_path.display());
+    println!("experience_file: {}", args.experience_path.display());
+    println!("adaptive_file: {}", args.adaptive_path.display());
+    println!("runtime: local-transformer");
+    println!("prompt_profile: {:?}", args.profile);
+    println!("{}", report.summary_line());
+    for failure in &report.failures {
+        println!("persistent_roundtrip_failure: {failure}");
     }
 }
 
@@ -411,6 +494,7 @@ struct Args {
     benchmark_max_recursive_chunks: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
     benchmark_max_drift_rollbacks: Option<usize>,
+    benchmark_roundtrip: bool,
     list_devices: bool,
     local_runtime: bool,
     runtime_command: Option<PathBuf>,
@@ -446,6 +530,7 @@ impl Args {
         let mut benchmark_max_recursive_chunks = None;
         let mut benchmark_max_drift_blocks = None;
         let mut benchmark_max_drift_rollbacks = None;
+        let mut benchmark_roundtrip = false;
         let mut list_devices = false;
         let mut local_runtime = false;
         let mut runtime_command = None;
@@ -530,6 +615,10 @@ impl Args {
                     benchmark_max_drift_rollbacks = Some(parse_usize(&raw[index + 1], usize::MAX));
                     benchmark_gate_enabled = true;
                     index += 2;
+                }
+                "--benchmark-roundtrip" | "--roundtrip-gate" => {
+                    benchmark_roundtrip = true;
+                    index += 1;
                 }
                 "--list-devices" => {
                     list_devices = true;
@@ -691,6 +780,7 @@ impl Args {
             benchmark_max_recursive_chunks,
             benchmark_max_drift_blocks,
             benchmark_max_drift_rollbacks,
+            benchmark_roundtrip,
             list_devices,
             local_runtime,
             runtime_command,
@@ -773,7 +863,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -813,6 +903,7 @@ mod tests {
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
             "0".to_owned(),
+            "--benchmark-roundtrip".to_owned(),
             "--list-devices".to_owned(),
             "--local-runtime".to_owned(),
             "--runtime-model-id".to_owned(),
@@ -853,6 +944,7 @@ mod tests {
         assert_eq!(args.benchmark_max_recursive_chunks, Some(8));
         assert_eq!(args.benchmark_max_drift_blocks, Some(0));
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
+        assert!(args.benchmark_roundtrip);
         assert!(args.list_devices);
         assert!(args.local_runtime);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");

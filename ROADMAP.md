@@ -281,7 +281,9 @@ These are algorithmic references, not product dependencies:
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
   latency ceilings, recursive chunk ceilings, and maximum drift block/rollback
-  counts; a deterministic Rust-native local runtime prototype now implements
+  counts; a persistent roundtrip gate now verifies memory, experience, and
+  runtime KV reuse after full-state reload; a deterministic Rust-native local
+  runtime prototype now implements
   tokenizer, embedding, generation, token trace, and KV import/export through
   the same `ModelRuntime` ABI; command runtimes can now use a structured
   JSON wire format carrying Noiron route, hierarchy, recursive, hardware
@@ -310,4 +312,5 @@ These are algorithmic references, not product dependencies:
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
-  recursive scheduling budgets, or drift block/rollback counts regress.
+  recursive scheduling budgets, drift block/rollback counts, or persistent
+  state reuse regress.
