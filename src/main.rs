@@ -19,6 +19,11 @@ fn main() -> std::io::Result<()> {
         args.chunk_overlap_tokens,
         args.merge_fan_in,
     );
+    let replay_report = if args.replay_limit > 0 {
+        Some(engine.replay_experience(args.replay_limit))
+    } else {
+        None
+    };
 
     let outcome = if let Some(runtime_command) = args.runtime_command.clone() {
         let runtime = CommandRuntime::new(runtime_command)
@@ -47,6 +52,9 @@ fn main() -> std::io::Result<()> {
     println!("adaptive_file: {}", args.adaptive_path.display());
     if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
+    }
+    if let Some(replay_report) = &replay_report {
+        println!("experience_replay: {}", replay_report.summary());
     }
     println!();
     println!("{}", outcome.answer);
@@ -162,6 +170,7 @@ struct Args {
     chunk_tokens: usize,
     chunk_overlap_tokens: usize,
     merge_fan_in: usize,
+    replay_limit: usize,
 }
 
 impl Args {
@@ -179,6 +188,7 @@ impl Args {
         let mut chunk_tokens = default_scheduler.chunk_tokens();
         let mut chunk_overlap_tokens = default_scheduler.overlap_tokens();
         let mut merge_fan_in = default_scheduler.merge_fan_in();
+        let mut replay_limit = 0;
         let mut index = 0;
 
         while index < raw.len() {
@@ -230,6 +240,10 @@ impl Args {
                     merge_fan_in = parse_usize(&raw[index + 1], merge_fan_in);
                     index += 2;
                 }
+                "--replay" if index + 1 < raw.len() => {
+                    replay_limit = parse_usize(&raw[index + 1], replay_limit);
+                    index += 2;
+                }
                 "--help" | "-h" => {
                     print_help_and_exit();
                 }
@@ -261,6 +275,7 @@ impl Args {
             chunk_tokens,
             chunk_overlap_tokens,
             merge_fan_in,
+            replay_limit,
         }
     }
 }
@@ -293,7 +308,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] <prompt>"
     );
     std::process::exit(0);
 }
@@ -315,6 +330,8 @@ mod tests {
             "2".to_owned(),
             "--merge-fan-in".to_owned(),
             "2".to_owned(),
+            "--replay".to_owned(),
+            "3".to_owned(),
             "one two three four five six seven eight nine".to_owned(),
         ]);
 
@@ -323,6 +340,7 @@ mod tests {
         assert_eq!(args.chunk_tokens, 6);
         assert_eq!(args.chunk_overlap_tokens, 2);
         assert_eq!(args.merge_fan_in, 2);
+        assert_eq!(args.replay_limit, 3);
         assert!(args.prompt.contains("nine"));
     }
 }

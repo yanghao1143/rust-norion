@@ -3,11 +3,16 @@ use std::path::Path;
 
 use crate::adaptive_state::AdaptiveState;
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
+use crate::experience_replay::{
+    ExperienceReplayItem, ExperienceReplayPlanner, ExperienceReplayReport,
+};
 use crate::gist_memory::{GistGenerator, GistRecord};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
-use crate::process_reward::{ProcessRewardInput, ProcessRewardReport, ProcessRewarder};
+use crate::process_reward::{
+    ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
+};
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
@@ -83,6 +88,7 @@ pub struct NoironEngine {
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
+    pub experience_replay_planner: ExperienceReplayPlanner,
     pub gist_generator: GistGenerator,
     pub process_rewarder: ProcessRewarder,
     pub reflector: Reflector,
@@ -102,6 +108,7 @@ impl Default for NoironEngine {
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
+            experience_replay_planner: ExperienceReplayPlanner::new(),
             gist_generator: GistGenerator::new(),
             process_rewarder: ProcessRewarder::new(),
             reflector: Reflector::new(),
@@ -172,6 +179,49 @@ impl NoironEngine {
 
     pub fn save_adaptive_state(&self, path: impl AsRef<Path>) -> io::Result<()> {
         self.adaptive_state().save_to_disk_kv(path)
+    }
+
+    pub fn replay_experience(&mut self, limit: usize) -> ExperienceReplayReport {
+        let plan = self
+            .experience_replay_planner
+            .plan(self.experience.records(), limit);
+        let mut report = ExperienceReplayReport::from_plan(&plan);
+
+        for item in plan.items {
+            let metrics = replay_metrics(&item);
+            self.router.observe(metrics);
+            self.hierarchy.observe(item.profile, metrics);
+
+            match item.action {
+                RewardAction::Reinforce => {
+                    for memory_id in &item.memory_ids {
+                        self.cache.reinforce(*memory_id, item.reward);
+                        report.touched_memories += 1;
+                    }
+                    report.reinforced += 1;
+                }
+                RewardAction::Penalize => {
+                    let penalty = 1.0 - item.reward;
+                    for memory_id in &item.memory_ids {
+                        self.cache.penalize(*memory_id, penalty);
+                        report.touched_memories += 1;
+                    }
+                    report.penalized += 1;
+                }
+                RewardAction::Hold => {}
+            }
+
+            report.applied += 1;
+            report.notes.push(format!(
+                "experience:{}:{} reward={:.3} lesson={}",
+                item.experience_id,
+                item.action.as_str(),
+                item.reward,
+                compact(&item.lesson, 64)
+            ));
+        }
+
+        report
     }
 
     pub fn infer<B: InferenceBackend>(
@@ -497,6 +547,31 @@ fn metrics_from_report(
     }
 }
 
+fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
+    match item.action {
+        RewardAction::Reinforce => GenerationMetrics {
+            perplexity: (6.0 + (1.0 - item.reward) * 8.0 + item.stream_windows as f32 * 0.03)
+                .clamp(3.0, 18.0),
+            semantic_consistency: item.quality.max(item.reward).clamp(0.0, 1.0),
+            contradiction_count: item.contradiction_count,
+            token_count: 64,
+        },
+        RewardAction::Penalize => GenerationMetrics {
+            perplexity: (18.0 + (1.0 - item.reward) * 18.0 + item.stream_windows as f32 * 0.05)
+                .clamp(12.0, 48.0),
+            semantic_consistency: item.quality.min(item.reward).clamp(0.0, 1.0),
+            contradiction_count: item.contradiction_count.max(1),
+            token_count: 64,
+        },
+        RewardAction::Hold => GenerationMetrics {
+            perplexity: 10.0,
+            semantic_consistency: item.quality.clamp(0.0, 1.0),
+            contradiction_count: item.contradiction_count,
+            token_count: 64,
+        },
+    }
+}
+
 fn approximate_token_count(text: &str) -> usize {
     let word_count = text.split_whitespace().count();
     if word_count > 0 {
@@ -554,6 +629,7 @@ fn char_weight(ch: char) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::process_reward::ProcessRewardComponents;
     use crate::reflection::DraftToken;
     use crate::tiered_cache::TierMigrationAction;
 
@@ -648,6 +724,41 @@ mod tests {
             engine.experience.records()[0].gist_memory_ids,
             outcome.stored_gist_memory_ids
         );
+    }
+
+    #[test]
+    fn replay_experience_reinforces_rewarded_memory() {
+        let mut engine = NoironEngine::new();
+        let memory_id = engine
+            .cache
+            .store_or_fuse("replay memory", vec![1.0, 0.0, 0.0], 0.8);
+        engine.experience.record(ExperienceInput {
+            prompt: "Rust replay router".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "reinforce high reward control path".to_owned(),
+            quality: 0.92,
+            contradictions: Vec::new(),
+            stored_memory_id: Some(memory_id),
+            router_threshold_after: 0.55,
+            stream_windows: 2,
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            process_reward: ProcessRewardReport {
+                total: 0.91,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
+        let before_hits = engine.cache.entries()[0].hits;
+
+        let report = engine.replay_experience(4);
+
+        assert_eq!(report.applied, 1);
+        assert_eq!(report.reinforced, 1);
+        assert!(engine.cache.entries()[0].hits > before_hits);
+        assert!(engine.router.observations() > 0);
     }
 
     #[test]

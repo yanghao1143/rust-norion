@@ -138,6 +138,7 @@ Implemented modules:
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/experience.rs`: structured reflection experience store
+- `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
@@ -169,6 +170,12 @@ Trigger recursive long-context scheduling with a small demo native window:
 
 ```powershell
 cargo run -- --profile long --native-window 8 --chunk-tokens 6 --chunk-overlap 2 --merge-fan-in 2 "one two three four five six seven eight nine ten eleven twelve"
+```
+
+Replay high/low reward experience before the next inference:
+
+```powershell
+cargo run -- --replay 4 --profile coding "Improve Rust Noiron routing from prior experience"
 ```
 
 Run through a local command runtime:
@@ -229,6 +236,10 @@ flowchart LR
     Gist --> Experience
     Gist --> Memory
     Reward --> Experience
+    Experience --> Replay[Experience Replay]
+    Replay --> Router
+    Replay --> Hierarchy
+    Replay --> Memory
     Experience --> DiskKV
     Reflect --> Router
     Reflect --> Hierarchy
@@ -252,24 +263,26 @@ Expected integration loop:
 1. embed prompt and retrieve local memory
 2. compute route budget and hierarchy weights
 3. plan single-pass or recursive chunk/merge scheduling for the native model window
-4. retrieve relevant reflection lessons from the experience store
-5. call the real model backend
-6. reflect on the draft
-7. generate document, section, and paragraph-level gist records
-8. score route, memory, hierarchy, latency, and admission with process rewards
-9. reinforce or penalize memory
-10. update routing threshold, hierarchy weights, and experience records
+4. optionally replay high/low reward experience into router, hierarchy, and KV state
+5. retrieve relevant reflection lessons from the experience store
+6. call the real model backend
+7. reflect on the draft
+8. generate document, section, and paragraph-level gist records
+9. score route, memory, hierarchy, latency, and admission with process rewards
+10. reinforce or penalize memory
+11. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
 2. 计算路由预算和层级权重
 3. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
-4. 从经验库检索相关反思 lesson
-5. 调用真实模型后端
-6. 对草稿答案做反思评估
-7. 生成 document、section、paragraph 三级 gist 记忆
-8. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
-9. 强化或惩罚记忆
-10. 更新路由阈值、层级权重和经验记录
+4. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
+5. 从经验库检索相关反思 lesson
+6. 调用真实模型后端
+7. 对草稿答案做反思评估
+8. 生成 document、section、paragraph 三级 gist 记忆
+9. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
+10. 强化或惩罚记忆
+11. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 

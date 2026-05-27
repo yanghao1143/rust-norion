@@ -206,7 +206,9 @@ These are algorithmic references, not product dependencies:
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
   allocation
   (initial process reward scoring for route, memory, hierarchy, reflection,
-  latency, and memory admission is in place and persisted with experience)
+  latency, and memory admission is in place and persisted with experience;
+  reward-ranked experience replay can now update router, hierarchy, and KV
+  memory state before inference)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
 - v1.0: production-grade local Agent Harness and test-time scaling inference
