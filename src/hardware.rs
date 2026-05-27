@@ -17,6 +17,29 @@ pub enum DeviceClass {
     Server,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceTier {
+    Auto,
+    Tiny,
+    Constrained,
+    Balanced,
+    Accelerated,
+    Distributed,
+}
+
+impl DeviceTier {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Tiny => "tiny",
+            Self::Constrained => "constrained",
+            Self::Balanced => "balanced",
+            Self::Accelerated => "accelerated",
+            Self::Distributed => "distributed",
+        }
+    }
+}
+
 impl DeviceClass {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -33,6 +56,54 @@ impl DeviceClass {
             Self::Server => "server",
         }
     }
+
+    pub fn supported_profiles() -> &'static [Self] {
+        const PROFILES: [DeviceClass; 11] = [
+            DeviceClass::Auto,
+            DeviceClass::CpuOnly,
+            DeviceClass::IntegratedGpu,
+            DeviceClass::DiscreteGpu,
+            DeviceClass::UnifiedMemory,
+            DeviceClass::Mobile,
+            DeviceClass::Embedded,
+            DeviceClass::NpuAccelerator,
+            DeviceClass::MultiGpu,
+            DeviceClass::Edge,
+            DeviceClass::Server,
+        ];
+
+        &PROFILES
+    }
+
+    pub fn explicit_profiles() -> &'static [Self] {
+        const PROFILES: [DeviceClass; 10] = [
+            DeviceClass::CpuOnly,
+            DeviceClass::IntegratedGpu,
+            DeviceClass::DiscreteGpu,
+            DeviceClass::UnifiedMemory,
+            DeviceClass::Mobile,
+            DeviceClass::Embedded,
+            DeviceClass::NpuAccelerator,
+            DeviceClass::MultiGpu,
+            DeviceClass::Edge,
+            DeviceClass::Server,
+        ];
+
+        &PROFILES
+    }
+
+    pub fn tier(self) -> DeviceTier {
+        match self {
+            Self::Auto => DeviceTier::Auto,
+            Self::Embedded => DeviceTier::Tiny,
+            Self::CpuOnly | Self::Mobile | Self::Edge => DeviceTier::Constrained,
+            Self::IntegratedGpu | Self::UnifiedMemory | Self::NpuAccelerator => {
+                DeviceTier::Balanced
+            }
+            Self::DiscreteGpu | Self::Server => DeviceTier::Accelerated,
+            Self::MultiGpu => DeviceTier::Distributed,
+        }
+    }
 }
 
 impl FromStr for DeviceClass {
@@ -41,22 +112,31 @@ impl FromStr for DeviceClass {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "auto" => Ok(Self::Auto),
-            "cpu" | "cpu-only" | "cpu_only" => Ok(Self::CpuOnly),
-            "integrated" | "igpu" | "integrated-gpu" => Ok(Self::IntegratedGpu),
-            "discrete" | "dgpu" | "discrete-gpu" => Ok(Self::DiscreteGpu),
-            "uma" | "unified" | "unified-memory" | "apple" => Ok(Self::UnifiedMemory),
-            "mobile" | "phone" | "tablet" | "android" | "ios" | "handheld" => Ok(Self::Mobile),
+            "cpu" | "cpu-only" | "cpu_only" | "pc-cpu" | "desktop-cpu" => Ok(Self::CpuOnly),
+            "integrated" | "igpu" | "integrated-gpu" | "laptop" | "notebook" | "intel-gpu"
+            | "amd-apu" | "apu" => Ok(Self::IntegratedGpu),
+            "discrete" | "dgpu" | "discrete-gpu" | "desktop-gpu" | "cuda" | "rtx" | "nvidia"
+            | "radeon" => Ok(Self::DiscreteGpu),
+            "uma" | "unified" | "unified-memory" | "apple" | "mac" | "macbook" | "m-series"
+            | "m1" | "m2" | "m3" | "m4" => Ok(Self::UnifiedMemory),
+            "mobile" | "phone" | "tablet" | "android" | "ios" | "handheld" | "iphone" | "ipad"
+            | "smartphone" => Ok(Self::Mobile),
             "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro" => {
                 Ok(Self::Embedded)
             }
-            "npu" | "ane" | "tpu" | "ai-accelerator" | "ai_accelerator" | "neural" => {
-                Ok(Self::NpuAccelerator)
-            }
-            "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "cluster" => {
-                Ok(Self::MultiGpu)
-            }
-            "edge" | "gateway" | "edge-gateway" => Ok(Self::Edge),
-            "server" | "workstation" => Ok(Self::Server),
+            "npu"
+            | "ane"
+            | "tpu"
+            | "ai-accelerator"
+            | "ai_accelerator"
+            | "neural"
+            | "snapdragon"
+            | "qualcomm"
+            | "apple-neural-engine" => Ok(Self::NpuAccelerator),
+            "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "distributed"
+            | "cluster" => Ok(Self::MultiGpu),
+            "edge" | "gateway" | "edge-gateway" | "jetson" => Ok(Self::Edge),
+            "server" | "workstation" | "rack" | "datacenter" | "local-cloud" => Ok(Self::Server),
             other => Err(format!("unknown device class: {other}")),
         }
     }
@@ -113,6 +193,7 @@ impl HardwareSnapshot {
 #[derive(Debug, Clone)]
 pub struct HardwarePlan {
     pub device: DeviceClass,
+    pub tier: DeviceTier,
     pub pressure: f32,
     pub latency_budget_ms: Option<u64>,
     pub local_kv_token_budget: usize,
@@ -135,8 +216,9 @@ impl Default for HardwarePlan {
 impl HardwarePlan {
     pub fn summary(&self) -> String {
         format!(
-            "device={} pressure={:.3} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2})",
+            "device={} tier={} pressure={:.3} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2})",
             self.device.as_str(),
+            self.tier.as_str(),
             self.pressure,
             self.latency_budget_ms
                 .map(|value| value.to_string())
@@ -201,6 +283,7 @@ impl HardwareAllocator {
 
         HardwarePlan {
             device: snapshot.device,
+            tier: snapshot.device.tier(),
             pressure,
             latency_budget_ms,
             local_kv_token_budget,
@@ -413,7 +496,10 @@ fn notes(
     pressure: f32,
     prompt_tokens: usize,
 ) -> Vec<String> {
-    let mut notes = vec![format!("device:{}", snapshot.device.as_str())];
+    let mut notes = vec![
+        format!("device:{}", snapshot.device.as_str()),
+        format!("tier:{}", snapshot.device.tier().as_str()),
+    ];
 
     if pressure >= 0.72 {
         notes.push("pressure:high_reduce_attention_and_kv".to_owned());
@@ -537,6 +623,60 @@ mod tests {
         assert!(plan.global_kv_token_budget > 4096);
         assert!(plan.hierarchy.global > 0.30);
         assert!(plan.latency_budget_ms.is_none());
+    }
+
+    #[test]
+    fn common_device_aliases_parse_to_profiles() {
+        assert_eq!(
+            "laptop".parse::<DeviceClass>().unwrap(),
+            DeviceClass::IntegratedGpu
+        );
+        assert_eq!(
+            "rtx".parse::<DeviceClass>().unwrap(),
+            DeviceClass::DiscreteGpu
+        );
+        assert_eq!(
+            "macbook".parse::<DeviceClass>().unwrap(),
+            DeviceClass::UnifiedMemory
+        );
+        assert_eq!(
+            "iphone".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Mobile
+        );
+        assert_eq!(
+            "snapdragon".parse::<DeviceClass>().unwrap(),
+            DeviceClass::NpuAccelerator
+        );
+        assert_eq!("jetson".parse::<DeviceClass>().unwrap(), DeviceClass::Edge);
+        assert_eq!(
+            "datacenter".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Server
+        );
+    }
+
+    #[test]
+    fn every_supported_device_profile_has_a_plan() {
+        let allocator = HardwareAllocator::new();
+        let base = HierarchyWeights::new(0.30, 0.40, 0.30);
+
+        for device in DeviceClass::supported_profiles() {
+            let plan = allocator.plan(
+                HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20),
+                TaskProfile::General,
+                4096,
+                base,
+            );
+            let hierarchy_total =
+                plan.hierarchy.global + plan.hierarchy.local + plan.hierarchy.convolution;
+
+            assert_eq!(plan.device, *device);
+            assert_eq!(plan.tier, device.tier());
+            assert!(plan.local_kv_token_budget >= 32);
+            assert!(plan.global_kv_token_budget >= 32);
+            assert!((hierarchy_total - 1.0).abs() < 0.001);
+            assert!(plan.notes.iter().any(|note| note.starts_with("device:")));
+            assert!(plan.notes.iter().any(|note| note.starts_with("tier:")));
+        }
     }
 
     #[test]

@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use rust_norion::{
-    BenchmarkSummary, CommandPromptMode, CommandRuntime, DeviceClass, GistLevel, HardwareSnapshot,
-    HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest, NoironEngine,
-    RecursiveScheduler, RuntimeBackend, RuntimeMetadata, TaskProfile, TierMigrationAction,
-    append_trace_jsonl, append_trace_jsonl_with_case, default_benchmark_cases,
+    BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
+    DeviceClass, GistLevel, HardwareSnapshot, HeuristicBackend, InferenceBackend, InferenceOutcome,
+    InferenceRequest, NoironEngine, RecursiveScheduler, RuntimeBackend, RuntimeMetadata,
+    TaskProfile, TierMigrationAction, append_trace_jsonl, append_trace_jsonl_with_case,
+    default_benchmark_cases,
 };
 
 fn main() -> std::io::Result<()> {
@@ -50,7 +51,17 @@ fn main() -> std::io::Result<()> {
         engine.save_memory(&args.memory_path)?;
         engine.save_experience(&args.experience_path)?;
         engine.save_adaptive_state(&args.adaptive_path)?;
-        print_benchmark_summary(&args, &benchmark_path, &summary);
+        let gate_report = if args.benchmark_gate_enabled {
+            Some(summary.evaluate(&args.benchmark_gate()))
+        } else {
+            None
+        };
+        print_benchmark_summary(&args, &benchmark_path, &summary, gate_report.as_ref());
+        if let Some(report) = gate_report {
+            if !report.passed {
+                std::process::exit(2);
+            }
+        }
         return Ok(());
     }
 
@@ -246,7 +257,12 @@ fn run_benchmark<B: InferenceBackend>(
     Ok(summary)
 }
 
-fn print_benchmark_summary(args: &Args, benchmark_path: &PathBuf, summary: &BenchmarkSummary) {
+fn print_benchmark_summary(
+    args: &Args,
+    benchmark_path: &PathBuf,
+    summary: &BenchmarkSummary,
+    gate_report: Option<&BenchmarkGateReport>,
+) {
     println!("Noiron Rust benchmark");
     println!("benchmark_file: {}", benchmark_path.display());
     println!("memory_file: {}", args.memory_path.display());
@@ -269,6 +285,13 @@ fn print_benchmark_summary(args: &Args, benchmark_path: &PathBuf, summary: &Benc
             result.runtime_kv_exported,
             result.runtime_kv_stored
         );
+    }
+
+    if let Some(report) = gate_report {
+        println!("{}", report.summary_line());
+        for failure in &report.failures {
+            println!("benchmark_gate_failure: {failure}");
+        }
     }
 }
 
@@ -298,6 +321,11 @@ struct Args {
     adaptive_path: PathBuf,
     trace_path: Option<PathBuf>,
     benchmark_path: Option<PathBuf>,
+    benchmark_gate_enabled: bool,
+    benchmark_min_quality: Option<f32>,
+    benchmark_min_reward: Option<f32>,
+    benchmark_max_total_ms: Option<u128>,
+    benchmark_max_recursive_chunks: Option<usize>,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
@@ -323,6 +351,11 @@ impl Args {
         let mut adaptive_path = PathBuf::from("noiron-adaptive.ndkv");
         let mut trace_path = None;
         let mut benchmark_path = None;
+        let mut benchmark_gate_enabled = false;
+        let mut benchmark_min_quality = None;
+        let mut benchmark_min_reward = None;
+        let mut benchmark_max_total_ms = None;
+        let mut benchmark_max_recursive_chunks = None;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
@@ -365,6 +398,30 @@ impl Args {
                 }
                 "--benchmark" if index + 1 < raw.len() => {
                     benchmark_path = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
+                "--benchmark-gate" => {
+                    benchmark_gate_enabled = true;
+                    index += 1;
+                }
+                "--benchmark-min-quality" if index + 1 < raw.len() => {
+                    benchmark_min_quality = Some(parse_f32(&raw[index + 1], 0.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-reward" if index + 1 < raw.len() => {
+                    benchmark_min_reward = Some(parse_f32(&raw[index + 1], 0.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-max-total-ms" if index + 1 < raw.len() => {
+                    benchmark_max_total_ms = Some(parse_u128(&raw[index + 1], u128::MAX));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-max-recursive-chunks" if index + 1 < raw.len() => {
+                    benchmark_max_recursive_chunks = Some(parse_usize(&raw[index + 1], usize::MAX));
+                    benchmark_gate_enabled = true;
                     index += 2;
                 }
                 "--runtime-command" if index + 1 < raw.len() => {
@@ -479,6 +536,11 @@ impl Args {
             adaptive_path,
             trace_path,
             benchmark_path,
+            benchmark_gate_enabled,
+            benchmark_min_quality,
+            benchmark_min_reward,
+            benchmark_max_total_ms,
+            benchmark_max_recursive_chunks,
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
@@ -495,10 +557,33 @@ impl Args {
             disk_load,
         }
     }
+
+    fn benchmark_gate(&self) -> BenchmarkGate {
+        let mut gate = BenchmarkGate::default();
+
+        if let Some(value) = self.benchmark_min_quality {
+            gate.min_average_quality = value;
+        }
+        if let Some(value) = self.benchmark_min_reward {
+            gate.min_average_reward = value;
+        }
+        if let Some(value) = self.benchmark_max_total_ms {
+            gate.max_total_elapsed_ms = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_recursive_chunks {
+            gate.max_case_recursive_chunks = Some(value);
+        }
+
+        gate
+    }
 }
 
 fn parse_usize(value: &str, fallback: usize) -> usize {
     value.parse::<usize>().unwrap_or(fallback)
+}
+
+fn parse_u128(value: &str, fallback: u128) -> u128 {
+    value.parse::<u128>().unwrap_or(fallback)
 }
 
 fn parse_f32(value: &str, fallback: f32) -> f32 {
@@ -529,7 +614,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -557,6 +642,14 @@ mod tests {
             "trace.jsonl".to_owned(),
             "--benchmark".to_owned(),
             "benchmark.jsonl".to_owned(),
+            "--benchmark-min-quality".to_owned(),
+            "0.6".to_owned(),
+            "--benchmark-min-reward".to_owned(),
+            "0.5".to_owned(),
+            "--benchmark-max-total-ms".to_owned(),
+            "10000".to_owned(),
+            "--benchmark-max-recursive-chunks".to_owned(),
+            "8".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
@@ -586,6 +679,11 @@ mod tests {
             args.benchmark_path.unwrap(),
             PathBuf::from("benchmark.jsonl")
         );
+        assert!(args.benchmark_gate_enabled);
+        assert_eq!(args.benchmark_min_quality, Some(0.6));
+        assert_eq!(args.benchmark_min_reward, Some(0.5));
+        assert_eq!(args.benchmark_max_total_ms, Some(10000));
+        assert_eq!(args.benchmark_max_recursive_chunks, Some(8));
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
         assert_eq!(args.runtime_metadata.native_context_window, 4096);

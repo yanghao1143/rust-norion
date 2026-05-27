@@ -58,6 +58,41 @@ pub struct BenchmarkCaseResult {
     pub runtime_kv_stored: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct BenchmarkGate {
+    pub min_average_quality: f32,
+    pub min_average_reward: f32,
+    pub max_total_elapsed_ms: Option<u128>,
+    pub max_case_recursive_chunks: Option<usize>,
+}
+
+impl Default for BenchmarkGate {
+    fn default() -> Self {
+        Self {
+            min_average_quality: 0.50,
+            min_average_reward: 0.45,
+            max_total_elapsed_ms: None,
+            max_case_recursive_chunks: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BenchmarkGateReport {
+    pub passed: bool,
+    pub failures: Vec<String>,
+}
+
+impl BenchmarkGateReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "benchmark_gate: passed={} failures={}",
+            self.passed,
+            self.failures.len()
+        )
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct BenchmarkSummary {
     results: Vec<BenchmarkCaseResult>,
@@ -128,6 +163,63 @@ impl BenchmarkSummary {
             .iter()
             .map(|result| result.stored_memories)
             .sum()
+    }
+
+    pub fn max_recursive_chunks(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.recursive_chunks)
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn evaluate(&self, gate: &BenchmarkGate) -> BenchmarkGateReport {
+        let mut failures = Vec::new();
+
+        if self.is_empty() {
+            failures.push("no benchmark cases were recorded".to_owned());
+        }
+
+        let average_quality = self.average_quality();
+        if average_quality < gate.min_average_quality {
+            failures.push(format!(
+                "average_quality {:.3} below minimum {:.3}",
+                average_quality, gate.min_average_quality
+            ));
+        }
+
+        let average_reward = self.average_reward();
+        if average_reward < gate.min_average_reward {
+            failures.push(format!(
+                "average_reward {:.3} below minimum {:.3}",
+                average_reward, gate.min_average_reward
+            ));
+        }
+
+        if let Some(max_total_elapsed_ms) = gate.max_total_elapsed_ms {
+            let total_elapsed_ms = self.total_elapsed_ms();
+            if total_elapsed_ms > max_total_elapsed_ms {
+                failures.push(format!(
+                    "total_elapsed_ms {} above maximum {}",
+                    total_elapsed_ms, max_total_elapsed_ms
+                ));
+            }
+        }
+
+        if let Some(max_case_recursive_chunks) = gate.max_case_recursive_chunks {
+            let max_recursive_chunks = self.max_recursive_chunks();
+            if max_recursive_chunks > max_case_recursive_chunks {
+                failures.push(format!(
+                    "max_recursive_chunks {} above maximum {}",
+                    max_recursive_chunks, max_case_recursive_chunks
+                ));
+            }
+        }
+
+        BenchmarkGateReport {
+            passed: failures.is_empty(),
+            failures,
+        }
     }
 
     pub fn summary_line(&self) -> String {
@@ -203,5 +295,68 @@ mod tests {
         assert_eq!(summary.len(), 1);
         assert!(summary.average_quality() > 0.0);
         assert!(summary.summary_line().contains("cases=1"));
+    }
+
+    #[test]
+    fn default_gate_passes_heuristic_summary() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new(
+            "reflection",
+            TaskProfile::General,
+            "Explain benchmark gates for Noiron control loops",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+
+        summary.record(&case, 3, &outcome);
+        let report = summary.evaluate(&BenchmarkGate::default());
+
+        assert!(report.passed, "{:?}", report.failures);
+        assert!(report.summary_line().contains("passed=true"));
+    }
+
+    #[test]
+    fn gate_reports_threshold_failures() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new("coding", TaskProfile::Coding, "Rust gate failure test");
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+        let gate = BenchmarkGate {
+            min_average_quality: 1.10,
+            min_average_reward: 1.10,
+            max_total_elapsed_ms: Some(1),
+            max_case_recursive_chunks: Some(0),
+        };
+
+        summary.record(&case, 7, &outcome);
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("average_quality"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("average_reward"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("total_elapsed_ms"))
+        );
     }
 }

@@ -148,7 +148,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure and compute allocation planner for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
+- `src/hardware.rs`: device-agnostic hardware pressure and compute allocation planner for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles, with capability tiers and common device aliases
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
@@ -199,6 +199,12 @@ Run the built-in benchmark suite and append one JSONL trace record per case:
 cargo run -- --benchmark target/noiron-benchmark.jsonl
 ```
 
+Run the same suite as a regression gate:
+
+```powershell
+cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5
+```
+
 Apply universal device-profile hardware pressure hints:
 
 ```powershell
@@ -207,9 +213,17 @@ cargo run -- --device cpu --cpu-load 85 --ram-load 70 --disk-load 40 --profile l
 
 Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
 `uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.
+Common aliases such as `laptop`, `rtx`, `macbook`, `iphone`, `snapdragon`,
+`jetson`, and `datacenter` map into those profiles. Internally, profiles are
+also grouped into `tiny`, `constrained`, `balanced`, `accelerated`, and
+`distributed` capability tiers so the same control loop can scale down or up
+without binding to one vendor device.
 
 可用设备 profile 包括 `cpu`、`integrated`、`discrete`、`uma`、`mobile`、
-`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。
+`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。常见别名如 `laptop`、
+`rtx`、`macbook`、`iphone`、`snapdragon`、`jetson` 和 `datacenter` 会映射到这些
+profile。内部还会按 `tiny`、`constrained`、`balanced`、`accelerated`、
+`distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
 
 Run through a local command runtime:
 
@@ -370,6 +384,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
 - add configurable memory retention policies
+- expand real-device probing beyond explicit profiles and aliases
 - expand the built-in benchmark suite into regression gates
 
 - 用模型侧 embedding 或轻量向量编码器替换当前启发式 embedding

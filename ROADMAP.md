@@ -87,7 +87,8 @@ The north star is now explicitly scoped around five core requirements:
 4. Hardware abstraction / 硬件抽象
    Device profiles convert heterogeneous CPU, GPU, unified-memory, mobile,
    embedded, NPU, multi-GPU, edge, and server pressure into latency budgets, KV
-   budgets, routing constraints, and hierarchy weights.
+   budgets, routing constraints, and hierarchy weights. Profiles also map into
+   capability tiers from tiny devices through distributed accelerators.
 
 5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
@@ -184,7 +185,10 @@ modules, not external product dependencies:
 - Universal hardware profiles:
   hardware allocation should stay device-agnostic while supporting explicit
   policy profiles for PC, laptop, workstation, server, mobile, embedded,
-  NPU/AI accelerator, and heterogeneous multi-GPU deployments.
+  NPU/AI accelerator, and heterogeneous multi-GPU deployments. Common aliases
+  such as laptop, RTX, MacBook, iPhone, Snapdragon, Jetson, and datacenter
+  should resolve into stable profiles instead of adding vendor-specific code
+  paths.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -229,7 +233,8 @@ These are algorithmic references, not product dependencies:
   memory state before inference; device-agnostic hardware pressure planning now
   adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
   integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI
-  accelerator, multi-GPU, edge, and server devices)
+  accelerator, multi-GPU, edge, and server devices, with capability tiers and
+  common device aliases covered by tests)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
   (initial runtime metadata, tokenizer, embedding, and KV import/export trait
@@ -241,7 +246,9 @@ These are algorithmic references, not product dependencies:
   exported runtime KV can be written back into reinforced memory; JSONL trace
   records now capture route, hierarchy, KV, recursion, hardware, reward, and
   memory counters per inference; a built-in benchmark suite now writes one
-  trace record per coding, long-context, general-reflection, and writing case)
+  trace record per coding, long-context, general-reflection, and writing case;
+  benchmark regression gates can enforce minimum quality, minimum reward, total
+  latency ceilings, and recursive chunk ceilings)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -259,3 +266,5 @@ These are algorithmic references, not product dependencies:
   versions through stable Rust traits.
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets.
+- Benchmark gates can fail CI or local checks when quality, reward, latency, or
+  recursive scheduling budgets regress.

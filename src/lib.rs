@@ -23,7 +23,8 @@ pub mod transformer;
 
 pub use adaptive_state::AdaptiveState;
 pub use benchmark::{
-    BenchmarkCase, BenchmarkCaseResult, BenchmarkSummary, default_benchmark_cases,
+    BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport, BenchmarkSummary,
+    default_benchmark_cases,
 };
 pub use disk_kv::DiskKvStore;
 pub use engine::{
@@ -35,7 +36,7 @@ pub use experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlan, ExperienceReplayPlanner, ExperienceReplayReport,
 };
 pub use gist_memory::{GistGenerator, GistLevel, GistRecord};
-pub use hardware::{DeviceClass, HardwareAllocator, HardwarePlan, HardwareSnapshot};
+pub use hardware::{DeviceClass, DeviceTier, HardwareAllocator, HardwarePlan, HardwareSnapshot};
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
