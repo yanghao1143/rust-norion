@@ -75,6 +75,15 @@ testable, and replaceable before connecting a real model backend.
 cargo run -- --profile coding "Build a Rust Noiron inference engine"
 ```
 
+Run through a local command runtime:
+
+```powershell
+cargo run -- --runtime-command ./llama-cli --runtime-arg "-p" --runtime-arg "{prompt}" --runtime-prompt-mode args "Build a Rust Noiron inference engine"
+```
+
+If `--runtime-prompt-mode stdin` is used, the formatted Noiron runtime request is
+written to the child process stdin.
+
 By default, the demo writes local memory to `noiron-memory.tsv` and structured
 reflection experience to `noiron-experience.ndkv`. Both files are ignored by Git
 because they are local runtime state.

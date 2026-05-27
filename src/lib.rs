@@ -20,7 +20,8 @@ pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
 pub use reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{GenerationMetrics, NoironRouter, Route, RouteBudget, RoutingDecision};
 pub use runtime::{
-    ModelRuntime, RuntimeBackend, RuntimeError, RuntimeRequest, RuntimeResponse, RuntimeToken,
+    CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeError, RuntimeRequest,
+    RuntimeResponse, RuntimeToken,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TieredCachePlan, TieredCacheScheduler,

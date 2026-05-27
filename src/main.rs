@@ -1,17 +1,31 @@
 use std::env;
 use std::path::PathBuf;
 
-use rust_norion::{HeuristicBackend, InferenceRequest, NoironEngine, TaskProfile};
+use rust_norion::{
+    CommandPromptMode, CommandRuntime, HeuristicBackend, InferenceRequest, NoironEngine,
+    RuntimeBackend, TaskProfile,
+};
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse(env::args().skip(1).collect());
     let mut engine = NoironEngine::load_state(&args.memory_path, &args.experience_path)?;
-    let mut backend = HeuristicBackend;
 
-    let outcome = engine.infer(
-        InferenceRequest::new(args.prompt.clone(), args.profile),
-        &mut backend,
-    );
+    let outcome = if let Some(runtime_command) = args.runtime_command.clone() {
+        let runtime = CommandRuntime::new(runtime_command)
+            .args(args.runtime_args.clone())
+            .prompt_mode(args.runtime_prompt_mode);
+        let mut backend = RuntimeBackend::new(runtime);
+        engine.infer(
+            InferenceRequest::new(args.prompt.clone(), args.profile),
+            &mut backend,
+        )
+    } else {
+        let mut backend = HeuristicBackend;
+        engine.infer(
+            InferenceRequest::new(args.prompt.clone(), args.profile),
+            &mut backend,
+        )
+    };
     engine.save_memory(&args.memory_path)?;
     engine.save_experience(&args.experience_path)?;
 
@@ -19,6 +33,9 @@ fn main() -> std::io::Result<()> {
     println!("profile: {:?}", args.profile);
     println!("memory_file: {}", args.memory_path.display());
     println!("experience_file: {}", args.experience_path.display());
+    if let Some(runtime_command) = &args.runtime_command {
+        println!("runtime_command: {}", runtime_command.display());
+    }
     println!();
     println!("{}", outcome.answer);
     println!();
@@ -59,6 +76,9 @@ struct Args {
     profile: TaskProfile,
     memory_path: PathBuf,
     experience_path: PathBuf,
+    runtime_command: Option<PathBuf>,
+    runtime_args: Vec<String>,
+    runtime_prompt_mode: CommandPromptMode,
 }
 
 impl Args {
@@ -67,6 +87,9 @@ impl Args {
         let mut profile = None;
         let mut memory_path = PathBuf::from("noiron-memory.tsv");
         let mut experience_path = PathBuf::from("noiron-experience.ndkv");
+        let mut runtime_command = None;
+        let mut runtime_args = Vec::new();
+        let mut runtime_prompt_mode = CommandPromptMode::Stdin;
         let mut index = 0;
 
         while index < raw.len() {
@@ -81,6 +104,21 @@ impl Args {
                 }
                 "--experience" | "-e" if index + 1 < raw.len() => {
                     experience_path = PathBuf::from(&raw[index + 1]);
+                    index += 2;
+                }
+                "--runtime-command" if index + 1 < raw.len() => {
+                    runtime_command = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
+                "--runtime-arg" if index + 1 < raw.len() => {
+                    runtime_args.push(raw[index + 1].clone());
+                    index += 2;
+                }
+                "--runtime-prompt-mode" if index + 1 < raw.len() => {
+                    runtime_prompt_mode = match raw[index + 1].as_str() {
+                        "args" => CommandPromptMode::Args,
+                        _ => CommandPromptMode::Stdin,
+                    };
                     index += 2;
                 }
                 "--help" | "-h" => {
@@ -106,6 +144,9 @@ impl Args {
             profile,
             memory_path,
             experience_path,
+            runtime_command,
+            runtime_args,
+            runtime_prompt_mode,
         }
     }
 }
@@ -134,7 +175,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] <prompt>"
     );
     std::process::exit(0);
 }

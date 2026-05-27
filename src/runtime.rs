@@ -1,5 +1,8 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
@@ -110,6 +113,154 @@ impl Error for RuntimeError {}
 
 pub trait ModelRuntime {
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandPromptMode {
+    Stdin,
+    Args,
+}
+
+#[derive(Debug, Clone)]
+pub struct CommandRuntime {
+    program: PathBuf,
+    args: Vec<String>,
+    prompt_mode: CommandPromptMode,
+}
+
+impl CommandRuntime {
+    pub fn new(program: impl Into<PathBuf>) -> Self {
+        Self {
+            program: program.into(),
+            args: Vec::new(),
+            prompt_mode: CommandPromptMode::Stdin,
+        }
+    }
+
+    pub fn arg(mut self, arg: impl Into<String>) -> Self {
+        self.args.push(arg.into());
+        self
+    }
+
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.args.extend(args.into_iter().map(Into::into));
+        self
+    }
+
+    pub fn prompt_mode(mut self, prompt_mode: CommandPromptMode) -> Self {
+        self.prompt_mode = prompt_mode;
+        self
+    }
+
+    pub fn program(&self) -> &Path {
+        &self.program
+    }
+
+    pub fn command_args(&self) -> &[String] {
+        &self.args
+    }
+
+    fn expanded_args(&self, request: &RuntimeRequest, prompt: &str) -> Vec<String> {
+        self.args
+            .iter()
+            .map(|arg| {
+                arg.replace("{prompt}", prompt)
+                    .replace("{max_tokens}", &request.max_tokens.to_string())
+                    .replace("{memory_hints}", &request.memory_hints.join("\n"))
+                    .replace("{experience_hints}", &request.experience_hints.join("\n"))
+            })
+            .collect()
+    }
+}
+
+impl ModelRuntime for CommandRuntime {
+    fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        let prompt = format_runtime_prompt(&request);
+        let mut command = Command::new(&self.program);
+        command.args(self.expanded_args(&request, &prompt));
+
+        if self.prompt_mode == CommandPromptMode::Stdin {
+            command.stdin(Stdio::piped());
+        }
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        let mut child = command.spawn().map_err(|error| {
+            RuntimeError::new(format!(
+                "failed to spawn runtime command {}: {error}",
+                self.program.display()
+            ))
+        })?;
+
+        if self.prompt_mode == CommandPromptMode::Stdin {
+            let Some(mut stdin) = child.stdin.take() else {
+                return Err(RuntimeError::new("runtime command did not expose stdin"));
+            };
+            stdin.write_all(prompt.as_bytes()).map_err(|error| {
+                RuntimeError::new(format!("failed to write runtime prompt to stdin: {error}"))
+            })?;
+        }
+
+        let output = child.wait_with_output().map_err(|error| {
+            RuntimeError::new(format!("failed to wait for runtime command: {error}"))
+        })?;
+        if !output.status.success() {
+            return Err(RuntimeError::new(format!(
+                "runtime command exited with status {:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+
+        let answer = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let mut response = RuntimeResponse::new(answer);
+        response.trace = vec![ReasoningStep::new(
+            "command_runtime",
+            format!("executed {}", self.program.display()),
+            0.72,
+        )];
+        Ok(response)
+    }
+}
+
+fn format_runtime_prompt(request: &RuntimeRequest) -> String {
+    format!(
+        "Noiron runtime request\n\
+         profile: {:?}\n\
+         max_tokens: {}\n\
+         route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
+         hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
+         memory_hints:\n{}\n\
+         experience_hints:\n{}\n\
+         prompt:\n{}",
+        request.profile,
+        request.max_tokens,
+        request.route_budget.threshold,
+        request.route_budget.attention_fraction,
+        request.route_budget.attention_tokens,
+        request.route_budget.fast_tokens,
+        request.hierarchy.global,
+        request.hierarchy.local,
+        request.hierarchy.convolution,
+        bullet_list(&request.memory_hints),
+        bullet_list(&request.experience_hints),
+        request.prompt
+    )
+}
+
+fn bullet_list(items: &[String]) -> String {
+    if items.is_empty() {
+        return "- none".to_owned();
+    }
+
+    items
+        .iter()
+        .map(|item| format!("- {item}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[derive(Debug, Clone)]
@@ -301,5 +452,50 @@ mod tests {
             backend.last_error().unwrap().message(),
             "model file missing"
         );
+    }
+
+    #[test]
+    fn command_runtime_formats_prompt_and_expands_placeholders() {
+        let runtime = CommandRuntime::new("runner")
+            .arg("--prompt")
+            .arg("{prompt}")
+            .arg("--max")
+            .arg("{max_tokens}")
+            .prompt_mode(CommandPromptMode::Args);
+        let request = sample_request();
+        let prompt = format_runtime_prompt(&request);
+        let args = runtime.expanded_args(&request, &prompt);
+
+        assert!(prompt.contains("memory_hints"));
+        assert!(prompt.contains("experience_hints"));
+        assert!(args[1].contains("Noiron runtime request"));
+        assert_eq!(args[3], "64");
+    }
+
+    #[test]
+    fn command_runtime_reports_spawn_errors() {
+        let mut runtime = CommandRuntime::new("__rust_norion_missing_command__")
+            .prompt_mode(CommandPromptMode::Args);
+
+        let error = runtime.generate(sample_request()).unwrap_err();
+
+        assert!(error.message().contains("failed to spawn runtime command"));
+    }
+
+    fn sample_request() -> RuntimeRequest {
+        RuntimeRequest {
+            prompt: "build a command runtime".to_owned(),
+            profile: TaskProfile::Coding,
+            memory_hints: vec!["memory hint".to_owned()],
+            experience_hints: vec!["experience hint".to_owned()],
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 2,
+                fast_tokens: 1,
+                attention_fraction: 0.66,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            max_tokens: 64,
+        }
     }
 }
