@@ -17,6 +17,29 @@ closed services, or vendor-specific runtimes.
 
 核心目标是通过自主实现公开算法，达成本地离线、轻量化、超长上下文推理，而不是依赖外部模型权重、闭源服务或厂商绑定运行时。
 
+The north star is now explicitly scoped around four core requirements:
+
+总目标明确收敛到四个核心诉求：
+
+1. Self-developed model first / 自研模型优先
+   The default production backend is an internally trained Transformer-family
+   model. Third-party weights can be adapter examples only, never the core
+   dependency.
+
+2. Anti lock-in / 规避卡脖子
+   The engine must stay useful if external model providers, weight licenses,
+   cloud APIs, or vendor runtimes become unavailable.
+
+3. Extreme local, lightweight, ultra-long context / 极致本地化、轻量化、超长上下文
+   The control plane should make limited local hardware practical through disk
+   KV, mixed-precision cache, sparse context, recursive scheduling, and
+   global/local memory separation.
+
+4. Frontier ideas as owned Rust implementations / 前沿技术本地落地
+   Public research ideas are treated as algorithmic references. The project
+   owns its Rust implementation of memory, routing, quantization, reflection,
+   scheduling, and runtime boundaries.
+
 ## Sovereignty Contract / 自主可控约束
 
 - No default dependency on Gemma, Llama, Qwen, or other third-party model
@@ -29,12 +52,16 @@ closed services, or vendor-specific runtimes.
   should own its implementation details.
 - Runtime memory, experience, and adaptive state remain local, inspectable, and
   replaceable.
+- Semantic retrieval, sparse filtering, and gist generation reuse the
+  self-developed model's own tokenizer and embedding surface instead of
+  introducing a hidden third-party encoder dependency.
 
 - 默认不依赖 Gemma、Llama、Qwen 等第三方模型权重。
 - 核心路径不依赖闭源量化、注意力、记忆或调度组件。
 - Tokenizer、Embedding 和模型前向计算由自研 Transformer 运行时通过 Rust trait 显式接入。
 - 可借鉴公开论文和开放算法思想，但实现细节由本仓库自主掌控。
 - 运行时记忆、经验库和自适应状态全部本地化、可检查、可替换。
+- 语义检索、稀疏筛选和 gist 生成复用自研模型自身的 tokenizer 与 embedding 接口，不引入隐藏的第三方编码器依赖。
 
 ## Architecture Target / 架构目标
 
@@ -104,6 +131,42 @@ closed services, or vendor-specific runtimes.
 10. Hardware-aware compute allocation / 硬件感知算力分配
     Use local CPU/GPU/RAM/disk pressure to decide when to lower compute, shrink
     windows, evict memory, or spend extra attention on hard tasks.
+
+## Target Module Fusion / 目标模块融合
+
+The following algorithmic ideas are merged into the project goal as owned local
+modules, not external product dependencies:
+
+以下算法思想已合并进项目目标，并以本地自研模块落地，而不是作为外部产品依赖：
+
+- Infini-style memory control:
+  `kv_cache.rs`, `infini_memory.rs`, `tiered_cache.rs`, and `disk_kv.rs` split
+  global permanent memory from the active local window, then persist and filter
+  high-value KV records.
+- Hierarchical gist memory:
+  `reflection.rs` and `experience.rs` should produce document, section, and
+  paragraph-level summaries after long runs, then write only high-value gist
+  records into durable memory.
+- Recursive language-model scheduling:
+  `recursive_scheduler.rs` should chunk prompts beyond the native model window,
+  run per-chunk inference through the same backend boundary, merge results, and
+  store cross-chunk experience.
+- SpeContext-style sparse KV filtering:
+  memory loading should reject redundant, stale, or low-value KV records before
+  they enter expensive attention paths.
+- Mixed-precision KV compression:
+  hot local KV uses safer precision, cold disk KV can use more aggressive 4-bit
+  storage, and both paths require benchmark gates before production defaults.
+- Test-time scaling and RLVR-style rewards:
+  reflection should score not only the final answer but also routing choices,
+  KV reads, hierarchy weights, latency, contradictions, and memory admission.
+- Experience replay:
+  the experience store should become replayable training data for the control
+  plane state while leaving model weights untouched.
+- Rust-native Transformer reconstruction:
+  transformer planning should evolve into explicit templates and ABI contracts
+  for self-developed model runtimes, including native window, embedding access,
+  and KV exchange.
 
 ## Research-Inspired Algorithms / 公开算法启发
 

@@ -14,6 +14,25 @@ time without retraining model weights on every interaction.
 
 本项目目标是构建一个实用、自主可控优先的本地推理控制引擎，让自研模型后端在不频繁重训权重的前提下，能够随着使用逐步调整推理策略、记忆选择和计算分配。
 
+The optimized target combines four non-negotiable requirements:
+
+优化后的目标由四个硬约束共同定义：
+
+- self-developed model stack: the default backend is a self-trained
+  Transformer-family model, not external weights
+- anti lock-in: no closed model service, vendor-only runtime, or opaque
+  quantization path in the core engine
+- extreme local deployment: offline-first, lightweight, disk-backed memory,
+  and ultra-long-context control for consumer or edge hardware
+- frontier algorithms as owned implementations: use public papers as
+  inspiration, but implement attention, memory, quantization, routing,
+  reflection, and scheduling locally in Rust
+
+- 自研模型栈：默认后端是自主训练的 Transformer 系列模型，而不是外部权重
+- 规避卡脖子：核心引擎不绑定闭源模型服务、厂商专用运行时或不透明量化路径
+- 极致本地化部署：离线优先、轻量化、磁盘记忆、面向消费级/边缘硬件的超长上下文控制
+- 前沿算法自主实现：公开论文只作为思想来源，注意力、记忆、量化、路由、反思和调度都在 Rust 中本地实现
+
 The project focuses on the control loop around inference:
 
 项目重点不是从零实现完整大模型，而是实现推理外层闭环：
@@ -39,6 +58,26 @@ The project focuses on the control loop around inference:
 - 反思闭环：评估草稿质量，发现薄弱输出，修正置信度，并决定是否写入可复用记忆
 - 后端抽象：让控制层与真实模型运行时解耦
 
+## Self-Owned Stack / 自主双栈
+
+`rust-norion` is designed as an Agent Harness and test-time scaling control
+plane around a self-owned Transformer runtime:
+
+`rust-norion` 的架构定位是围绕自研 Transformer 运行时的 Agent Harness 与
+Test-time Scaling 控制平面：
+
+- model runtime: owns tokenizer, embeddings, weights, native context window,
+  forward kernels, and optional KV import/export
+- control plane: owns recursive scheduling, adaptive routing, memory tiering,
+  sparse context filtering, reflection, RLVR-style process rewards, experience
+  replay, and persisted adaptive state
+- stable boundary: `ModelRuntime` and `InferenceBackend` keep model iteration
+  independent from routing, memory, and reflection iteration
+
+- 模型运行时：负责 tokenizer、embedding、权重、原生上下文窗口、前向计算内核，以及可选的 KV 导入/导出
+- 控制平面：负责递归调度、自适应路由、记忆分层、稀疏上下文筛选、反思、RLVR 风格过程奖励、经验回放和持久化自适应状态
+- 稳定边界：通过 `ModelRuntime` 和 `InferenceBackend` 让模型迭代与路由、记忆、反思迭代解耦
+
 ## Sovereignty Scope / 自主可控范围
 
 The default target is a self-trained Transformer-family model. The core project
@@ -48,6 +87,34 @@ but quantization, attention routing, memory scheduling, reflection, and adaptive
 state should be implemented as local Rust components.
 
 默认目标是自主训练的 Transformer 系列模型。核心项目不依赖 Gemma、Llama、Qwen、闭源模型服务或厂商绑定运行时能力。可以借鉴公开论文和开放算法思想，但量化、注意力路由、记忆调度、反思闭环和自适应状态都应作为本地 Rust 组件自主实现。
+
+All semantic filtering, gist generation, and memory scoring should prefer the
+self-developed model's own tokenizer and embeddings. The project should not add
+a second third-party encoder just to make memory retrieval work.
+
+语义筛选、gist 生成和记忆评分优先复用自研模型自身的 tokenizer 与 embedding。项目不应为了记忆检索再引入第二套第三方编码器。
+
+## Local Algorithm Stack / 本地算法栈
+
+The target algorithm stack is model-weight independent:
+
+目标算法栈与具体模型权重解耦：
+
+- ultra-long context: Infini-style global/local KV separation, recursive
+  long-context scheduling, hierarchical gist memory, and SpeContext-style
+  sparse KV filtering
+- lightweight KV system: self-owned 4/8-bit uniform KV quantization,
+  reinforced KV-Fusion, time decay, semantic clustering, and Hot/Warm/Cold
+  storage
+- self-evolution loop: test-time scaling, RLVR-style rewards for control
+  decisions, reflection scoring, drift gates, and experience replay
+- Rust Transformer refactor: explicit layer templates for local-window,
+  global-memory, and convolutional-fusion compute paths
+
+- 超长上下文：Infini 风格全局/局部 KV 分离、递归长上下文调度、层级 gist 记忆、SpeContext 风格稀疏 KV 筛选
+- 轻量 KV 系统：自研 4/8-bit uniform KV 量化、强化式 KV-Fusion、时间衰减、语义聚类和 Hot/Warm/Cold 分层存储
+- 自进化闭环：Test-time Scaling、针对控制决策的 RLVR 风格奖励、反思评分、漂移门控和经验回放
+- Rust Transformer 重构：用显式层模板表达局部窗口、全局记忆、卷积融合等计算路径
 
 ## Current Status / 当前状态
 
