@@ -8,7 +8,7 @@ use rust_norion::{
     HardwareSnapshot, HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome,
     InferenceRequest, LocalTransformerRuntime, ModelRuntime, NoironEngine,
     PersistentRoundtripInput, PersistentRoundtripReport, RecursiveScheduler, RuntimeBackend,
-    RuntimeMetadata, TaskProfile, TierMigrationAction, append_trace_jsonl,
+    RuntimeMetadata, StateInspectionReport, TaskProfile, TierMigrationAction, append_trace_jsonl,
     append_trace_jsonl_with_case, default_benchmark_cases,
 };
 
@@ -23,6 +23,17 @@ fn main() -> std::io::Result<()> {
         if !report.passed() {
             std::process::exit(2);
         }
+        return Ok(());
+    }
+
+    if args.inspect_state {
+        let engine = NoironEngine::load_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )?;
+        let report = StateInspectionReport::from_engine(&engine, args.inspect_limit);
+        print_state_inspection_report(&args, &report);
         return Ok(());
     }
 
@@ -439,6 +450,48 @@ fn print_persistent_roundtrip_report(args: &Args, report: &PersistentRoundtripRe
     }
 }
 
+fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
+    println!("Noiron state inspection");
+    println!("memory_file: {}", args.memory_path.display());
+    println!("experience_file: {}", args.experience_path.display());
+    println!("adaptive_file: {}", args.adaptive_path.display());
+    println!("{}", report.summary_line());
+
+    println!("top_memories:");
+    if report.top_memories.is_empty() {
+        println!("  none");
+    } else {
+        for memory in &report.top_memories {
+            println!(
+                "  id={} strength={:.3} hits={} failures={} last_score={:.3} key={}",
+                memory.id,
+                memory.strength,
+                memory.hits,
+                memory.failures,
+                memory.last_score,
+                memory.key
+            );
+        }
+    }
+
+    println!("top_experiences:");
+    if report.top_experiences.is_empty() {
+        println!("  none");
+    } else {
+        for experience in &report.top_experiences {
+            println!(
+                "  id={} profile={:?} quality={:.3} reward={:.3} action={} lesson={}",
+                experience.id,
+                experience.profile,
+                experience.quality,
+                experience.process_reward,
+                experience.reward_action.as_str(),
+                experience.lesson
+            );
+        }
+    }
+}
+
 fn print_device_matrix_and_exit() -> ! {
     let allocator = HardwareAllocator::new();
     let base_hierarchy = HierarchyWeights::default();
@@ -557,6 +610,8 @@ struct Args {
     benchmark_roundtrip: bool,
     list_devices: bool,
     device_gate: bool,
+    inspect_state: bool,
+    inspect_limit: usize,
     local_runtime: bool,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
@@ -594,6 +649,8 @@ impl Args {
         let mut benchmark_roundtrip = false;
         let mut list_devices = false;
         let mut device_gate = false;
+        let mut inspect_state = false;
+        let mut inspect_limit = 5;
         let mut local_runtime = false;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
@@ -689,6 +746,15 @@ impl Args {
                 "--device-gate" => {
                     device_gate = true;
                     index += 1;
+                }
+                "--inspect-state" => {
+                    inspect_state = true;
+                    index += 1;
+                }
+                "--inspect-limit" if index + 1 < raw.len() => {
+                    inspect_limit = parse_usize(&raw[index + 1], inspect_limit).max(1);
+                    inspect_state = true;
+                    index += 2;
                 }
                 "--local-runtime" => {
                     local_runtime = true;
@@ -849,6 +915,8 @@ impl Args {
             benchmark_roundtrip,
             list_devices,
             device_gate,
+            inspect_state,
+            inspect_limit,
             local_runtime,
             runtime_command,
             runtime_args,
@@ -930,7 +998,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -973,6 +1041,9 @@ mod tests {
             "--benchmark-roundtrip".to_owned(),
             "--list-devices".to_owned(),
             "--device-gate".to_owned(),
+            "--inspect-state".to_owned(),
+            "--inspect-limit".to_owned(),
+            "2".to_owned(),
             "--local-runtime".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
@@ -1015,6 +1086,8 @@ mod tests {
         assert!(args.benchmark_roundtrip);
         assert!(args.list_devices);
         assert!(args.device_gate);
+        assert!(args.inspect_state);
+        assert_eq!(args.inspect_limit, 2);
         assert!(args.local_runtime);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");

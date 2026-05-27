@@ -210,6 +210,9 @@ modules, not external product dependencies:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
   memory reuse, and roll back adaptive state when the drift is severe.
+- State inspection:
+  persisted memory, experience, router threshold, hierarchy weights, and tier
+  counts should be inspectable from the CLI without running a new inference.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -289,6 +292,7 @@ These are algorithmic references, not product dependencies:
   coverage descriptor with common aliases; the CLI can print the full built-in
   device matrix and run a `--device-gate` compatibility check across every
   explicit device profile, including alias roundtrips;
+  the CLI can inspect persisted local state without running inference;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
@@ -326,6 +330,9 @@ These are algorithmic references, not product dependencies:
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
   rollback, protected-id memory compaction, and inspectable local state.
+- The CLI can inspect memory count, experience count, adaptive router state,
+  hierarchy weights, tier counts, and top memories/lessons from persisted local
+  files without invoking a model runtime.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves the runtime ABI end to end before

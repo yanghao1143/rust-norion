@@ -158,6 +158,7 @@ Implemented modules:
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
+- `src/state_inspect.rs`: local state inspection report for memory, experience, adaptive router, hierarchy, and tier counts
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -189,6 +190,18 @@ Replay high/low reward experience before the next inference:
 
 ```powershell
 cargo run -- --replay 4 --profile coding "Improve Rust Noiron routing from prior experience"
+```
+
+Inspect persisted local state without running inference:
+
+```powershell
+cargo run -- --inspect-state --inspect-limit 5
+```
+
+查看本地持久化状态，但不执行推理：
+
+```powershell
+cargo run -- --inspect-state --inspect-limit 5
 ```
 
 Write one structured JSONL trace record for benchmark comparison:

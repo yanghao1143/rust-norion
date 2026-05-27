@@ -18,6 +18,7 @@ pub mod recursive_scheduler;
 pub mod reflection;
 pub mod router;
 pub mod runtime;
+pub mod state_inspect;
 pub mod tiered_cache;
 pub mod token_stream;
 pub mod trace;
@@ -72,6 +73,7 @@ pub use runtime::{
     RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
     RuntimeTokenId, parse_runtime_response_json, runtime_request_json,
 };
+pub use state_inspect::{StateExperienceSummary, StateInspectionReport, StateMemorySummary};
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
     TieredCacheScheduler,
