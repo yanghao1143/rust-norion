@@ -159,8 +159,14 @@ The north star is now explicitly scoped around five core requirements:
     memory mode, runtime adapter hints, KV precision, prefetch count, disk-spill
     policy, and recursive parallel chunk budget. These hints must remain optional
     so the self-developed runtime can choose CUDA, ROCm, Metal, Vulkan, WGPU,
-    DirectML, CoreML, NNAPI, QNN, OpenVINO, portable Rust, or future adapters
-    without making any one runtime mandatory.
+    DirectML, CoreML, NNAPI, QNN, OpenVINO, CANN, MLU, RKNN, WebGPU, portable
+    Rust, or future adapters without making any one runtime mandatory.
+
+12. Device compatibility gate / 全设备兼容门禁
+    The CLI should provide a `--device-gate` check that validates every explicit
+    hardware profile keeps nonzero KV budgets, bounded prefetch, valid precision
+    policy, adapter hints, and a CPU/portable Rust escape hatch. This makes
+    device adaptation a regression gate rather than a documentation claim.
 
 ## Target Module Fusion / 目标模块融合
 
@@ -214,6 +220,10 @@ modules, not external product dependencies:
   fallback policies so the same control plane can run on CPU-only machines,
   GPUs, unified-memory systems, phones, embedded boards, NPUs, edge devices, and
   multi-accelerator servers without assuming one vendor stack.
+- Device compatibility gate:
+  the repository should fail fast when any supported device profile loses valid
+  execution lanes, KV budgets, adapter hints, disk-spill policy, or portable
+  fallback coverage.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -265,7 +275,8 @@ These are algorithmic references, not product dependencies:
   conservative device profile; each profile now emits execution-lane, memory
   mode, adapter-hint, KV-precision, prefetch, disk-spill, and recursive
   parallelism policies; runtime KV import now honors the device prefetch
-  budget; the CLI can print the full built-in device matrix;
+  budget; the CLI can print the full built-in device matrix and run a
+  `--device-gate` compatibility check across every explicit device profile;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
@@ -310,6 +321,8 @@ These are algorithmic references, not product dependencies:
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets, including execution-plan
   fallbacks for each device class.
+- The device compatibility gate passes across all explicit profiles and fails
+  if a profile loses valid budgets, adapter hints, or a portable fallback.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,

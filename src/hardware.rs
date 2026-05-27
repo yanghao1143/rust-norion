@@ -82,15 +82,20 @@ pub enum RuntimeAdapterHint {
     PortableRust,
     CpuSimd,
     Wgpu,
+    WebGpu,
     Vulkan,
     Metal,
     Cuda,
     Rocm,
+    OneApi,
     DirectMl,
     CoreMl,
     Nnapi,
     Qnn,
     OpenVino,
+    Cann,
+    Mlu,
+    Rknn,
     MultiDevice,
 }
 
@@ -100,15 +105,20 @@ impl RuntimeAdapterHint {
             Self::PortableRust => "portable-rust",
             Self::CpuSimd => "cpu-simd",
             Self::Wgpu => "wgpu",
+            Self::WebGpu => "webgpu",
             Self::Vulkan => "vulkan",
             Self::Metal => "metal",
             Self::Cuda => "cuda",
             Self::Rocm => "rocm",
+            Self::OneApi => "oneapi",
             Self::DirectMl => "directml",
             Self::CoreMl => "coreml",
             Self::Nnapi => "nnapi",
             Self::Qnn => "qnn",
             Self::OpenVino => "openvino",
+            Self::Cann => "cann",
+            Self::Mlu => "mlu",
+            Self::Rknn => "rknn",
             Self::MultiDevice => "multi-device",
         }
     }
@@ -201,14 +211,15 @@ impl FromStr for DeviceClass {
             "auto" => Ok(Self::Auto),
             "cpu" | "cpu-only" | "cpu_only" | "pc-cpu" | "desktop-cpu" => Ok(Self::CpuOnly),
             "integrated" | "igpu" | "integrated-gpu" | "laptop" | "notebook" | "intel-gpu"
-            | "amd-apu" | "apu" => Ok(Self::IntegratedGpu),
+            | "intel-iris" | "intel-xe" | "amd-apu" | "apu" => Ok(Self::IntegratedGpu),
             "discrete" | "dgpu" | "discrete-gpu" | "desktop-gpu" | "cuda" | "rtx" | "nvidia"
-            | "radeon" => Ok(Self::DiscreteGpu),
+            | "radeon" | "arc" | "intel-arc" => Ok(Self::DiscreteGpu),
             "uma" | "unified" | "unified-memory" | "apple" | "mac" | "macbook" | "m-series"
             | "m1" | "m2" | "m3" | "m4" => Ok(Self::UnifiedMemory),
             "mobile" | "phone" | "tablet" | "android" | "ios" | "handheld" | "iphone" | "ipad"
             | "smartphone" => Ok(Self::Mobile),
-            "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro" => {
+            "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro" | "sbc"
+            | "arm-sbc" | "riscv" | "risc-v" | "wasm" | "browser" | "web" | "webgpu" => {
                 Ok(Self::Embedded)
             }
             "npu"
@@ -219,7 +230,17 @@ impl FromStr for DeviceClass {
             | "neural"
             | "snapdragon"
             | "qualcomm"
-            | "apple-neural-engine" => Ok(Self::NpuAccelerator),
+            | "apple-neural-engine"
+            | "ascend"
+            | "cann"
+            | "cambricon"
+            | "mlu"
+            | "kunlun"
+            | "sophgo"
+            | "bm1684"
+            | "rockchip-npu"
+            | "rknn"
+            | "horizon-bpu" => Ok(Self::NpuAccelerator),
             "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "distributed"
             | "cluster" => Ok(Self::MultiGpu),
             "edge" | "gateway" | "edge-gateway" | "jetson" => Ok(Self::Edge),
@@ -409,9 +430,30 @@ impl HardwareProbe {
                     "HEXAGON_SDK_ROOT",
                     "COREML_ENABLE_NEURAL_ENGINE",
                     "ANDROID_NNAPI_DEVICE",
+                    "ASCEND_HOME_PATH",
+                    "ASCEND_TOOLKIT_HOME",
+                    "CAMBRICON_HOME",
+                    "KUNLUN_HOME",
+                    "SOPHGO_SDK_ROOT",
+                    "RKNN_TOOLKIT2",
                 ])
                 .is_some()
-            || self.adapter_hint_contains(&["npu", "neural", "ane", "hexagon", "qnn"])
+            || self.adapter_hint_contains(&[
+                "npu",
+                "neural",
+                "ane",
+                "hexagon",
+                "qnn",
+                "ascend",
+                "cann",
+                "cambricon",
+                "mlu",
+                "kunlun",
+                "sophgo",
+                "rknn",
+                "rockchip",
+                "horizon",
+            ])
     }
 
     fn has_unified_memory_hint(&self) -> bool {
@@ -458,6 +500,9 @@ impl HardwareProbe {
             "HIP_VISIBLE_DEVICES",
             "ROCR_VISIBLE_DEVICES",
             "ONEAPI_DEVICE_SELECTOR",
+            "ASCEND_RT_VISIBLE_DEVICES",
+            "ASCEND_VISIBLE_DEVICES",
+            "MLU_VISIBLE_DEVICES",
         ])
         .map(count_visible_devices)
         .unwrap_or(0)
@@ -548,6 +593,105 @@ impl HardwarePlan {
             self.hierarchy.local,
             self.hierarchy.convolution,
             self.execution.summary()
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DevicePlanGateRow {
+    pub device: DeviceClass,
+    pub tier: DeviceTier,
+    pub primary_lane: ComputeLane,
+    pub fallback_lane: ComputeLane,
+    pub memory_mode: DeviceMemoryMode,
+    pub adapter_hints: Vec<RuntimeAdapterHint>,
+    pub max_parallel_chunks: usize,
+    pub kv_prefetch_blocks: usize,
+    pub hot_kv_precision_bits: u8,
+    pub cold_kv_precision_bits: u8,
+    pub allow_disk_spill: bool,
+    pub local_kv_token_budget: usize,
+    pub global_kv_token_budget: usize,
+    pub latency_budget_ms: Option<u64>,
+    pub failures: Vec<String>,
+}
+
+impl DevicePlanGateRow {
+    pub fn from_plan(plan: &HardwarePlan) -> Self {
+        Self {
+            device: plan.device,
+            tier: plan.tier,
+            primary_lane: plan.execution.primary_lane,
+            fallback_lane: plan.execution.fallback_lane,
+            memory_mode: plan.execution.memory_mode,
+            adapter_hints: plan.execution.adapter_hints.clone(),
+            max_parallel_chunks: plan.execution.max_parallel_chunks,
+            kv_prefetch_blocks: plan.execution.kv_prefetch_blocks,
+            hot_kv_precision_bits: plan.execution.hot_kv_precision_bits,
+            cold_kv_precision_bits: plan.execution.cold_kv_precision_bits,
+            allow_disk_spill: plan.execution.allow_disk_spill,
+            local_kv_token_budget: plan.local_kv_token_budget,
+            global_kv_token_budget: plan.global_kv_token_budget,
+            latency_budget_ms: plan.latency_budget_ms,
+            failures: validate_device_plan(plan),
+        }
+    }
+
+    pub fn passed(&self) -> bool {
+        self.failures.is_empty()
+    }
+
+    pub fn adapters_csv(&self) -> String {
+        self.adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join("+")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DevicePlanGateReport {
+    pub rows: Vec<DevicePlanGateRow>,
+}
+
+impl DevicePlanGateReport {
+    pub fn evaluate() -> Self {
+        Self::evaluate_with_allocator(&HardwareAllocator::new())
+    }
+
+    pub fn evaluate_with_allocator(allocator: &HardwareAllocator) -> Self {
+        let base_hierarchy = HierarchyWeights::default();
+        let rows = DeviceClass::explicit_profiles()
+            .iter()
+            .map(|device| {
+                let plan = allocator.plan(
+                    HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20),
+                    TaskProfile::General,
+                    4096,
+                    base_hierarchy,
+                );
+                DevicePlanGateRow::from_plan(&plan)
+            })
+            .collect();
+
+        Self { rows }
+    }
+
+    pub fn passed(&self) -> bool {
+        self.rows.iter().all(DevicePlanGateRow::passed)
+    }
+
+    pub fn failure_count(&self) -> usize {
+        self.rows.iter().map(|row| row.failures.len()).sum()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "device_gate: passed={} profiles={} failures={}",
+            self.passed(),
+            self.rows.len(),
+            self.failure_count()
         )
     }
 }
@@ -821,6 +965,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::Wgpu,
                 RuntimeAdapterHint::Vulkan,
                 RuntimeAdapterHint::DirectMl,
+                RuntimeAdapterHint::OneApi,
                 RuntimeAdapterHint::PortableRust,
             ],
             true,
@@ -834,6 +979,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::Rocm,
                 RuntimeAdapterHint::Vulkan,
                 RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::OneApi,
                 RuntimeAdapterHint::DirectMl,
                 RuntimeAdapterHint::PortableRust,
             ],
@@ -860,6 +1006,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::Nnapi,
                 RuntimeAdapterHint::Qnn,
                 RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::WebGpu,
                 RuntimeAdapterHint::PortableRust,
             ],
             true,
@@ -870,8 +1017,10 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
             DeviceMemoryMode::MinimalDisk,
             vec![
                 RuntimeAdapterHint::PortableRust,
+                RuntimeAdapterHint::WebGpu,
                 RuntimeAdapterHint::Nnapi,
                 RuntimeAdapterHint::Qnn,
+                RuntimeAdapterHint::Rknn,
             ],
             true,
         ),
@@ -883,6 +1032,9 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::CoreMl,
                 RuntimeAdapterHint::Nnapi,
                 RuntimeAdapterHint::Qnn,
+                RuntimeAdapterHint::Cann,
+                RuntimeAdapterHint::Mlu,
+                RuntimeAdapterHint::Rknn,
                 RuntimeAdapterHint::OpenVino,
                 RuntimeAdapterHint::Wgpu,
                 RuntimeAdapterHint::PortableRust,
@@ -897,8 +1049,10 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::MultiDevice,
                 RuntimeAdapterHint::Cuda,
                 RuntimeAdapterHint::Rocm,
+                RuntimeAdapterHint::OneApi,
                 RuntimeAdapterHint::Vulkan,
                 RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::PortableRust,
             ],
             false,
         ),
@@ -912,6 +1066,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::Vulkan,
                 RuntimeAdapterHint::Nnapi,
                 RuntimeAdapterHint::Qnn,
+                RuntimeAdapterHint::Rknn,
             ],
             true,
         ),
@@ -922,6 +1077,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
             vec![
                 RuntimeAdapterHint::Cuda,
                 RuntimeAdapterHint::Rocm,
+                RuntimeAdapterHint::OneApi,
                 RuntimeAdapterHint::Vulkan,
                 RuntimeAdapterHint::Wgpu,
                 RuntimeAdapterHint::OpenVino,
@@ -1041,6 +1197,69 @@ fn notes(
     }
 
     notes
+}
+
+fn validate_device_plan(plan: &HardwarePlan) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if plan.local_kv_token_budget < 32 {
+        failures.push(format!(
+            "local_kv_token_budget {} below minimum 32",
+            plan.local_kv_token_budget
+        ));
+    }
+    if plan.global_kv_token_budget < 32 {
+        failures.push(format!(
+            "global_kv_token_budget {} below minimum 32",
+            plan.global_kv_token_budget
+        ));
+    }
+    if plan.execution.max_parallel_chunks == 0 {
+        failures.push("max_parallel_chunks must be at least 1".to_owned());
+    }
+    if plan.execution.kv_prefetch_blocks == 0 {
+        failures.push("kv_prefetch_blocks must be at least 1".to_owned());
+    }
+    if !matches!(plan.execution.hot_kv_precision_bits, 4 | 8) {
+        failures.push(format!(
+            "hot_kv_precision_bits {} must be 4 or 8",
+            plan.execution.hot_kv_precision_bits
+        ));
+    }
+    if !matches!(plan.execution.cold_kv_precision_bits, 4 | 8) {
+        failures.push(format!(
+            "cold_kv_precision_bits {} must be 4 or 8",
+            plan.execution.cold_kv_precision_bits
+        ));
+    }
+    if plan.execution.adapter_hints.is_empty() {
+        failures.push("adapter_hints must not be empty".to_owned());
+    }
+    if !has_portable_escape_hatch(plan) {
+        failures.push("plan must include a CPU or portable Rust fallback".to_owned());
+    }
+    if matches!(plan.tier, DeviceTier::Tiny | DeviceTier::Constrained)
+        && !plan.execution.allow_disk_spill
+    {
+        failures.push("tiny and constrained devices must allow disk spill".to_owned());
+    }
+    if plan.tier == DeviceTier::Distributed && plan.execution.max_parallel_chunks < 2 {
+        failures.push("distributed devices should expose more than one parallel chunk".to_owned());
+    }
+
+    failures
+}
+
+fn has_portable_escape_hatch(plan: &HardwarePlan) -> bool {
+    matches!(
+        plan.execution.fallback_lane,
+        ComputeLane::CpuPortable | ComputeLane::CpuVector | ComputeLane::DiskBackedStreaming
+    ) || plan.execution.adapter_hints.iter().any(|adapter| {
+        matches!(
+            adapter,
+            RuntimeAdapterHint::PortableRust | RuntimeAdapterHint::CpuSimd
+        )
+    })
 }
 
 fn scaled_tokens(base: usize, scale: f32) -> usize {
@@ -1235,6 +1454,22 @@ mod tests {
             "snapdragon".parse::<DeviceClass>().unwrap(),
             DeviceClass::NpuAccelerator
         );
+        assert_eq!(
+            "ascend".parse::<DeviceClass>().unwrap(),
+            DeviceClass::NpuAccelerator
+        );
+        assert_eq!(
+            "rknn".parse::<DeviceClass>().unwrap(),
+            DeviceClass::NpuAccelerator
+        );
+        assert_eq!(
+            "wasm".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Embedded
+        );
+        assert_eq!(
+            "riscv".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Embedded
+        );
         assert_eq!("jetson".parse::<DeviceClass>().unwrap(), DeviceClass::Edge);
         assert_eq!(
             "datacenter".parse::<DeviceClass>().unwrap(),
@@ -1275,7 +1510,25 @@ mod tests {
                     .iter()
                     .any(|note| note.starts_with("memory_mode:"))
             );
+            assert!(
+                plan.execution.adapter_hints.iter().any(|adapter| matches!(
+                    adapter,
+                    RuntimeAdapterHint::PortableRust | RuntimeAdapterHint::CpuSimd
+                )) || matches!(
+                    plan.execution.fallback_lane,
+                    ComputeLane::CpuPortable | ComputeLane::CpuVector
+                )
+            );
         }
+    }
+
+    #[test]
+    fn device_plan_gate_covers_all_explicit_profiles() {
+        let report = DevicePlanGateReport::evaluate();
+
+        assert!(report.passed(), "{:?}", report.rows);
+        assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
+        assert!(report.summary_line().contains("passed=true"));
     }
 
     #[test]
@@ -1347,6 +1600,12 @@ mod tests {
                 .execution
                 .adapter_hints
                 .contains(&RuntimeAdapterHint::MultiDevice)
+        );
+        assert!(
+            multi_gpu
+                .execution
+                .adapter_hints
+                .contains(&RuntimeAdapterHint::PortableRust)
         );
         assert!(!multi_gpu.execution.allow_disk_spill);
 
