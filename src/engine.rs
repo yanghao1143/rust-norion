@@ -1,6 +1,7 @@
 use std::io;
 use std::path::Path;
 
+use crate::adaptive_state::AdaptiveState;
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::kv_cache::{KvFusionCache, MemoryMatch};
@@ -112,12 +113,40 @@ impl NoironEngine {
         Ok(engine)
     }
 
+    pub fn load_full_state(
+        memory_path: impl AsRef<Path>,
+        experience_path: impl AsRef<Path>,
+        adaptive_path: impl AsRef<Path>,
+    ) -> io::Result<Self> {
+        let mut engine = Self::load_state(memory_path, experience_path)?;
+        if let Some(state) = AdaptiveState::load_from_disk_kv(adaptive_path)? {
+            engine.restore_adaptive_state(state);
+        }
+        Ok(engine)
+    }
+
     pub fn save_memory(&self, path: impl AsRef<Path>) -> io::Result<()> {
         self.cache.save_to_disk(path)
     }
 
     pub fn save_experience(&self, path: impl AsRef<Path>) -> io::Result<()> {
         self.experience.save_to_disk_kv(path)
+    }
+
+    pub fn adaptive_state(&self) -> AdaptiveState {
+        AdaptiveState {
+            router: self.router.state(),
+            hierarchy: self.hierarchy.state(),
+        }
+    }
+
+    pub fn restore_adaptive_state(&mut self, state: AdaptiveState) {
+        self.router.restore_state(state.router);
+        self.hierarchy.restore_state(state.hierarchy);
+    }
+
+    pub fn save_adaptive_state(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        self.adaptive_state().save_to_disk_kv(path)
     }
 
     pub fn infer<B: InferenceBackend>(
@@ -491,5 +520,27 @@ mod tests {
         assert_eq!(outcome.stream_reports.len(), 1);
         assert_eq!(outcome.stream_reports[0].observations[0].entropy, 0.1);
         assert_eq!(outcome.stream_reports[0].observations[1].entropy, 0.9);
+    }
+
+    #[test]
+    fn adaptive_state_restores_router_and_hierarchy() {
+        let mut engine = NoironEngine::new();
+        engine.router.observe(GenerationMetrics {
+            perplexity: 4.0,
+            semantic_consistency: 0.98,
+            contradiction_count: 0,
+            token_count: 8,
+        });
+        engine.hierarchy.adapt_to_profile(TaskProfile::Coding);
+        let state = engine.adaptive_state();
+
+        let mut restored = NoironEngine::new();
+        restored.restore_adaptive_state(state);
+
+        assert_eq!(restored.router.observations(), engine.router.observations());
+        assert!((restored.router.threshold() - engine.router.threshold()).abs() < 0.0001);
+        assert!(
+            (restored.hierarchy.current().local - engine.hierarchy.current().local).abs() < 0.0001
+        );
     }
 }

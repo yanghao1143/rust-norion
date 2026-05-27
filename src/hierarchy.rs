@@ -84,6 +84,11 @@ pub struct HierarchyController {
     learning_rate: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct HierarchyState {
+    pub current: HierarchyWeights,
+}
+
 impl Default for HierarchyController {
     fn default() -> Self {
         Self {
@@ -100,6 +105,17 @@ impl HierarchyController {
 
     pub fn current(&self) -> HierarchyWeights {
         self.current
+    }
+
+    pub fn state(&self) -> HierarchyState {
+        HierarchyState {
+            current: self.current,
+        }
+    }
+
+    pub fn restore_state(&mut self, state: HierarchyState) {
+        self.current = state.current;
+        self.current.normalize();
     }
 
     pub fn target_for_profile(profile: TaskProfile) -> HierarchyWeights {

@@ -1,3 +1,4 @@
+pub mod adaptive_state;
 pub mod disk_kv;
 pub mod engine;
 pub mod experience;
@@ -10,16 +11,19 @@ pub mod tiered_cache;
 pub mod token_stream;
 pub mod transformer;
 
+pub use adaptive_state::AdaptiveState;
 pub use disk_kv::DiskKvStore;
 pub use engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest,
     NoironEngine,
 };
 pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
-pub use hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
+pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
 pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
-pub use router::{GenerationMetrics, NoironRouter, Route, RouteBudget, RoutingDecision};
+pub use router::{
+    GenerationMetrics, NoironRouter, Route, RouteBudget, RouterState, RoutingDecision,
+};
 pub use runtime::{
     CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeError, RuntimeRequest,
     RuntimeResponse, RuntimeToken,

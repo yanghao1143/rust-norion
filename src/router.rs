@@ -64,6 +64,12 @@ pub struct NoironRouter {
     observations: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct RouterState {
+    pub threshold: f32,
+    pub observations: u64,
+}
+
 impl Default for NoironRouter {
     fn default() -> Self {
         Self {
@@ -87,6 +93,20 @@ impl NoironRouter {
 
     pub fn observations(&self) -> u64 {
         self.observations
+    }
+
+    pub fn state(&self) -> RouterState {
+        RouterState {
+            threshold: self.threshold,
+            observations: self.observations,
+        }
+    }
+
+    pub fn restore_state(&mut self, state: RouterState) {
+        self.threshold = state
+            .threshold
+            .clamp(self.min_threshold, self.max_threshold);
+        self.observations = state.observations;
     }
 
     pub fn route_token(&self, token: &str) -> RoutingDecision {

@@ -8,7 +8,11 @@ use rust_norion::{
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse(env::args().skip(1).collect());
-    let mut engine = NoironEngine::load_state(&args.memory_path, &args.experience_path)?;
+    let mut engine = NoironEngine::load_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
 
     let outcome = if let Some(runtime_command) = args.runtime_command.clone() {
         let runtime = CommandRuntime::new(runtime_command)
@@ -28,11 +32,13 @@ fn main() -> std::io::Result<()> {
     };
     engine.save_memory(&args.memory_path)?;
     engine.save_experience(&args.experience_path)?;
+    engine.save_adaptive_state(&args.adaptive_path)?;
 
     println!("Noiron Rust prototype");
     println!("profile: {:?}", args.profile);
     println!("memory_file: {}", args.memory_path.display());
     println!("experience_file: {}", args.experience_path.display());
+    println!("adaptive_file: {}", args.adaptive_path.display());
     if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
     }
@@ -81,6 +87,7 @@ struct Args {
     profile: TaskProfile,
     memory_path: PathBuf,
     experience_path: PathBuf,
+    adaptive_path: PathBuf,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
@@ -92,6 +99,7 @@ impl Args {
         let mut profile = None;
         let mut memory_path = PathBuf::from("noiron-memory.tsv");
         let mut experience_path = PathBuf::from("noiron-experience.ndkv");
+        let mut adaptive_path = PathBuf::from("noiron-adaptive.ndkv");
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
@@ -109,6 +117,10 @@ impl Args {
                 }
                 "--experience" | "-e" if index + 1 < raw.len() => {
                     experience_path = PathBuf::from(&raw[index + 1]);
+                    index += 2;
+                }
+                "--adaptive" | "-a" if index + 1 < raw.len() => {
+                    adaptive_path = PathBuf::from(&raw[index + 1]);
                     index += 2;
                 }
                 "--runtime-command" if index + 1 < raw.len() => {
@@ -149,6 +161,7 @@ impl Args {
             profile,
             memory_path,
             experience_path,
+            adaptive_path,
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
@@ -180,7 +193,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] <prompt>"
     );
     std::process::exit(0);
 }

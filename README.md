@@ -49,6 +49,7 @@ Implemented modules:
 已实现模块：
 
 - `src/router.rs`: adaptive entropy router
+- `src/adaptive_state.rs`: persisted router and hierarchy control state
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
@@ -88,12 +89,14 @@ cargo run -- --runtime-command ./llama-cli --runtime-arg "-p" --runtime-arg "{pr
 If `--runtime-prompt-mode stdin` is used, the formatted Noiron runtime request is
 written to the child process stdin.
 
-By default, the demo writes local memory to `noiron-memory.tsv` and structured
-reflection experience to `noiron-experience.ndkv`. Both files are ignored by Git
-because they are local runtime state.
+By default, the demo writes local memory to `noiron-memory.tsv`, structured
+reflection experience to `noiron-experience.ndkv`, and adaptive router/hierarchy
+state to `noiron-adaptive.ndkv`. These files are ignored by Git because they are
+local runtime state.
 
 demo 默认会把本地记忆写入 `noiron-memory.tsv`，并把结构化反思经验写入
-`noiron-experience.ndkv`。这些文件属于本地运行状态，已被 Git 忽略。
+`noiron-experience.ndkv`，同时把自适应路由和层级权重状态写入
+`noiron-adaptive.ndkv`。这些文件属于本地运行状态，已被 Git 忽略。
 
 ## Test / 测试
 
@@ -129,6 +132,9 @@ flowchart LR
     Experience --> DiskKV
     Reflect --> Router
     Reflect --> Hierarchy
+    Router --> Adaptive[Adaptive State]
+    Hierarchy --> Adaptive
+    Adaptive --> DiskKV
 ```
 
 ## Backend Integration / 后端接入
