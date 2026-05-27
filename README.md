@@ -148,7 +148,7 @@ Implemented modules:
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence, retention policy, and batch semantic compaction for near-duplicate memories
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
-- `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, embedding, generation, and KV import/export
+- `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, model-side embedding, generation, and KV import/export
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
@@ -161,7 +161,7 @@ Implemented modules:
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, optional model-side embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
 - `src/state_inspect.rs`: local state inspection report for memory, experience, reflection diagnostics, adaptive router, hierarchy, and tier counts
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
@@ -560,7 +560,8 @@ Expected integration loop:
 
 预期接入流程：
 
-1. embed prompt and retrieve local memory
+1. embed the prompt with the model runtime when available, otherwise use the
+   portable Rust fallback, then retrieve local memory
 2. read runtime metadata such as model id, tokenizer, native context window,
    embedding dimensions, and KV exchange support
 3. compute route budget and hierarchy weights
@@ -579,7 +580,7 @@ Expected integration loop:
 13. reinforce or penalize memory, including accepted exported runtime KV
 14. update or roll back routing threshold, hierarchy weights, and experience records
 
-1. 对 prompt 做嵌入并检索本地记忆
+1. 优先用模型 runtime 对 prompt 做嵌入；不可用时使用可移植 Rust fallback，然后检索本地记忆
 2. 读取模型 id、tokenizer、原生上下文窗口、embedding 维度和 KV 交换能力等 runtime metadata
 3. 计算路由预算和层级权重
 4. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
@@ -600,8 +601,8 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 优化后的路线图维护在 [`ROADMAP.md`](ROADMAP.md)。
 
-- replace heuristic embedding with model-side embeddings or compact vector
-  encoders
+- prefer model-side embeddings from the self-developed runtime for memory lookup
+  and writes, with a portable Rust heuristic fallback
 - implement a self-developed Transformer runtime adapter
 - expand mixed-precision 4/8-bit KV quantization benchmarks and policies
 - add Infini-style global/local KV separation and sparse context filtering
@@ -611,7 +612,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - expand real-device probing and execution-plan calibration beyond explicit profiles and aliases
 - expand the built-in benchmark suite into regression gates
 
-- 用模型侧 embedding 或轻量向量编码器替换当前启发式 embedding
+- 记忆检索和写入优先使用自研 runtime 的模型侧 embedding，并保留可移植 Rust 启发式 fallback
 - 实现自研 Transformer 运行时适配器
 - 扩展 4/8-bit 混合精度 KV 量化 benchmark 和策略
 - 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选

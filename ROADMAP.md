@@ -342,9 +342,11 @@ These are algorithmic references, not product dependencies:
   long-context-convolution Transformer templates are now exposed through the
   refactor plan, CLI output, traces, and runtime request ABI;
   initial runtime metadata, tokenizer, embedding, and KV import/export trait
-  hooks are in place; `RuntimeBackend` now injects runtime metadata into each
-  request, command runtime prompts expose the ABI boundary, and backend native
-  context windows feed recursive scheduling; CLI command runtimes can pass
+  hooks are in place; `RuntimeBackend` now exposes model-side embeddings to the
+  control plane for memory lookup and writes when a self-developed runtime
+  provides them, while preserving the portable Rust fallback; `RuntimeBackend`
+  now injects runtime metadata into each request, command runtime prompts
+  expose the ABI boundary, and backend native context windows feed recursive scheduling; CLI command runtimes can pass
   model id, tokenizer, native window, embedding dimensions, and KV exchange
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
@@ -382,8 +384,9 @@ These are algorithmic references, not product dependencies:
   persisted local files without invoking a model runtime.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
-- A built-in local runtime prototype proves the runtime ABI end to end before
-  production Transformer kernels are connected.
+- A built-in local runtime prototype proves tokenizer, model-side embedding,
+  generation, KV exchange, and control-plane memory integration end to end
+  before production Transformer kernels are connected.
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets, including execution-plan
   fallbacks and alias coverage for each device class.

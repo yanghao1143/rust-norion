@@ -351,4 +351,28 @@ mod tests {
         assert!(outcome.exported_runtime_kv_blocks > 0);
         assert!(!outcome.stored_runtime_kv_memory_ids.is_empty());
     }
+
+    #[test]
+    fn engine_uses_local_runtime_embeddings_for_memory_vectors() {
+        let mut engine = NoironEngine::new();
+        let runtime = LocalTransformerRuntime::new(128, 24);
+        let mut backend = RuntimeBackend::new(runtime);
+
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "Store a reusable Noiron memory using model-side embeddings",
+                TaskProfile::Coding,
+            ),
+            &mut backend,
+        );
+
+        assert!(outcome.stored_memory_id.is_some());
+        assert!(
+            engine
+                .cache
+                .entries()
+                .iter()
+                .any(|entry| entry.vector.len() == 24)
+        );
+    }
 }

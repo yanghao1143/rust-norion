@@ -265,6 +265,11 @@ pub trait ModelRuntime {
         Ok(RuntimeEmbedding::empty())
     }
 
+    fn embed_text(&self, text: &str) -> Result<RuntimeEmbedding, RuntimeError> {
+        let tokens = self.tokenize(text)?;
+        self.embed(&tokens)
+    }
+
     fn import_kv(&mut self, _blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
         Ok(0)
     }
@@ -980,6 +985,17 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
         (window > 0).then_some(window)
     }
 
+    fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {
+        match self.runtime.embed_text(text) {
+            Ok(embedding) if !embedding.values.is_empty() => Some(embedding.values),
+            Ok(_) => None,
+            Err(error) => {
+                self.last_error = Some(error);
+                None
+            }
+        }
+    }
+
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
         let runtime_metadata = self.runtime.metadata();
         let import_blocks = runtime_kv_blocks_from_context(&context, &runtime_metadata);
@@ -1307,6 +1323,7 @@ mod tests {
         let metadata = runtime.metadata();
         let tokens = runtime.tokenize("alpha beta").unwrap();
         let embedding = runtime.embed(&tokens).unwrap();
+        let text_embedding = runtime.embed_text("alpha beta gamma").unwrap();
         let imported = runtime
             .import_kv(&[RuntimeKvBlock::new(
                 0,
@@ -1323,10 +1340,20 @@ mod tests {
         assert_eq!(metadata.tokenizer, "noiron-wordpiece");
         assert_eq!(tokens[0], RuntimeTokenId::new(10_000, "alpha"));
         assert_eq!(embedding.dimensions, 3);
+        assert_eq!(text_embedding.values, vec![3.0, 1.0, 0.5]);
         assert_eq!(imported, 1);
         assert_eq!(runtime.imported_blocks, 1);
         assert_eq!(exported[0].layer, 1);
         assert_eq!(exported[0].head, 2);
+    }
+
+    #[test]
+    fn runtime_backend_exposes_model_side_embeddings() {
+        let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+        let embedding = backend.embed_text("alpha beta").unwrap();
+
+        assert_eq!(embedding, vec![2.0, 1.0, 0.5]);
     }
 
     #[test]

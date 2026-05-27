@@ -61,6 +61,10 @@ pub trait InferenceBackend {
         None
     }
 
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        None
+    }
+
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft;
 }
 
@@ -278,7 +282,7 @@ impl NoironEngine {
     ) -> InferenceOutcome {
         let auto_replay_report = self.maybe_auto_replay();
         let adaptive_before_inference = self.adaptive_state();
-        let query_vector = self.embedder.embed(&request.prompt);
+        let query_vector = self.embed_for_backend(backend, &request.prompt);
         let used_memories = self.cache.lookup(&query_vector, 4);
         let used_experiences =
             self.experience
@@ -364,7 +368,7 @@ impl NoironEngine {
                 report.revised_answer,
                 report.lesson
             );
-            let memory_vector = self.embedder.embed(&memory_text);
+            let memory_vector = self.embed_for_backend(backend, &memory_text);
             Some(self.cache.store_or_fuse(
                 summarize_key(&request.prompt, &report.lesson),
                 memory_vector,
@@ -382,7 +386,7 @@ impl NoironEngine {
                     let memory_text = gist.hint();
                     self.cache.store_or_fuse(
                         format_gist_key(&request.prompt, gist),
-                        self.embedder.embed(&memory_text),
+                        self.embed_for_backend(backend, &memory_text),
                         (report.quality * gist.importance).clamp(0.0, 1.0),
                     )
                 })
@@ -511,6 +515,13 @@ impl NoironEngine {
             experience_id,
             router_threshold_after,
         }
+    }
+
+    fn embed_for_backend<B: InferenceBackend>(&self, backend: &mut B, text: &str) -> Vec<f32> {
+        backend
+            .embed_text(text)
+            .filter(|vector| !vector.is_empty())
+            .unwrap_or_else(|| self.embedder.embed(text))
     }
 
     fn scheduler_for_backend_window(
