@@ -156,7 +156,7 @@ Implemented modules:
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, and KV import/export ABI hooks
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -282,6 +282,22 @@ cargo run -- --runtime-command ./self-transformer-cli --runtime-model-id noiron-
 
 If `--runtime-prompt-mode stdin` is used, the formatted Noiron runtime request is
 written to the child process stdin.
+
+Use the structured JSON runtime ABI when the self-developed runtime can parse a
+machine-readable request and return token/trace metadata:
+
+```powershell
+cargo run -- --runtime-command ./self-transformer-cli --runtime-wire-format json --runtime-prompt-mode stdin --runtime-model-id noiron-dev-transformer --runtime-native-window 32768 --runtime-embedding-dims 4096 "Build a Rust Noiron inference engine"
+```
+
+In JSON mode, stdin receives `rust-norion-runtime-request-v1` and stdout must
+return `rust-norion-runtime-response-v1` with an `answer`, optional `tokens`,
+and optional `trace` entries.
+
+当自研 runtime 支持机器可读协议时，可以使用结构化 JSON ABI。JSON 模式下 stdin 会收到
+`rust-norion-runtime-request-v1`，stdout 需要返回
+`rust-norion-runtime-response-v1`，其中包含 `answer`，并可选包含 `tokens` 与
+`trace`，方便 Noiron 控制层继续做 token 监控与反思。
 
 Run through the built-in Rust-native local runtime prototype:
 

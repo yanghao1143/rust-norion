@@ -12,7 +12,7 @@ use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
 use crate::router::RouteBudget;
 use crate::tiered_cache::MemoryTier;
-use crate::transformer::TransformerRefactorPlan;
+use crate::transformer::{AttentionKind, TransformerRefactorPlan};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeMetadata {
@@ -282,11 +282,27 @@ pub enum CommandPromptMode {
     Args,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandWireFormat {
+    Text,
+    Json,
+}
+
+impl CommandWireFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Json => "json",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CommandRuntime {
     program: PathBuf,
     args: Vec<String>,
     prompt_mode: CommandPromptMode,
+    wire_format: CommandWireFormat,
     metadata: RuntimeMetadata,
 }
 
@@ -296,6 +312,7 @@ impl CommandRuntime {
             program: program.into(),
             args: Vec::new(),
             prompt_mode: CommandPromptMode::Stdin,
+            wire_format: CommandWireFormat::Text,
             metadata: RuntimeMetadata::default(),
         }
     }
@@ -319,6 +336,11 @@ impl CommandRuntime {
         self
     }
 
+    pub fn wire_format(mut self, wire_format: CommandWireFormat) -> Self {
+        self.wire_format = wire_format;
+        self
+    }
+
     pub fn with_metadata(mut self, metadata: RuntimeMetadata) -> Self {
         self.metadata = metadata;
         self
@@ -332,11 +354,13 @@ impl CommandRuntime {
         &self.args
     }
 
-    fn expanded_args(&self, request: &RuntimeRequest, prompt: &str) -> Vec<String> {
+    fn expanded_args(&self, request: &RuntimeRequest, payload: &str) -> Vec<String> {
         self.args
             .iter()
             .map(|arg| {
-                arg.replace("{prompt}", prompt)
+                arg.replace("{prompt}", payload)
+                    .replace("{runtime_payload}", payload)
+                    .replace("{wire_format}", self.wire_format.as_str())
                     .replace("{max_tokens}", &request.max_tokens.to_string())
                     .replace("{memory_hints}", &request.memory_hints.join("\n"))
                     .replace(
@@ -360,9 +384,9 @@ impl ModelRuntime for CommandRuntime {
     }
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
-        let prompt = format_runtime_prompt(&request);
+        let payload = format_runtime_payload(&request, self.wire_format);
         let mut command = Command::new(&self.program);
-        command.args(self.expanded_args(&request, &prompt));
+        command.args(self.expanded_args(&request, &payload));
 
         if self.prompt_mode == CommandPromptMode::Stdin {
             command.stdin(Stdio::piped());
@@ -380,7 +404,7 @@ impl ModelRuntime for CommandRuntime {
             let Some(mut stdin) = child.stdin.take() else {
                 return Err(RuntimeError::new("runtime command did not expose stdin"));
             };
-            stdin.write_all(prompt.as_bytes()).map_err(|error| {
+            stdin.write_all(payload.as_bytes()).map_err(|error| {
                 RuntimeError::new(format!("failed to write runtime prompt to stdin: {error}"))
             })?;
         }
@@ -396,14 +420,24 @@ impl ModelRuntime for CommandRuntime {
             )));
         }
 
-        let answer = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        let mut response = RuntimeResponse::new(answer);
-        response.trace = vec![ReasoningStep::new(
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let mut response = match self.wire_format {
+            CommandWireFormat::Text => RuntimeResponse::new(stdout),
+            CommandWireFormat::Json => parse_runtime_response_json(&stdout)?,
+        };
+        response.trace.push(ReasoningStep::new(
             "command_runtime",
             format!("executed {}", self.program.display()),
             0.72,
-        )];
+        ));
         Ok(response)
+    }
+}
+
+fn format_runtime_payload(request: &RuntimeRequest, wire_format: CommandWireFormat) -> String {
+    match wire_format {
+        CommandWireFormat::Text => format_runtime_prompt(request),
+        CommandWireFormat::Json => runtime_request_json(request),
     }
 }
 
@@ -443,6 +477,436 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         bullet_list(&request.experience_hints),
         request.prompt
     )
+}
+
+pub fn runtime_request_json(request: &RuntimeRequest) -> String {
+    let transformer_counts = request.transformer_plan.counts();
+    let transformer_layers = request
+        .transformer_plan
+        .layers
+        .iter()
+        .map(|layer| {
+            format!(
+                "{{\"layer_index\":{},\"attention\":{},\"compute_fraction\":{:.6},\"window_size\":{}}}",
+                layer.layer_index,
+                json_string(attention_kind_str(layer.attention)),
+                layer.compute_fraction,
+                layer.window_size
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let recursive_chunks = request
+        .recursive_schedule
+        .chunks
+        .iter()
+        .map(|chunk| {
+            format!(
+                "{{\"index\":{},\"start_token\":{},\"end_token\":{},\"estimated_tokens\":{},\"overlap_left\":{},\"overlap_right\":{}}}",
+                chunk.index,
+                chunk.start_token,
+                chunk.end_token,
+                chunk.estimated_tokens,
+                chunk.overlap_left,
+                chunk.overlap_right
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let recursive_merge_rounds = request
+        .recursive_schedule
+        .merge_rounds
+        .iter()
+        .map(|round| {
+            format!(
+                "{{\"round\":{},\"input_units\":{},\"output_units\":{}}}",
+                round.round, round.input_units, round.output_units
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let adapter_hints = request
+        .hardware_plan
+        .execution
+        .adapter_hints
+        .iter()
+        .map(|adapter| adapter.as_str())
+        .collect::<Vec<_>>();
+
+    format!(
+        "{{\
+         \"schema\":{},\
+         \"prompt\":{},\
+         \"profile\":{},\
+         \"max_tokens\":{},\
+         \"runtime\":{{\
+         \"model_id\":{},\
+         \"tokenizer\":{},\
+         \"native_context_window\":{},\
+         \"embedding_dimensions\":{},\
+         \"supports_kv_import\":{},\
+         \"supports_kv_export\":{}\
+         }},\
+         \"route\":{{\
+         \"threshold\":{:.6},\
+         \"attention_fraction\":{:.6},\
+         \"attention_tokens\":{},\
+         \"fast_tokens\":{}\
+         }},\
+         \"hierarchy\":{{\
+         \"global\":{:.6},\
+         \"local\":{:.6},\
+         \"convolution\":{:.6}\
+         }},\
+         \"transformer\":{{\
+         \"global_layers\":{},\
+         \"local_layers\":{},\
+         \"convolution_layers\":{},\
+         \"layers\":[{}]\
+         }},\
+         \"recursive\":{{\
+         \"required\":{},\
+         \"prompt_tokens\":{},\
+         \"native_window\":{},\
+         \"chunk_tokens\":{},\
+         \"overlap_tokens\":{},\
+         \"merge_fan_in\":{},\
+         \"chunks\":[{}],\
+         \"merge_rounds\":[{}]\
+         }},\
+         \"hardware\":{{\
+         \"device\":{},\
+         \"tier\":{},\
+         \"pressure\":{:.6},\
+         \"latency_budget_ms\":{},\
+         \"local_kv_token_budget\":{},\
+         \"global_kv_token_budget\":{},\
+         \"execution\":{{\
+         \"primary_lane\":{},\
+         \"fallback_lane\":{},\
+         \"memory_mode\":{},\
+         \"adapter_hints\":{},\
+         \"max_parallel_chunks\":{},\
+         \"kv_prefetch_blocks\":{},\
+         \"hot_kv_precision_bits\":{},\
+         \"cold_kv_precision_bits\":{},\
+         \"allow_disk_spill\":{}\
+         }},\
+         \"notes\":{}\
+         }},\
+         \"memory_hints\":{},\
+         \"infini_memory_hints\":{},\
+         \"experience_hints\":{}\
+         }}",
+        json_string("rust-norion-runtime-request-v1"),
+        json_string(&request.prompt),
+        json_string(task_profile_str(request.profile)),
+        request.max_tokens,
+        json_string(&request.runtime_metadata.model_id),
+        json_string(&request.runtime_metadata.tokenizer),
+        request.runtime_metadata.native_context_window,
+        request.runtime_metadata.embedding_dimensions,
+        request.runtime_metadata.supports_kv_import,
+        request.runtime_metadata.supports_kv_export,
+        request.route_budget.threshold,
+        request.route_budget.attention_fraction,
+        request.route_budget.attention_tokens,
+        request.route_budget.fast_tokens,
+        request.hierarchy.global,
+        request.hierarchy.local,
+        request.hierarchy.convolution,
+        transformer_counts.global,
+        transformer_counts.local,
+        transformer_counts.convolution,
+        transformer_layers,
+        request.recursive_schedule.requires_recursion,
+        request.recursive_schedule.prompt_tokens,
+        request.recursive_schedule.native_window_tokens,
+        request.recursive_schedule.chunk_tokens,
+        request.recursive_schedule.overlap_tokens,
+        request.recursive_schedule.merge_fan_in,
+        recursive_chunks,
+        recursive_merge_rounds,
+        json_string(request.hardware_plan.device.as_str()),
+        json_string(request.hardware_plan.tier.as_str()),
+        request.hardware_plan.pressure,
+        option_u64_json(request.hardware_plan.latency_budget_ms),
+        request.hardware_plan.local_kv_token_budget,
+        request.hardware_plan.global_kv_token_budget,
+        json_string(request.hardware_plan.execution.primary_lane.as_str()),
+        json_string(request.hardware_plan.execution.fallback_lane.as_str()),
+        json_string(request.hardware_plan.execution.memory_mode.as_str()),
+        json_str_array(adapter_hints),
+        request.hardware_plan.execution.max_parallel_chunks,
+        request.hardware_plan.execution.kv_prefetch_blocks,
+        request.hardware_plan.execution.hot_kv_precision_bits,
+        request.hardware_plan.execution.cold_kv_precision_bits,
+        request.hardware_plan.execution.allow_disk_spill,
+        json_str_array(request.hardware_plan.notes.iter().map(String::as_str)),
+        json_str_array(request.memory_hints.iter().map(String::as_str)),
+        json_str_array(request.infini_memory_hints.iter().map(String::as_str)),
+        json_str_array(request.experience_hints.iter().map(String::as_str))
+    )
+}
+
+pub fn parse_runtime_response_json(payload: &str) -> Result<RuntimeResponse, RuntimeError> {
+    let schema = extract_json_string_field(payload, "schema")
+        .ok_or_else(|| RuntimeError::new("runtime response JSON must include a schema string"))?;
+    if schema != "rust-norion-runtime-response-v1" {
+        return Err(RuntimeError::new(
+            "runtime response schema must be rust-norion-runtime-response-v1",
+        ));
+    }
+    let answer = extract_json_string_field(payload, "answer")
+        .ok_or_else(|| RuntimeError::new("runtime response JSON must include an answer string"))?;
+    if answer.trim().is_empty() {
+        return Err(RuntimeError::new(
+            "runtime response JSON must include a non-empty answer",
+        ));
+    }
+
+    let mut response = RuntimeResponse::new(answer);
+    response.tokens = extract_json_array_field(payload, "tokens")
+        .map(split_json_objects)
+        .unwrap_or_default()
+        .iter()
+        .map(|token| RuntimeToken {
+            text: extract_json_string_field(token, "text").unwrap_or_default(),
+            logprob: extract_json_number_field(token, "logprob"),
+            entropy: extract_json_number_field(token, "entropy"),
+        })
+        .filter(|token| !token.text.is_empty())
+        .collect();
+    response.trace = extract_json_array_field(payload, "trace")
+        .map(split_json_objects)
+        .unwrap_or_default()
+        .iter()
+        .map(|step| {
+            ReasoningStep::new(
+                extract_json_string_field(step, "label").unwrap_or_else(|| "runtime".to_owned()),
+                extract_json_string_field(step, "content").unwrap_or_default(),
+                extract_json_number_field(step, "confidence").unwrap_or(0.5),
+            )
+        })
+        .collect();
+    Ok(response)
+}
+
+fn task_profile_str(profile: TaskProfile) -> &'static str {
+    match profile {
+        TaskProfile::General => "general",
+        TaskProfile::Coding => "coding",
+        TaskProfile::Writing => "writing",
+        TaskProfile::LongDocument => "long_document",
+    }
+}
+
+fn attention_kind_str(attention: AttentionKind) -> &'static str {
+    match attention {
+        AttentionKind::Global => "global",
+        AttentionKind::LocalWindow => "local_window",
+        AttentionKind::ConvolutionalFusion => "convolutional_fusion",
+    }
+}
+
+fn option_u64_json(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
+fn json_str_array<'a, I>(items: I) -> String
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let values = items
+        .into_iter()
+        .map(json_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
+}
+
+fn json_string(value: &str) -> String {
+    format!("\"{}\"", json_escape(value))
+}
+
+fn json_escape(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out
+}
+
+fn extract_json_string_field(source: &str, field: &str) -> Option<String> {
+    extract_json_field(source, field).and_then(parse_json_string)
+}
+
+fn extract_json_number_field(source: &str, field: &str) -> Option<f32> {
+    extract_json_field(source, field).and_then(|value| value.trim().parse::<f32>().ok())
+}
+
+fn extract_json_array_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
+    extract_json_field(source, field).filter(|value| value.trim_start().starts_with('['))
+}
+
+fn extract_json_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
+    let needle = json_string(field);
+    let key_start = source.find(&needle)?;
+    let after_key = key_start + needle.len();
+    let colon_offset = source[after_key..].find(':')?;
+    let mut value_start = after_key + colon_offset + 1;
+    while source[value_start..]
+        .chars()
+        .next()
+        .is_some_and(char::is_whitespace)
+    {
+        value_start += source[value_start..].chars().next()?.len_utf8();
+    }
+    let value_end = json_value_end(source, value_start)?;
+    Some(&source[value_start..value_end])
+}
+
+fn split_json_objects(array_value: &str) -> Vec<&str> {
+    let trimmed = array_value.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return Vec::new();
+    }
+
+    let inner_start = 1;
+    let inner_end = trimmed.len().saturating_sub(1);
+    let inner = &trimmed[inner_start..inner_end];
+    let mut objects = Vec::new();
+    let mut index = 0;
+
+    while index < inner.len() {
+        while index < inner.len() {
+            let Some(ch) = inner[index..].chars().next() else {
+                break;
+            };
+            if ch == ',' || ch.is_whitespace() {
+                index += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+        if index >= inner.len() {
+            break;
+        }
+        if !inner[index..].starts_with('{') {
+            break;
+        }
+        let Some(end) = json_value_end(inner, index) else {
+            break;
+        };
+        objects.push(&inner[index..end]);
+        index = end;
+    }
+
+    objects
+}
+
+fn json_value_end(source: &str, start: usize) -> Option<usize> {
+    let first = source[start..].chars().next()?;
+    match first {
+        '"' => scan_json_string_end(source, start),
+        '[' => scan_json_compound_end(source, start, '[', ']'),
+        '{' => scan_json_compound_end(source, start, '{', '}'),
+        _ => {
+            let mut end = start;
+            while end < source.len() {
+                let ch = source[end..].chars().next()?;
+                if ch == ',' || ch == '}' || ch == ']' || ch.is_whitespace() {
+                    break;
+                }
+                end += ch.len_utf8();
+            }
+            Some(end)
+        }
+    }
+}
+
+fn scan_json_string_end(source: &str, start: usize) -> Option<usize> {
+    let mut escaped = false;
+    let mut index = start + 1;
+    while index < source.len() {
+        let ch = source[index..].chars().next()?;
+        index += ch.len_utf8();
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+        } else if ch == '"' {
+            return Some(index);
+        }
+    }
+    None
+}
+
+fn scan_json_compound_end(source: &str, start: usize, open: char, close: char) -> Option<usize> {
+    let mut depth = 0_usize;
+    let mut index = start;
+    while index < source.len() {
+        let ch = source[index..].chars().next()?;
+        if ch == '"' {
+            index = scan_json_string_end(source, index)?;
+            continue;
+        }
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return Some(index + ch.len_utf8());
+            }
+        }
+        index += ch.len_utf8();
+    }
+    None
+}
+
+fn parse_json_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if !trimmed.starts_with('"') || !trimmed.ends_with('"') {
+        return None;
+    }
+
+    let mut out = String::new();
+    let mut chars = trimmed[1..trimmed.len().saturating_sub(1)].chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next()? {
+            '"' => out.push('"'),
+            '\\' => out.push('\\'),
+            '/' => out.push('/'),
+            'b' => out.push('\u{0008}'),
+            'f' => out.push('\u{000c}'),
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            'u' => {
+                let code = (0..4).filter_map(|_| chars.next()).collect::<String>();
+                let value = u32::from_str_radix(&code, 16).ok()?;
+                out.push(char::from_u32(value)?);
+            }
+            other => out.push(other),
+        }
+    }
+    Some(out)
 }
 
 fn bullet_list(items: &[String]) -> String {
@@ -982,6 +1446,78 @@ mod tests {
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
         assert!(args[5].contains("model_id=sample-transformer"));
+    }
+
+    #[test]
+    fn runtime_request_json_includes_control_plane_sections() {
+        let request = sample_request();
+
+        let payload = runtime_request_json(&request);
+
+        assert_eq!(
+            extract_json_string_field(&payload, "schema").unwrap(),
+            "rust-norion-runtime-request-v1"
+        );
+        assert_eq!(
+            extract_json_string_field(&payload, "profile").unwrap(),
+            "coding"
+        );
+        assert_eq!(
+            extract_json_string_field(&payload, "model_id").unwrap(),
+            "sample-transformer"
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "attention_tokens").unwrap(),
+            2.0
+        );
+        assert_eq!(
+            extract_json_string_field(&payload, "primary_lane").unwrap(),
+            "cpu-vector"
+        );
+        assert!(payload.contains("\"memory_hints\":[\"memory hint\"]"));
+        assert_eq!(extract_json_array_field(&payload, "layers").unwrap(), "[]");
+    }
+
+    #[test]
+    fn runtime_response_json_parses_tokens_and_trace() {
+        let payload = r#"{
+            "schema": "rust-norion-runtime-response-v1",
+            "answer": "structured runtime answer",
+            "tokens": [
+                {"text": "structured", "logprob": -0.2, "entropy": 0.3},
+                {"text": "answer", "entropy": 0.4}
+            ],
+            "trace": [
+                {"label": "runtime", "content": "generated with JSON ABI", "confidence": 0.91}
+            ]
+        }"#;
+
+        let response = parse_runtime_response_json(payload).unwrap();
+
+        assert_eq!(response.answer, "structured runtime answer");
+        assert_eq!(response.tokens.len(), 2);
+        assert_eq!(response.tokens[0].logprob, Some(-0.2));
+        assert_eq!(response.tokens[1].entropy, Some(0.4));
+        assert_eq!(response.trace[0].label, "runtime");
+        assert!((response.trace[0].confidence - 0.91).abs() < 0.0001);
+    }
+
+    #[test]
+    fn command_runtime_can_expand_json_wire_payload() {
+        let runtime = CommandRuntime::new("runner")
+            .wire_format(CommandWireFormat::Json)
+            .arg("--wire")
+            .arg("{wire_format}")
+            .arg("--payload")
+            .arg("{runtime_payload}")
+            .prompt_mode(CommandPromptMode::Args);
+        let request = sample_request();
+        let payload = format_runtime_payload(&request, CommandWireFormat::Json);
+        let args = runtime.expanded_args(&request, &payload);
+
+        assert_eq!(args[1], "json");
+        assert!(args[3].contains("\"schema\":\"rust-norion-runtime-request-v1\""));
+        assert!(args[3].contains("\"hardware\""));
     }
 
     #[test]

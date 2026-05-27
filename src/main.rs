@@ -4,8 +4,8 @@ use std::time::Instant;
 
 use rust_norion::{
     BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
-    DeviceClass, GistLevel, HardwareAllocator, HardwareSnapshot, HeuristicBackend,
-    HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest,
+    CommandWireFormat, DeviceClass, GistLevel, HardwareAllocator, HardwareSnapshot,
+    HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest,
     LocalTransformerRuntime, ModelRuntime, NoironEngine, RecursiveScheduler, RuntimeBackend,
     RuntimeMetadata, TaskProfile, TierMigrationAction, append_trace_jsonl,
     append_trace_jsonl_with_case, default_benchmark_cases,
@@ -46,6 +46,7 @@ fn main() -> std::io::Result<()> {
             let runtime = CommandRuntime::new(runtime_command)
                 .args(args.runtime_args.clone())
                 .prompt_mode(args.runtime_prompt_mode)
+                .wire_format(args.runtime_wire_format)
                 .with_metadata(args.runtime_metadata.clone());
             let mut backend = RuntimeBackend::new(runtime);
             run_benchmark(&mut engine, &mut backend, &benchmark_path)?
@@ -80,6 +81,7 @@ fn main() -> std::io::Result<()> {
         let runtime = CommandRuntime::new(runtime_command)
             .args(args.runtime_args.clone())
             .prompt_mode(args.runtime_prompt_mode)
+            .wire_format(args.runtime_wire_format)
             .with_metadata(args.runtime_metadata.clone());
         let mut backend = RuntimeBackend::new(runtime);
         run_timed_inference(
@@ -140,6 +142,7 @@ fn main() -> std::io::Result<()> {
     } else if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
         println!("runtime_metadata: {}", args.runtime_metadata.summary());
+        println!("runtime_wire_format: {}", args.runtime_wire_format.as_str());
     }
     if let Some(replay_report) = &replay_report {
         println!("experience_replay: {}", replay_report.summary());
@@ -413,6 +416,7 @@ struct Args {
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
+    runtime_wire_format: CommandWireFormat,
     runtime_metadata: RuntimeMetadata,
     native_window_tokens: usize,
     chunk_tokens: usize,
@@ -447,6 +451,7 @@ impl Args {
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
+        let mut runtime_wire_format = CommandWireFormat::Text;
         let mut runtime_metadata = RuntimeMetadata::default();
         let default_scheduler = RecursiveScheduler::default();
         let mut native_window_tokens = default_scheduler.native_window_tokens();
@@ -550,6 +555,17 @@ impl Args {
                         _ => CommandPromptMode::Stdin,
                     };
                     index += 2;
+                }
+                "--runtime-wire-format" if index + 1 < raw.len() => {
+                    runtime_wire_format = match raw[index + 1].as_str() {
+                        "json" => CommandWireFormat::Json,
+                        _ => CommandWireFormat::Text,
+                    };
+                    index += 2;
+                }
+                "--runtime-json" => {
+                    runtime_wire_format = CommandWireFormat::Json;
+                    index += 1;
                 }
                 "--runtime-model-id" if index + 1 < raw.len() => {
                     runtime_metadata.model_id = raw[index + 1].clone();
@@ -680,6 +696,7 @@ impl Args {
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
+            runtime_wire_format,
             runtime_metadata,
             native_window_tokens,
             chunk_tokens,
@@ -756,7 +773,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -802,6 +819,8 @@ mod tests {
             "dev-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
             "dev-bpe".to_owned(),
+            "--runtime-wire-format".to_owned(),
+            "json".to_owned(),
             "--runtime-native-window".to_owned(),
             "4096".to_owned(),
             "--runtime-embedding-dims".to_owned(),
@@ -838,6 +857,7 @@ mod tests {
         assert!(args.local_runtime);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
+        assert_eq!(args.runtime_wire_format, CommandWireFormat::Json);
         assert_eq!(args.runtime_metadata.native_context_window, 4096);
         assert_eq!(args.runtime_metadata.embedding_dimensions, 128);
         assert!(args.runtime_metadata.supports_kv_import);
