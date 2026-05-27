@@ -17,9 +17,9 @@ closed services, or vendor-specific runtimes.
 
 核心目标是通过自主实现公开算法，达成本地离线、轻量化、超长上下文推理，而不是依赖外部模型权重、闭源服务或厂商绑定运行时。
 
-The north star is now explicitly scoped around four core requirements:
+The north star is now explicitly scoped around five core requirements:
 
-总目标明确收敛到四个核心诉求：
+总目标明确收敛到五个核心诉求：
 
 1. Self-developed model first / 自研模型优先
    The default production backend is an internally trained Transformer-family
@@ -39,6 +39,12 @@ The north star is now explicitly scoped around four core requirements:
    Public research ideas are treated as algorithmic references. The project
    owns its Rust implementation of memory, routing, quantization, reflection,
    scheduling, and runtime boundaries.
+
+5. Universal device adaptation / 全设备适配
+   The control plane must run across CPU-only PCs, integrated-GPU laptops,
+   discrete-GPU desktops, unified-memory machines, phones, tablets, embedded
+   boards, NPU/AI accelerator devices, multi-GPU workstations, edge gateways,
+   and servers through explicit hardware profiles instead of vendor lock-in.
 
 ## Sovereignty Contract / 自主可控约束
 
@@ -78,11 +84,16 @@ The north star is now explicitly scoped around four core requirements:
    reinforced KV fusion, 4/8-bit mixed-precision KV quantization, disk-backed
    append-only storage, and promotion/demotion policies.
 
-4. Runtime boundary / 运行时边界
+4. Hardware abstraction / 硬件抽象
+   Device profiles convert heterogeneous CPU, GPU, unified-memory, mobile,
+   embedded, NPU, multi-GPU, edge, and server pressure into latency budgets, KV
+   budgets, routing constraints, and hierarchy weights.
+
+5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
    default production target is a self-developed Transformer runtime.
 
-5. Self-developed model stack / 自研模型栈
+6. Self-developed model stack / 自研模型栈
    The model runtime owns weights, tokenizer, embedding, and forward kernels.
    The control plane decides how context, memory, routing, and reflection are
    applied around that model.
@@ -129,8 +140,11 @@ The north star is now explicitly scoped around four core requirements:
    prompt, route plan, KV usage, output quality, reward, and follow-up action.
 
 10. Hardware-aware compute allocation / 硬件感知算力分配
-    Use local CPU/GPU/RAM/disk pressure to decide when to lower compute, shrink
-    windows, evict memory, or spend extra attention on hard tasks.
+    Use local CPU/GPU/RAM/disk pressure and explicit device profiles for
+    CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded,
+    NPU/AI accelerator, multi-GPU, edge, and server targets to decide when to
+    lower compute, shrink windows, evict memory, or spend extra attention on
+    hard tasks.
 
 ## Target Module Fusion / 目标模块融合
 
@@ -167,6 +181,10 @@ modules, not external product dependencies:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
   and KV exchange.
+- Universal hardware profiles:
+  hardware allocation should stay device-agnostic while supporting explicit
+  policy profiles for PC, laptop, workstation, server, mobile, embedded,
+  NPU/AI accelerator, and heterogeneous multi-GPU deployments.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -210,7 +228,8 @@ These are algorithmic references, not product dependencies:
   reward-ranked experience replay can now update router, hierarchy, and KV
   memory state before inference; device-agnostic hardware pressure planning now
   adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
-  integrated GPU, discrete GPU, unified-memory, edge, and server devices)
+  integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI
+  accelerator, multi-GPU, edge, and server devices)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
 - v1.0: production-grade local Agent Harness and test-time scaling inference
@@ -228,3 +247,5 @@ These are algorithmic references, not product dependencies:
   rollback, and inspectable local state.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
+- Hardware adaptation is profile-driven and test-covered across constrained
+  devices and high-capacity accelerator targets.

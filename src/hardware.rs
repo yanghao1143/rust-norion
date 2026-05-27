@@ -9,6 +9,10 @@ pub enum DeviceClass {
     IntegratedGpu,
     DiscreteGpu,
     UnifiedMemory,
+    Mobile,
+    Embedded,
+    NpuAccelerator,
+    MultiGpu,
     Edge,
     Server,
 }
@@ -21,6 +25,10 @@ impl DeviceClass {
             Self::IntegratedGpu => "integrated",
             Self::DiscreteGpu => "discrete",
             Self::UnifiedMemory => "uma",
+            Self::Mobile => "mobile",
+            Self::Embedded => "embedded",
+            Self::NpuAccelerator => "npu",
+            Self::MultiGpu => "multi-gpu",
             Self::Edge => "edge",
             Self::Server => "server",
         }
@@ -37,7 +45,17 @@ impl FromStr for DeviceClass {
             "integrated" | "igpu" | "integrated-gpu" => Ok(Self::IntegratedGpu),
             "discrete" | "dgpu" | "discrete-gpu" => Ok(Self::DiscreteGpu),
             "uma" | "unified" | "unified-memory" | "apple" => Ok(Self::UnifiedMemory),
-            "edge" | "mobile" | "embedded" => Ok(Self::Edge),
+            "mobile" | "phone" | "tablet" | "android" | "ios" | "handheld" => Ok(Self::Mobile),
+            "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro" => {
+                Ok(Self::Embedded)
+            }
+            "npu" | "ane" | "tpu" | "ai-accelerator" | "ai_accelerator" | "neural" => {
+                Ok(Self::NpuAccelerator)
+            }
+            "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "cluster" => {
+                Ok(Self::MultiGpu)
+            }
+            "edge" | "gateway" | "edge-gateway" => Ok(Self::Edge),
             "server" | "workstation" => Ok(Self::Server),
             other => Err(format!("unknown device class: {other}")),
         }
@@ -227,6 +245,30 @@ fn device_pressure_weights(device: DeviceClass) -> PressureWeights {
             ram: 0.26,
             disk: 0.14,
         },
+        DeviceClass::Mobile => PressureWeights {
+            cpu: 0.28,
+            gpu: 0.18,
+            ram: 0.42,
+            disk: 0.12,
+        },
+        DeviceClass::Embedded => PressureWeights {
+            cpu: 0.42,
+            gpu: 0.06,
+            ram: 0.40,
+            disk: 0.12,
+        },
+        DeviceClass::NpuAccelerator => PressureWeights {
+            cpu: 0.18,
+            gpu: 0.34,
+            ram: 0.36,
+            disk: 0.12,
+        },
+        DeviceClass::MultiGpu => PressureWeights {
+            cpu: 0.16,
+            gpu: 0.46,
+            ram: 0.22,
+            disk: 0.16,
+        },
         DeviceClass::Edge => PressureWeights {
             cpu: 0.34,
             gpu: 0.12,
@@ -266,6 +308,22 @@ fn device_budget_scale(device: DeviceClass) -> BudgetScale {
             local: 1.25,
             global: 1.10,
         },
+        DeviceClass::Mobile => BudgetScale {
+            local: 0.55,
+            global: 0.42,
+        },
+        DeviceClass::Embedded => BudgetScale {
+            local: 0.36,
+            global: 0.28,
+        },
+        DeviceClass::NpuAccelerator => BudgetScale {
+            local: 0.95,
+            global: 0.78,
+        },
+        DeviceClass::MultiGpu => BudgetScale {
+            local: 2.20,
+            global: 2.40,
+        },
         DeviceClass::Edge => BudgetScale {
             local: 0.48,
             global: 0.36,
@@ -287,12 +345,16 @@ fn latency_budget(device: DeviceClass, pressure: f32) -> Option<u64> {
     }
 
     let base: u64 = match device {
+        DeviceClass::Embedded => 90,
+        DeviceClass::Mobile => 110,
         DeviceClass::Edge => 120,
         DeviceClass::CpuOnly => 160,
         DeviceClass::IntegratedGpu => 220,
+        DeviceClass::NpuAccelerator => 240,
         DeviceClass::UnifiedMemory => 260,
         DeviceClass::DiscreteGpu => 320,
         DeviceClass::Server => 420,
+        DeviceClass::MultiGpu => 520,
         DeviceClass::Auto => 240,
     };
     let pressure_discount = ((pressure - 0.45) * 180.0).round() as u64;
@@ -306,16 +368,26 @@ fn adapt_hierarchy(
     pressure: f32,
 ) -> HierarchyWeights {
     match device {
-        DeviceClass::CpuOnly | DeviceClass::Edge => {
+        DeviceClass::CpuOnly | DeviceClass::Edge | DeviceClass::Mobile => {
             hierarchy.local += 0.08;
             hierarchy.convolution += 0.10 + pressure * 0.12;
             hierarchy.global -= pressure * 0.10;
+        }
+        DeviceClass::Embedded => {
+            hierarchy.local += 0.06;
+            hierarchy.convolution += 0.18 + pressure * 0.16;
+            hierarchy.global -= pressure * 0.14;
         }
         DeviceClass::IntegratedGpu | DeviceClass::UnifiedMemory => {
             hierarchy.local += 0.04;
             hierarchy.convolution += pressure * 0.08;
         }
-        DeviceClass::DiscreteGpu | DeviceClass::Server => {
+        DeviceClass::NpuAccelerator => {
+            hierarchy.local += 0.05;
+            hierarchy.convolution += pressure * 0.05;
+            hierarchy.global += 0.02 * (1.0 - pressure);
+        }
+        DeviceClass::DiscreteGpu | DeviceClass::Server | DeviceClass::MultiGpu => {
             hierarchy.global += 0.04 * (1.0 - pressure);
             hierarchy.local += 0.03;
         }
@@ -326,6 +398,9 @@ fn adapt_hierarchy(
 
     if profile == TaskProfile::LongDocument {
         hierarchy.convolution += 0.06;
+    }
+    if device == DeviceClass::MultiGpu && pressure < 0.45 {
+        hierarchy.global += 0.05;
     }
 
     hierarchy.normalize();
@@ -353,6 +428,15 @@ fn notes(
     }
     if profile == TaskProfile::LongDocument {
         notes.push("profile:long_document_boost_convolution".to_owned());
+    }
+    match snapshot.device {
+        DeviceClass::Mobile => notes.push("device_policy:mobile_thermal_and_ram_guard".to_owned()),
+        DeviceClass::Embedded => notes.push("device_policy:embedded_minimal_kv".to_owned()),
+        DeviceClass::NpuAccelerator => {
+            notes.push("device_policy:npu_gpu_load_as_accelerator_pressure".to_owned());
+        }
+        DeviceClass::MultiGpu => notes.push("device_policy:multi_gpu_expand_global_kv".to_owned()),
+        _ => {}
     }
 
     notes
@@ -406,6 +490,53 @@ mod tests {
         assert!(plan.latency_budget_ms.is_none());
         assert!(plan.local_kv_token_budget > 512);
         assert!(plan.global_kv_token_budget > 4096);
+    }
+
+    #[test]
+    fn mobile_and_embedded_profiles_tighten_kv_budgets() {
+        let allocator = HardwareAllocator::new();
+        let base = HierarchyWeights::new(0.30, 0.40, 0.30);
+
+        let mobile = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Mobile, 0.30, 0.35, 0.82, 0.10),
+            TaskProfile::General,
+            2048,
+            base,
+        );
+        let embedded = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Embedded, 0.45, 0.0, 0.80, 0.20),
+            TaskProfile::LongDocument,
+            2048,
+            base,
+        );
+
+        assert!(mobile.local_kv_token_budget < 512);
+        assert!(mobile.global_kv_token_budget < 4096);
+        assert!(mobile.hierarchy.convolution > base.convolution);
+        assert!(embedded.local_kv_token_budget < mobile.local_kv_token_budget);
+        assert!(embedded.global_kv_token_budget < mobile.global_kv_token_budget);
+    }
+
+    #[test]
+    fn accelerator_profiles_parse_and_expand_when_capacity_exists() {
+        let allocator = HardwareAllocator::new();
+        let multi_gpu = "cluster".parse::<DeviceClass>().unwrap();
+        let npu = "ane".parse::<DeviceClass>().unwrap();
+
+        assert_eq!(multi_gpu, DeviceClass::MultiGpu);
+        assert_eq!(npu, DeviceClass::NpuAccelerator);
+
+        let plan = allocator.plan(
+            HardwareSnapshot::new(multi_gpu, 0.12, 0.18, 0.20, 0.12),
+            TaskProfile::LongDocument,
+            4096,
+            HierarchyWeights::new(0.30, 0.40, 0.30),
+        );
+
+        assert!(plan.local_kv_token_budget > 512);
+        assert!(plan.global_kv_token_budget > 4096);
+        assert!(plan.hierarchy.global > 0.30);
+        assert!(plan.latency_budget_ms.is_none());
     }
 
     #[test]

@@ -14,9 +14,9 @@ time without retraining model weights on every interaction.
 
 本项目目标是构建一个实用、自主可控优先的本地推理控制引擎，让自研模型后端在不频繁重训权重的前提下，能够随着使用逐步调整推理策略、记忆选择和计算分配。
 
-The optimized target combines four non-negotiable requirements:
+The optimized target combines five non-negotiable requirements:
 
-优化后的目标由四个硬约束共同定义：
+优化后的目标由五个硬约束共同定义：
 
 - self-developed model stack: the default backend is a self-trained
   Transformer-family model, not external weights
@@ -24,6 +24,11 @@ The optimized target combines four non-negotiable requirements:
   quantization path in the core engine
 - extreme local deployment: offline-first, lightweight, disk-backed memory,
   and ultra-long-context control for consumer or edge hardware
+- universal device adaptation: laptops, desktops, workstations, servers,
+  phones, tablets, embedded boards, NPU/AI accelerator devices, and
+  heterogeneous multi-GPU machines should all map into explicit hardware
+  profiles that tune latency, KV budgets, routing pressure, and hierarchy
+  weights
 - frontier algorithms as owned implementations: use public papers as
   inspiration, but implement attention, memory, quantization, routing,
   reflection, and scheduling locally in Rust
@@ -31,6 +36,7 @@ The optimized target combines four non-negotiable requirements:
 - 自研模型栈：默认后端是自主训练的 Transformer 系列模型，而不是外部权重
 - 规避卡脖子：核心引擎不绑定闭源模型服务、厂商专用运行时或不透明量化路径
 - 极致本地化部署：离线优先、轻量化、磁盘记忆、面向消费级/边缘硬件的超长上下文控制
+- 全设备适配：笔记本、台式机、工作站、服务器、手机、平板、嵌入式板卡、NPU/AI 加速器设备以及异构多 GPU 机器，都应映射到明确的硬件 profile，用于调整延迟、KV budget、路由压力和层级权重
 - 前沿算法自主实现：公开论文只作为思想来源，注意力、记忆、量化、路由、反思和调度都在 Rust 中本地实现
 
 The project focuses on the control loop around inference:
@@ -140,7 +146,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure and compute allocation planner
+- `src/hardware.rs`: device-agnostic hardware pressure and compute allocation planner for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
@@ -179,11 +185,17 @@ Replay high/low reward experience before the next inference:
 cargo run -- --replay 4 --profile coding "Improve Rust Noiron routing from prior experience"
 ```
 
-Apply device-agnostic hardware pressure hints:
+Apply universal device-profile hardware pressure hints:
 
 ```powershell
 cargo run -- --device cpu --cpu-load 85 --ram-load 70 --disk-load 40 --profile long "Summarize a long local document"
 ```
+
+Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
+`uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.
+
+可用设备 profile 包括 `cpu`、`integrated`、`discrete`、`uma`、`mobile`、
+`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。
 
 Run through a local command runtime:
 
@@ -276,7 +288,8 @@ Expected integration loop:
 2. compute route budget and hierarchy weights
 3. plan single-pass or recursive chunk/merge scheduling for the native model window
 4. adapt latency, KV budgets, and hierarchy weights to CPU-only, integrated GPU,
-   discrete GPU, unified-memory, edge, or server devices
+   discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator,
+   multi-GPU, edge, or server devices
 5. optionally replay high/low reward experience into router, hierarchy, and KV state
 6. retrieve relevant reflection lessons from the experience store
 7. call the real model backend
@@ -289,7 +302,7 @@ Expected integration loop:
 1. 对 prompt 做嵌入并检索本地记忆
 2. 计算路由预算和层级权重
 3. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
-4. 根据 CPU-only、集显、独显、统一内存、边缘设备或服务器压力调整延迟、KV budget 和层级权重
+4. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重
 5. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
 6. 从经验库检索相关反思 lesson
 7. 调用真实模型后端
@@ -322,4 +335,5 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 增加超过模型原生窗口输入的递归调度
 - 增加长上下文路由和记忆复用 benchmark
 - 增加可配置的记忆保留策略
+- 扩展全设备硬件 profile 和真实设备探测适配
 - 为每次推理闭环增加结构化 trace
