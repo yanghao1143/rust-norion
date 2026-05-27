@@ -494,12 +494,15 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
     } else {
         for experience in &report.top_experiences {
             println!(
-                "  id={} profile={:?} quality={:.3} reward={:.3} action={} lesson={}",
+                "  id={} profile={:?} quality={:.3} reward={:.3} action={} reflection_issues={} critical={} revision_actions={} lesson={}",
                 experience.id,
                 experience.profile,
                 experience.quality,
                 experience.process_reward,
                 experience.reward_action.as_str(),
+                experience.reflection_issues,
+                experience.critical_reflection_issues,
+                experience.revision_actions,
                 experience.lesson
             );
         }
@@ -854,7 +857,7 @@ impl Args {
                     index += 2;
                 }
                 "--device" if index + 1 < raw.len() => {
-                    device = raw[index + 1].parse::<DeviceClass>().unwrap_or(device);
+                    device = parse_device_or_generic(&raw[index + 1]);
                     index += 2;
                 }
                 "--cpu-load" if index + 1 < raw.len() => {
@@ -986,6 +989,10 @@ fn parse_u128(value: &str, fallback: u128) -> u128 {
 
 fn parse_f32(value: &str, fallback: f32) -> f32 {
     value.parse::<f32>().unwrap_or(fallback)
+}
+
+fn parse_device_or_generic(value: &str) -> DeviceClass {
+    value.parse::<DeviceClass>().unwrap_or(DeviceClass::CpuOnly)
 }
 
 fn detect_profile(prompt: &str) -> TaskProfile {
@@ -1136,5 +1143,16 @@ mod tests {
         assert_eq!(args.gpu_load, 12.0);
         assert_eq!(args.ram_load, 61.0);
         assert_eq!(args.disk_load, 7.0);
+    }
+
+    #[test]
+    fn unknown_manual_device_uses_portable_cpu_fallback() {
+        let args = Args::parse(vec![
+            "--device".to_owned(),
+            "future-device-sku".to_owned(),
+            "unknown devices should still get a portable execution plan".to_owned(),
+        ]);
+
+        assert_eq!(args.device, DeviceClass::CpuOnly);
     }
 }

@@ -25,6 +25,9 @@ pub struct StateExperienceSummary {
     pub quality: f32,
     pub process_reward: f32,
     pub reward_action: RewardAction,
+    pub reflection_issues: usize,
+    pub critical_reflection_issues: usize,
+    pub revision_actions: usize,
     pub lesson: String,
 }
 
@@ -104,6 +107,15 @@ impl StateInspectionReport {
                 quality: record.quality,
                 process_reward: record.process_reward.total,
                 reward_action: record.process_reward.action,
+                reflection_issues: record.reflection_issues.len(),
+                critical_reflection_issues: record
+                    .reflection_issues
+                    .iter()
+                    .filter(|issue| {
+                        issue.severity == crate::reflection::ReflectionSeverity::Critical
+                    })
+                    .count(),
+                revision_actions: record.revision_actions.len(),
                 lesson: compact(&record.lesson, 160),
             })
             .collect::<Vec<_>>();
@@ -164,6 +176,7 @@ mod tests {
     use crate::experience::ExperienceInput;
     use crate::hierarchy::{HierarchyWeights, TaskProfile};
     use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
+    use crate::reflection::{ReflectionIssue, ReflectionSeverity};
     use crate::router::RouteBudget;
 
     #[test]
@@ -180,6 +193,12 @@ mod tests {
             lesson: "state inspection should expose learned control decisions".to_owned(),
             quality: 0.91,
             contradictions: Vec::new(),
+            reflection_issues: vec![ReflectionIssue::new(
+                "needs_grounding",
+                ReflectionSeverity::Warning,
+                "inspect warning",
+            )],
+            revision_actions: vec!["increase_prompt_grounding".to_owned()],
             stored_memory_id: Some(memory_id),
             router_threshold_after: 0.62,
             stream_windows: 2,
@@ -212,6 +231,8 @@ mod tests {
             report.top_experiences[0].reward_action,
             RewardAction::Reinforce
         );
+        assert_eq!(report.top_experiences[0].reflection_issues, 1);
+        assert_eq!(report.top_experiences[0].revision_actions, 1);
         assert!(report.summary_line().contains("memories=1"));
     }
 }

@@ -6,6 +6,7 @@ use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
+use crate::reflection::{ReflectionIssue, ReflectionSeverity};
 use crate::router::RouteBudget;
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,8 @@ pub struct ExperienceInput {
     pub lesson: String,
     pub quality: f32,
     pub contradictions: Vec<String>,
+    pub reflection_issues: Vec<ReflectionIssue>,
+    pub revision_actions: Vec<String>,
     pub stored_memory_id: Option<u64>,
     pub router_threshold_after: f32,
     pub stream_windows: usize,
@@ -35,6 +38,8 @@ pub struct ExperienceRecord {
     pub lesson: String,
     pub quality: f32,
     pub contradictions: Vec<String>,
+    pub reflection_issues: Vec<ReflectionIssue>,
+    pub revision_actions: Vec<String>,
     pub stored_memory_id: Option<u64>,
     pub router_threshold_after: f32,
     pub stream_windows: usize,
@@ -55,6 +60,8 @@ pub struct ExperienceMatch {
     pub quality: f32,
     pub score: f32,
     pub gist_hints: Vec<String>,
+    pub reflection_issue_codes: Vec<String>,
+    pub revision_actions: Vec<String>,
     pub process_reward: f32,
     pub reward_action: RewardAction,
 }
@@ -101,6 +108,8 @@ impl ExperienceStore {
             lesson: input.lesson,
             quality: input.quality.clamp(0.0, 1.0),
             contradictions: input.contradictions,
+            reflection_issues: input.reflection_issues,
+            revision_actions: input.revision_actions,
             stored_memory_id: input.stored_memory_id,
             router_threshold_after: input.router_threshold_after,
             stream_windows: input.stream_windows,
@@ -151,9 +160,19 @@ impl ExperienceStore {
                     .map(|gist| format!("{} {}", gist.title, gist.summary))
                     .collect::<Vec<_>>()
                     .join(" ");
+                let reflection_text = record
+                    .reflection_issues
+                    .iter()
+                    .map(|issue| format!("{} {}", issue.code, issue.detail))
+                    .chain(record.revision_actions.iter().cloned())
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 let overlap = lexical_overlap(
                     prompt,
-                    &format!("{} {} {}", record.prompt, record.lesson, gist_text),
+                    &format!(
+                        "{} {} {} {}",
+                        record.prompt, record.lesson, gist_text, reflection_text
+                    ),
                 );
                 let profile_bonus = if record.profile == profile { 0.16 } else { 0.0 };
                 let gist_bonus = record
@@ -164,12 +183,14 @@ impl ExperienceStore {
                     * 0.08;
                 let reward_bonus = record.process_reward.total * 0.08;
                 let contradiction_penalty = (record.contradictions.len() as f32 * 0.08).min(0.32);
+                let reflection_penalty = reflection_issue_penalty(&record.reflection_issues);
                 let score = (overlap * 0.52
                     + record.quality * 0.36
                     + profile_bonus
                     + gist_bonus
                     + reward_bonus
-                    - contradiction_penalty)
+                    - contradiction_penalty
+                    - reflection_penalty)
                     .clamp(0.0, 1.0);
 
                 if score < 0.12 {
@@ -188,6 +209,12 @@ impl ExperienceStore {
                         .take(3)
                         .map(GistRecord::hint)
                         .collect(),
+                    reflection_issue_codes: record
+                        .reflection_issues
+                        .iter()
+                        .map(|issue| issue.code.clone())
+                        .collect(),
+                    revision_actions: record.revision_actions.clone(),
                     process_reward: record.process_reward.total,
                     reward_action: record.process_reward.action,
                 })
@@ -273,9 +300,11 @@ fn serialize_record(record: &ExperienceRecord) -> String {
     let stored_runtime_kv_memory_ids = serialize_ids(&record.stored_runtime_kv_memory_ids);
     let process_reward = serialize_process_reward(&record.process_reward);
     let route_budget = serialize_route_budget(record.route_budget);
+    let reflection_issues = serialize_reflection_issues(&record.reflection_issues);
+    let revision_actions = serialize_revision_actions(&record.revision_actions);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -293,7 +322,9 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         escape_field(&process_reward),
         escape_field(&route_budget),
         escape_field(&used_memory_ids),
-        escape_field(&stored_runtime_kv_memory_ids)
+        escape_field(&stored_runtime_kv_memory_ids),
+        escape_field(&reflection_issues),
+        escape_field(&revision_actions)
     )
 }
 
@@ -354,6 +385,14 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(17)
         .map(|value| deserialize_ids(&unescape_field(value)))
         .unwrap_or_default();
+    let reflection_issues = fields
+        .get(18)
+        .map(|value| deserialize_reflection_issues(&unescape_field(value)))
+        .unwrap_or_default();
+    let revision_actions = fields
+        .get(19)
+        .map(|value| deserialize_revision_actions(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -362,6 +401,8 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         lesson,
         quality,
         contradictions,
+        reflection_issues,
+        revision_actions,
         stored_memory_id,
         router_threshold_after,
         stream_windows,
@@ -449,6 +490,59 @@ fn deserialize_ids(value: &str) -> Vec<u64> {
         .split(',')
         .filter_map(|item| item.parse::<u64>().ok())
         .collect()
+}
+
+fn serialize_reflection_issues(issues: &[ReflectionIssue]) -> String {
+    issues
+        .iter()
+        .map(|issue| {
+            [
+                sanitize_control_part(&issue.code),
+                issue.severity.as_str().to_owned(),
+                sanitize_control_part(&issue.detail),
+            ]
+            .join("\u{1f}")
+        })
+        .collect::<Vec<_>>()
+        .join("\u{1e}")
+}
+
+fn deserialize_reflection_issues(value: &str) -> Vec<ReflectionIssue> {
+    if value.is_empty() {
+        return Vec::new();
+    }
+
+    value
+        .split('\u{1e}')
+        .filter_map(|item| {
+            let fields = item.split('\u{1f}').collect::<Vec<_>>();
+            if fields.len() != 3 {
+                return None;
+            }
+
+            Some(ReflectionIssue::new(
+                fields[0],
+                ReflectionSeverity::from_str(fields[1])?,
+                fields[2],
+            ))
+        })
+        .collect()
+}
+
+fn serialize_revision_actions(actions: &[String]) -> String {
+    actions
+        .iter()
+        .map(|action| sanitize_control_part(action))
+        .collect::<Vec<_>>()
+        .join("\u{1e}")
+}
+
+fn deserialize_revision_actions(value: &str) -> Vec<String> {
+    if value.is_empty() {
+        Vec::new()
+    } else {
+        value.split('\u{1e}').map(ToOwned::to_owned).collect()
+    }
 }
 
 fn serialize_process_reward(report: &ProcessRewardReport) -> String {
@@ -555,6 +649,18 @@ fn lexical_overlap(left: &str, right: &str) -> f32 {
     (shared / denom).clamp(0.0, 1.0)
 }
 
+fn reflection_issue_penalty(issues: &[ReflectionIssue]) -> f32 {
+    issues
+        .iter()
+        .map(|issue| match issue.severity {
+            ReflectionSeverity::Info => 0.01,
+            ReflectionSeverity::Warning => 0.04,
+            ReflectionSeverity::Critical => 0.14,
+        })
+        .sum::<f32>()
+        .min(0.36)
+}
+
 fn escape_field(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -651,6 +757,15 @@ mod tests {
         assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
         assert_eq!(loaded.records()[0].used_memory_ids, vec![3, 5]);
         assert_eq!(loaded.records()[0].stored_runtime_kv_memory_ids, vec![11]);
+        assert_eq!(loaded.records()[0].reflection_issues.len(), 1);
+        assert_eq!(
+            loaded.records()[0].reflection_issues[0].severity,
+            ReflectionSeverity::Warning
+        );
+        assert_eq!(
+            loaded.records()[0].revision_actions,
+            vec!["revise_reflection_signal".to_owned()]
+        );
         assert!((loaded.records()[0].route_budget.attention_fraction - 0.4).abs() < 0.0001);
         assert!((loaded.records()[0].process_reward.total - 0.5).abs() < 0.0001);
         cleanup(path);
@@ -678,6 +793,36 @@ mod tests {
         assert_eq!(matches[0].reward_action, RewardAction::Hold);
     }
 
+    #[test]
+    fn retrieval_uses_reflection_issue_text_but_penalizes_severity() {
+        let mut store = ExperienceStore::new();
+        store.record(ExperienceInput {
+            prompt: "generic prompt".to_owned(),
+            lesson: "avoid repeating weak answers".to_owned(),
+            quality: 0.86,
+            reflection_issues: vec![ReflectionIssue::new(
+                "repetitive_answer",
+                ReflectionSeverity::Warning,
+                "deduplicate repeated phrases",
+            )],
+            revision_actions: vec!["deduplicate_repeated_phrases".to_owned()],
+            ..input("issue", 0.86)
+        });
+
+        let matches =
+            store.retrieve_lessons("deduplicate repeated phrases", TaskProfile::Coding, 1);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(
+            matches[0].reflection_issue_codes,
+            vec!["repetitive_answer".to_owned()]
+        );
+        assert_eq!(
+            matches[0].revision_actions,
+            vec!["deduplicate_repeated_phrases".to_owned()]
+        );
+    }
+
     fn input(lesson: &str, quality: f32) -> ExperienceInput {
         ExperienceInput {
             prompt: "build a Noiron loop".to_owned(),
@@ -685,6 +830,12 @@ mod tests {
             lesson: lesson.to_owned(),
             quality,
             contradictions: Vec::new(),
+            reflection_issues: vec![ReflectionIssue::new(
+                "needs_grounding",
+                ReflectionSeverity::Warning,
+                "needs grounding detail",
+            )],
+            revision_actions: vec!["revise_reflection_signal".to_owned()],
             stored_memory_id: Some(42),
             router_threshold_after: 0.55,
             stream_windows: 3,

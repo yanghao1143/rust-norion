@@ -153,8 +153,8 @@ Implemented modules:
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reflection diagnostics, drift, reward, and memory counters
-- `src/experience.rs`: structured reflection experience store with route budget and KV usage traces
-- `src/experience_replay.rs`: reward-ranked experience replay planner that can reinforce or penalize used, stored, gist, and runtime-KV memories
+- `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
+- `src/experience_replay.rs`: reward-ranked experience replay planner that can reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties
@@ -162,7 +162,7 @@ Implemented modules:
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
-- `src/state_inspect.rs`: local state inspection report for memory, experience, adaptive router, hierarchy, and tier counts
+- `src/state_inspect.rs`: local state inspection report for memory, experience, reflection diagnostics, adaptive router, hierarchy, and tier counts
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -292,10 +292,15 @@ If `--device auto` is used, or no device is provided, the CLI performs a
 best-effort local probe using OS, architecture, CPU parallelism, and common
 GPU/NPU environment variables. Manual flags such as `--device`, `--cpu-load`,
 `--gpu-load`, `--ram-load`, and `--disk-load` always override probe defaults.
+If a manual device name or `NOIRON_DEVICE_PROFILE` value is not recognized yet,
+the control plane deliberately falls back to the portable `cpu` profile instead
+of failing or binding to an unknown vendor path.
 
 使用 `--device auto` 或不指定设备时，CLI 会根据 OS、CPU 架构、CPU 并行度以及常见
 GPU/NPU 环境变量做保守本地探测。`--device`、`--cpu-load`、`--gpu-load`、
-`--ram-load`、`--disk-load` 等手动参数始终优先。
+`--ram-load`、`--disk-load` 等手动参数始终优先。如果手动设备名或
+`NOIRON_DEVICE_PROFILE` 暂未被识别，控制平面会明确降级到可移植 `cpu`
+profile，而不是失败或绑定到未知厂商路径。
 
 Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
 `uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.

@@ -100,6 +100,9 @@ The north star is now explicitly scoped around five core requirements:
    and recursive parallelism budget. Every explicit profile should also carry a
    coverage descriptor with common aliases so new device names map into stable
    policy classes instead of fragmenting the runtime into one-off vendor paths.
+   Unrecognized manual profiles must degrade to the portable CPU profile, so
+   new or niche devices are supported first through a safe generic execution
+   path and then promoted to richer profiles when calibrated.
 
 5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
@@ -175,6 +178,9 @@ The north star is now explicitly scoped around five core requirements:
     so the self-developed runtime can choose CUDA, ROCm, Metal, Vulkan, WGPU,
     DirectML, CoreML, NNAPI, QNN, OpenVINO, CANN, MLU, RKNN, WebGPU, portable
     Rust, or future adapters without making any one runtime mandatory.
+    Unknown explicit device names must map to the portable CPU fallback instead
+    of aborting, keeping all future devices reachable through a conservative
+    baseline plan.
 
 12. Device compatibility gate / 全设备兼容门禁
     The CLI should provide a `--device-gate` check that validates every explicit
@@ -218,8 +224,9 @@ modules, not external product dependencies:
 - Experience replay:
   the experience store should become replayable training data for the control
   plane state while leaving model weights untouched. Records should preserve
-  route budgets, used KV memory ids, gist memory ids, and runtime-KV memory ids
-  so replay can reinforce or penalize the actual memory path used by an answer.
+  route budgets, used KV memory ids, gist memory ids, runtime-KV memory ids,
+  structured reflection issues, and revision actions so replay can reinforce or
+  penalize the actual memory and reasoning path used by an answer.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
@@ -319,7 +326,7 @@ These are algorithmic references, not product dependencies:
   route scoring now consumes hardware pressure and device compute headroom from
   the hardware plan;
   experience records now persist route budgets plus used/stored/gist/runtime-KV
-  memory ids for replay;
+  memory ids, structured reflection issues, and revision actions for replay;
   the CLI can inspect persisted local state without running inference;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)

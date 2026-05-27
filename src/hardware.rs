@@ -701,12 +701,12 @@ impl HardwareProbe {
     }
 
     pub fn detect_device(&self) -> DeviceClass {
-        if let Some(device) = self
-            .env_value("NOIRON_DEVICE_PROFILE")
-            .and_then(|value| value.parse::<DeviceClass>().ok())
-            .filter(|device| *device != DeviceClass::Auto)
-        {
-            return device;
+        if let Some(value) = self.env_value("NOIRON_DEVICE_PROFILE") {
+            match value.parse::<DeviceClass>() {
+                Ok(DeviceClass::Auto) => {}
+                Ok(device) => return device,
+                Err(_) => return DeviceClass::CpuOnly,
+            }
         }
 
         let os = self.os.to_ascii_lowercase();
@@ -2255,6 +2255,16 @@ mod tests {
 
         assert_eq!(snapshot.device, DeviceClass::DiscreteGpu);
         assert!((snapshot.cpu_load - 0.80).abs() < 0.0001);
+    }
+
+    #[test]
+    fn unknown_environment_profile_falls_back_to_portable_cpu() {
+        let device = HardwareProbe::new("windows", "x86_64", 8)
+            .with_env("NOIRON_DEVICE_PROFILE", "future-device-sku")
+            .with_env("WGPU_ADAPTER_NAME", "NVIDIA GeForce RTX")
+            .detect_device();
+
+        assert_eq!(device, DeviceClass::CpuOnly);
     }
 
     #[test]

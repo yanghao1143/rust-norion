@@ -1192,6 +1192,8 @@ mod tests {
             quality: 0.9,
             score: 0.88,
             gist_hints: vec!["document:gist importance=0.900".to_owned()],
+            reflection_issue_codes: Vec::new(),
+            revision_actions: Vec::new(),
             process_reward: 0.81,
             reward_action: crate::process_reward::RewardAction::Reinforce,
         }];

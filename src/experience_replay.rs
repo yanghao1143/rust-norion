@@ -1,6 +1,7 @@
 use crate::experience::ExperienceRecord;
 use crate::hierarchy::TaskProfile;
 use crate::process_reward::RewardAction;
+use crate::reflection::ReflectionSeverity;
 use crate::router::RouteBudget;
 
 #[derive(Debug, Clone)]
@@ -52,9 +53,10 @@ impl ExperienceReplayPlanner {
         };
         let priority = match action {
             RewardAction::Reinforce => reward,
-            RewardAction::Penalize => 1.0 - reward,
+            RewardAction::Penalize => 1.0 - reward + reflection_issue_priority(record),
             RewardAction::Hold => 0.0,
-        };
+        }
+        .clamp(0.0, 1.0);
         let mut memory_ids = record
             .used_memory_ids
             .iter()
@@ -72,7 +74,13 @@ impl ExperienceReplayPlanner {
             action,
             reward,
             quality: record.quality,
-            contradiction_count: record.contradictions.len(),
+            contradiction_count: record
+                .contradictions
+                .len()
+                .max(critical_reflection_issue_count(record)),
+            reflection_issue_count: record.reflection_issues.len(),
+            critical_reflection_issue_count: critical_reflection_issue_count(record),
+            revision_action_count: record.revision_actions.len(),
             stream_windows: record.stream_windows,
             route_budget: record.route_budget,
             memory_ids,
@@ -101,11 +109,35 @@ pub struct ExperienceReplayItem {
     pub reward: f32,
     pub quality: f32,
     pub contradiction_count: usize,
+    pub reflection_issue_count: usize,
+    pub critical_reflection_issue_count: usize,
+    pub revision_action_count: usize,
     pub stream_windows: usize,
     pub route_budget: RouteBudget,
     pub memory_ids: Vec<u64>,
     pub priority: f32,
     pub lesson: String,
+}
+
+fn critical_reflection_issue_count(record: &ExperienceRecord) -> usize {
+    record
+        .reflection_issues
+        .iter()
+        .filter(|issue| issue.severity == ReflectionSeverity::Critical)
+        .count()
+}
+
+fn reflection_issue_priority(record: &ExperienceRecord) -> f32 {
+    record
+        .reflection_issues
+        .iter()
+        .map(|issue| match issue.severity {
+            ReflectionSeverity::Info => 0.01,
+            ReflectionSeverity::Warning => 0.04,
+            ReflectionSeverity::Critical => 0.12,
+        })
+        .sum::<f32>()
+        .min(0.28)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -153,6 +185,7 @@ mod tests {
     use crate::experience::ExperienceInput;
     use crate::hierarchy::HierarchyWeights;
     use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport};
+    use crate::reflection::ReflectionIssue;
 
     #[test]
     fn planner_selects_reinforce_and_penalize_records() {
@@ -186,6 +219,13 @@ mod tests {
                 .any(|item| item.action == RewardAction::Penalize)
         );
         assert!(!plan.items.iter().any(|item| item.experience_id == 2));
+        let penalized = plan
+            .items
+            .iter()
+            .find(|item| item.action == RewardAction::Penalize)
+            .unwrap();
+        assert_eq!(penalized.critical_reflection_issue_count, 1);
+        assert_eq!(penalized.revision_action_count, 1);
     }
 
     #[test]
@@ -211,6 +251,20 @@ mod tests {
             quality: reward,
             contradictions: if action == RewardAction::Penalize {
                 vec!["bad".to_owned()]
+            } else {
+                Vec::new()
+            },
+            reflection_issues: if action == RewardAction::Penalize {
+                vec![ReflectionIssue::new(
+                    "bad",
+                    ReflectionSeverity::Critical,
+                    "bad replay issue",
+                )]
+            } else {
+                Vec::new()
+            },
+            revision_actions: if action == RewardAction::Penalize {
+                vec!["review_bad_replay".to_owned()]
             } else {
                 Vec::new()
             },
@@ -243,6 +297,8 @@ mod tests {
             lesson: input.lesson,
             quality: input.quality,
             contradictions: input.contradictions,
+            reflection_issues: input.reflection_issues,
+            revision_actions: input.revision_actions,
             stored_memory_id: input.stored_memory_id,
             router_threshold_after: input.router_threshold_after,
             stream_windows: input.stream_windows,

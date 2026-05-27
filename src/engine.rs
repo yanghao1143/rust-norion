@@ -250,10 +250,13 @@ impl NoironEngine {
 
             report.applied += 1;
             report.notes.push(format!(
-                "experience:{}:{} reward={:.3} lesson={}",
+                "experience:{}:{} reward={:.3} reflection_issues={} critical={} actions={} lesson={}",
                 item.experience_id,
                 item.action.as_str(),
                 item.reward,
+                item.reflection_issue_count,
+                item.critical_reflection_issue_count,
+                item.revision_action_count,
                 compact(&item.lesson, 64)
             ));
         }
@@ -443,6 +446,8 @@ impl NoironEngine {
             lesson: report.lesson.clone(),
             quality: report.quality,
             contradictions: report.contradictions.clone(),
+            reflection_issues: report.issues.clone(),
+            revision_actions: report.revision_actions.clone(),
             stored_memory_id,
             router_threshold_after,
             stream_windows: stream_reports.len(),
@@ -702,13 +707,18 @@ fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
             perplexity: (18.0 + (1.0 - item.reward) * 18.0 + item.stream_windows as f32 * 0.05)
                 .clamp(12.0, 48.0),
             semantic_consistency: item.quality.min(item.reward).clamp(0.0, 1.0),
-            contradiction_count: item.contradiction_count.max(1),
+            contradiction_count: item
+                .contradiction_count
+                .max(item.critical_reflection_issue_count)
+                .max(1),
             token_count,
         },
         RewardAction::Hold => GenerationMetrics {
             perplexity: 10.0,
             semantic_consistency: item.quality.clamp(0.0, 1.0),
-            contradiction_count: item.contradiction_count,
+            contradiction_count: item
+                .contradiction_count
+                .max(item.critical_reflection_issue_count),
             token_count,
         },
     }
@@ -1170,6 +1180,8 @@ mod tests {
             lesson: "reinforce high reward control path".to_owned(),
             quality: 0.92,
             contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
             stored_memory_id: Some(memory_id),
             router_threshold_after: 0.55,
             stream_windows: 2,
@@ -1213,6 +1225,8 @@ mod tests {
             lesson: "reinforce memories that helped a high reward answer".to_owned(),
             quality: 0.93,
             contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
             stored_memory_id: None,
             router_threshold_after: 0.55,
             stream_windows: 2,
@@ -1287,6 +1301,8 @@ mod tests {
             lesson: "reuse token-window feedback lessons".to_owned(),
             quality: 0.9,
             contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
             stored_memory_id: None,
             router_threshold_after: 0.55,
             stream_windows: 2,

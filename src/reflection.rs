@@ -113,6 +113,15 @@ impl ReflectionSeverity {
         }
     }
 
+    pub fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "info" => Some(Self::Info),
+            "warning" => Some(Self::Warning),
+            "critical" => Some(Self::Critical),
+            _ => None,
+        }
+    }
+
     fn penalty(self) -> f32 {
         match self {
             Self::Info => 0.04,
