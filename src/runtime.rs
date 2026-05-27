@@ -45,8 +45,12 @@ impl RuntimeRequest {
                 .chain(context.infini_memory_plan.global_memory())
                 .map(|memory| {
                     format!(
-                        "{:?}:{} score={:.3} reason={}",
-                        memory.scope, memory.key, memory.score, memory.reason
+                        "{:?}:{} score={:.3} tokens={} reason={}",
+                        memory.scope,
+                        memory.key,
+                        memory.score,
+                        memory.estimated_tokens,
+                        memory.reason
                     )
                 })
                 .collect(),
@@ -435,6 +439,7 @@ mod tests {
                 key: "local kv memory".to_owned(),
                 scope: InfiniMemoryScope::LocalWindow,
                 score: 0.91,
+                estimated_tokens: 3,
                 reason: "test local".to_owned(),
             }],
             Vec::new(),

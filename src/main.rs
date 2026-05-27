@@ -74,8 +74,13 @@ fn main() -> std::io::Result<()> {
     );
     let infini_counts = outcome.infini_memory_plan.counts();
     println!(
-        "infini_memory: local_window={} global_memory={} sparse_skipped={}",
-        infini_counts.local_window, infini_counts.global_memory, infini_counts.skipped
+        "infini_memory: local_window={} global_memory={} sparse_skipped={} local_tokens={} global_tokens={} skipped_tokens={}",
+        infini_counts.local_window,
+        infini_counts.global_memory,
+        infini_counts.skipped,
+        infini_counts.local_tokens,
+        infini_counts.global_tokens,
+        infini_counts.skipped_tokens
     );
     let transformer_counts = outcome.transformer_plan.counts();
     println!(

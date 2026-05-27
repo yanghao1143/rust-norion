@@ -16,6 +16,7 @@ pub struct InfiniMemoryItem {
     pub key: String,
     pub scope: InfiniMemoryScope,
     pub score: f32,
+    pub estimated_tokens: usize,
     pub reason: String,
 }
 
@@ -24,6 +25,9 @@ pub struct InfiniMemoryCounts {
     pub local_window: usize,
     pub global_memory: usize,
     pub skipped: usize,
+    pub local_tokens: usize,
+    pub global_tokens: usize,
+    pub skipped_tokens: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -63,6 +67,17 @@ impl InfiniMemoryPlan {
             local_window: self.local_window.len(),
             global_memory: self.global_memory.len(),
             skipped: self.skipped.len(),
+            local_tokens: self
+                .local_window
+                .iter()
+                .map(|item| item.estimated_tokens)
+                .sum(),
+            global_tokens: self
+                .global_memory
+                .iter()
+                .map(|item| item.estimated_tokens)
+                .sum(),
+            skipped_tokens: self.skipped.iter().map(|item| item.estimated_tokens).sum(),
         }
     }
 }
@@ -74,6 +89,8 @@ pub struct InfiniMemoryPlanner {
     min_local_score: f32,
     min_global_score: f32,
     redundancy_threshold: f32,
+    local_token_budget: usize,
+    global_token_budget: usize,
 }
 
 impl Default for InfiniMemoryPlanner {
@@ -84,6 +101,8 @@ impl Default for InfiniMemoryPlanner {
             min_local_score: 0.08,
             min_global_score: 0.42,
             redundancy_threshold: 0.82,
+            local_token_budget: 512,
+            global_token_budget: 4096,
         }
     }
 }
@@ -99,6 +118,16 @@ impl InfiniMemoryPlanner {
             global_capacity: global_capacity.max(1),
             ..Self::default()
         }
+    }
+
+    pub fn with_token_budgets(
+        mut self,
+        local_token_budget: usize,
+        global_token_budget: usize,
+    ) -> Self {
+        self.local_token_budget = local_token_budget.max(1);
+        self.global_token_budget = global_token_budget.max(1);
+        self
     }
 
     pub fn plan(
@@ -122,7 +151,21 @@ impl InfiniMemoryPlanner {
         sort_items(&mut local_candidates);
 
         let mut local_window = Vec::new();
-        for item in local_candidates.into_iter().take(self.local_capacity) {
+        let mut local_tokens = 0;
+        let mut skipped = Vec::new();
+        for item in local_candidates {
+            if local_window.len() >= self.local_capacity {
+                skipped_ids.insert(item.id);
+                skipped.push(skipped_item(item, "sparse_filter:local_capacity"));
+                continue;
+            }
+            if local_tokens + item.estimated_tokens > self.local_token_budget {
+                skipped_ids.insert(item.id);
+                skipped.push(skipped_item(item, "sparse_filter:local_token_budget"));
+                continue;
+            }
+
+            local_tokens += item.estimated_tokens;
             selected_ids.insert(item.id);
             selected_keys.push(item.key.clone());
             local_window.push(item);
@@ -142,12 +185,18 @@ impl InfiniMemoryPlanner {
         sort_items(&mut global_candidates);
 
         let mut global_memory = Vec::new();
-        let mut skipped = Vec::new();
+        let mut global_tokens = 0;
 
         for item in global_candidates {
             if global_memory.len() >= self.global_capacity {
                 skipped_ids.insert(item.id);
                 skipped.push(skipped_item(item, "sparse_filter:global_capacity"));
+                continue;
+            }
+
+            if global_tokens + item.estimated_tokens > self.global_token_budget {
+                skipped_ids.insert(item.id);
+                skipped.push(skipped_item(item, "sparse_filter:global_token_budget"));
                 continue;
             }
 
@@ -157,6 +206,7 @@ impl InfiniMemoryPlanner {
                 continue;
             }
 
+            global_tokens += item.estimated_tokens;
             selected_ids.insert(item.id);
             selected_keys.push(item.key.clone());
             global_memory.push(item);
@@ -184,6 +234,7 @@ impl InfiniMemoryPlanner {
                 key: memory.key.clone(),
                 scope: InfiniMemoryScope::Skipped,
                 score: memory.similarity * memory.strength,
+                estimated_tokens: estimate_tokens(&memory.key),
                 reason: "sparse_filter:missing_entry".to_owned(),
             });
         }
@@ -201,6 +252,7 @@ fn local_item(memory: &MemoryMatch) -> InfiniMemoryItem {
         key: memory.key.clone(),
         scope: InfiniMemoryScope::LocalWindow,
         score,
+        estimated_tokens: estimate_tokens(&memory.key),
         reason: format!(
             "local_window:similarity={:.3}:strength={:.3}",
             memory.similarity, memory.strength
@@ -230,6 +282,7 @@ fn global_item(entry: &MemoryEntry, max_access: u64) -> InfiniMemoryItem {
         key: entry.key.clone(),
         scope: InfiniMemoryScope::GlobalMemory,
         score,
+        estimated_tokens: estimate_tokens(&entry.key),
         reason: format!(
             "global_memory:strength={:.3}:last_score={:.3}:reliability={:.3}:recency={:.3}",
             entry.strength, entry.last_score, reliability, recency
@@ -278,6 +331,14 @@ fn tokenize_key(value: &str) -> HashSet<String> {
         .filter(|part| !part.is_empty())
         .map(|part| part.to_ascii_lowercase())
         .collect()
+}
+
+fn estimate_tokens(value: &str) -> usize {
+    let token_count = value
+        .split(|ch: char| ch.is_whitespace() || ch.is_ascii_punctuation())
+        .filter(|part| !part.is_empty())
+        .count();
+    token_count.max(1)
 }
 
 #[cfg(test)]
@@ -344,6 +405,46 @@ mod tests {
             plan.skipped()
                 .iter()
                 .any(|item| item.reason.contains("redundant"))
+        );
+    }
+
+    #[test]
+    fn local_token_budget_skips_overflow() {
+        let planner = InfiniMemoryPlanner::with_limits(4, 4).with_token_budgets(3, 32);
+        let entries = vec![
+            entry(1, "short local", 0.8),
+            entry(2, "very long local memory key", 0.8),
+        ];
+        let matches = vec![
+            memory_match(1, "short local", 0.9, 0.8),
+            memory_match(2, "very long local memory key", 0.88, 0.8),
+        ];
+
+        let plan = planner.plan(&entries, &matches);
+
+        assert_eq!(plan.counts().local_tokens, 2);
+        assert!(
+            plan.skipped()
+                .iter()
+                .any(|item| item.reason.contains("local_token_budget"))
+        );
+    }
+
+    #[test]
+    fn global_token_budget_skips_overflow() {
+        let planner = InfiniMemoryPlanner::with_limits(1, 4).with_token_budgets(16, 3);
+        let entries = vec![
+            entry(1, "compact global", 2.2),
+            entry(2, "very long durable global memory", 2.1),
+        ];
+
+        let plan = planner.plan(&entries, &[]);
+
+        assert_eq!(plan.counts().global_tokens, 2);
+        assert!(
+            plan.skipped()
+                .iter()
+                .any(|item| item.reason.contains("global_token_budget"))
         );
     }
 

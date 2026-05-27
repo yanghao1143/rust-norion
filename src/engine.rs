@@ -318,7 +318,7 @@ impl InferenceBackend for HeuristicBackend {
              Experience hints: {experience_summary}. \
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
-             Infini memory: {} local-window, {} global, {} sparse-skipped memories. \
+             Infini memory: {} local-window ({} tokens), {} global ({} tokens), {} sparse-skipped ({} tokens) memories. \
              Transformer plan: {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
@@ -328,8 +328,11 @@ impl InferenceBackend for HeuristicBackend {
             tier_counts.warm_ram,
             tier_counts.cold_disk,
             infini_counts.local_window,
+            infini_counts.local_tokens,
             infini_counts.global_memory,
+            infini_counts.global_tokens,
             infini_counts.skipped,
+            infini_counts.skipped_tokens,
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution
