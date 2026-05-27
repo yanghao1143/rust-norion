@@ -447,6 +447,19 @@ local memory useful without growing indefinitely.
 每次推理后，引擎会先执行 retention，再执行批量 KV-Fusion compaction。本轮正在使用或刚写入的
 memory id 会被保护，旧的近重复记忆会合并到更强的条目里，避免长期本地记忆无限膨胀。
 
+Retention and compaction can be tuned locally with
+`--retention-stale-after`, `--retention-decay-rate`,
+`--retention-remove-below`, `--retention-remove-after-failures`,
+`--compaction-threshold`, `--compaction-max-candidates`, and
+`--compaction-max-merges`. Values are clamped to conservative ranges, and
+`--compaction-max-merges 0` disables batch merging for a run.
+
+可以通过 `--retention-stale-after`、`--retention-decay-rate`、
+`--retention-remove-below`、`--retention-remove-after-failures`、
+`--compaction-threshold`、`--compaction-max-candidates` 和
+`--compaction-max-merges` 本地调整记忆衰减与合并策略。参数会被限制在保守范围内，
+`--compaction-max-merges 0` 可以在单次运行中关闭批量合并。
+
 ## Test / 测试
 
 ```powershell
@@ -608,7 +621,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - add Infini-style global/local KV separation and sparse context filtering
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
-- add configurable memory retention policies
+- tune configurable memory retention and compaction policies from the CLI
 - expand real-device probing and execution-plan calibration beyond explicit profiles and aliases
 - expand the built-in benchmark suite into regression gates
 
@@ -618,6 +631,6 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
 - 增加超过模型原生窗口输入的递归调度
 - 增加长上下文路由和记忆复用 benchmark
-- 增加可配置的记忆保留策略
+- 通过 CLI 调整可配置的记忆保留与压缩合并策略
 - 扩展全设备硬件 profile、执行计划和真实设备探测适配
 - 把内置 benchmark 套件扩展成回归门禁

@@ -7,10 +7,10 @@ use rust_norion::{
     CommandWireFormat, DeviceClass, DevicePlanGateReport, GistLevel, HardwareAllocator,
     HardwareSnapshot, HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome,
     InferenceRequest, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary,
-    LocalTransformerRuntime, ModelRuntime, NoironEngine, PersistentRoundtripInput,
-    PersistentRoundtripReport, RecursiveScheduler, RuntimeBackend, RuntimeMetadata,
-    StateInspectionReport, TaskProfile, TierMigrationAction, append_trace_jsonl,
-    append_trace_jsonl_with_case, default_benchmark_cases,
+    LocalTransformerRuntime, MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime,
+    NoironEngine, PersistentRoundtripInput, PersistentRoundtripReport, RecursiveScheduler,
+    RuntimeBackend, RuntimeMetadata, StateInspectionReport, TaskProfile, TierMigrationAction,
+    append_trace_jsonl, append_trace_jsonl_with_case, default_benchmark_cases,
 };
 
 fn main() -> std::io::Result<()> {
@@ -407,6 +407,8 @@ fn configure_engine(engine: &mut NoironEngine, args: &Args) {
         args.merge_fan_in,
     );
     engine.set_auto_replay_limit(args.auto_replay_limit);
+    engine.set_memory_retention_policy(memory_retention_policy_from_args(engine, args));
+    engine.set_memory_compaction_policy(memory_compaction_policy_from_args(engine, args));
     engine.set_hardware_snapshot(HardwareSnapshot::new(
         args.device,
         args.cpu_load,
@@ -414,6 +416,44 @@ fn configure_engine(engine: &mut NoironEngine, args: &Args) {
         args.ram_load,
         args.disk_load,
     ));
+}
+
+fn memory_retention_policy_from_args(engine: &NoironEngine, args: &Args) -> MemoryRetentionPolicy {
+    let mut policy = engine.memory_retention_policy;
+
+    if let Some(value) = args.retention_stale_after {
+        policy.stale_after = value.max(1);
+    }
+    if let Some(value) = args.retention_decay_rate {
+        policy.decay_rate = value.clamp(0.0, 0.95);
+    }
+    if let Some(value) = args.retention_remove_below {
+        policy.remove_below_strength = value.clamp(0.0, 3.0);
+    }
+    if let Some(value) = args.retention_remove_after_failures {
+        policy.remove_after_failures = value.max(1);
+    }
+
+    policy
+}
+
+fn memory_compaction_policy_from_args(
+    engine: &NoironEngine,
+    args: &Args,
+) -> MemoryCompactionPolicy {
+    let mut policy = engine.memory_compaction_policy.clone();
+
+    if let Some(value) = args.compaction_similarity_threshold {
+        policy.similarity_threshold = value.clamp(0.10, 0.999);
+    }
+    if let Some(value) = args.compaction_max_candidates {
+        policy.max_candidates = value.max(2);
+    }
+    if let Some(value) = args.compaction_max_merges {
+        policy.max_merges = value;
+    }
+
+    policy
 }
 
 fn print_benchmark_summary(
@@ -692,6 +732,13 @@ struct Args {
     merge_fan_in: usize,
     replay_limit: usize,
     auto_replay_limit: usize,
+    retention_stale_after: Option<u64>,
+    retention_decay_rate: Option<f32>,
+    retention_remove_below: Option<f32>,
+    retention_remove_after_failures: Option<u64>,
+    compaction_similarity_threshold: Option<f32>,
+    compaction_max_candidates: Option<usize>,
+    compaction_max_merges: Option<usize>,
     device: DeviceClass,
     cpu_load: f32,
     gpu_load: f32,
@@ -736,6 +783,13 @@ impl Args {
         let mut merge_fan_in = default_scheduler.merge_fan_in();
         let mut replay_limit = 0;
         let mut auto_replay_limit = 2;
+        let mut retention_stale_after = None;
+        let mut retention_decay_rate = None;
+        let mut retention_remove_below = None;
+        let mut retention_remove_after_failures = None;
+        let mut compaction_similarity_threshold = None;
+        let mut compaction_max_candidates = None;
+        let mut compaction_max_merges = None;
         let default_hardware = HardwareSnapshot::default();
         let mut device = default_hardware.device;
         let mut cpu_load = default_hardware.cpu_load;
@@ -930,6 +984,34 @@ impl Args {
                     auto_replay_limit = parse_usize(&raw[index + 1], auto_replay_limit);
                     index += 2;
                 }
+                "--retention-stale-after" if index + 1 < raw.len() => {
+                    retention_stale_after = Some(parse_u64(&raw[index + 1], 64));
+                    index += 2;
+                }
+                "--retention-decay-rate" if index + 1 < raw.len() => {
+                    retention_decay_rate = Some(parse_f32(&raw[index + 1], 0.04));
+                    index += 2;
+                }
+                "--retention-remove-below" if index + 1 < raw.len() => {
+                    retention_remove_below = Some(parse_f32(&raw[index + 1], 0.04));
+                    index += 2;
+                }
+                "--retention-remove-after-failures" if index + 1 < raw.len() => {
+                    retention_remove_after_failures = Some(parse_u64(&raw[index + 1], 4));
+                    index += 2;
+                }
+                "--compaction-threshold" if index + 1 < raw.len() => {
+                    compaction_similarity_threshold = Some(parse_f32(&raw[index + 1], 0.92));
+                    index += 2;
+                }
+                "--compaction-max-candidates" if index + 1 < raw.len() => {
+                    compaction_max_candidates = Some(parse_usize(&raw[index + 1], 512));
+                    index += 2;
+                }
+                "--compaction-max-merges" if index + 1 < raw.len() => {
+                    compaction_max_merges = Some(parse_usize(&raw[index + 1], 32));
+                    index += 2;
+                }
                 "--device" if index + 1 < raw.len() => {
                     device = parse_device_or_generic(&raw[index + 1]);
                     index += 2;
@@ -1023,6 +1105,13 @@ impl Args {
             merge_fan_in,
             replay_limit,
             auto_replay_limit,
+            retention_stale_after,
+            retention_decay_rate,
+            retention_remove_below,
+            retention_remove_after_failures,
+            compaction_similarity_threshold,
+            compaction_max_candidates,
+            compaction_max_merges,
             device,
             cpu_load,
             gpu_load,
@@ -1078,6 +1167,10 @@ fn parse_u128(value: &str, fallback: u128) -> u128 {
     value.parse::<u128>().unwrap_or(fallback)
 }
 
+fn parse_u64(value: &str, fallback: u64) -> u64 {
+    value.parse::<u64>().unwrap_or(fallback)
+}
+
 fn parse_f32(value: &str, fallback: f32) -> f32 {
     value.parse::<f32>().unwrap_or(fallback)
 }
@@ -1110,7 +1203,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1136,6 +1229,20 @@ mod tests {
             "3".to_owned(),
             "--auto-replay".to_owned(),
             "4".to_owned(),
+            "--retention-stale-after".to_owned(),
+            "12".to_owned(),
+            "--retention-decay-rate".to_owned(),
+            "0.25".to_owned(),
+            "--retention-remove-below".to_owned(),
+            "0.08".to_owned(),
+            "--retention-remove-after-failures".to_owned(),
+            "7".to_owned(),
+            "--compaction-threshold".to_owned(),
+            "0.88".to_owned(),
+            "--compaction-max-candidates".to_owned(),
+            "64".to_owned(),
+            "--compaction-max-merges".to_owned(),
+            "5".to_owned(),
             "--trace".to_owned(),
             "trace.jsonl".to_owned(),
             "--benchmark".to_owned(),
@@ -1190,6 +1297,13 @@ mod tests {
         assert_eq!(args.merge_fan_in, 2);
         assert_eq!(args.replay_limit, 3);
         assert_eq!(args.auto_replay_limit, 4);
+        assert_eq!(args.retention_stale_after, Some(12));
+        assert_eq!(args.retention_decay_rate, Some(0.25));
+        assert_eq!(args.retention_remove_below, Some(0.08));
+        assert_eq!(args.retention_remove_after_failures, Some(7));
+        assert_eq!(args.compaction_similarity_threshold, Some(0.88));
+        assert_eq!(args.compaction_max_candidates, Some(64));
+        assert_eq!(args.compaction_max_merges, Some(5));
         assert_eq!(args.trace_path.unwrap(), PathBuf::from("trace.jsonl"));
         assert_eq!(
             args.benchmark_path.unwrap(),
@@ -1222,6 +1336,37 @@ mod tests {
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);
         assert!(args.prompt.contains("nine"));
+    }
+
+    #[test]
+    fn configure_engine_applies_memory_policy_flags() {
+        let args = Args::parse(vec![
+            "--retention-stale-after".to_owned(),
+            "9".to_owned(),
+            "--retention-decay-rate".to_owned(),
+            "1.5".to_owned(),
+            "--retention-remove-below".to_owned(),
+            "0.12".to_owned(),
+            "--retention-remove-after-failures".to_owned(),
+            "0".to_owned(),
+            "--compaction-threshold".to_owned(),
+            "0.05".to_owned(),
+            "--compaction-max-candidates".to_owned(),
+            "1".to_owned(),
+            "--compaction-max-merges".to_owned(),
+            "0".to_owned(),
+        ]);
+        let mut engine = NoironEngine::new();
+
+        configure_engine(&mut engine, &args);
+
+        assert_eq!(engine.memory_retention_policy.stale_after, 9);
+        assert_eq!(engine.memory_retention_policy.decay_rate, 0.95);
+        assert_eq!(engine.memory_retention_policy.remove_below_strength, 0.12);
+        assert_eq!(engine.memory_retention_policy.remove_after_failures, 1);
+        assert_eq!(engine.memory_compaction_policy.similarity_threshold, 0.10);
+        assert_eq!(engine.memory_compaction_policy.max_candidates, 2);
+        assert_eq!(engine.memory_compaction_policy.max_merges, 0);
     }
 
     #[test]

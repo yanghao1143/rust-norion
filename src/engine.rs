@@ -117,6 +117,8 @@ pub struct NoironEngine {
     pub drift_guard: DriftGuard,
     pub reflector: Reflector,
     pub auto_replay_limit: usize,
+    pub memory_retention_policy: MemoryRetentionPolicy,
+    pub memory_compaction_policy: MemoryCompactionPolicy,
     last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
 }
@@ -141,6 +143,8 @@ impl Default for NoironEngine {
             drift_guard: DriftGuard::new(),
             reflector: Reflector::new(),
             auto_replay_limit: 2,
+            memory_retention_policy: MemoryRetentionPolicy::default(),
+            memory_compaction_policy: MemoryCompactionPolicy::default(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
         }
@@ -227,6 +231,14 @@ impl NoironEngine {
 
     pub fn set_auto_replay_limit(&mut self, limit: usize) {
         self.auto_replay_limit = limit;
+    }
+
+    pub fn set_memory_retention_policy(&mut self, policy: MemoryRetentionPolicy) {
+        self.memory_retention_policy = policy;
+    }
+
+    pub fn set_memory_compaction_policy(&mut self, policy: MemoryCompactionPolicy) {
+        self.memory_compaction_policy = policy;
     }
 
     pub fn replay_experience(&mut self, limit: usize) -> ExperienceReplayReport {
@@ -472,7 +484,7 @@ impl NoironEngine {
             stored_runtime_kv_memory_ids: stored_runtime_kv_memory_ids.clone(),
             process_reward: process_reward.clone(),
         });
-        let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
+        let retention_report = self.cache.apply_retention(self.memory_retention_policy);
         let protected_memory_ids = protected_memory_ids(
             &used_memories,
             stored_memory_id,
@@ -480,7 +492,7 @@ impl NoironEngine {
             &stored_runtime_kv_memory_ids,
         );
         let memory_compaction_report = self.cache.compact_similar_with_protected(
-            MemoryCompactionPolicy::default(),
+            self.memory_compaction_policy.clone(),
             &protected_memory_ids,
         );
         if !drift_report.rollback_adaptive {

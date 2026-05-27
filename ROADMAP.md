@@ -288,10 +288,12 @@ These are algorithmic references, not product dependencies:
 - v0.3: 4/8-bit KV quantization, retention policy, automatic tier migration
   (initial local q4 disk-KV persistence, memory retention, and persisted tier
   migration tracing are in place; engine memory now defaults to append-only
-  DiskKvStore persistence with legacy TSV migration; batch KV-Fusion compaction
-  can merge near-duplicate persistent memories while protecting ids used by the
-  current inference; a KV quantization benchmark gate now checks deterministic
-  q4/q8 accuracy, compression ratio, and elapsed time before compression policy
+  DiskKvStore persistence with legacy TSV migration; retention and batch
+  KV-Fusion compaction policies are configurable through engine setters and CLI
+  flags with conservative clamping; batch KV-Fusion compaction can merge
+  near-duplicate persistent memories while protecting ids used by the current
+  inference; a KV quantization benchmark gate now checks deterministic q4/q8
+  accuracy, compression ratio, and elapsed time before compression policy
   changes are accepted)
 - v0.4: Infini-style global/local KV split and sparse context filtering
   (initial control-plane memory planner with token-budget filtering is in place)
@@ -380,7 +382,8 @@ These are algorithmic references, not product dependencies:
   require at least one truly recursive scheduling case instead of marketing
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
-  rollback, protected-id memory compaction, and inspectable local state.
+  rollback, configurable retention, protected-id memory compaction, and
+  inspectable local state.
 - The CLI can inspect memory count, experience count, adaptive global/profile
   router state, hierarchy weights, tier counts, and top memories/lessons from
   persisted local files without invoking a model runtime.
