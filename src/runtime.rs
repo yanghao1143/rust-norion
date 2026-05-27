@@ -450,7 +450,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          max_tokens: {}\n\
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
          hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
-         transformer: global_layers={} local_layers={} convolution_layers={}\n\
+         transformer: template={} global_layers={} local_layers={} convolution_layers={}\n\
          recursive: {}\n\
          hardware: {}\n\
          memory_hints:\n{}\n\
@@ -467,6 +467,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         request.hierarchy.global,
         request.hierarchy.local,
         request.hierarchy.convolution,
+        request.transformer_plan.template_name(),
         transformer_counts.global,
         transformer_counts.local,
         transformer_counts.convolution,
@@ -571,6 +572,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"convolution\":{:.6}\
          }},\
          \"transformer\":{{\
+         \"template\":{},\
          \"global_layers\":{},\
          \"local_layers\":{},\
          \"convolution_layers\":{},\
@@ -629,6 +631,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         request.hierarchy.global,
         request.hierarchy.local,
         request.hierarchy.convolution,
+        json_string(request.transformer_plan.template_name()),
         transformer_counts.global,
         transformer_counts.local,
         transformer_counts.convolution,
@@ -1513,6 +1516,7 @@ mod tests {
         assert!(prompt.contains("experience_hints"));
         assert!(prompt.contains("recursive:"));
         assert!(prompt.contains("hardware:"));
+        assert!(prompt.contains("transformer: template=none"));
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
         assert!(args[5].contains("model_id=sample-transformer"));
@@ -1546,6 +1550,7 @@ mod tests {
         );
         assert!(payload.contains("\"execution_waves\""));
         assert!(payload.contains("\"max_parallel_chunks\""));
+        assert!(payload.contains("\"template\":\"none\""));
         assert!(payload.contains("\"memory_hints\":[\"memory hint\"]"));
         assert_eq!(extract_json_array_field(&payload, "layers").unwrap(), "[]");
     }

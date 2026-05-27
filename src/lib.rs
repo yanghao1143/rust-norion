@@ -89,5 +89,5 @@ pub use trace::{
 };
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
-    TransformerRefactorPlan,
+    TransformerRefactorPlan, TransformerTemplate, TransformerTemplateKind,
 };

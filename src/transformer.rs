@@ -16,8 +16,82 @@ pub struct TransformerLayerPlan {
     pub window_size: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransformerTemplateKind {
+    GeneralBalanced,
+    CodingLocal,
+    CreativeWritingGlobal,
+    LongContextConvolution,
+}
+
+impl TransformerTemplateKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::GeneralBalanced => "general_balanced",
+            Self::CodingLocal => "coding_local",
+            Self::CreativeWritingGlobal => "creative_writing_global",
+            Self::LongContextConvolution => "long_context_convolution",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TransformerTemplate {
+    pub kind: TransformerTemplateKind,
+    pub global_bias: f32,
+    pub local_bias: f32,
+    pub convolution_bias: f32,
+    pub global_window_scale: f32,
+    pub local_window_scale: f32,
+    pub convolution_window_scale: f32,
+}
+
+impl TransformerTemplate {
+    pub fn for_profile(profile: TaskProfile) -> Self {
+        match profile {
+            TaskProfile::General => Self {
+                kind: TransformerTemplateKind::GeneralBalanced,
+                global_bias: 0.0,
+                local_bias: 0.0,
+                convolution_bias: 0.0,
+                global_window_scale: 8.0,
+                local_window_scale: 1.0,
+                convolution_window_scale: 0.5,
+            },
+            TaskProfile::Coding => Self {
+                kind: TransformerTemplateKind::CodingLocal,
+                global_bias: -0.02,
+                local_bias: 0.12,
+                convolution_bias: 0.02,
+                global_window_scale: 6.0,
+                local_window_scale: 0.75,
+                convolution_window_scale: 0.5,
+            },
+            TaskProfile::Writing => Self {
+                kind: TransformerTemplateKind::CreativeWritingGlobal,
+                global_bias: 0.12,
+                local_bias: -0.02,
+                convolution_bias: 0.02,
+                global_window_scale: 10.0,
+                local_window_scale: 1.25,
+                convolution_window_scale: 0.6,
+            },
+            TaskProfile::LongDocument => Self {
+                kind: TransformerTemplateKind::LongContextConvolution,
+                global_bias: 0.02,
+                local_bias: -0.04,
+                convolution_bias: 0.16,
+                global_window_scale: 12.0,
+                local_window_scale: 1.5,
+                convolution_window_scale: 0.75,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct TransformerRefactorPlan {
+    pub template: Option<TransformerTemplateKind>,
     pub layers: Vec<TransformerLayerPlan>,
 }
 
@@ -38,6 +112,12 @@ impl TransformerRefactorPlan {
 
     pub fn is_empty(&self) -> bool {
         self.layers.is_empty()
+    }
+
+    pub fn template_name(&self) -> &'static str {
+        self.template
+            .map(TransformerTemplateKind::as_str)
+            .unwrap_or("none")
     }
 }
 
@@ -77,7 +157,8 @@ impl TransformerPlanner {
         hierarchy: HierarchyWeights,
         route_budget: RouteBudget,
     ) -> TransformerRefactorPlan {
-        let target = adjusted_weights(profile, hierarchy);
+        let template = TransformerTemplate::for_profile(profile);
+        let target = adjusted_weights(template, hierarchy);
         let mut global_left = quota(self.layer_count, target.global);
         let mut local_left = quota(self.layer_count, target.local);
         let mut convolution_left = self
@@ -107,21 +188,24 @@ impl TransformerPlanner {
                 layer_index,
                 attention,
                 compute_fraction: compute_fraction(attention, route_budget),
-                window_size: window_size(attention, self.base_window_size, route_budget),
+                window_size: window_size(attention, self.base_window_size, route_budget, template),
             });
         }
 
-        TransformerRefactorPlan { layers }
+        TransformerRefactorPlan {
+            template: Some(template.kind),
+            layers,
+        }
     }
 }
 
-fn adjusted_weights(profile: TaskProfile, mut hierarchy: HierarchyWeights) -> HierarchyWeights {
-    match profile {
-        TaskProfile::Coding => hierarchy.local += 0.08,
-        TaskProfile::Writing => hierarchy.global += 0.08,
-        TaskProfile::LongDocument => hierarchy.convolution += 0.10,
-        TaskProfile::General => {}
-    }
+fn adjusted_weights(
+    template: TransformerTemplate,
+    mut hierarchy: HierarchyWeights,
+) -> HierarchyWeights {
+    hierarchy.global += template.global_bias;
+    hierarchy.local += template.local_bias;
+    hierarchy.convolution += template.convolution_bias;
     hierarchy.normalize();
     hierarchy
 }
@@ -171,11 +255,18 @@ fn compute_fraction(attention: AttentionKind, route_budget: RouteBudget) -> f32 
     }
 }
 
-fn window_size(attention: AttentionKind, base: usize, route_budget: RouteBudget) -> usize {
+fn window_size(
+    attention: AttentionKind,
+    base: usize,
+    route_budget: RouteBudget,
+    template: TransformerTemplate,
+) -> usize {
     let multiplier = match attention {
-        AttentionKind::Global => 8.0,
-        AttentionKind::LocalWindow => 1.0 + route_budget.attention_fraction as f64,
-        AttentionKind::ConvolutionalFusion => 0.5,
+        AttentionKind::Global => template.global_window_scale as f64,
+        AttentionKind::LocalWindow => {
+            template.local_window_scale as f64 * (1.0 + route_budget.attention_fraction as f64)
+        }
+        AttentionKind::ConvolutionalFusion => template.convolution_window_scale as f64,
     };
     ((base as f64 * multiplier).round() as usize).max(16)
 }
@@ -194,8 +285,15 @@ mod tests {
         );
         let counts = plan.counts();
 
+        assert_eq!(plan.template, Some(TransformerTemplateKind::CodingLocal));
         assert!(counts.local >= counts.global);
         assert!(counts.local >= counts.convolution);
+        assert!(
+            plan.layers
+                .iter()
+                .filter(|layer| layer.attention == AttentionKind::LocalWindow)
+                .all(|layer| layer.window_size <= 192)
+        );
     }
 
     #[test]
@@ -207,7 +305,29 @@ mod tests {
             budget(0.3),
         );
 
+        assert_eq!(
+            plan.template,
+            Some(TransformerTemplateKind::LongContextConvolution)
+        );
         assert!(plan.counts().convolution > 0);
+    }
+
+    #[test]
+    fn writing_plan_uses_global_template() {
+        let planner = TransformerPlanner::new(12, 128);
+        let plan = planner.plan(
+            TaskProfile::Writing,
+            HierarchyWeights::new(0.3, 0.4, 0.3),
+            budget(0.4),
+        );
+        let counts = plan.counts();
+
+        assert_eq!(
+            plan.template,
+            Some(TransformerTemplateKind::CreativeWritingGlobal)
+        );
+        assert!(counts.global >= counts.convolution);
+        assert_eq!(plan.template_name(), "creative_writing_global");
     }
 
     fn budget(attention_fraction: f32) -> RouteBudget {

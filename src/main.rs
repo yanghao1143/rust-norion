@@ -235,8 +235,11 @@ fn main() -> std::io::Result<()> {
     );
     let transformer_counts = outcome.transformer_plan.counts();
     println!(
-        "transformer: global={} local={} convolution={}",
-        transformer_counts.global, transformer_counts.local, transformer_counts.convolution
+        "transformer: template={} global={} local={} convolution={}",
+        outcome.transformer_plan.template_name(),
+        transformer_counts.global,
+        transformer_counts.local,
+        transformer_counts.convolution
     );
     println!("stream_windows={}", outcome.stream_reports.len());
     println!(

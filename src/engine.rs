@@ -591,7 +591,7 @@ impl InferenceBackend for HeuristicBackend {
              Infini memory: {} local-window ({} tokens), {} global ({} tokens), {} sparse-skipped ({} tokens) memories. \
              Recursive schedule: required={}, {} chunks, {} merge rounds, {} execution waves, max parallel {}, {} prompt tokens, native window {}. \
              Hardware plan: {}. \
-             Transformer plan: {} global, {} local, {} convolution layers.",
+             Transformer plan: template {}, {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
             context.route_budget.fast_tokens,
@@ -613,6 +613,7 @@ impl InferenceBackend for HeuristicBackend {
             recursive_schedule.prompt_tokens,
             recursive_schedule.native_window_tokens,
             hardware_plan.summary(),
+            context.transformer_plan.template_name(),
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution

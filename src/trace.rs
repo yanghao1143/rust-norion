@@ -51,7 +51,7 @@ pub fn trace_json_line_with_case(
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
-         \"transformer\":{{\"global\":{},\"local\":{},\"convolution\":{}}},\
+         \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
@@ -111,6 +111,7 @@ pub fn trace_json_line_with_case(
         infini_counts.local_tokens,
         infini_counts.global_tokens,
         infini_counts.skipped_tokens,
+        json_escape(outcome.transformer_plan.template_name()),
         transformer_counts.global,
         transformer_counts.local,
         transformer_counts.convolution,
@@ -255,6 +256,7 @@ mod tests {
         assert!(line.contains("\"adapter_hints\":"));
         assert!(line.contains("\"execution_waves\":"));
         assert!(line.contains("\"max_parallel_chunks\":"));
+        assert!(line.contains("\"template\":\"coding_local\""));
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
