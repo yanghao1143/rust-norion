@@ -36,7 +36,9 @@ pub use experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlan, ExperienceReplayPlanner, ExperienceReplayReport,
 };
 pub use gist_memory::{GistGenerator, GistLevel, GistRecord};
-pub use hardware::{DeviceClass, DeviceTier, HardwareAllocator, HardwarePlan, HardwareSnapshot};
+pub use hardware::{
+    DeviceClass, DeviceTier, HardwareAllocator, HardwarePlan, HardwareProbe, HardwareSnapshot,
+};
 pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,

@@ -1,4 +1,6 @@
+use std::env;
 use std::str::FromStr;
+use std::thread;
 
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 
@@ -180,6 +182,10 @@ impl HardwareSnapshot {
         }
     }
 
+    pub fn auto_detect() -> Self {
+        HardwareProbe::current().snapshot()
+    }
+
     pub fn pressure(&self) -> f32 {
         let weights = device_pressure_weights(self.device);
         (self.cpu_load * weights.cpu
@@ -188,6 +194,197 @@ impl HardwareSnapshot {
             + self.disk_load * weights.disk)
             .clamp(0.0, 1.0)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct HardwareProbe {
+    os: String,
+    arch: String,
+    cpu_count: usize,
+    env: Vec<(String, String)>,
+}
+
+impl HardwareProbe {
+    pub fn current() -> Self {
+        Self {
+            os: env::consts::OS.to_owned(),
+            arch: env::consts::ARCH.to_owned(),
+            cpu_count: thread::available_parallelism()
+                .map(|count| count.get())
+                .unwrap_or(1),
+            env: env::vars().collect(),
+        }
+    }
+
+    pub fn new(os: impl Into<String>, arch: impl Into<String>, cpu_count: usize) -> Self {
+        Self {
+            os: os.into(),
+            arch: arch.into(),
+            cpu_count: cpu_count.max(1),
+            env: Vec::new(),
+        }
+    }
+
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn snapshot(&self) -> HardwareSnapshot {
+        let device = self.detect_device();
+        let defaults = default_probe_loads(device);
+
+        HardwareSnapshot::new(
+            device,
+            self.load_hint("NOIRON_CPU_LOAD", defaults.cpu),
+            self.load_hint("NOIRON_GPU_LOAD", defaults.gpu),
+            self.load_hint("NOIRON_RAM_LOAD", defaults.ram),
+            self.load_hint("NOIRON_DISK_LOAD", defaults.disk),
+        )
+    }
+
+    pub fn detect_device(&self) -> DeviceClass {
+        if let Some(device) = self
+            .env_value("NOIRON_DEVICE_PROFILE")
+            .and_then(|value| value.parse::<DeviceClass>().ok())
+            .filter(|device| *device != DeviceClass::Auto)
+        {
+            return device;
+        }
+
+        let os = self.os.to_ascii_lowercase();
+        let arch = self.arch.to_ascii_lowercase();
+
+        if os == "android" || os == "ios" {
+            return DeviceClass::Mobile;
+        }
+        if arch.starts_with("wasm") {
+            return DeviceClass::Embedded;
+        }
+        if self.has_npu_hint() {
+            return DeviceClass::NpuAccelerator;
+        }
+
+        let accelerator_count = self.accelerator_count();
+        if accelerator_count > 1 {
+            return DeviceClass::MultiGpu;
+        }
+        if accelerator_count == 1 {
+            if self.has_unified_memory_hint() {
+                return DeviceClass::UnifiedMemory;
+            }
+            if self.has_integrated_gpu_hint() {
+                return DeviceClass::IntegratedGpu;
+            }
+            return DeviceClass::DiscreteGpu;
+        }
+
+        if self.has_unified_memory_hint() || (os == "macos" && is_arm_arch(&arch)) {
+            return DeviceClass::UnifiedMemory;
+        }
+        if self.has_integrated_gpu_hint() {
+            return DeviceClass::IntegratedGpu;
+        }
+        if os == "linux" && is_arm_arch(&arch) {
+            return if self.cpu_count <= 4 {
+                DeviceClass::Embedded
+            } else {
+                DeviceClass::Edge
+            };
+        }
+        if self.cpu_count >= 32 {
+            return DeviceClass::Server;
+        }
+
+        DeviceClass::CpuOnly
+    }
+
+    fn load_hint(&self, key: &str, fallback: f32) -> f32 {
+        self.env_value(key)
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(fallback)
+    }
+
+    fn env_value(&self, key: &str) -> Option<&str> {
+        self.env
+            .iter()
+            .find(|(env_key, _)| env_key == key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn env_value_any(&self, keys: &[&str]) -> Option<&str> {
+        keys.iter().find_map(|key| self.env_value(key))
+    }
+
+    fn has_npu_hint(&self) -> bool {
+        self.env_flag("NOIRON_NPU")
+            || self
+                .env_value_any(&[
+                    "QNN_SDK_ROOT",
+                    "HEXAGON_SDK_ROOT",
+                    "COREML_ENABLE_NEURAL_ENGINE",
+                    "ANDROID_NNAPI_DEVICE",
+                ])
+                .is_some()
+            || self.adapter_hint_contains(&["npu", "neural", "ane", "hexagon", "qnn"])
+    }
+
+    fn has_unified_memory_hint(&self) -> bool {
+        self.env_flag("NOIRON_UNIFIED_MEMORY")
+            || self.adapter_hint_contains(&["apple", "m1", "m2", "m3", "m4", "unified"])
+    }
+
+    fn has_integrated_gpu_hint(&self) -> bool {
+        self.env_flag("NOIRON_INTEGRATED_GPU")
+            || self.adapter_hint_contains(&["integrated", "iris", "uhd", "intel", "apu"])
+    }
+
+    fn adapter_hint_contains(&self, needles: &[&str]) -> bool {
+        self.env_value_any(&[
+            "NOIRON_GPU_ADAPTER",
+            "WGPU_ADAPTER_NAME",
+            "GPU_DEVICE_NAME",
+            "DXGI_ADAPTER_NAME",
+            "METAL_DEVICE_NAME",
+        ])
+        .map(|value| {
+            let lower = value.to_ascii_lowercase();
+            needles.iter().any(|needle| lower.contains(needle))
+        })
+        .unwrap_or(false)
+    }
+
+    fn env_flag(&self, key: &str) -> bool {
+        self.env_value(key)
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    fn accelerator_count(&self) -> usize {
+        self.env_value_any(&[
+            "NOIRON_ACCELERATOR_DEVICES",
+            "CUDA_VISIBLE_DEVICES",
+            "NVIDIA_VISIBLE_DEVICES",
+            "HIP_VISIBLE_DEVICES",
+            "ROCR_VISIBLE_DEVICES",
+            "ONEAPI_DEVICE_SELECTOR",
+        ])
+        .map(count_visible_devices)
+        .unwrap_or(0)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProbeLoads {
+    cpu: f32,
+    gpu: f32,
+    ram: f32,
+    disk: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -540,6 +737,79 @@ fn normalize_load(value: f32) -> f32 {
     }
 }
 
+fn default_probe_loads(device: DeviceClass) -> ProbeLoads {
+    match device {
+        DeviceClass::Mobile => ProbeLoads {
+            cpu: 0.30,
+            gpu: 0.20,
+            ram: 0.55,
+            disk: 0.10,
+        },
+        DeviceClass::Embedded => ProbeLoads {
+            cpu: 0.35,
+            gpu: 0.05,
+            ram: 0.60,
+            disk: 0.15,
+        },
+        DeviceClass::Edge => ProbeLoads {
+            cpu: 0.32,
+            gpu: 0.15,
+            ram: 0.48,
+            disk: 0.18,
+        },
+        DeviceClass::NpuAccelerator => ProbeLoads {
+            cpu: 0.22,
+            gpu: 0.28,
+            ram: 0.42,
+            disk: 0.12,
+        },
+        DeviceClass::MultiGpu => ProbeLoads {
+            cpu: 0.18,
+            gpu: 0.24,
+            ram: 0.28,
+            disk: 0.12,
+        },
+        DeviceClass::Server => ProbeLoads {
+            cpu: 0.18,
+            gpu: 0.22,
+            ram: 0.30,
+            disk: 0.16,
+        },
+        _ => ProbeLoads {
+            cpu: 0.20,
+            gpu: 0.20,
+            ram: 0.35,
+            disk: 0.15,
+        },
+    }
+}
+
+fn count_visible_devices(value: &str) -> usize {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || matches!(
+            trimmed.to_ascii_lowercase().as_str(),
+            "none" | "void" | "disabled" | "-1"
+        )
+    {
+        return 0;
+    }
+    if trimmed.eq_ignore_ascii_case("all") {
+        return 1;
+    }
+
+    trimmed
+        .split([',', ';'])
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .filter(|item| *item != "-1")
+        .count()
+}
+
+fn is_arm_arch(arch: &str) -> bool {
+    arch.contains("arm") || arch.contains("aarch64")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,5 +957,40 @@ mod tests {
         assert!((snapshot.gpu_load - 0.25).abs() < 0.0001);
         assert!((snapshot.ram_load - 0.50).abs() < 0.0001);
         assert!((snapshot.disk_load - 0.10).abs() < 0.0001);
+    }
+
+    #[test]
+    fn probe_prefers_explicit_environment_profile() {
+        let snapshot = HardwareProbe::new("windows", "x86_64", 8)
+            .with_env("NOIRON_DEVICE_PROFILE", "rtx")
+            .with_env("NOIRON_CPU_LOAD", "80")
+            .snapshot();
+
+        assert_eq!(snapshot.device, DeviceClass::DiscreteGpu);
+        assert!((snapshot.cpu_load - 0.80).abs() < 0.0001);
+    }
+
+    #[test]
+    fn probe_detects_mobile_arm_and_multi_gpu_targets() {
+        let mobile = HardwareProbe::new("ios", "aarch64", 6).detect_device();
+        let multi_gpu = HardwareProbe::new("linux", "x86_64", 32)
+            .with_env("CUDA_VISIBLE_DEVICES", "0,1")
+            .detect_device();
+
+        assert_eq!(mobile, DeviceClass::Mobile);
+        assert_eq!(multi_gpu, DeviceClass::MultiGpu);
+    }
+
+    #[test]
+    fn probe_detects_unified_integrated_and_edge_targets() {
+        let uma = HardwareProbe::new("macos", "aarch64", 10).detect_device();
+        let integrated = HardwareProbe::new("windows", "x86_64", 8)
+            .with_env("WGPU_ADAPTER_NAME", "Intel Iris Xe Graphics")
+            .detect_device();
+        let edge = HardwareProbe::new("linux", "aarch64", 8).detect_device();
+
+        assert_eq!(uma, DeviceClass::UnifiedMemory);
+        assert_eq!(integrated, DeviceClass::IntegratedGpu);
+        assert_eq!(edge, DeviceClass::Edge);
     }
 }

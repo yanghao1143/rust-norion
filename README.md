@@ -148,7 +148,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure and compute allocation planner for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles, with capability tiers and common device aliases
+- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, and compute allocation planner for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles, with capability tiers and common device aliases
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
@@ -211,6 +211,15 @@ Apply universal device-profile hardware pressure hints:
 cargo run -- --device cpu --cpu-load 85 --ram-load 70 --disk-load 40 --profile long "Summarize a long local document"
 ```
 
+If `--device auto` is used, or no device is provided, the CLI performs a
+best-effort local probe using OS, architecture, CPU parallelism, and common
+GPU/NPU environment variables. Manual flags such as `--device`, `--cpu-load`,
+`--gpu-load`, `--ram-load`, and `--disk-load` always override probe defaults.
+
+使用 `--device auto` 或不指定设备时，CLI 会根据 OS、CPU 架构、CPU 并行度以及常见
+GPU/NPU 环境变量做保守本地探测。`--device`、`--cpu-load`、`--gpu-load`、
+`--ram-load`、`--disk-load` 等手动参数始终优先。
+
 Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
 `uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.
 Common aliases such as `laptop`, `rtx`, `macbook`, `iphone`, `snapdragon`,
@@ -224,6 +233,16 @@ without binding to one vendor device.
 `rtx`、`macbook`、`iphone`、`snapdragon`、`jetson` 和 `datacenter` 会映射到这些
 profile。内部还会按 `tiny`、`constrained`、`balanced`、`accelerated`、
 `distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
+
+Probe override environment variables include `NOIRON_DEVICE_PROFILE`,
+`NOIRON_CPU_LOAD`, `NOIRON_GPU_LOAD`, `NOIRON_RAM_LOAD`, `NOIRON_DISK_LOAD`,
+`CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`, `WGPU_ADAPTER_NAME`, and
+NPU hints such as `NOIRON_NPU`.
+
+可用于覆盖探测结果的环境变量包括 `NOIRON_DEVICE_PROFILE`、`NOIRON_CPU_LOAD`、
+`NOIRON_GPU_LOAD`、`NOIRON_RAM_LOAD`、`NOIRON_DISK_LOAD`、
+`CUDA_VISIBLE_DEVICES`、`NVIDIA_VISIBLE_DEVICES`、`WGPU_ADAPTER_NAME`，以及
+`NOIRON_NPU` 等 NPU 提示。
 
 Run through a local command runtime:
 

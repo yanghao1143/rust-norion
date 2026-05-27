@@ -372,6 +372,10 @@ impl Args {
         let mut gpu_load = default_hardware.gpu_load;
         let mut ram_load = default_hardware.ram_load;
         let mut disk_load = default_hardware.disk_load;
+        let mut cpu_load_set = false;
+        let mut gpu_load_set = false;
+        let mut ram_load_set = false;
+        let mut disk_load_set = false;
         let mut index = 0;
 
         while index < raw.len() {
@@ -496,18 +500,22 @@ impl Args {
                 }
                 "--cpu-load" if index + 1 < raw.len() => {
                     cpu_load = parse_f32(&raw[index + 1], cpu_load);
+                    cpu_load_set = true;
                     index += 2;
                 }
                 "--gpu-load" if index + 1 < raw.len() => {
                     gpu_load = parse_f32(&raw[index + 1], gpu_load);
+                    gpu_load_set = true;
                     index += 2;
                 }
                 "--ram-load" if index + 1 < raw.len() => {
                     ram_load = parse_f32(&raw[index + 1], ram_load);
+                    ram_load_set = true;
                     index += 2;
                 }
                 "--disk-load" if index + 1 < raw.len() => {
                     disk_load = parse_f32(&raw[index + 1], disk_load);
+                    disk_load_set = true;
                     index += 2;
                 }
                 "--help" | "-h" => {
@@ -527,6 +535,22 @@ impl Args {
             prompt_parts.join(" ")
         };
         let profile = profile.unwrap_or_else(|| detect_profile(&prompt));
+        if device == DeviceClass::Auto {
+            let detected = HardwareSnapshot::auto_detect();
+            device = detected.device;
+            if !cpu_load_set {
+                cpu_load = detected.cpu_load;
+            }
+            if !gpu_load_set {
+                gpu_load = detected.gpu_load;
+            }
+            if !ram_load_set {
+                ram_load = detected.ram_load;
+            }
+            if !disk_load_set {
+                disk_load = detected.disk_load;
+            }
+        }
 
         Self {
             prompt,
@@ -694,5 +718,27 @@ mod tests {
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);
         assert!(args.prompt.contains("nine"));
+    }
+
+    #[test]
+    fn auto_device_preserves_manual_load_overrides() {
+        let args = Args::parse(vec![
+            "--device".to_owned(),
+            "auto".to_owned(),
+            "--cpu-load".to_owned(),
+            "91".to_owned(),
+            "--gpu-load".to_owned(),
+            "12".to_owned(),
+            "--ram-load".to_owned(),
+            "61".to_owned(),
+            "--disk-load".to_owned(),
+            "7".to_owned(),
+            "probe defaults should not replace explicit loads".to_owned(),
+        ]);
+
+        assert_eq!(args.cpu_load, 91.0);
+        assert_eq!(args.gpu_load, 12.0);
+        assert_eq!(args.ram_load, 61.0);
+        assert_eq!(args.disk_load, 7.0);
     }
 }

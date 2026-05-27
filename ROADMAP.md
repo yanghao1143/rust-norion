@@ -88,7 +88,9 @@ The north star is now explicitly scoped around five core requirements:
    Device profiles convert heterogeneous CPU, GPU, unified-memory, mobile,
    embedded, NPU, multi-GPU, edge, and server pressure into latency budgets, KV
    budgets, routing constraints, and hierarchy weights. Profiles also map into
-   capability tiers from tiny devices through distributed accelerators.
+   capability tiers from tiny devices through distributed accelerators. The CLI
+   should use best-effort local probing when no explicit profile is provided,
+   while preserving manual overrides.
 
 5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
@@ -234,7 +236,9 @@ These are algorithmic references, not product dependencies:
   adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
   integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI
   accelerator, multi-GPU, edge, and server devices, with capability tiers and
-  common device aliases covered by tests)
+  common device aliases covered by tests; best-effort auto probing now maps OS,
+  architecture, CPU parallelism, and common GPU/NPU environment hints into a
+  conservative device profile)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
   (initial runtime metadata, tokenizer, embedding, and KV import/export trait
@@ -266,5 +270,7 @@ These are algorithmic references, not product dependencies:
   versions through stable Rust traits.
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets.
+- Default CLI execution performs conservative local device probing, and manual
+  device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency, or
   recursive scheduling budgets regress.
