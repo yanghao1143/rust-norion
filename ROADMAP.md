@@ -205,6 +205,8 @@ These are algorithmic references, not product dependencies:
   gist generation, gist persistence, and KV admission are in place)
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
   allocation
+  (initial process reward scoring for route, memory, hierarchy, reflection,
+  latency, and memory admission is in place and persisted with experience)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
 - v1.0: production-grade local Agent Harness and test-time scaling inference

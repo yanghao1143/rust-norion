@@ -7,6 +7,7 @@ use crate::gist_memory::{GistGenerator, GistRecord};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
+use crate::process_reward::{ProcessRewardInput, ProcessRewardReport, ProcessRewarder};
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
@@ -65,6 +66,7 @@ pub struct InferenceOutcome {
     pub gist_records: Vec<GistRecord>,
     pub stored_memory_id: Option<u64>,
     pub stored_gist_memory_ids: Vec<u64>,
+    pub process_reward: ProcessRewardReport,
     pub retention_report: RetentionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
@@ -82,6 +84,7 @@ pub struct NoironEngine {
     pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
     pub gist_generator: GistGenerator,
+    pub process_rewarder: ProcessRewarder,
     pub reflector: Reflector,
     last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
@@ -100,6 +103,7 @@ impl Default for NoironEngine {
             transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
             gist_generator: GistGenerator::new(),
+            process_rewarder: ProcessRewarder::new(),
             reflector: Reflector::new(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
@@ -272,6 +276,23 @@ impl NoironEngine {
         self.router.observe(metrics);
         let hierarchy = self.hierarchy.observe(request.profile, metrics);
         let router_threshold_after = self.router.threshold();
+        let process_reward = self.process_rewarder.score(ProcessRewardInput {
+            profile: request.profile,
+            route_budget,
+            hierarchy,
+            metrics,
+            quality: report.quality,
+            contradiction_count: report.contradictions.len(),
+            used_memories: used_memories.len(),
+            used_experiences: used_experiences.len(),
+            tier_counts: tier_plan.counts(),
+            infini_counts: infini_memory_plan.counts(),
+            recursive_schedule: recursive_schedule.clone(),
+            stream_windows: stream_reports.len(),
+            stored_memory: stored_memory_id.is_some(),
+            stored_gist_memories: stored_gist_memory_ids.len(),
+            gist_records: gist_records.len(),
+        });
         let experience_id = self.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),
             profile: request.profile,
@@ -284,6 +305,7 @@ impl NoironEngine {
             hierarchy,
             gist_records: gist_records.clone(),
             gist_memory_ids: stored_gist_memory_ids.clone(),
+            process_reward: process_reward.clone(),
         });
         let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
         self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
@@ -305,6 +327,7 @@ impl NoironEngine {
             gist_records,
             stored_memory_id,
             stored_gist_memory_ids,
+            process_reward,
             retention_report,
             experience_id,
             router_threshold_after,
@@ -351,7 +374,14 @@ impl InferenceBackend for HeuristicBackend {
                     } else {
                         item.gist_hints.join(" | ")
                     };
-                    format!("{} ({:.2}) gist: {}", item.lesson, item.score, gist_hint)
+                    format!(
+                        "{} ({:.2}) reward={:.2}/{} gist: {}",
+                        item.lesson,
+                        item.score,
+                        item.process_reward,
+                        item.reward_action.as_str(),
+                        gist_hint
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("; ")
@@ -545,6 +575,12 @@ mod tests {
         );
         assert_eq!(engine.experience.len(), 1);
         assert_eq!(outcome.experience_id, 1);
+        assert!(outcome.process_reward.total > 0.0);
+        assert!(
+            (engine.experience.records()[0].process_reward.total - outcome.process_reward.total)
+                .abs()
+                < 0.0001
+        );
         assert!(!outcome.transformer_plan.is_empty());
         assert!(!engine.cache.is_empty());
     }
@@ -665,6 +701,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
+            process_reward: ProcessRewardReport::default(),
         });
         let mut backend = HeuristicBackend;
 

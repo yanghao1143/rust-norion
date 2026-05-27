@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
 
 #[derive(Debug, Clone)]
 pub struct ExperienceInput {
@@ -19,6 +20,7 @@ pub struct ExperienceInput {
     pub hierarchy: HierarchyWeights,
     pub gist_records: Vec<GistRecord>,
     pub gist_memory_ids: Vec<u64>,
+    pub process_reward: ProcessRewardReport,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,7 @@ pub struct ExperienceRecord {
     pub hierarchy: HierarchyWeights,
     pub gist_records: Vec<GistRecord>,
     pub gist_memory_ids: Vec<u64>,
+    pub process_reward: ProcessRewardReport,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +48,8 @@ pub struct ExperienceMatch {
     pub quality: f32,
     pub score: f32,
     pub gist_hints: Vec<String>,
+    pub process_reward: f32,
+    pub reward_action: RewardAction,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +100,7 @@ impl ExperienceStore {
             hierarchy: input.hierarchy,
             gist_records: input.gist_records,
             gist_memory_ids: input.gist_memory_ids,
+            process_reward: input.process_reward,
         });
         id
     }
@@ -146,8 +152,13 @@ impl ExperienceStore {
                     .map(|gist| gist.importance)
                     .fold(0.0, f32::max)
                     * 0.08;
+                let reward_bonus = record.process_reward.total * 0.08;
                 let contradiction_penalty = (record.contradictions.len() as f32 * 0.08).min(0.32);
-                let score = (overlap * 0.52 + record.quality * 0.36 + profile_bonus + gist_bonus
+                let score = (overlap * 0.52
+                    + record.quality * 0.36
+                    + profile_bonus
+                    + gist_bonus
+                    + reward_bonus
                     - contradiction_penalty)
                     .clamp(0.0, 1.0);
 
@@ -167,6 +178,8 @@ impl ExperienceStore {
                         .take(3)
                         .map(GistRecord::hint)
                         .collect(),
+                    process_reward: record.process_reward.total,
+                    reward_action: record.process_reward.action,
                 })
             })
             .collect::<Vec<_>>();
@@ -246,9 +259,10 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         .join("|");
     let gist_records = serialize_gists(&record.gist_records);
     let gist_memory_ids = serialize_ids(&record.gist_memory_ids);
+    let process_reward = serialize_process_reward(&record.process_reward);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -262,7 +276,8 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         escape_field(&record.lesson),
         contradictions,
         escape_field(&gist_records),
-        escape_field(&gist_memory_ids)
+        escape_field(&gist_memory_ids),
+        escape_field(&process_reward)
     )
 }
 
@@ -302,6 +317,10 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(13)
         .map(|value| deserialize_ids(&unescape_field(value)))
         .unwrap_or_default();
+    let process_reward = fields
+        .get(14)
+        .and_then(|value| deserialize_process_reward(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -316,6 +335,7 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         hierarchy,
         gist_records,
         gist_memory_ids,
+        process_reward,
     })
 }
 
@@ -371,7 +391,63 @@ fn deserialize_ids(value: &str) -> Vec<u64> {
         .collect()
 }
 
+fn serialize_process_reward(report: &ProcessRewardReport) -> String {
+    let notes = report
+        .notes
+        .iter()
+        .map(|note| sanitize_control_part(note))
+        .collect::<Vec<_>>()
+        .join("\u{1e}");
+    [
+        format!("{:.6}", report.total),
+        report.action.as_str().to_owned(),
+        format!("{:.6}", report.components.route),
+        format!("{:.6}", report.components.memory),
+        format!("{:.6}", report.components.hierarchy),
+        format!("{:.6}", report.components.reflection),
+        format!("{:.6}", report.components.latency),
+        format!("{:.6}", report.components.admission),
+        notes,
+    ]
+    .join("\u{1f}")
+}
+
+fn deserialize_process_reward(value: &str) -> Option<ProcessRewardReport> {
+    if value.is_empty() {
+        return Some(ProcessRewardReport::default());
+    }
+
+    let fields = value.split('\u{1f}').collect::<Vec<_>>();
+    if fields.len() != 9 {
+        return None;
+    }
+
+    let notes = if fields[8].is_empty() {
+        Vec::new()
+    } else {
+        fields[8].split('\u{1e}').map(ToOwned::to_owned).collect()
+    };
+
+    Some(ProcessRewardReport {
+        total: fields[0].parse::<f32>().ok()?.clamp(0.0, 1.0),
+        action: RewardAction::from_str(fields[1])?,
+        components: ProcessRewardComponents {
+            route: fields[2].parse::<f32>().ok()?.clamp(0.0, 1.0),
+            memory: fields[3].parse::<f32>().ok()?.clamp(0.0, 1.0),
+            hierarchy: fields[4].parse::<f32>().ok()?.clamp(0.0, 1.0),
+            reflection: fields[5].parse::<f32>().ok()?.clamp(0.0, 1.0),
+            latency: fields[6].parse::<f32>().ok()?.clamp(0.0, 1.0),
+            admission: fields[7].parse::<f32>().ok()?.clamp(0.0, 1.0),
+        },
+        notes,
+    })
+}
+
 fn sanitize_gist_part(value: &str) -> String {
+    sanitize_control_part(value)
+}
+
+fn sanitize_control_part(value: &str) -> String {
     value
         .chars()
         .map(|ch| match ch {
@@ -513,6 +589,7 @@ mod tests {
         assert_eq!(loaded.records()[0].profile, TaskProfile::Coding);
         assert_eq!(loaded.records()[0].gist_records.len(), 1);
         assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
+        assert!((loaded.records()[0].process_reward.total - 0.5).abs() < 0.0001);
         cleanup(path);
     }
 
@@ -535,6 +612,7 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].gist_hints.len(), 1);
         assert!(matches[0].gist_hints[0].contains("recursive chunks"));
+        assert_eq!(matches[0].reward_action, RewardAction::Hold);
     }
 
     fn input(lesson: &str, quality: f32) -> ExperienceInput {
@@ -550,6 +628,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
+            process_reward: ProcessRewardReport::default(),
         }
     }
 

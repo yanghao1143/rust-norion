@@ -66,8 +66,13 @@ impl RuntimeRequest {
                         experience.gist_hints.join(" | ")
                     };
                     format!(
-                        "{} score={:.3} quality={:.3} gist_hints={}",
-                        experience.lesson, experience.score, experience.quality, gist_hints
+                        "{} score={:.3} quality={:.3} reward={:.3}/{} gist_hints={}",
+                        experience.lesson,
+                        experience.score,
+                        experience.quality,
+                        experience.process_reward,
+                        experience.reward_action.as_str(),
+                        gist_hints
                     )
                 })
                 .collect(),
@@ -446,6 +451,8 @@ mod tests {
             quality: 0.9,
             score: 0.88,
             gist_hints: vec!["document:gist importance=0.900".to_owned()],
+            process_reward: 0.81,
+            reward_action: crate::process_reward::RewardAction::Reinforce,
         }];
         let tier_plan = TieredCachePlan::default();
         let infini_memory_plan = InfiniMemoryPlan::new(

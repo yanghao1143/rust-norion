@@ -55,6 +55,7 @@ fn main() -> std::io::Result<()> {
         "quality={:.3} perplexity={:.2} threshold_after={:.3}",
         outcome.report.quality, outcome.metrics.perplexity, outcome.router_threshold_after
     );
+    println!("process_reward: {}", outcome.process_reward.summary());
     println!(
         "route: attention={} fast={} attention_fraction={:.2}",
         outcome.route_budget.attention_tokens,

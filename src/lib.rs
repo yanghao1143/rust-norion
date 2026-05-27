@@ -7,6 +7,7 @@ pub mod hierarchy;
 pub mod infini_memory;
 pub mod kv_cache;
 pub mod kv_quant;
+pub mod process_reward;
 pub mod recursive_scheduler;
 pub mod reflection;
 pub mod router;
@@ -31,6 +32,9 @@ pub use kv_cache::{
     KvFusionCache, MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
 };
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
+pub use process_reward::{
+    ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
+};
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveMergeRound, RecursiveSchedule, RecursiveScheduler,
 };

@@ -139,6 +139,7 @@ Implemented modules:
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/experience.rs`: structured reflection experience store
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
+- `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
@@ -221,11 +222,13 @@ flowchart LR
     Draft --> Stream[Token Stream Monitor]
     Draft --> Reflect[Reflection Loop]
     Reflect --> Gist[Hierarchical Gist Memory]
+    Reflect --> Reward[Process Reward]
     Stream --> Router
     Reflect --> Experience[Experience Store]
     Reflect --> Memory
     Gist --> Experience
     Gist --> Memory
+    Reward --> Experience
     Experience --> DiskKV
     Reflect --> Router
     Reflect --> Hierarchy
@@ -253,8 +256,9 @@ Expected integration loop:
 5. call the real model backend
 6. reflect on the draft
 7. generate document, section, and paragraph-level gist records
-8. reinforce or penalize memory
-9. update routing threshold, hierarchy weights, and experience records
+8. score route, memory, hierarchy, latency, and admission with process rewards
+9. reinforce or penalize memory
+10. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
 2. 计算路由预算和层级权重
@@ -263,8 +267,9 @@ Expected integration loop:
 5. 调用真实模型后端
 6. 对草稿答案做反思评估
 7. 生成 document、section、paragraph 三级 gist 记忆
-8. 强化或惩罚记忆
-9. 更新路由阈值、层级权重和经验记录
+8. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
+9. 强化或惩罚记忆
+10. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 
