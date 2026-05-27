@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 
 use rust_norion::{
-    CommandPromptMode, CommandRuntime, HeuristicBackend, InferenceRequest, NoironEngine,
+    CommandPromptMode, CommandRuntime, GistLevel, HeuristicBackend, InferenceRequest, NoironEngine,
     RecursiveScheduler, RuntimeBackend, TaskProfile, TierMigrationAction,
 };
 
@@ -112,6 +112,14 @@ fn main() -> std::io::Result<()> {
         outcome.experience_id
     );
     println!(
+        "gist_memory: records={} document={} section={} paragraph={} stored_ids={}",
+        outcome.gist_records.len(),
+        count_gists(&outcome.gist_records, GistLevel::Document),
+        count_gists(&outcome.gist_records, GistLevel::Section),
+        count_gists(&outcome.gist_records, GistLevel::Paragraph),
+        outcome.stored_gist_memory_ids.len()
+    );
+    println!(
         "retention: before={} after={} decayed={} removed={}",
         outcome.retention_report.before,
         outcome.retention_report.after,
@@ -120,6 +128,13 @@ fn main() -> std::io::Result<()> {
     );
 
     Ok(())
+}
+
+fn count_gists(records: &[rust_norion::GistRecord], level: GistLevel) -> usize {
+    records
+        .iter()
+        .filter(|record| record.level == level)
+        .count()
 }
 
 fn count_tier_migrations(

@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::adaptive_state::AdaptiveState;
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
+use crate::gist_memory::{GistGenerator, GistRecord};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
@@ -61,7 +62,9 @@ pub struct InferenceOutcome {
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
     pub used_experiences: Vec<ExperienceMatch>,
+    pub gist_records: Vec<GistRecord>,
     pub stored_memory_id: Option<u64>,
+    pub stored_gist_memory_ids: Vec<u64>,
     pub retention_report: RetentionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
@@ -78,6 +81,7 @@ pub struct NoironEngine {
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
+    pub gist_generator: GistGenerator,
     pub reflector: Reflector,
     last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
@@ -95,6 +99,7 @@ impl Default for NoironEngine {
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
+            gist_generator: GistGenerator::new(),
             reflector: Reflector::new(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
@@ -209,6 +214,9 @@ impl NoironEngine {
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
         let metrics = metrics_from_report(&draft, &report, route_budget);
+        let gist_records =
+            self.gist_generator
+                .generate(&request.prompt, &report.revised_answer, report.quality);
         let stream_reports = self.stream_monitor.observe_draft(
             &mut self.router,
             &draft,
@@ -233,6 +241,26 @@ impl NoironEngine {
             None
         };
 
+        let stored_gist_memory_ids = if report.store_as_memory {
+            let mut ids = gist_records
+                .iter()
+                .filter(|gist| gist.importance >= 0.54)
+                .map(|gist| {
+                    let memory_text = gist.hint();
+                    self.cache.store_or_fuse(
+                        format_gist_key(&request.prompt, gist),
+                        self.embedder.embed(&memory_text),
+                        (report.quality * gist.importance).clamp(0.0, 1.0),
+                    )
+                })
+                .collect::<Vec<_>>();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        } else {
+            Vec::new()
+        };
+
         for memory in &used_memories {
             if report.store_as_memory {
                 self.cache.reinforce(memory.id, report.quality);
@@ -254,6 +282,8 @@ impl NoironEngine {
             router_threshold_after,
             stream_windows: stream_reports.len(),
             hierarchy,
+            gist_records: gist_records.clone(),
+            gist_memory_ids: stored_gist_memory_ids.clone(),
         });
         let retention_report = self.cache.apply_retention(MemoryRetentionPolicy::default());
         self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
@@ -272,7 +302,9 @@ impl NoironEngine {
             stream_reports,
             used_memories,
             used_experiences,
+            gist_records,
             stored_memory_id,
+            stored_gist_memory_ids,
             retention_report,
             experience_id,
             router_threshold_after,
@@ -313,7 +345,14 @@ impl InferenceBackend for HeuristicBackend {
                 .experiences
                 .iter()
                 .take(2)
-                .map(|item| format!("{} ({:.2})", item.lesson, item.score))
+                .map(|item| {
+                    let gist_hint = if item.gist_hints.is_empty() {
+                        "no gist".to_owned()
+                    } else {
+                        item.gist_hints.join(" | ")
+                    };
+                    format!("{} ({:.2}) gist: {}", item.lesson, item.score, gist_hint)
+                })
                 .collect::<Vec<_>>()
                 .join("; ")
         };
@@ -441,6 +480,15 @@ fn summarize_key(prompt: &str, lesson: &str) -> String {
     format!("{} :: {}", compact(prompt, 96), compact(lesson, 64))
 }
 
+fn format_gist_key(prompt: &str, gist: &GistRecord) -> String {
+    format!(
+        "gist:{}:{} :: {}",
+        gist.level.as_str(),
+        compact(prompt, 64),
+        compact(&gist.title, 64)
+    )
+}
+
 fn compact(text: &str, max_chars: usize) -> String {
     let mut out = text.chars().take(max_chars).collect::<String>();
     if text.chars().count() > max_chars {
@@ -542,6 +590,31 @@ mod tests {
     }
 
     #[test]
+    fn inference_generates_gist_memory_for_high_quality_answer() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "Rust Noiron hierarchical gist memory for long context control",
+                TaskProfile::LongDocument,
+            ),
+            &mut backend,
+        );
+
+        assert!(!outcome.gist_records.is_empty());
+        assert!(!outcome.stored_gist_memory_ids.is_empty());
+        assert_eq!(
+            engine.experience.records()[0].gist_records.len(),
+            outcome.gist_records.len()
+        );
+        assert_eq!(
+            engine.experience.records()[0].gist_memory_ids,
+            outcome.stored_gist_memory_ids
+        );
+    }
+
+    #[test]
     fn inference_tracks_tier_migrations_across_runs() {
         let mut cache = KvFusionCache::new();
         cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
@@ -590,6 +663,8 @@ mod tests {
             router_threshold_after: 0.55,
             stream_windows: 2,
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
         });
         let mut backend = HeuristicBackend;
 

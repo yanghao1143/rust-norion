@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 
 use crate::disk_kv::DiskKvStore;
+use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 
 #[derive(Debug, Clone)]
@@ -16,6 +17,8 @@ pub struct ExperienceInput {
     pub router_threshold_after: f32,
     pub stream_windows: usize,
     pub hierarchy: HierarchyWeights,
+    pub gist_records: Vec<GistRecord>,
+    pub gist_memory_ids: Vec<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +33,8 @@ pub struct ExperienceRecord {
     pub router_threshold_after: f32,
     pub stream_windows: usize,
     pub hierarchy: HierarchyWeights,
+    pub gist_records: Vec<GistRecord>,
+    pub gist_memory_ids: Vec<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +44,7 @@ pub struct ExperienceMatch {
     pub lesson: String,
     pub quality: f32,
     pub score: f32,
+    pub gist_hints: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +93,8 @@ impl ExperienceStore {
             router_threshold_after: input.router_threshold_after,
             stream_windows: input.stream_windows,
             hierarchy: input.hierarchy,
+            gist_records: input.gist_records,
+            gist_memory_ids: input.gist_memory_ids,
         });
         id
     }
@@ -121,11 +129,25 @@ impl ExperienceStore {
             .records
             .iter()
             .filter_map(|record| {
-                let overlap =
-                    lexical_overlap(prompt, &format!("{} {}", record.prompt, record.lesson));
+                let gist_text = record
+                    .gist_records
+                    .iter()
+                    .map(|gist| format!("{} {}", gist.title, gist.summary))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let overlap = lexical_overlap(
+                    prompt,
+                    &format!("{} {} {}", record.prompt, record.lesson, gist_text),
+                );
                 let profile_bonus = if record.profile == profile { 0.16 } else { 0.0 };
+                let gist_bonus = record
+                    .gist_records
+                    .iter()
+                    .map(|gist| gist.importance)
+                    .fold(0.0, f32::max)
+                    * 0.08;
                 let contradiction_penalty = (record.contradictions.len() as f32 * 0.08).min(0.32);
-                let score = (overlap * 0.52 + record.quality * 0.36 + profile_bonus
+                let score = (overlap * 0.52 + record.quality * 0.36 + profile_bonus + gist_bonus
                     - contradiction_penalty)
                     .clamp(0.0, 1.0);
 
@@ -139,6 +161,12 @@ impl ExperienceStore {
                     lesson: record.lesson.clone(),
                     quality: record.quality,
                     score,
+                    gist_hints: record
+                        .gist_records
+                        .iter()
+                        .take(3)
+                        .map(GistRecord::hint)
+                        .collect(),
                 })
             })
             .collect::<Vec<_>>();
@@ -216,9 +244,11 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         .map(|item| escape_field(item))
         .collect::<Vec<_>>()
         .join("|");
+    let gist_records = serialize_gists(&record.gist_records);
+    let gist_memory_ids = serialize_ids(&record.gist_memory_ids);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -230,13 +260,15 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         record.hierarchy.convolution,
         escape_field(&record.prompt),
         escape_field(&record.lesson),
-        contradictions
+        contradictions,
+        escape_field(&gist_records),
+        escape_field(&gist_memory_ids)
     )
 }
 
 fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
     let fields = line.split('\t').collect::<Vec<_>>();
-    if fields.len() != 12 {
+    if fields.len() < 12 {
         return None;
     }
 
@@ -262,6 +294,14 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
     } else {
         fields[11].split('|').map(unescape_field).collect()
     };
+    let gist_records = fields
+        .get(12)
+        .map(|value| deserialize_gists(&unescape_field(value)))
+        .unwrap_or_default();
+    let gist_memory_ids = fields
+        .get(13)
+        .map(|value| deserialize_ids(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -274,7 +314,71 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         router_threshold_after,
         stream_windows,
         hierarchy,
+        gist_records,
+        gist_memory_ids,
     })
+}
+
+fn serialize_gists(records: &[GistRecord]) -> String {
+    records
+        .iter()
+        .map(|record| {
+            [
+                record.level.as_str().to_owned(),
+                format!("{:.6}", record.importance),
+                record.source_tokens.to_string(),
+                sanitize_gist_part(&record.title),
+                sanitize_gist_part(&record.summary),
+            ]
+            .join("\u{1f}")
+        })
+        .collect::<Vec<_>>()
+        .join("\u{1e}")
+}
+
+fn deserialize_gists(value: &str) -> Vec<GistRecord> {
+    if value.is_empty() {
+        return Vec::new();
+    }
+
+    value
+        .split('\u{1e}')
+        .filter_map(|item| {
+            let fields = item.split('\u{1f}').collect::<Vec<_>>();
+            if fields.len() != 5 {
+                return None;
+            }
+
+            Some(GistRecord {
+                level: GistLevel::from_str(fields[0])?,
+                importance: fields[1].parse::<f32>().ok()?.clamp(0.0, 1.0),
+                source_tokens: fields[2].parse::<usize>().ok()?,
+                title: fields[3].to_owned(),
+                summary: fields[4].to_owned(),
+            })
+        })
+        .collect()
+}
+
+fn serialize_ids(ids: &[u64]) -> String {
+    ids.iter().map(u64::to_string).collect::<Vec<_>>().join(",")
+}
+
+fn deserialize_ids(value: &str) -> Vec<u64> {
+    value
+        .split(',')
+        .filter_map(|item| item.parse::<u64>().ok())
+        .collect()
+}
+
+fn sanitize_gist_part(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            '\u{1e}' | '\u{1f}' | '\t' | '\n' | '\r' => ' ',
+            other => other,
+        })
+        .collect()
 }
 
 fn profile_to_str(profile: TaskProfile) -> &'static str {
@@ -394,7 +498,11 @@ mod tests {
     fn disk_kv_roundtrip_preserves_experience() {
         let path = temp_path("experience");
         let mut store = ExperienceStore::new();
-        let id = store.record(input("stored", 0.87));
+        let id = store.record(ExperienceInput {
+            gist_records: vec![gist("document", GistLevel::Document, 0.88)],
+            gist_memory_ids: vec![7, 8],
+            ..input("stored", 0.87)
+        });
 
         store.save_to_disk_kv(&path).unwrap();
         let loaded = ExperienceStore::load_from_disk_kv(&path).unwrap();
@@ -403,7 +511,30 @@ mod tests {
         assert_eq!(loaded.records()[0].id, id);
         assert_eq!(loaded.records()[0].lesson, "stored");
         assert_eq!(loaded.records()[0].profile, TaskProfile::Coding);
+        assert_eq!(loaded.records()[0].gist_records.len(), 1);
+        assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
         cleanup(path);
+    }
+
+    #[test]
+    fn retrieve_lessons_includes_gist_hints() {
+        let mut store = ExperienceStore::new();
+        store.record(ExperienceInput {
+            prompt: "long context scheduler".to_owned(),
+            lesson: "reuse recursive chunk summaries".to_owned(),
+            gist_records: vec![gist(
+                "recursive chunks preserve overlap",
+                GistLevel::Section,
+                0.91,
+            )],
+            ..input("gist", 0.9)
+        });
+
+        let matches = store.retrieve_lessons("recursive overlap", TaskProfile::Coding, 1);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].gist_hints.len(), 1);
+        assert!(matches[0].gist_hints[0].contains("recursive chunks"));
     }
 
     fn input(lesson: &str, quality: f32) -> ExperienceInput {
@@ -417,6 +548,18 @@ mod tests {
             router_threshold_after: 0.55,
             stream_windows: 3,
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+        }
+    }
+
+    fn gist(summary: &str, level: GistLevel, importance: f32) -> GistRecord {
+        GistRecord {
+            level,
+            title: "gist title".to_owned(),
+            summary: summary.to_owned(),
+            source_tokens: 8,
+            importance,
         }
     }
 

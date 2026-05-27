@@ -60,9 +60,14 @@ impl RuntimeRequest {
                 .experiences
                 .iter()
                 .map(|experience| {
+                    let gist_hints = if experience.gist_hints.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        experience.gist_hints.join(" | ")
+                    };
                     format!(
-                        "{} score={:.3} quality={:.3}",
-                        experience.lesson, experience.score, experience.quality
+                        "{} score={:.3} quality={:.3} gist_hints={}",
+                        experience.lesson, experience.score, experience.quality, gist_hints
                     )
                 })
                 .collect(),
@@ -440,6 +445,7 @@ mod tests {
             lesson: "lesson".to_owned(),
             quality: 0.9,
             score: 0.88,
+            gist_hints: vec!["document:gist importance=0.900".to_owned()],
         }];
         let tier_plan = TieredCachePlan::default();
         let infini_memory_plan = InfiniMemoryPlan::new(

@@ -201,7 +201,8 @@ These are algorithmic references, not product dependencies:
   (initial control-plane memory planner with token-budget filtering is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
   (initial native-window-aware recursive schedule planning, chunk overlap, merge
-  rounds, runtime prompt propagation, and CLI reporting are in place)
+  rounds, runtime prompt propagation, CLI reporting, document/section/paragraph
+  gist generation, gist persistence, and KV admission are in place)
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
   allocation
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
