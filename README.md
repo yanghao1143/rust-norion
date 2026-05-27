@@ -200,7 +200,7 @@ Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
 Run through a local command runtime:
 
 ```powershell
-cargo run -- --runtime-command ./self-transformer-cli --runtime-arg "-p" --runtime-arg "{prompt}" --runtime-prompt-mode args "Build a Rust Noiron inference engine"
+cargo run -- --runtime-command ./self-transformer-cli --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-kv-exchange --runtime-arg "-p" --runtime-arg "{prompt}" --runtime-prompt-mode args "Build a Rust Noiron inference engine"
 ```
 
 If `--runtime-prompt-mode stdin` is used, the formatted Noiron runtime request is
@@ -286,6 +286,18 @@ generation. Unsupported capabilities have safe defaults so a command-line
 runtime can still start with only `generate`.
 
 `ModelRuntime` 现在显式暴露自研运行时边界：模型元数据、tokenizer、embedding、可选 KV 导入/导出以及生成接口。不支持的能力有安全默认值，因此命令行后端仍然可以只从 `generate` 起步。
+
+`RuntimeBackend` reports the runtime's native context window back to the engine,
+so recursive long-context scheduling can use the actual self-developed model
+window instead of a hardcoded control-plane default.
+
+`RuntimeBackend` 会把运行时的原生上下文窗口反馈给引擎，因此递归长上下文调度可以使用真实自研模型窗口，而不是固定的控制层默认值。
+
+The CLI exposes this metadata through `--runtime-model-id`,
+`--runtime-tokenizer`, `--runtime-native-window`, `--runtime-embedding-dims`,
+`--runtime-kv-import`, `--runtime-kv-export`, and `--runtime-kv-exchange`.
+
+CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 
 Expected integration loop:
 

@@ -52,6 +52,10 @@ pub struct GenerationContext<'a> {
 }
 
 pub trait InferenceBackend {
+    fn runtime_native_context_window(&self) -> Option<usize> {
+        None
+    }
+
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft;
 }
 
@@ -245,7 +249,9 @@ impl NoironEngine {
         let used_experiences =
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
-        let recursive_schedule = self.recursive_scheduler.plan(&request.prompt);
+        let recursive_scheduler =
+            self.scheduler_for_backend_window(backend.runtime_native_context_window());
+        let recursive_schedule = recursive_scheduler.plan(&request.prompt);
         let base_hierarchy = self.hierarchy.adapt_to_profile(request.profile);
         let hardware_plan = self.hardware_allocator.plan(
             self.hardware_snapshot,
@@ -404,6 +410,28 @@ impl NoironEngine {
             experience_id,
             router_threshold_after,
         }
+    }
+
+    fn scheduler_for_backend_window(
+        &self,
+        native_window_tokens: Option<usize>,
+    ) -> RecursiveScheduler {
+        let Some(native_window_tokens) = native_window_tokens.filter(|tokens| *tokens > 0) else {
+            return self.recursive_scheduler.clone();
+        };
+
+        if native_window_tokens == self.recursive_scheduler.native_window_tokens() {
+            return self.recursive_scheduler.clone();
+        }
+
+        RecursiveScheduler::new(
+            native_window_tokens,
+            self.recursive_scheduler
+                .chunk_tokens()
+                .min(native_window_tokens),
+            self.recursive_scheduler.overlap_tokens(),
+            self.recursive_scheduler.merge_fan_in(),
+        )
     }
 }
 
@@ -725,6 +753,41 @@ mod tests {
         assert_eq!(outcome.recursive_schedule.chunk_count(), 3);
         assert_eq!(outcome.recursive_schedule.merge_round_count(), 2);
         assert!(outcome.answer.contains("Recursive schedule"));
+    }
+
+    #[test]
+    fn inference_uses_backend_native_window_for_recursive_schedule() {
+        struct SmallWindowBackend;
+
+        impl InferenceBackend for SmallWindowBackend {
+            fn runtime_native_context_window(&self) -> Option<usize> {
+                Some(4)
+            }
+
+            fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    format!(
+                        "native window {} chunks {}",
+                        context.recursive_schedule.native_window_tokens,
+                        context.recursive_schedule.chunk_count()
+                    ),
+                    vec![ReasoningStep::new("runtime", "used native window", 0.9)],
+                )
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        let mut backend = SmallWindowBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("one two three four five six", TaskProfile::LongDocument),
+            &mut backend,
+        );
+
+        assert!(outcome.recursive_schedule.requires_recursion);
+        assert_eq!(outcome.recursive_schedule.native_window_tokens, 4);
+        assert!(outcome.recursive_schedule.chunk_count() > 1);
+        assert!(outcome.answer.contains("native window 4"));
     }
 
     #[test]

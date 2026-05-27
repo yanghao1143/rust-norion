@@ -520,6 +520,11 @@ impl<R> RuntimeBackend<R> {
 }
 
 impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
+    fn runtime_native_context_window(&self) -> Option<usize> {
+        let window = self.runtime.metadata().native_context_window;
+        (window > 0).then_some(window)
+    }
+
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
         let runtime_metadata = self.runtime.metadata();
         let request = RuntimeRequest::from_context(&context, self.max_tokens, runtime_metadata);

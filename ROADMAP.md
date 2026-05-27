@@ -234,7 +234,10 @@ These are algorithmic references, not product dependencies:
   harness for self-developed model runtimes
   (initial runtime metadata, tokenizer, embedding, and KV import/export trait
   hooks are in place; `RuntimeBackend` now injects runtime metadata into each
-  request and command runtime prompts expose the ABI boundary)
+  request, command runtime prompts expose the ABI boundary, and backend native
+  context windows feed recursive scheduling; CLI command runtimes can pass
+  model id, tokenizer, native window, embedding dimensions, and KV exchange
+  flags)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 

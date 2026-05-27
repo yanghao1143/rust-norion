@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use rust_norion::{
     CommandPromptMode, CommandRuntime, DeviceClass, GistLevel, HardwareSnapshot, HeuristicBackend,
-    InferenceRequest, NoironEngine, RecursiveScheduler, RuntimeBackend, TaskProfile,
-    TierMigrationAction,
+    InferenceRequest, NoironEngine, RecursiveScheduler, RuntimeBackend, RuntimeMetadata,
+    TaskProfile, TierMigrationAction,
 };
 
 fn main() -> std::io::Result<()> {
@@ -36,7 +36,8 @@ fn main() -> std::io::Result<()> {
     let outcome = if let Some(runtime_command) = args.runtime_command.clone() {
         let runtime = CommandRuntime::new(runtime_command)
             .args(args.runtime_args.clone())
-            .prompt_mode(args.runtime_prompt_mode);
+            .prompt_mode(args.runtime_prompt_mode)
+            .with_metadata(args.runtime_metadata.clone());
         let mut backend = RuntimeBackend::new(runtime);
         engine.infer(
             InferenceRequest::new(args.prompt.clone(), args.profile),
@@ -60,6 +61,7 @@ fn main() -> std::io::Result<()> {
     println!("adaptive_file: {}", args.adaptive_path.display());
     if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
+        println!("runtime_metadata: {}", args.runtime_metadata.summary());
     }
     if let Some(replay_report) = &replay_report {
         println!("experience_replay: {}", replay_report.summary());
@@ -175,6 +177,7 @@ struct Args {
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
+    runtime_metadata: RuntimeMetadata,
     native_window_tokens: usize,
     chunk_tokens: usize,
     chunk_overlap_tokens: usize,
@@ -197,6 +200,7 @@ impl Args {
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
+        let mut runtime_metadata = RuntimeMetadata::default();
         let default_scheduler = RecursiveScheduler::default();
         let mut native_window_tokens = default_scheduler.native_window_tokens();
         let mut chunk_tokens = default_scheduler.chunk_tokens();
@@ -243,6 +247,37 @@ impl Args {
                         _ => CommandPromptMode::Stdin,
                     };
                     index += 2;
+                }
+                "--runtime-model-id" if index + 1 < raw.len() => {
+                    runtime_metadata.model_id = raw[index + 1].clone();
+                    index += 2;
+                }
+                "--runtime-tokenizer" if index + 1 < raw.len() => {
+                    runtime_metadata.tokenizer = raw[index + 1].clone();
+                    index += 2;
+                }
+                "--runtime-native-window" if index + 1 < raw.len() => {
+                    runtime_metadata.native_context_window =
+                        parse_usize(&raw[index + 1], runtime_metadata.native_context_window);
+                    index += 2;
+                }
+                "--runtime-embedding-dims" if index + 1 < raw.len() => {
+                    runtime_metadata.embedding_dimensions =
+                        parse_usize(&raw[index + 1], runtime_metadata.embedding_dimensions);
+                    index += 2;
+                }
+                "--runtime-kv-import" => {
+                    runtime_metadata.supports_kv_import = true;
+                    index += 1;
+                }
+                "--runtime-kv-export" => {
+                    runtime_metadata.supports_kv_export = true;
+                    index += 1;
+                }
+                "--runtime-kv-exchange" => {
+                    runtime_metadata.supports_kv_import = true;
+                    runtime_metadata.supports_kv_export = true;
+                    index += 1;
                 }
                 "--native-window" if index + 1 < raw.len() => {
                     native_window_tokens = parse_usize(&raw[index + 1], native_window_tokens);
@@ -311,6 +346,7 @@ impl Args {
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
+            runtime_metadata,
             native_window_tokens,
             chunk_tokens,
             chunk_overlap_tokens,
@@ -357,7 +393,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -381,6 +417,15 @@ mod tests {
             "2".to_owned(),
             "--replay".to_owned(),
             "3".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "dev-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "dev-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "128".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
             "--device".to_owned(),
             "cpu".to_owned(),
             "--cpu-load".to_owned(),
@@ -396,6 +441,12 @@ mod tests {
         assert_eq!(args.chunk_overlap_tokens, 2);
         assert_eq!(args.merge_fan_in, 2);
         assert_eq!(args.replay_limit, 3);
+        assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
+        assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
+        assert_eq!(args.runtime_metadata.native_context_window, 4096);
+        assert_eq!(args.runtime_metadata.embedding_dimensions, 128);
+        assert!(args.runtime_metadata.supports_kv_import);
+        assert!(args.runtime_metadata.supports_kv_export);
         assert_eq!(args.device, DeviceClass::CpuOnly);
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);
