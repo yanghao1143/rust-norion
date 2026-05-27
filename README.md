@@ -141,6 +141,7 @@ Implemented modules:
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
+- `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, embedding, generation, and KV import/export
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
@@ -252,6 +253,21 @@ cargo run -- --runtime-command ./self-transformer-cli --runtime-model-id noiron-
 
 If `--runtime-prompt-mode stdin` is used, the formatted Noiron runtime request is
 written to the child process stdin.
+
+Run through the built-in Rust-native local runtime prototype:
+
+```powershell
+cargo run -- --local-runtime --runtime-native-window 32768 --runtime-embedding-dims 128 --profile coding "Build a Rust Noiron runtime with KV exchange"
+```
+
+The local runtime is still a deterministic prototype, not a production LLM
+kernel. Its purpose is to exercise the same self-developed runtime ABI that a
+real Transformer runtime will implement: tokenizer, embedding, native context
+window, KV import/export, token trace, and generation.
+
+内置 local runtime 仍然是确定性原型，不是生产级大模型内核。它的作用是打通真实自研
+Transformer runtime 将要实现的同一套 ABI：tokenizer、embedding、原生上下文窗口、KV
+导入/导出、token trace 和生成接口。
 
 By default, the demo writes local memory to `noiron-memory.tsv`, structured
 reflection experience to `noiron-experience.ndkv`, and adaptive router/hierarchy

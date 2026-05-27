@@ -11,6 +11,7 @@ pub mod infini_memory;
 pub mod kv_cache;
 pub mod kv_exchange;
 pub mod kv_quant;
+pub mod local_runtime;
 pub mod process_reward;
 pub mod recursive_scheduler;
 pub mod reflection;
@@ -48,6 +49,7 @@ pub use kv_cache::{
 };
 pub use kv_exchange::RuntimeKvBlock;
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
+pub use local_runtime::LocalTransformerRuntime;
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };

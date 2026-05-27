@@ -183,7 +183,8 @@ modules, not external product dependencies:
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
-  and KV exchange.
+  and KV exchange. A built-in local runtime prototype should exercise that ABI
+  before production kernels are available.
 - Universal hardware profiles:
   hardware allocation should stay device-agnostic while supporting explicit
   policy profiles for PC, laptop, workstation, server, mobile, embedded,
@@ -252,7 +253,9 @@ These are algorithmic references, not product dependencies:
   memory counters per inference; a built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
-  latency ceilings, and recursive chunk ceilings)
+  latency ceilings, and recursive chunk ceilings; a deterministic Rust-native
+  local runtime prototype now implements tokenizer, embedding, generation,
+  token trace, and KV import/export through the same `ModelRuntime` ABI)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -268,6 +271,8 @@ These are algorithmic references, not product dependencies:
   rollback, and inspectable local state.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
+- A built-in local runtime prototype proves the runtime ABI end to end before
+  production Transformer kernels are connected.
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets.
 - Default CLI execution performs conservative local device probing, and manual

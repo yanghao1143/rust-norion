@@ -5,9 +5,9 @@ use std::time::Instant;
 use rust_norion::{
     BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
     DeviceClass, GistLevel, HardwareSnapshot, HeuristicBackend, InferenceBackend, InferenceOutcome,
-    InferenceRequest, NoironEngine, RecursiveScheduler, RuntimeBackend, RuntimeMetadata,
-    TaskProfile, TierMigrationAction, append_trace_jsonl, append_trace_jsonl_with_case,
-    default_benchmark_cases,
+    InferenceRequest, LocalTransformerRuntime, ModelRuntime, NoironEngine, RecursiveScheduler,
+    RuntimeBackend, RuntimeMetadata, TaskProfile, TierMigrationAction, append_trace_jsonl,
+    append_trace_jsonl_with_case, default_benchmark_cases,
 };
 
 fn main() -> std::io::Result<()> {
@@ -42,6 +42,10 @@ fn main() -> std::io::Result<()> {
                 .args(args.runtime_args.clone())
                 .prompt_mode(args.runtime_prompt_mode)
                 .with_metadata(args.runtime_metadata.clone());
+            let mut backend = RuntimeBackend::new(runtime);
+            run_benchmark(&mut engine, &mut backend, &benchmark_path)?
+        } else if args.local_runtime {
+            let runtime = LocalTransformerRuntime::with_metadata(args.runtime_metadata.clone());
             let mut backend = RuntimeBackend::new(runtime);
             run_benchmark(&mut engine, &mut backend, &benchmark_path)?
         } else {
@@ -79,6 +83,17 @@ fn main() -> std::io::Result<()> {
             args.trace_path.as_ref(),
             None,
         )?
+    } else if args.local_runtime {
+        let runtime = LocalTransformerRuntime::with_metadata(args.runtime_metadata.clone());
+        let mut backend = RuntimeBackend::new(runtime);
+        run_timed_inference(
+            &mut engine,
+            &mut backend,
+            args.prompt.clone(),
+            args.profile,
+            args.trace_path.as_ref(),
+            None,
+        )?
     } else {
         let mut backend = HeuristicBackend;
         run_timed_inference(
@@ -105,7 +120,15 @@ fn main() -> std::io::Result<()> {
     if let Some(trace_path) = &args.trace_path {
         println!("trace_file: {}", trace_path.display());
     }
-    if let Some(runtime_command) = &args.runtime_command {
+    if args.local_runtime {
+        println!("runtime: local-transformer");
+        println!(
+            "runtime_metadata: {}",
+            LocalTransformerRuntime::with_metadata(args.runtime_metadata.clone())
+                .metadata()
+                .summary()
+        );
+    } else if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
         println!("runtime_metadata: {}", args.runtime_metadata.summary());
     }
@@ -326,6 +349,7 @@ struct Args {
     benchmark_min_reward: Option<f32>,
     benchmark_max_total_ms: Option<u128>,
     benchmark_max_recursive_chunks: Option<usize>,
+    local_runtime: bool,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
@@ -356,6 +380,7 @@ impl Args {
         let mut benchmark_min_reward = None;
         let mut benchmark_max_total_ms = None;
         let mut benchmark_max_recursive_chunks = None;
+        let mut local_runtime = false;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
@@ -427,6 +452,12 @@ impl Args {
                     benchmark_max_recursive_chunks = Some(parse_usize(&raw[index + 1], usize::MAX));
                     benchmark_gate_enabled = true;
                     index += 2;
+                }
+                "--local-runtime" => {
+                    local_runtime = true;
+                    runtime_metadata.supports_kv_import = true;
+                    runtime_metadata.supports_kv_export = true;
+                    index += 1;
                 }
                 "--runtime-command" if index + 1 < raw.len() => {
                     runtime_command = Some(PathBuf::from(&raw[index + 1]));
@@ -565,6 +596,7 @@ impl Args {
             benchmark_min_reward,
             benchmark_max_total_ms,
             benchmark_max_recursive_chunks,
+            local_runtime,
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
@@ -638,7 +670,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--benchmark path] [--benchmark-gate] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -674,6 +706,7 @@ mod tests {
             "10000".to_owned(),
             "--benchmark-max-recursive-chunks".to_owned(),
             "8".to_owned(),
+            "--local-runtime".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
@@ -708,6 +741,7 @@ mod tests {
         assert_eq!(args.benchmark_min_reward, Some(0.5));
         assert_eq!(args.benchmark_max_total_ms, Some(10000));
         assert_eq!(args.benchmark_max_recursive_chunks, Some(8));
+        assert!(args.local_runtime);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
         assert_eq!(args.runtime_metadata.native_context_window, 4096);
