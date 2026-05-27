@@ -45,7 +45,10 @@ pub use hardware::{
     DevicePlanGateRow, DeviceProfileDescriptor, DeviceTier, HardwareAllocator, HardwarePlan,
     HardwareProbe, HardwareSnapshot, RuntimeAdapterHint,
 };
-pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskProfile};
+pub use hierarchy::{
+    HierarchyController, HierarchyState, HierarchyWeights, ProfileHierarchyObservations,
+    ProfileHierarchyWeights, TaskProfile,
+};
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
 };

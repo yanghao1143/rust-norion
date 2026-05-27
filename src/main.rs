@@ -463,6 +463,13 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
         report.profile_observations.writing,
         report.profile_observations.long_document
     );
+    println!(
+        "profile_hierarchy_observations: general={} coding={} writing={} long={}",
+        report.profile_hierarchy_observations.general,
+        report.profile_hierarchy_observations.coding,
+        report.profile_hierarchy_observations.writing,
+        report.profile_hierarchy_observations.long_document
+    );
 
     println!("top_memories:");
     if report.top_memories.is_empty() {

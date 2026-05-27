@@ -120,6 +120,11 @@ The north star is now explicitly scoped around five core requirements:
    evolve per task profile so coding, writing, general reasoning, and
    long-document runs do not overwrite each other's compute strategy.
 
+   Hierarchy weights should follow the same profile-specific rule: learned
+   global/local/convolution balances for coding, writing, general reasoning,
+   and long-document workloads persist independently instead of one task
+   overwriting another.
+
 2. Self-owned Transformer boundary / 自研 Transformer 边界
    Strengthen the runtime trait so the self-developed model exposes tokenizer,
    embeddings, native context window, KV import/export, and forward execution
@@ -298,6 +303,8 @@ These are algorithmic references, not product dependencies:
   device matrix and run a `--device-gate` compatibility check across every
   explicit device profile, including alias roundtrips;
   router thresholds now persist separately for general, coding, writing, and
+  long-document profiles;
+  hierarchy weights now persist separately for general, coding, writing, and
   long-document profiles;
   route scoring now consumes hardware pressure and device compute headroom from
   the hardware plan;

@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 
 use crate::engine::NoironEngine;
-use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::hierarchy::{
+    HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
+};
 use crate::process_reward::RewardAction;
 use crate::router::{ProfileObservations, ProfileThresholds};
 use crate::tiered_cache::TierCounts;
@@ -35,6 +37,8 @@ pub struct StateInspectionReport {
     pub profile_thresholds: ProfileThresholds,
     pub profile_observations: ProfileObservations,
     pub hierarchy: HierarchyWeights,
+    pub profile_hierarchy_weights: ProfileHierarchyWeights,
+    pub profile_hierarchy_observations: ProfileHierarchyObservations,
     pub tier_counts: TierCounts,
     pub top_memories: Vec<StateMemorySummary>,
     pub top_experiences: Vec<StateExperienceSummary>,
@@ -112,6 +116,8 @@ impl StateInspectionReport {
             profile_thresholds: adaptive_state.router.profile_thresholds,
             profile_observations: adaptive_state.router.profile_observations,
             hierarchy: adaptive_state.hierarchy.current,
+            profile_hierarchy_weights: adaptive_state.hierarchy.profile_weights,
+            profile_hierarchy_observations: adaptive_state.hierarchy.profile_observations,
             tier_counts: adaptive_state.tier_plan.counts(),
             top_memories,
             top_experiences,
@@ -120,7 +126,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) tiers=({},{},{})",
+            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{})",
             self.memory_count,
             self.experience_count,
             self.router_threshold,
@@ -132,6 +138,10 @@ impl StateInspectionReport {
             self.hierarchy.global,
             self.hierarchy.local,
             self.hierarchy.convolution,
+            self.profile_hierarchy_weights.general.local,
+            self.profile_hierarchy_weights.coding.local,
+            self.profile_hierarchy_weights.writing.local,
+            self.profile_hierarchy_weights.long_document.local,
             self.tier_counts.hot_gpu,
             self.tier_counts.warm_ram,
             self.tier_counts.cold_disk

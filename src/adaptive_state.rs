@@ -2,7 +2,9 @@ use std::io;
 use std::path::Path;
 
 use crate::disk_kv::DiskKvStore;
-use crate::hierarchy::{HierarchyState, HierarchyWeights};
+use crate::hierarchy::{
+    HierarchyState, HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights,
+};
 use crate::router::{ProfileObservations, ProfileThresholds, RouterState};
 use crate::tiered_cache::{MemoryPlacement, MemoryTier, TieredCachePlan};
 
@@ -35,13 +37,7 @@ impl AdaptiveState {
         )?;
         store.put(
             "adaptive/hierarchy",
-            format!(
-                "{:.6}\t{:.6}\t{:.6}",
-                self.hierarchy.current.global,
-                self.hierarchy.current.local,
-                self.hierarchy.current.convolution
-            )
-            .as_bytes(),
+            serialize_hierarchy_state(self.hierarchy).as_bytes(),
         )?;
         store.put(
             "adaptive/tier_plan",
@@ -124,17 +120,77 @@ fn parse_router_state(value: &str) -> Option<RouterState> {
 
 fn parse_hierarchy_state(value: &str) -> Option<HierarchyState> {
     let fields = value.split('\t').collect::<Vec<_>>();
+    if fields.len() != 3 && fields.len() != 19 {
+        return None;
+    }
+
+    let current = HierarchyWeights::new(
+        fields[0].parse::<f32>().ok()?,
+        fields[1].parse::<f32>().ok()?,
+        fields[2].parse::<f32>().ok()?,
+    );
+    let profile_weights = if fields.len() == 19 {
+        ProfileHierarchyWeights {
+            general: parse_hierarchy_weights(&fields[3..6])?,
+            coding: parse_hierarchy_weights(&fields[6..9])?,
+            writing: parse_hierarchy_weights(&fields[9..12])?,
+            long_document: parse_hierarchy_weights(&fields[12..15])?,
+        }
+    } else {
+        ProfileHierarchyWeights::from_single(current)
+    };
+    let profile_observations = if fields.len() == 19 {
+        ProfileHierarchyObservations {
+            general: fields[15].parse::<u64>().ok()?,
+            coding: fields[16].parse::<u64>().ok()?,
+            writing: fields[17].parse::<u64>().ok()?,
+            long_document: fields[18].parse::<u64>().ok()?,
+        }
+    } else {
+        ProfileHierarchyObservations::default()
+    };
+
+    Some(HierarchyState {
+        current,
+        profile_weights,
+        profile_observations,
+    })
+}
+
+fn serialize_hierarchy_state(state: HierarchyState) -> String {
+    format!(
+        "{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        state.current.global,
+        state.current.local,
+        state.current.convolution,
+        serialize_hierarchy_weights(state.profile_weights.general),
+        serialize_hierarchy_weights(state.profile_weights.coding),
+        serialize_hierarchy_weights(state.profile_weights.writing),
+        serialize_hierarchy_weights(state.profile_weights.long_document),
+        state.profile_observations.general,
+        state.profile_observations.coding,
+        state.profile_observations.writing,
+        state.profile_observations.long_document
+    )
+}
+
+fn serialize_hierarchy_weights(weights: HierarchyWeights) -> String {
+    format!(
+        "{:.6}\t{:.6}\t{:.6}",
+        weights.global, weights.local, weights.convolution
+    )
+}
+
+fn parse_hierarchy_weights(fields: &[&str]) -> Option<HierarchyWeights> {
     if fields.len() != 3 {
         return None;
     }
 
-    Some(HierarchyState {
-        current: HierarchyWeights::new(
-            fields[0].parse::<f32>().ok()?,
-            fields[1].parse::<f32>().ok()?,
-            fields[2].parse::<f32>().ok()?,
-        ),
-    })
+    Some(HierarchyWeights::new(
+        fields[0].parse::<f32>().ok()?,
+        fields[1].parse::<f32>().ok()?,
+        fields[2].parse::<f32>().ok()?,
+    ))
 }
 
 fn serialize_tier_plan(plan: &TieredCachePlan) -> String {
@@ -237,6 +293,18 @@ mod tests {
             },
             hierarchy: HierarchyState {
                 current: HierarchyWeights::new(0.2, 0.6, 0.2),
+                profile_weights: ProfileHierarchyWeights {
+                    general: HierarchyWeights::new(0.36, 0.42, 0.22),
+                    coding: HierarchyWeights::new(0.18, 0.68, 0.14),
+                    writing: HierarchyWeights::new(0.60, 0.26, 0.14),
+                    long_document: HierarchyWeights::new(0.24, 0.18, 0.58),
+                },
+                profile_observations: ProfileHierarchyObservations {
+                    general: 2,
+                    coding: 7,
+                    writing: 5,
+                    long_document: 3,
+                },
             },
             tier_plan: TieredCachePlan::new(vec![MemoryPlacement {
                 id: 7,
@@ -254,6 +322,8 @@ mod tests {
         assert!((loaded.router.profile_thresholds.coding - 0.49).abs() < 0.0001);
         assert_eq!(loaded.router.profile_observations.writing, 3);
         assert!((loaded.hierarchy.current.local - 0.6).abs() < 0.0001);
+        assert!((loaded.hierarchy.profile_weights.coding.local - 0.68).abs() < 0.0001);
+        assert_eq!(loaded.hierarchy.profile_observations.long_document, 3);
         let placement = loaded.tier_plan.placement_for(7).unwrap();
         assert_eq!(placement.tier, MemoryTier::WarmRam);
         assert_eq!(placement.reason, "warm\tstate");

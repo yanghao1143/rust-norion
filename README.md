@@ -51,7 +51,8 @@ The project focuses on the control loop around inference:
 - reinforced KV memory: store useful context, fuse similar memories, weaken bad
   memories, and persist local state
 - task-aware hierarchy: shift global, local, and convolution-style compute
-  weights for coding, writing, general reasoning, or long-document tasks
+  weights for coding, writing, general reasoning, or long-document tasks, with
+  profile-specific learned weights persisted across runs
 - Rust-native Transformer refactor planning: express global, local-window, and
   convolutional-fusion layer plans as explicit Rust data structures
 - reflection loop: score drafts, detect weak outputs, revise confidence, and
@@ -61,7 +62,7 @@ The project focuses on the control loop around inference:
 
 - 多因子自适应路由：基于熵、任务类型、上下文长度、缓存命中率、延迟压力、硬件压力和设备算力余量，判断 token 应该走投影、局部窗口注意力、全局注意力还是卷积融合，并为不同任务 profile 分别维护自适应阈值
 - 强化式 KV 记忆：保存有用上下文，融合相似记忆，削弱错误记忆，并持久化到本地
-- 任务感知层级调度：针对代码、写作、通用推理、长文档任务调整全局/局部/卷积式计算权重
+- 任务感知层级调度：针对代码、写作、通用推理、长文档任务调整全局/局部/卷积式计算权重，并按任务 profile 持久化学习后的权重
 - Rust 原生 Transformer 重构规划：用明确的 Rust 数据结构表达全局注意力、局部窗口注意力和卷积融合层计划
 - 反思闭环：评估草稿质量，发现薄弱输出，修正置信度，并决定是否写入可复用记忆
 - 后端抽象：让控制层与真实模型运行时解耦
@@ -157,7 +158,7 @@ Implemented modules:
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
-- `src/hierarchy.rs`: task-profile hierarchy controller
+- `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
 - `src/state_inspect.rs`: local state inspection report for memory, experience, adaptive router, hierarchy, and tier counts
