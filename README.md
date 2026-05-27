@@ -152,7 +152,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reflection diagnostics, drift, reward, and memory counters
+- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -452,13 +452,16 @@ Retention and compaction can be tuned locally with
 `--retention-remove-below`, `--retention-remove-after-failures`,
 `--compaction-threshold`, `--compaction-max-candidates`, and
 `--compaction-max-merges`. Values are clamped to conservative ranges, and
-`--compaction-max-merges 0` disables batch merging for a run.
+`--compaction-max-merges 0` disables batch merging for a run. JSONL traces
+include the effective retention and compaction policy values alongside the
+result counters.
 
 可以通过 `--retention-stale-after`、`--retention-decay-rate`、
 `--retention-remove-below`、`--retention-remove-after-failures`、
 `--compaction-threshold`、`--compaction-max-candidates` 和
 `--compaction-max-merges` 本地调整记忆衰减与合并策略。参数会被限制在保守范围内，
-`--compaction-max-merges 0` 可以在单次运行中关闭批量合并。
+`--compaction-max-merges 0` 可以在单次运行中关闭批量合并。JSONL trace 会同时记录
+实际生效的 retention / compaction 策略和值以及执行结果计数。
 
 ## Test / 测试
 

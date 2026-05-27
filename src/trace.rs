@@ -58,8 +58,8 @@ pub fn trace_json_line_with_case(
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{}}},\
-         \"retention\":{{\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
-         \"memory_compaction\":{{\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
+         \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
+         \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
          }}",
         option_string_json(case_name),
@@ -146,10 +146,17 @@ pub fn trace_json_line_with_case(
         auto_replay
             .map(|report| report.touched_memories)
             .unwrap_or(0),
+        outcome.memory_retention_policy.stale_after,
+        outcome.memory_retention_policy.decay_rate,
+        outcome.memory_retention_policy.remove_below_strength,
+        outcome.memory_retention_policy.remove_after_failures,
         outcome.retention_report.before,
         outcome.retention_report.after,
         outcome.retention_report.decayed,
         outcome.retention_report.removed.len(),
+        outcome.memory_compaction_policy.similarity_threshold,
+        outcome.memory_compaction_policy.max_candidates,
+        outcome.memory_compaction_policy.max_merges,
         outcome.memory_compaction_report.before,
         outcome.memory_compaction_report.after,
         outcome.memory_compaction_report.merged.len(),
@@ -271,6 +278,10 @@ mod tests {
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"auto_replay\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
+        assert!(line.contains("\"stale_after\":"));
+        assert!(line.contains("\"decay_rate\":"));
+        assert!(line.contains("\"similarity_threshold\":"));
+        assert!(line.contains("\"max_merges\":"));
         assert!(line.contains("\"memory_compaction\":"));
         assert!(line.ends_with('}'));
     }

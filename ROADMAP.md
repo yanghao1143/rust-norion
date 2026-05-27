@@ -355,7 +355,8 @@ These are algorithmic references, not product dependencies:
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
   records now capture route, hierarchy, KV, recursion, hardware, structured
-  reflection diagnostics, drift, reward, and memory counters per inference; a
+  reflection diagnostics, drift, reward, effective memory policies, and memory
+  counters per inference; a
   built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
@@ -375,7 +376,7 @@ These are algorithmic references, not product dependencies:
 
 - The default build can run without external model weights or closed services.
 - Every control decision can be traced: route, memory, hierarchy, reflection,
-  drift, reward, and adaptive-state update.
+  drift, reward, effective memory policies, and adaptive-state update.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
   before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, including gates that
