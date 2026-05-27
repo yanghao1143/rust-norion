@@ -1,3 +1,4 @@
+use crate::drift::DriftSeverity;
 use crate::engine::InferenceOutcome;
 use crate::hierarchy::TaskProfile;
 
@@ -56,6 +57,7 @@ pub struct BenchmarkCaseResult {
     pub stored_memories: usize,
     pub runtime_kv_exported: usize,
     pub runtime_kv_stored: usize,
+    pub drift_severity: DriftSeverity,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -64,6 +66,8 @@ pub struct BenchmarkGate {
     pub min_average_reward: f32,
     pub max_total_elapsed_ms: Option<u128>,
     pub max_case_recursive_chunks: Option<usize>,
+    pub max_drift_blocks: Option<usize>,
+    pub max_drift_rollbacks: Option<usize>,
 }
 
 impl Default for BenchmarkGate {
@@ -73,6 +77,8 @@ impl Default for BenchmarkGate {
             min_average_reward: 0.45,
             max_total_elapsed_ms: None,
             max_case_recursive_chunks: None,
+            max_drift_blocks: Some(0),
+            max_drift_rollbacks: Some(0),
         }
     }
 }
@@ -120,6 +126,7 @@ impl BenchmarkSummary {
             stored_memories,
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
             runtime_kv_stored: outcome.stored_runtime_kv_memory_ids.len(),
+            drift_severity: outcome.drift_report.severity,
         });
     }
 
@@ -163,6 +170,27 @@ impl BenchmarkSummary {
             .iter()
             .map(|result| result.stored_memories)
             .sum()
+    }
+
+    pub fn drift_watches(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.drift_severity == DriftSeverity::Watch)
+            .count()
+    }
+
+    pub fn drift_blocks(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.drift_severity == DriftSeverity::Block)
+            .count()
+    }
+
+    pub fn drift_rollbacks(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.drift_severity == DriftSeverity::Rollback)
+            .count()
     }
 
     pub fn max_recursive_chunks(&self) -> usize {
@@ -216,6 +244,26 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(max_drift_blocks) = gate.max_drift_blocks {
+            let drift_blocks = self.drift_blocks();
+            if drift_blocks > max_drift_blocks {
+                failures.push(format!(
+                    "drift_blocks {} above maximum {}",
+                    drift_blocks, max_drift_blocks
+                ));
+            }
+        }
+
+        if let Some(max_drift_rollbacks) = gate.max_drift_rollbacks {
+            let drift_rollbacks = self.drift_rollbacks();
+            if drift_rollbacks > max_drift_rollbacks {
+                failures.push(format!(
+                    "drift_rollbacks {} above maximum {}",
+                    drift_rollbacks, max_drift_rollbacks
+                ));
+            }
+        }
+
         BenchmarkGateReport {
             passed: failures.is_empty(),
             failures,
@@ -224,14 +272,17 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} stored_memories={} runtime_kv_stored={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} stored_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
             self.average_reward(),
             self.average_attention_fraction(),
             self.total_stored_memories(),
-            self.total_runtime_kv_stored()
+            self.total_runtime_kv_stored(),
+            self.drift_watches(),
+            self.drift_blocks(),
+            self.drift_rollbacks()
         )
     }
 }
@@ -334,6 +385,8 @@ mod tests {
             min_average_reward: 1.10,
             max_total_elapsed_ms: Some(1),
             max_case_recursive_chunks: Some(0),
+            max_drift_blocks: Some(0),
+            max_drift_rollbacks: Some(0),
         };
 
         summary.record(&case, 7, &outcome);
@@ -357,6 +410,35 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("total_elapsed_ms"))
+        );
+    }
+
+    #[test]
+    fn gate_reports_drift_failures() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "drift".to_owned(),
+                profile: TaskProfile::General,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                recursive_chunks: 1,
+                used_memories: 0,
+                stored_memories: 0,
+                runtime_kv_exported: 0,
+                runtime_kv_stored: 0,
+                drift_severity: DriftSeverity::Rollback,
+            }],
+        };
+        let report = summary.evaluate(&BenchmarkGate::default());
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("drift_rollbacks"))
         );
     }
 }

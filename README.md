@@ -205,8 +205,14 @@ cargo run -- --benchmark target/noiron-benchmark.jsonl
 Run the same suite as a regression gate:
 
 ```powershell
-cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5
+cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
+
+Benchmark summaries include drift watch/block/rollback counts, so safety
+regressions in the self-evolution loop can fail the gate even when average
+quality still looks acceptable.
+
+Benchmark 汇总会包含 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

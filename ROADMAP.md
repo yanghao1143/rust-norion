@@ -255,13 +255,14 @@ These are algorithmic references, not product dependencies:
   model id, tokenizer, native window, embedding dimensions, and KV exchange
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
-  records now capture route, hierarchy, KV, recursion, hardware, reward, and
+  records now capture route, hierarchy, KV, recursion, hardware, drift, reward, and
   memory counters per inference; a built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
-  latency ceilings, and recursive chunk ceilings; a deterministic Rust-native
-  local runtime prototype now implements tokenizer, embedding, generation,
-  token trace, and KV import/export through the same `ModelRuntime` ABI)
+  latency ceilings, recursive chunk ceilings, and maximum drift block/rollback
+  counts; a deterministic Rust-native local runtime prototype now implements
+  tokenizer, embedding, generation, token trace, and KV import/export through
+  the same `ModelRuntime` ABI)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -283,5 +284,5 @@ These are algorithmic references, not product dependencies:
   devices and high-capacity accelerator targets.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
-- Benchmark gates can fail CI or local checks when quality, reward, latency, or
-  recursive scheduling budgets regress.
+- Benchmark gates can fail CI or local checks when quality, reward, latency,
+  recursive scheduling budgets, or drift block/rollback counts regress.
