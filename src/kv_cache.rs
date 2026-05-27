@@ -1,7 +1,10 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::disk_kv::DiskKvStore;
 
 #[derive(Debug, Clone)]
 pub struct MemoryEntry {
@@ -145,22 +148,8 @@ impl KvFusionCache {
         content.push_str("# noiron-kv-cache-v1\n");
 
         for entry in &self.entries {
-            let vector = entry
-                .vector
-                .iter()
-                .map(|value| format!("{value:.6}"))
-                .collect::<Vec<_>>()
-                .join(",");
-            content.push_str(&format!(
-                "{}\t{:.6}\t{}\t{}\t{:.6}\t{}\t{}\n",
-                entry.id,
-                entry.strength,
-                entry.hits,
-                entry.failures,
-                entry.last_score,
-                escape_field(&entry.key),
-                vector
-            ));
+            content.push_str(&serialize_entry(entry));
+            content.push('\n');
         }
 
         fs::write(path, content)
@@ -176,41 +165,59 @@ impl KvFusionCache {
         let mut cache = Self::new();
 
         for line in content.lines().filter(|line| !line.starts_with('#')) {
-            let fields = line.split('\t').collect::<Vec<_>>();
-            if fields.len() != 7 {
-                continue;
-            }
-
-            let Ok(id) = fields[0].parse::<u64>() else {
+            let Some(entry) = deserialize_entry(line) else {
                 continue;
             };
-            let Ok(strength) = fields[1].parse::<f32>() else {
-                continue;
-            };
-            let Ok(hits) = fields[2].parse::<u64>() else {
-                continue;
-            };
-            let Ok(failures) = fields[3].parse::<u64>() else {
-                continue;
-            };
-            let Ok(last_score) = fields[4].parse::<f32>() else {
-                continue;
-            };
-            let vector = fields[6]
-                .split(',')
-                .filter_map(|value| value.parse::<f32>().ok())
-                .collect::<Vec<_>>();
-
-            cache.entries.push(MemoryEntry {
-                id,
-                key: unescape_field(fields[5]),
-                vector,
-                strength,
-                hits,
-                failures,
-                last_score,
-            });
+            let id = entry.id;
+            cache.entries.push(entry);
             cache.next_id = cache.next_id.max(id + 1);
+        }
+
+        Ok(cache)
+    }
+
+    pub fn save_to_disk_kv(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        let mut store = DiskKvStore::open(path)?;
+        let mut live_keys = HashSet::new();
+
+        for entry in &self.entries {
+            let key = format!("memory/{}", entry.id);
+            live_keys.insert(key.clone());
+            store.put(&key, serialize_entry(entry).as_bytes())?;
+        }
+
+        for stale_key in store.keys_with_prefix("memory/") {
+            if !live_keys.contains(&stale_key) {
+                store.delete(&stale_key)?;
+            }
+        }
+
+        store.put("meta/next_id", self.next_id.to_string().as_bytes())?;
+        store.compact()
+    }
+
+    pub fn load_from_disk_kv(path: impl AsRef<Path>) -> io::Result<Self> {
+        let store = DiskKvStore::open(path)?;
+        let mut cache = Self::new();
+
+        for key in store.keys_with_prefix("memory/") {
+            let Some(value) = store.get(&key)? else {
+                continue;
+            };
+            let Ok(line) = String::from_utf8(value) else {
+                continue;
+            };
+            let Some(entry) = deserialize_entry(&line) else {
+                continue;
+            };
+            cache.next_id = cache.next_id.max(entry.id + 1);
+            cache.entries.push(entry);
+        }
+
+        if let Some(value) = store.get("meta/next_id")? {
+            if let Ok(next_id) = String::from_utf8_lossy(&value).parse::<u64>() {
+                cache.next_id = cache.next_id.max(next_id);
+            }
         }
 
         Ok(cache)
@@ -253,6 +260,53 @@ fn fuse_vector(
         let next = incoming.get(index).copied().unwrap_or(0.0) * incoming_weight;
         existing[index] = (current + next) / total;
     }
+}
+
+fn serialize_entry(entry: &MemoryEntry) -> String {
+    let vector = entry
+        .vector
+        .iter()
+        .map(|value| format!("{value:.6}"))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    format!(
+        "{}\t{:.6}\t{}\t{}\t{:.6}\t{}\t{}",
+        entry.id,
+        entry.strength,
+        entry.hits,
+        entry.failures,
+        entry.last_score,
+        escape_field(&entry.key),
+        vector
+    )
+}
+
+fn deserialize_entry(line: &str) -> Option<MemoryEntry> {
+    let fields = line.split('\t').collect::<Vec<_>>();
+    if fields.len() != 7 {
+        return None;
+    }
+
+    let id = fields[0].parse::<u64>().ok()?;
+    let strength = fields[1].parse::<f32>().ok()?;
+    let hits = fields[2].parse::<u64>().ok()?;
+    let failures = fields[3].parse::<u64>().ok()?;
+    let last_score = fields[4].parse::<f32>().ok()?;
+    let vector = fields[6]
+        .split(',')
+        .filter_map(|value| value.parse::<f32>().ok())
+        .collect::<Vec<_>>();
+
+    Some(MemoryEntry {
+        id,
+        key: unescape_field(fields[5]),
+        vector,
+        strength,
+        hits,
+        failures,
+        last_score,
+    })
 }
 
 fn merge_key(existing: &str, incoming: &str) -> String {
@@ -337,6 +391,7 @@ fn unescape_field(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn fuses_similar_memories() {
@@ -359,5 +414,37 @@ mod tests {
         }
 
         assert!(cache.entries().iter().all(|entry| entry.id != id));
+    }
+
+    #[test]
+    fn disk_kv_roundtrip_preserves_entries() {
+        let path = temp_path("cache-roundtrip");
+        let mut cache = KvFusionCache::new();
+        let id = cache.store_or_fuse("durable memory", vec![0.4, 0.7, 0.1], 0.9);
+        cache.reinforce(id, 0.5);
+
+        cache.save_to_disk_kv(&path).unwrap();
+        let loaded = KvFusionCache::load_from_disk_kv(&path).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded.entries()[0].id, id);
+        assert_eq!(loaded.entries()[0].key, "durable memory");
+        assert!(loaded.entries()[0].strength > 0.9);
+        cleanup(path);
+    }
+
+    fn temp_path(label: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-{label}-{}-{nanos}.ndkv",
+            std::process::id()
+        ))
+    }
+
+    fn cleanup(path: std::path::PathBuf) {
+        let _ = std::fs::remove_file(path);
     }
 }

@@ -1,9 +1,11 @@
+pub mod disk_kv;
 pub mod engine;
 pub mod hierarchy;
 pub mod kv_cache;
 pub mod reflection;
 pub mod router;
 
+pub use disk_kv::DiskKvStore;
 pub use engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest,
     NoironEngine,

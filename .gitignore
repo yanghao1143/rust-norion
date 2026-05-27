@@ -1,4 +1,6 @@
 /target/
 noiron-memory.tsv
+*.ndkv
+*.compact
 *.log
 *.tmp

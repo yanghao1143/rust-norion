@@ -46,6 +46,7 @@ Implemented modules:
 已实现模块：
 
 - `src/router.rs`: adaptive entropy router
+- `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
@@ -87,9 +88,11 @@ cargo test
 flowchart LR
     Prompt[Prompt] --> Embed[Local Embedding]
     Embed --> Memory[KV Fusion Cache]
+    Memory --> DiskKV[Append-Only Disk KV]
     Prompt --> Router[Adaptive Router]
     Prompt --> Hierarchy[Hierarchy Controller]
     Memory --> Backend[InferenceBackend]
+    DiskKV --> Memory
     Router --> Backend
     Hierarchy --> Backend
     Backend --> Draft[Draft Answer]
