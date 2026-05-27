@@ -151,7 +151,7 @@ Implemented modules:
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, and KV import/export ABI hooks
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -280,37 +280,47 @@ self-developed runtime surface.
 
 要接入真实模型，可以实现 `ModelRuntime` 并用 `RuntimeBackend` 包装，也可以为更定制的自研运行时控制面直接实现 `InferenceBackend`，替换当前 demo 使用的 `HeuristicBackend`。
 
+`ModelRuntime` now exposes the self-developed runtime boundary explicitly:
+metadata, tokenizer access, embedding access, optional KV import/export, and
+generation. Unsupported capabilities have safe defaults so a command-line
+runtime can still start with only `generate`.
+
+`ModelRuntime` 现在显式暴露自研运行时边界：模型元数据、tokenizer、embedding、可选 KV 导入/导出以及生成接口。不支持的能力有安全默认值，因此命令行后端仍然可以只从 `generate` 起步。
+
 Expected integration loop:
 
 预期接入流程：
 
 1. embed prompt and retrieve local memory
-2. compute route budget and hierarchy weights
-3. plan single-pass or recursive chunk/merge scheduling for the native model window
-4. adapt latency, KV budgets, and hierarchy weights to CPU-only, integrated GPU,
+2. read runtime metadata such as model id, tokenizer, native context window,
+   embedding dimensions, and KV exchange support
+3. compute route budget and hierarchy weights
+4. plan single-pass or recursive chunk/merge scheduling for the native model window
+5. adapt latency, KV budgets, and hierarchy weights to CPU-only, integrated GPU,
    discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator,
    multi-GPU, edge, or server devices
-5. optionally replay high/low reward experience into router, hierarchy, and KV state
-6. retrieve relevant reflection lessons from the experience store
-7. call the real model backend
-8. reflect on the draft
-9. generate document, section, and paragraph-level gist records
-10. score route, memory, hierarchy, latency, and admission with process rewards
-11. reinforce or penalize memory
-12. update routing threshold, hierarchy weights, and experience records
+6. optionally replay high/low reward experience into router, hierarchy, and KV state
+7. retrieve relevant reflection lessons from the experience store
+8. call the real model backend
+9. reflect on the draft
+10. generate document, section, and paragraph-level gist records
+11. score route, memory, hierarchy, latency, and admission with process rewards
+12. reinforce or penalize memory
+13. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
-2. 计算路由预算和层级权重
-3. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
-4. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重
-5. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
-6. 从经验库检索相关反思 lesson
-7. 调用真实模型后端
-8. 对草稿答案做反思评估
-9. 生成 document、section、paragraph 三级 gist 记忆
-10. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
-11. 强化或惩罚记忆
-12. 更新路由阈值、层级权重和经验记录
+2. 读取模型 id、tokenizer、原生上下文窗口、embedding 维度和 KV 交换能力等 runtime metadata
+3. 计算路由预算和层级权重
+4. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
+5. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重
+6. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
+7. 从经验库检索相关反思 lesson
+8. 调用真实模型后端
+9. 对草稿答案做反思评估
+10. 生成 document、section、paragraph 三级 gist 记忆
+11. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
+12. 强化或惩罚记忆
+13. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 

@@ -12,10 +12,134 @@ use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
 use crate::router::RouteBudget;
 use crate::transformer::TransformerRefactorPlan;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeMetadata {
+    pub model_id: String,
+    pub tokenizer: String,
+    pub native_context_window: usize,
+    pub embedding_dimensions: usize,
+    pub supports_kv_import: bool,
+    pub supports_kv_export: bool,
+}
+
+impl RuntimeMetadata {
+    pub fn new(
+        model_id: impl Into<String>,
+        tokenizer: impl Into<String>,
+        native_context_window: usize,
+        embedding_dimensions: usize,
+    ) -> Self {
+        Self {
+            model_id: model_id.into(),
+            tokenizer: tokenizer.into(),
+            native_context_window,
+            embedding_dimensions,
+            supports_kv_import: false,
+            supports_kv_export: false,
+        }
+    }
+
+    pub fn with_kv_exchange(mut self, import: bool, export: bool) -> Self {
+        self.supports_kv_import = import;
+        self.supports_kv_export = export;
+        self
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "model_id={} tokenizer={} native_context_window={} embedding_dimensions={} kv_import={} kv_export={}",
+            self.model_id,
+            self.tokenizer,
+            self.native_context_window,
+            self.embedding_dimensions,
+            self.supports_kv_import,
+            self.supports_kv_export
+        )
+    }
+}
+
+impl Default for RuntimeMetadata {
+    fn default() -> Self {
+        Self {
+            model_id: "unknown-self-developed-runtime".to_owned(),
+            tokenizer: "unknown".to_owned(),
+            native_context_window: 0,
+            embedding_dimensions: 0,
+            supports_kv_import: false,
+            supports_kv_export: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeTokenId {
+    pub id: u32,
+    pub text: String,
+}
+
+impl RuntimeTokenId {
+    pub fn new(id: u32, text: impl Into<String>) -> Self {
+        Self {
+            id,
+            text: text.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeEmbedding {
+    pub dimensions: usize,
+    pub values: Vec<f32>,
+}
+
+impl RuntimeEmbedding {
+    pub fn new(values: Vec<f32>) -> Self {
+        Self {
+            dimensions: values.len(),
+            values,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeKvBlock {
+    pub layer: usize,
+    pub head: usize,
+    pub token_start: usize,
+    pub token_end: usize,
+    pub key: Vec<f32>,
+    pub value: Vec<f32>,
+}
+
+impl RuntimeKvBlock {
+    pub fn new(
+        layer: usize,
+        head: usize,
+        token_start: usize,
+        token_end: usize,
+        key: Vec<f32>,
+        value: Vec<f32>,
+    ) -> Self {
+        Self {
+            layer,
+            head,
+            token_start,
+            token_end,
+            key,
+            value,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeRequest {
     pub prompt: String,
     pub profile: TaskProfile,
+    pub runtime_metadata: RuntimeMetadata,
     pub memory_hints: Vec<String>,
     pub infini_memory_hints: Vec<String>,
     pub experience_hints: Vec<String>,
@@ -28,10 +152,15 @@ pub struct RuntimeRequest {
 }
 
 impl RuntimeRequest {
-    pub fn from_context(context: &GenerationContext<'_>, max_tokens: usize) -> Self {
+    pub fn from_context(
+        context: &GenerationContext<'_>,
+        max_tokens: usize,
+        runtime_metadata: RuntimeMetadata,
+    ) -> Self {
         Self {
             prompt: context.prompt.to_owned(),
             profile: context.profile,
+            runtime_metadata,
             memory_hints: context
                 .memories
                 .iter()
@@ -148,6 +277,30 @@ impl Display for RuntimeError {
 impl Error for RuntimeError {}
 
 pub trait ModelRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::default()
+    }
+
+    fn tokenize(&self, prompt: &str) -> Result<Vec<RuntimeTokenId>, RuntimeError> {
+        Ok(prompt
+            .split_whitespace()
+            .enumerate()
+            .map(|(index, text)| RuntimeTokenId::new(index as u32, text))
+            .collect())
+    }
+
+    fn embed(&self, _tokens: &[RuntimeTokenId]) -> Result<RuntimeEmbedding, RuntimeError> {
+        Ok(RuntimeEmbedding::empty())
+    }
+
+    fn import_kv(&mut self, _blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        Ok(0)
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        Ok(Vec::new())
+    }
+
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError>;
 }
 
@@ -162,6 +315,7 @@ pub struct CommandRuntime {
     program: PathBuf,
     args: Vec<String>,
     prompt_mode: CommandPromptMode,
+    metadata: RuntimeMetadata,
 }
 
 impl CommandRuntime {
@@ -170,6 +324,7 @@ impl CommandRuntime {
             program: program.into(),
             args: Vec::new(),
             prompt_mode: CommandPromptMode::Stdin,
+            metadata: RuntimeMetadata::default(),
         }
     }
 
@@ -189,6 +344,11 @@ impl CommandRuntime {
 
     pub fn prompt_mode(mut self, prompt_mode: CommandPromptMode) -> Self {
         self.prompt_mode = prompt_mode;
+        self
+    }
+
+    pub fn with_metadata(mut self, metadata: RuntimeMetadata) -> Self {
+        self.metadata = metadata;
         self
     }
 
@@ -216,12 +376,17 @@ impl CommandRuntime {
                         "{recursive_schedule}",
                         &request.recursive_schedule.summary(),
                     )
+                    .replace("{runtime_metadata}", &request.runtime_metadata.summary())
             })
             .collect()
     }
 }
 
 impl ModelRuntime for CommandRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        self.metadata.clone()
+    }
+
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         let prompt = format_runtime_prompt(&request);
         let mut command = Command::new(&self.program);
@@ -274,6 +439,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
     let transformer_counts = request.transformer_plan.counts();
     format!(
         "Noiron runtime request\n\
+         runtime: {}\n\
          profile: {:?}\n\
          max_tokens: {}\n\
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
@@ -285,6 +451,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
          prompt:\n{}",
+        request.runtime_metadata.summary(),
         request.profile,
         request.max_tokens,
         request.route_budget.threshold,
@@ -354,7 +521,8 @@ impl<R> RuntimeBackend<R> {
 
 impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
-        let request = RuntimeRequest::from_context(&context, self.max_tokens);
+        let runtime_metadata = self.runtime.metadata();
+        let request = RuntimeRequest::from_context(&context, self.max_tokens, runtime_metadata);
 
         match self.runtime.generate(request) {
             Ok(response) => {
@@ -425,6 +593,11 @@ mod tests {
     }
 
     impl ModelRuntime for MockRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("mock-self-transformer", "mock-bpe", 32_768, 128)
+                .with_kv_exchange(true, true)
+        }
+
         fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
             self.seen = Some(request.clone());
             let mut response = RuntimeResponse::new(format!(
@@ -500,12 +673,106 @@ mod tests {
 
         assert!(draft.answer.contains("1 memories and 1 experiences"));
         assert_eq!(seen.max_tokens, 128);
+        assert_eq!(seen.runtime_metadata.model_id, "mock-self-transformer");
+        assert_eq!(seen.runtime_metadata.native_context_window, 32_768);
+        assert!(seen.runtime_metadata.supports_kv_import);
+        assert!(seen.runtime_metadata.supports_kv_export);
         assert_eq!(seen.memory_hints.len(), 1);
         assert_eq!(seen.infini_memory_hints.len(), 1);
         assert_eq!(seen.experience_hints.len(), 1);
         assert!(!seen.recursive_schedule.requires_recursion);
         assert!(seen.hardware_plan.local_kv_token_budget > 0);
         assert!(seen.transformer_plan.is_empty());
+    }
+
+    #[derive(Debug, Default, Clone)]
+    struct SelfDevelopedRuntime {
+        imported_blocks: usize,
+    }
+
+    impl ModelRuntime for SelfDevelopedRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("noiron-dev-transformer", "noiron-wordpiece", 65_536, 256)
+                .with_kv_exchange(true, true)
+        }
+
+        fn tokenize(&self, prompt: &str) -> Result<Vec<RuntimeTokenId>, RuntimeError> {
+            Ok(prompt
+                .split_whitespace()
+                .enumerate()
+                .map(|(index, text)| RuntimeTokenId::new(10_000 + index as u32, text))
+                .collect())
+        }
+
+        fn embed(&self, tokens: &[RuntimeTokenId]) -> Result<RuntimeEmbedding, RuntimeError> {
+            Ok(RuntimeEmbedding::new(vec![tokens.len() as f32, 1.0, 0.5]))
+        }
+
+        fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+            self.imported_blocks += blocks.len();
+            Ok(blocks.len())
+        }
+
+        fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+            Ok(vec![RuntimeKvBlock::new(
+                1,
+                2,
+                0,
+                4,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )])
+        }
+
+        fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            Ok(RuntimeResponse::new(format!(
+                "generated with {}",
+                request.runtime_metadata.model_id
+            )))
+        }
+    }
+
+    #[test]
+    fn self_developed_runtime_abi_exposes_tokens_embeddings_and_kv_exchange() {
+        let mut runtime = SelfDevelopedRuntime::default();
+
+        let metadata = runtime.metadata();
+        let tokens = runtime.tokenize("alpha beta").unwrap();
+        let embedding = runtime.embed(&tokens).unwrap();
+        let imported = runtime
+            .import_kv(&[RuntimeKvBlock::new(
+                0,
+                1,
+                0,
+                2,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )])
+            .unwrap();
+        let exported = runtime.export_kv().unwrap();
+
+        assert_eq!(metadata.model_id, "noiron-dev-transformer");
+        assert_eq!(metadata.tokenizer, "noiron-wordpiece");
+        assert_eq!(tokens[0], RuntimeTokenId::new(10_000, "alpha"));
+        assert_eq!(embedding.dimensions, 3);
+        assert_eq!(imported, 1);
+        assert_eq!(runtime.imported_blocks, 1);
+        assert_eq!(exported[0].layer, 1);
+        assert_eq!(exported[0].head, 2);
+    }
+
+    #[test]
+    fn default_runtime_abi_keeps_command_runtime_compatible() {
+        let runtime = CommandRuntime::new("runner");
+
+        let metadata = runtime.metadata();
+        let tokens = runtime.tokenize("fallback tokenize").unwrap();
+        let embedding = runtime.embed(&tokens).unwrap();
+
+        assert_eq!(metadata, RuntimeMetadata::default());
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].text, "fallback");
+        assert_eq!(embedding.dimensions, 0);
     }
 
     #[derive(Debug, Default, Clone)]
@@ -556,16 +823,24 @@ mod tests {
 
     #[test]
     fn command_runtime_formats_prompt_and_expands_placeholders() {
+        let metadata = RuntimeMetadata::new("command-model", "command-tokenizer", 16_384, 384)
+            .with_kv_exchange(true, false);
         let runtime = CommandRuntime::new("runner")
+            .with_metadata(metadata)
             .arg("--prompt")
             .arg("{prompt}")
             .arg("--max")
             .arg("{max_tokens}")
+            .arg("--runtime")
+            .arg("{runtime_metadata}")
             .prompt_mode(CommandPromptMode::Args);
         let request = sample_request();
         let prompt = format_runtime_prompt(&request);
         let args = runtime.expanded_args(&request, &prompt);
 
+        assert!(prompt.contains("runtime:"));
+        assert!(prompt.contains("model_id=sample-transformer"));
+        assert!(prompt.contains("native_context_window=8192"));
         assert!(prompt.contains("memory_hints"));
         assert!(prompt.contains("infini_memory_hints"));
         assert!(prompt.contains("experience_hints"));
@@ -573,6 +848,7 @@ mod tests {
         assert!(prompt.contains("hardware:"));
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
+        assert!(args[5].contains("model_id=sample-transformer"));
     }
 
     #[test]
@@ -589,6 +865,13 @@ mod tests {
         RuntimeRequest {
             prompt: "build a command runtime".to_owned(),
             profile: TaskProfile::Coding,
+            runtime_metadata: RuntimeMetadata::new(
+                "sample-transformer",
+                "sample-tokenizer",
+                8192,
+                64,
+            )
+            .with_kv_exchange(true, true),
             memory_hints: vec!["memory hint".to_owned()],
             infini_memory_hints: vec!["LocalWindow:memory hint score=0.900".to_owned()],
             experience_hints: vec!["experience hint".to_owned()],

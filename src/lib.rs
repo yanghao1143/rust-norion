@@ -50,8 +50,9 @@ pub use router::{
     RoutingDecision,
 };
 pub use runtime::{
-    CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeError, RuntimeRequest,
-    RuntimeResponse, RuntimeToken,
+    CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeEmbedding,
+    RuntimeError, RuntimeKvBlock, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
+    RuntimeTokenId,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
