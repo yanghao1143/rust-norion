@@ -11,6 +11,16 @@ pub fn trace_json_line(
     elapsed_ms: u128,
     outcome: &InferenceOutcome,
 ) -> String {
+    trace_json_line_with_case(None, prompt, profile, elapsed_ms, outcome)
+}
+
+pub fn trace_json_line_with_case(
+    case_name: Option<&str>,
+    prompt: &str,
+    profile: TaskProfile,
+    elapsed_ms: u128,
+    outcome: &InferenceOutcome,
+) -> String {
     let tier_counts = outcome.tier_plan.counts();
     let infini_counts = outcome.infini_memory_plan.counts();
     let transformer_counts = outcome.transformer_plan.counts();
@@ -18,6 +28,7 @@ pub fn trace_json_line(
     format!(
         "{{\
          \"schema\":\"rust-norion-trace-v1\",\
+         \"case\":{},\
          \"profile\":\"{:?}\",\
          \"prompt_chars\":{},\
          \"prompt_preview\":\"{}\",\
@@ -38,6 +49,7 @@ pub fn trace_json_line(
          \"retention\":{{\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"experience_id\":{}\
          }}",
+        option_string_json(case_name),
         profile,
         prompt.chars().count(),
         json_escape(&compact(prompt, 160)),
@@ -113,9 +125,31 @@ pub fn append_trace_jsonl(
     )
 }
 
+pub fn append_trace_jsonl_with_case(
+    path: impl AsRef<Path>,
+    case_name: &str,
+    prompt: &str,
+    profile: TaskProfile,
+    elapsed_ms: u128,
+    outcome: &InferenceOutcome,
+) -> io::Result<()> {
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(
+        file,
+        "{}",
+        trace_json_line_with_case(Some(case_name), prompt, profile, elapsed_ms, outcome)
+    )
+}
+
 fn option_u64_json(value: Option<u64>) -> String {
     value
         .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
+fn option_string_json(value: Option<&str>) -> String {
+    value
+        .map(|value| format!("\"{}\"", json_escape(value)))
         .unwrap_or_else(|| "null".to_owned())
 }
 
@@ -174,6 +208,7 @@ mod tests {
         );
 
         assert!(line.contains("\"schema\":\"rust-norion-trace-v1\""));
+        assert!(line.contains("\"case\":null"));
         assert!(line.contains("\"route\":"));
         assert!(line.contains("\"hierarchy\":"));
         assert!(line.contains("\"process_reward\":"));
@@ -184,5 +219,25 @@ mod tests {
     #[test]
     fn json_escape_handles_quotes_and_newlines() {
         assert_eq!(json_escape("a\"b\nc"), "a\\\"b\\nc");
+    }
+
+    #[test]
+    fn trace_line_can_include_benchmark_case_name() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace benchmark case", TaskProfile::General),
+            &mut backend,
+        );
+
+        let line = trace_json_line_with_case(
+            Some("general_case"),
+            "trace benchmark case",
+            TaskProfile::General,
+            3,
+            &outcome,
+        );
+
+        assert!(line.contains("\"case\":\"general_case\""));
     }
 }

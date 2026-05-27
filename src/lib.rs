@@ -1,4 +1,5 @@
 pub mod adaptive_state;
+pub mod benchmark;
 pub mod disk_kv;
 pub mod engine;
 pub mod experience;
@@ -21,6 +22,9 @@ pub mod trace;
 pub mod transformer;
 
 pub use adaptive_state::AdaptiveState;
+pub use benchmark::{
+    BenchmarkCase, BenchmarkCaseResult, BenchmarkSummary, default_benchmark_cases,
+};
 pub use disk_kv::DiskKvStore;
 pub use engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest,
@@ -61,7 +65,9 @@ pub use tiered_cache::{
     TieredCacheScheduler,
 };
 pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};
-pub use trace::{append_trace_jsonl, trace_json_line};
+pub use trace::{
+    append_trace_jsonl, append_trace_jsonl_with_case, trace_json_line, trace_json_line_with_case,
+};
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
     TransformerRefactorPlan,

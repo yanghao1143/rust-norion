@@ -193,6 +193,12 @@ Write one structured JSONL trace record for benchmark comparison:
 cargo run -- --trace target/noiron-trace.jsonl --profile coding "Trace Rust Noiron routing and memory decisions"
 ```
 
+Run the built-in benchmark suite and append one JSONL trace record per case:
+
+```powershell
+cargo run -- --benchmark target/noiron-benchmark.jsonl
+```
+
 Apply universal device-profile hardware pressure hints:
 
 ```powershell
@@ -364,7 +370,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
 - add configurable memory retention policies
-- expand structured tracing into benchmark suites and regression gates
+- expand the built-in benchmark suite into regression gates
 
 - 用模型侧 embedding 或轻量向量编码器替换当前启发式 embedding
 - 实现自研 Transformer 运行时适配器
@@ -374,4 +380,4 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 增加长上下文路由和记忆复用 benchmark
 - 增加可配置的记忆保留策略
 - 扩展全设备硬件 profile 和真实设备探测适配
-- 把结构化 trace 扩展成 benchmark 套件和回归门禁
+- 把内置 benchmark 套件扩展成回归门禁

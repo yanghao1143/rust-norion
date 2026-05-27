@@ -240,7 +240,8 @@ These are algorithmic references, not product dependencies:
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
   records now capture route, hierarchy, KV, recursion, hardware, reward, and
-  memory counters per inference)
+  memory counters per inference; a built-in benchmark suite now writes one
+  trace record per coding, long-context, general-reflection, and writing case)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
