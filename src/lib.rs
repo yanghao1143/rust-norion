@@ -22,7 +22,8 @@ pub use hierarchy::{HierarchyController, HierarchyState, HierarchyWeights, TaskP
 pub use kv_cache::{KvFusionCache, MemoryEntry, MemoryMatch};
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{
-    GenerationMetrics, NoironRouter, Route, RouteBudget, RouterState, RoutingDecision,
+    GenerationMetrics, NoironRouter, Route, RouteBudget, RouterState, RoutingContext,
+    RoutingDecision,
 };
 pub use runtime::{
     CommandPromptMode, CommandRuntime, ModelRuntime, RuntimeBackend, RuntimeError, RuntimeRequest,

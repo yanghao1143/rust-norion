@@ -1,0 +1,155 @@
+# rust-norion Roadmap
+
+## Optimized North Star / 优化后的总目标
+
+Build a Rust-native, sovereignty-first FHT-DKE + Noiron local inference engine
+for self-trained Transformer-family models. `rust-norion` should act as a
+model-agnostic control plane around a self-owned model runtime, so future
+versions of the internal model can be swapped in without rewriting routing,
+memory, reflection, or scheduling logic.
+
+构建 Rust 原生、自主可控优先的 FHT-DKE + Noiron 本地推理引擎，默认服务于自主训练的
+Transformer 系列模型。`rust-norion` 的定位是模型无关的推理控制平面，让后续任何版本的自研模型都能复用同一套路由、记忆、反思和调度能力。
+
+The target is local, offline, lightweight, ultra-long-context inference through
+independently implemented public algorithms, not through external model weights,
+closed services, or vendor-specific runtimes.
+
+核心目标是通过自主实现公开算法，达成本地离线、轻量化、超长上下文推理，而不是依赖外部模型权重、闭源服务或厂商绑定运行时。
+
+## Sovereignty Contract / 自主可控约束
+
+- No default dependency on Gemma, Llama, Qwen, or other third-party model
+  weights.
+- No closed quantization, attention, memory, or scheduling component in the
+  core path.
+- Tokenization, embedding, and model forward execution should come from the
+  self-developed Transformer runtime through explicit Rust traits.
+- Public papers and open algorithm ideas may guide the design, but the codebase
+  should own its implementation details.
+- Runtime memory, experience, and adaptive state remain local, inspectable, and
+  replaceable.
+
+- 默认不依赖 Gemma、Llama、Qwen 等第三方模型权重。
+- 核心路径不依赖闭源量化、注意力、记忆或调度组件。
+- Tokenizer、Embedding 和模型前向计算由自研 Transformer 运行时通过 Rust trait 显式接入。
+- 可借鉴公开论文和开放算法思想，但实现细节由本仓库自主掌控。
+- 运行时记忆、经验库和自适应状态全部本地化、可检查、可替换。
+
+## Architecture Target / 架构目标
+
+1. Application layer / 应用层
+   CLI, local API, and future desktop or service entry points.
+
+2. `rust-norion` control plane / 控制平面
+   Multi-factor router, hierarchy controller, recursive scheduler,
+   Hot/Warm/Cold cache scheduler, sparse KV filter, reflection loop, RLVR-style
+   process rewards, experience replay, and persisted adaptive state.
+
+3. Memory system / 记忆系统
+   Infini-attention-style global/local KV split, hierarchical gist memory,
+   reinforced KV fusion, 4/8-bit mixed-precision KV quantization, disk-backed
+   append-only storage, and promotion/demotion policies.
+
+4. Runtime boundary / 运行时边界
+   `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
+   default production target is a self-developed Transformer runtime.
+
+5. Self-developed model stack / 自研模型栈
+   The model runtime owns weights, tokenizer, embedding, and forward kernels.
+   The control plane decides how context, memory, routing, and reflection are
+   applied around that model.
+
+## Priority Tracks / 优先级方向
+
+1. Multi-factor routing / 多因子路由
+   Entropy, task profile, context length, cache hit rate, latency budget, and
+   future hardware pressure choose among projection, local-window attention,
+   global attention, and convolutional fusion.
+
+2. Self-owned Transformer boundary / 自研 Transformer 边界
+   Strengthen the runtime trait so the self-developed model exposes tokenizer,
+   embeddings, native context window, KV import/export, and forward execution
+   without tying the control plane to any external weight format.
+
+3. Mixed-precision KV compression / 混合精度 KV 压缩
+   Implement local 8-bit hot KV and 4-bit cold KV quantization in Rust, with
+   model-specific accuracy benchmarks before aggressive compression is enabled.
+
+4. Infini-style global/local memory / 全局 + 局部 KV 分离
+   Separate permanent global memory from the active local window. Keep the
+   active window small while persisting high-value global memory to disk.
+
+5. Sparse context filtering / 稀疏上下文筛选
+   Add a SpeContext-style filter before KV loading so redundant or low-value
+   memories do not enter expensive attention paths.
+
+6. Hierarchical gist memory / 层级摘要记忆
+   Use reflection to produce document, section, and paragraph-level gist
+   records. Store high-value summaries permanently and keep low-level detail in
+   short-lived tiers.
+
+7. Recursive scheduling / 递归调度
+   Add `recursive_scheduler.rs` for inputs beyond the native model window:
+   chunk, infer, merge, store, and recursively refine cross-chunk answers.
+
+8. RLVR-style control rewards / 可验证奖励控制
+   Score routing choices, KV reads, hierarchy weights, latency, contradictions,
+   and final quality. Update control state without modifying model weights.
+
+9. Experience replay / 经验回放
+   Extend `experience.rs` from passive retrieval to replayable records:
+   prompt, route plan, KV usage, output quality, reward, and follow-up action.
+
+10. Hardware-aware compute allocation / 硬件感知算力分配
+    Use local CPU/GPU/RAM/disk pressure to decide when to lower compute, shrink
+    windows, evict memory, or spend extra attention on hard tasks.
+
+## Research-Inspired Algorithms / 公开算法启发
+
+These are algorithmic references, not product dependencies:
+
+- Infini-attention-style global memory plus local window:
+  <https://arxiv.org/abs/2404.07143>
+- Titans-style test-time memory update:
+  <https://arxiv.org/abs/2501.00663>
+- ReadAgent-style gist memory:
+  <https://arxiv.org/abs/2402.09727>
+- Standard uniform 4/8-bit KV quantization:
+  implement locally instead of depending on vendor-specific compression stacks.
+- Recursive long-context inference:
+  implement as control-plane scheduling so the self-developed model can keep a
+  stable native window.
+- RLVR and test-time scaling:
+  optimize routing, memory retention, and compute allocation without frequent
+  weight retraining.
+
+以上方向只作为公开算法启发，不作为外部权重、闭源组件或厂商运行时依赖。
+
+## Version Plan / 版本计划
+
+- v0.1: control layer prototype, heuristic backend, disk-backed memory
+- v0.2: multi-factor router, self-developed runtime contract, explicit
+  sovereignty constraints
+- v0.3: 4/8-bit KV quantization, retention policy, automatic tier migration
+- v0.4: Infini-style global/local KV split and sparse context filtering
+- v0.5: hierarchical gist memory and recursive long-context scheduler
+- v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
+  allocation
+- v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
+  harness for self-developed model runtimes
+- v1.0: production-grade local Agent Harness and test-time scaling inference
+  engine for self-owned Transformer models
+
+## Definition of Done / 验收标准
+
+- The default build can run without external model weights or closed services.
+- Every control decision can be traced: route, memory, hierarchy, reflection,
+  reward, and adaptive-state update.
+- KV compression has accuracy and latency benchmarks before it becomes default.
+- Long-context claims are tied to reproducible benchmarks, not marketing
+  language.
+- Self-evolution is bounded by drift controls: confidence gates, decay,
+  rollback, and inspectable local state.
+- The control plane remains compatible with future self-developed model
+  versions through stable Rust traits.

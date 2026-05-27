@@ -60,7 +60,7 @@ impl TokenStreamMonitor {
                 .collect::<Vec<_>>();
             let attention_count = observations
                 .iter()
-                .filter(|observation| observation.route == Route::Attention)
+                .filter(|observation| observation.route.uses_attention_budget())
                 .count();
             let token_count = observations.len().max(1);
             let average_loss = observations
@@ -147,7 +147,7 @@ impl TokenStreamMonitor {
                 .collect::<Vec<_>>();
             let attention_count = observations
                 .iter()
-                .filter(|observation| observation.route == Route::Attention)
+                .filter(|observation| observation.route.uses_attention_budget())
                 .count();
             let token_count = observations.len().max(1);
             let average_loss = observations
@@ -186,7 +186,7 @@ impl TokenStreamMonitor {
 fn observe_token(decision: RoutingDecision, semantic_consistency: f32) -> TokenObservation {
     let route_mismatch = match decision.route {
         Route::FastProjection if decision.entropy > 0.68 => 2.2,
-        Route::Attention if decision.entropy < 0.24 => 0.35,
+        route if route.uses_attention_budget() && decision.entropy < 0.24 => 0.35,
         _ => 0.0,
     };
     let consistency = semantic_consistency.clamp(0.0, 1.0);
@@ -277,6 +277,6 @@ mod tests {
 
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].observations[0].route, Route::FastProjection);
-        assert_eq!(reports[0].observations[1].route, Route::Attention);
+        assert!(reports[0].observations[1].route.uses_attention_budget());
     }
 }

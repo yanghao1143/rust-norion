@@ -6,7 +6,7 @@ use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::kv_cache::{KvFusionCache, MemoryMatch};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
-use crate::router::{GenerationMetrics, NoironRouter, RouteBudget};
+use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
 use crate::tiered_cache::{TieredCachePlan, TieredCacheScheduler};
 use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
 use crate::transformer::{TransformerPlanner, TransformerRefactorPlan};
@@ -160,7 +160,15 @@ impl NoironEngine {
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
-        let route_budget = self.router.budget_for_prompt(&request.prompt);
+        let routing_context = RoutingContext {
+            profile: request.profile,
+            context_tokens: approximate_token_count(&request.prompt),
+            cache_hit_rate: used_memories.len() as f32 / 4.0,
+            latency_budget_ms: None,
+        };
+        let route_budget = self
+            .router
+            .budget_for_prompt_with_context(&request.prompt, routing_context);
         let hierarchy = self.hierarchy.adapt_to_profile(request.profile);
         let transformer_plan =
             self.transformer_planner
@@ -281,9 +289,10 @@ impl InferenceBackend for HeuristicBackend {
 
         let answer = format!(
             "Prototype inference result: keep Noiron as a control layer around the model backend. \
-             Use entropy routing for attention decisions, reinforced KV fusion for local memory, \
-             task-aware hierarchy weights for compute allocation, and reflection to score each draft \
-             before storing it. Profile hint: {profile_hint}. Prompt anchor: {}. Memory hints: {memory_summary}. \
+             Use multi-factor routing for projection, local-window attention, global attention, \
+             and convolutional fusion decisions; reinforced KV fusion for local memory; task-aware \
+             hierarchy weights for compute allocation; and reflection to score each draft before \
+             storing it. Profile hint: {profile_hint}. Prompt anchor: {}. Memory hints: {memory_summary}. \
              Experience hints: {experience_summary}. \
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
@@ -305,7 +314,7 @@ impl InferenceBackend for HeuristicBackend {
             vec![
                 ReasoningStep::new(
                     "route",
-                    "estimated token entropy and selected attention budget",
+                    "combined entropy, task profile, context, cache, and latency signals",
                     0.82,
                 ),
                 ReasoningStep::new("memory", "looked up similar reinforced KV memories", 0.78),

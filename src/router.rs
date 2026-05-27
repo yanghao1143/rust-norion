@@ -1,7 +1,17 @@
+use crate::hierarchy::TaskProfile;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Route {
     FastProjection,
-    Attention,
+    LocalWindowAttention,
+    GlobalAttention,
+    ConvolutionalFusion,
+}
+
+impl Route {
+    pub fn uses_attention_budget(self) -> bool {
+        self != Self::FastProjection
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -26,7 +36,27 @@ impl GenerationMetrics {
 pub struct RoutingDecision {
     pub token: String,
     pub entropy: f32,
+    pub score: f32,
     pub route: Route,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RoutingContext {
+    pub profile: TaskProfile,
+    pub context_tokens: usize,
+    pub cache_hit_rate: f32,
+    pub latency_budget_ms: Option<u64>,
+}
+
+impl Default for RoutingContext {
+    fn default() -> Self {
+        Self {
+            profile: TaskProfile::General,
+            context_tokens: 0,
+            cache_hit_rate: 0.0,
+            latency_budget_ms: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,7 +71,7 @@ impl RouteBudget {
     pub fn from_decisions(threshold: f32, decisions: &[RoutingDecision]) -> Self {
         let attention_tokens = decisions
             .iter()
-            .filter(|decision| decision.route == Route::Attention)
+            .filter(|decision| decision.route.uses_attention_budget())
             .count();
         let fast_tokens = decisions.len().saturating_sub(attention_tokens);
         let total = decisions.len().max(1) as f32;
@@ -111,33 +141,69 @@ impl NoironRouter {
 
     pub fn route_token(&self, token: &str) -> RoutingDecision {
         let entropy = estimate_token_entropy(token);
-        self.route_entropy(token, entropy)
+        self.route_entropy_with_context(token, entropy, RoutingContext::default())
     }
 
     pub fn route_entropy(&self, token: &str, entropy: f32) -> RoutingDecision {
+        self.route_entropy_with_context(token, entropy, RoutingContext::default())
+    }
+
+    pub fn route_token_with_context(
+        &self,
+        token: &str,
+        context: RoutingContext,
+    ) -> RoutingDecision {
+        let entropy = estimate_token_entropy(token);
+        self.route_entropy_with_context(token, entropy, context)
+    }
+
+    pub fn route_entropy_with_context(
+        &self,
+        token: &str,
+        entropy: f32,
+        context: RoutingContext,
+    ) -> RoutingDecision {
         let entropy = entropy.clamp(0.0, 1.0);
-        let route = if entropy >= self.threshold {
-            Route::Attention
-        } else {
+        let score = routing_score(entropy, context);
+        let route = if score < self.threshold {
             Route::FastProjection
+        } else {
+            choose_route(score, self.threshold, context)
         };
 
         RoutingDecision {
             token: token.to_owned(),
             entropy,
+            score,
             route,
         }
     }
 
     pub fn route_prompt(&self, prompt: &str) -> Vec<RoutingDecision> {
+        self.route_prompt_with_context(prompt, RoutingContext::default())
+    }
+
+    pub fn route_prompt_with_context(
+        &self,
+        prompt: &str,
+        context: RoutingContext,
+    ) -> Vec<RoutingDecision> {
         tokenize(prompt)
             .into_iter()
-            .map(|token| self.route_token(&token))
+            .map(|token| self.route_token_with_context(&token, context))
             .collect()
     }
 
     pub fn budget_for_prompt(&self, prompt: &str) -> RouteBudget {
-        let decisions = self.route_prompt(prompt);
+        self.budget_for_prompt_with_context(prompt, RoutingContext::default())
+    }
+
+    pub fn budget_for_prompt_with_context(
+        &self,
+        prompt: &str,
+        context: RoutingContext,
+    ) -> RouteBudget {
+        let decisions = self.route_prompt_with_context(prompt, context);
         RouteBudget::from_decisions(self.threshold, &decisions)
     }
 
@@ -207,6 +273,36 @@ fn estimate_token_entropy(token: &str) -> f32 {
         .clamp(0.0, 1.0)
 }
 
+fn routing_score(entropy: f32, context: RoutingContext) -> f32 {
+    let task_pressure = match context.profile {
+        TaskProfile::General => 0.0,
+        TaskProfile::Coding => 0.05,
+        TaskProfile::Writing => 0.08,
+        TaskProfile::LongDocument => 0.10,
+    };
+    let context_pressure = (context.context_tokens as f32 / 32_000.0).min(0.18);
+    let cache_discount = context.cache_hit_rate.clamp(0.0, 1.0) * 0.10;
+    let latency_discount = match context.latency_budget_ms {
+        Some(budget) if budget <= 150 => 0.10,
+        Some(budget) if budget <= 500 => 0.04,
+        _ => 0.0,
+    };
+
+    (entropy * 0.72 + task_pressure + context_pressure - cache_discount - latency_discount)
+        .clamp(0.0, 1.0)
+}
+
+fn choose_route(score: f32, threshold: f32, context: RoutingContext) -> Route {
+    match context.profile {
+        TaskProfile::LongDocument if context.context_tokens >= 8_192 => Route::ConvolutionalFusion,
+        TaskProfile::LongDocument if score < threshold + 0.18 => Route::ConvolutionalFusion,
+        TaskProfile::Coding if score < threshold + 0.24 => Route::LocalWindowAttention,
+        TaskProfile::Writing => Route::GlobalAttention,
+        _ if score >= threshold + 0.24 => Route::GlobalAttention,
+        _ => Route::LocalWindowAttention,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,5 +335,39 @@ mod tests {
         });
 
         assert!(router.threshold() > before);
+    }
+
+    #[test]
+    fn routing_context_selects_long_document_convolution() {
+        let router = NoironRouter::new();
+        let decision = router.route_entropy_with_context(
+            "context",
+            0.9,
+            RoutingContext {
+                profile: TaskProfile::LongDocument,
+                context_tokens: 16_384,
+                cache_hit_rate: 0.0,
+                latency_budget_ms: None,
+            },
+        );
+
+        assert_eq!(decision.route, Route::ConvolutionalFusion);
+    }
+
+    #[test]
+    fn latency_budget_can_keep_token_on_fast_path() {
+        let router = NoironRouter::new();
+        let normal = router.route_entropy("token", 0.78);
+        let constrained = router.route_entropy_with_context(
+            "token",
+            0.78,
+            RoutingContext {
+                latency_budget_ms: Some(100),
+                ..RoutingContext::default()
+            },
+        );
+
+        assert!(normal.route.uses_attention_budget());
+        assert_eq!(constrained.route, Route::FastProjection);
     }
 }
