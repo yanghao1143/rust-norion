@@ -152,7 +152,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
+- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller
@@ -242,22 +242,29 @@ Print the built-in device execution matrix:
 cargo run -- --list-devices
 ```
 
+The matrix includes each profile's scope, common aliases, primary compute lane,
+portable fallback lane, memory mode, runtime adapter hints, KV precision,
+prefetch count, disk-spill policy, and recursive parallelism budget.
+
 打印内置全设备执行矩阵：
 
 ```powershell
 cargo run -- --list-devices
 ```
 
+矩阵会列出每个 profile 的覆盖范围、常见别名、主计算通道、可移植降级通道、内存模式、
+runtime adapter hint、KV 精度、预取数量、磁盘溢出策略和递归并行预算。
+
 Run the device compatibility gate. It fails with exit code `2` if any supported
-device profile loses its execution plan, KV budget, adapter hints, or portable
-fallback path:
+device profile loses its alias coverage, execution plan, KV budget, adapter
+hints, or portable fallback path:
 
 ```powershell
 cargo run -- --device-gate
 ```
 
-运行全设备兼容门禁。如果任一设备 profile 缺失执行计划、KV budget、adapter hint 或
-可移植降级路径，命令会以退出码 `2` 失败：
+运行全设备兼容门禁。如果任一设备 profile 缺失别名覆盖、执行计划、KV budget、
+adapter hint 或可移植降级路径，命令会以退出码 `2` 失败：
 
 ```powershell
 cargo run -- --device-gate
@@ -274,17 +281,19 @@ GPU/NPU 环境变量做保守本地探测。`--device`、`--cpu-load`、`--gpu-l
 
 Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
 `uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.
-Common aliases such as `laptop`, `rtx`, `macbook`, `iphone`, `snapdragon`,
-`ascend`, `rknn`, `wasm`, `riscv`, `jetson`, and `datacenter` map into those
-profiles. Internally, profiles are also grouped into `tiny`, `constrained`,
-`balanced`, `accelerated`, and `distributed` capability tiers so the same
-control loop can scale down or up without binding to one vendor device.
+Common aliases such as `x86_64`, `laptop`, `steamdeck`, `rtx`, `macbook`,
+`iphone`, `wearable`, `snapdragon`, `hailo`, `ascend`, `rknn`, `wasm`, `riscv`,
+`jetson`, `nas`, `datacenter`, and `hpc` map into those profiles. Internally,
+profiles are also grouped into `tiny`, `constrained`, `balanced`,
+`accelerated`, and `distributed` capability tiers so the same control loop can
+scale down or up without binding to one vendor device.
 
 可用设备 profile 包括 `cpu`、`integrated`、`discrete`、`uma`、`mobile`、
-`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。常见别名如 `laptop`、
-`rtx`、`macbook`、`iphone`、`snapdragon`、`ascend`、`rknn`、`wasm`、`riscv`、
-`jetson` 和 `datacenter` 会映射到这些 profile。内部还会按 `tiny`、`constrained`、`balanced`、`accelerated`、
-`distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
+`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。常见别名如 `x86_64`、
+`laptop`、`steamdeck`、`rtx`、`macbook`、`iphone`、`wearable`、`snapdragon`、
+`hailo`、`ascend`、`rknn`、`wasm`、`riscv`、`jetson`、`nas`、`datacenter` 和
+`hpc` 会映射到这些 profile。内部还会按 `tiny`、`constrained`、`balanced`、
+`accelerated`、`distributed` 能力档位调整策略，保证同一控制闭环可以在不同设备上降级或扩展。
 
 Every hardware plan also emits a `DeviceExecutionPlan`: primary compute lane,
 fallback lane, memory mode, candidate runtime adapters, hot/cold KV precision,

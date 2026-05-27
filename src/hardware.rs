@@ -97,6 +97,7 @@ pub enum RuntimeAdapterHint {
     Mlu,
     Rknn,
     MultiDevice,
+    CustomAccelerator,
 }
 
 impl RuntimeAdapterHint {
@@ -120,6 +121,7 @@ impl RuntimeAdapterHint {
             Self::Mlu => "mlu",
             Self::Rknn => "rknn",
             Self::MultiDevice => "multi-device",
+            Self::CustomAccelerator => "custom-accelerator",
         }
     }
 }
@@ -189,6 +191,214 @@ impl DeviceClass {
         &PROFILES
     }
 
+    pub fn descriptor(self) -> DeviceProfileDescriptor {
+        match self {
+            Self::Auto => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "best-effort local probe with manual override",
+                aliases: &["auto"],
+            },
+            Self::CpuOnly => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "portable CPU-only PCs / VMs / generic fallback targets",
+                aliases: &[
+                    "cpu",
+                    "cpu-only",
+                    "pc-cpu",
+                    "desktop-cpu",
+                    "x86",
+                    "x86_64",
+                    "amd64",
+                    "avx2",
+                    "avx512",
+                    "portable",
+                ],
+            },
+            Self::IntegratedGpu => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "laptops / mini PCs / handheld PCs / APU and iGPU machines",
+                aliases: &[
+                    "integrated",
+                    "igpu",
+                    "integrated-gpu",
+                    "laptop",
+                    "notebook",
+                    "ultrabook",
+                    "mini-pc",
+                    "handheld-pc",
+                    "steamdeck",
+                    "intel-iris",
+                    "intel-xe",
+                    "amd-apu",
+                ],
+            },
+            Self::DiscreteGpu => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "desktop GPUs / single accelerator workstations",
+                aliases: &[
+                    "discrete",
+                    "dgpu",
+                    "discrete-gpu",
+                    "desktop-gpu",
+                    "cuda",
+                    "rtx",
+                    "nvidia",
+                    "radeon",
+                    "arc",
+                    "intel-arc",
+                    "vulkan-gpu",
+                ],
+            },
+            Self::UnifiedMemory => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "unified-memory machines such as Apple Silicon and UMA APUs",
+                aliases: &[
+                    "uma",
+                    "unified",
+                    "unified-memory",
+                    "apple",
+                    "mac",
+                    "macbook",
+                    "apple-silicon",
+                    "m-series",
+                    "m1",
+                    "m2",
+                    "m3",
+                    "m4",
+                    "m5",
+                ],
+            },
+            Self::Mobile => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "phones / tablets / wearables / XR devices / mobile OS targets",
+                aliases: &[
+                    "mobile",
+                    "phone",
+                    "tablet",
+                    "android",
+                    "ios",
+                    "handheld",
+                    "iphone",
+                    "ipad",
+                    "smartphone",
+                    "wearable",
+                    "watch",
+                    "xr",
+                    "vr",
+                    "ar",
+                    "smart-tv",
+                    "android-tv",
+                ],
+            },
+            Self::Embedded => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "embedded boards / SBCs / browser-WASM / very small local targets",
+                aliases: &[
+                    "embedded",
+                    "iot",
+                    "rpi",
+                    "raspberry-pi",
+                    "raspberry_pi",
+                    "micro",
+                    "sbc",
+                    "arm-sbc",
+                    "riscv",
+                    "risc-v",
+                    "wasm",
+                    "browser",
+                    "web",
+                    "webgpu",
+                    "wasip1",
+                    "wasm32",
+                ],
+            },
+            Self::NpuAccelerator => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "NPU / neural engine / AI accelerator targets",
+                aliases: &[
+                    "npu",
+                    "ane",
+                    "tpu",
+                    "ai-accelerator",
+                    "neural",
+                    "snapdragon",
+                    "qualcomm",
+                    "hexagon",
+                    "apple-neural-engine",
+                    "ascend",
+                    "cann",
+                    "cambricon",
+                    "mlu",
+                    "kunlun",
+                    "sophgo",
+                    "bm1684",
+                    "rockchip-npu",
+                    "rknn",
+                    "horizon-bpu",
+                    "hailo",
+                    "ethos",
+                ],
+            },
+            Self::MultiGpu => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "heterogeneous multi-accelerator / distributed local boxes",
+                aliases: &[
+                    "multi-gpu",
+                    "multi_gpu",
+                    "multi",
+                    "multi-accelerator",
+                    "multi-device",
+                    "heterogeneous",
+                    "distributed",
+                    "cluster",
+                    "nvlink",
+                ],
+            },
+            Self::Edge => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "edge gateways / Jetson-class devices / NAS / industrial PCs",
+                aliases: &[
+                    "edge",
+                    "gateway",
+                    "edge-gateway",
+                    "jetson",
+                    "nas",
+                    "home-server",
+                    "router",
+                    "industrial-pc",
+                    "ipc",
+                ],
+            },
+            Self::Server => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "servers / racks / datacenter nodes / HPC / local cloud hosts",
+                aliases: &[
+                    "server",
+                    "workstation",
+                    "rack",
+                    "datacenter",
+                    "local-cloud",
+                    "hpc",
+                    "k8s",
+                    "kubernetes",
+                    "bare-metal",
+                    "cloud-host",
+                ],
+            },
+        }
+    }
+
     pub fn tier(self) -> DeviceTier {
         match self {
             Self::Auto => DeviceTier::Auto,
@@ -209,19 +419,21 @@ impl FromStr for DeviceClass {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "auto" => Ok(Self::Auto),
-            "cpu" | "cpu-only" | "cpu_only" | "pc-cpu" | "desktop-cpu" => Ok(Self::CpuOnly),
+            "cpu" | "cpu-only" | "cpu_only" | "pc-cpu" | "desktop-cpu" | "x86" | "x86_64"
+            | "amd64" | "avx2" | "avx512" | "portable" => Ok(Self::CpuOnly),
             "integrated" | "igpu" | "integrated-gpu" | "laptop" | "notebook" | "intel-gpu"
-            | "intel-iris" | "intel-xe" | "amd-apu" | "apu" => Ok(Self::IntegratedGpu),
+            | "intel-iris" | "intel-xe" | "amd-apu" | "apu" | "ultrabook" | "mini-pc"
+            | "handheld-pc" | "steamdeck" => Ok(Self::IntegratedGpu),
             "discrete" | "dgpu" | "discrete-gpu" | "desktop-gpu" | "cuda" | "rtx" | "nvidia"
-            | "radeon" | "arc" | "intel-arc" => Ok(Self::DiscreteGpu),
+            | "radeon" | "arc" | "intel-arc" | "vulkan-gpu" => Ok(Self::DiscreteGpu),
             "uma" | "unified" | "unified-memory" | "apple" | "mac" | "macbook" | "m-series"
-            | "m1" | "m2" | "m3" | "m4" => Ok(Self::UnifiedMemory),
+            | "apple-silicon" | "m1" | "m2" | "m3" | "m4" | "m5" => Ok(Self::UnifiedMemory),
             "mobile" | "phone" | "tablet" | "android" | "ios" | "handheld" | "iphone" | "ipad"
-            | "smartphone" => Ok(Self::Mobile),
+            | "smartphone" | "wearable" | "watch" | "xr" | "vr" | "ar" | "smart-tv"
+            | "android-tv" => Ok(Self::Mobile),
             "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro" | "sbc"
-            | "arm-sbc" | "riscv" | "risc-v" | "wasm" | "browser" | "web" | "webgpu" => {
-                Ok(Self::Embedded)
-            }
+            | "arm-sbc" | "riscv" | "risc-v" | "wasm" | "browser" | "web" | "webgpu" | "wasip1"
+            | "wasm32" => Ok(Self::Embedded),
             "npu"
             | "ane"
             | "tpu"
@@ -230,6 +442,7 @@ impl FromStr for DeviceClass {
             | "neural"
             | "snapdragon"
             | "qualcomm"
+            | "hexagon"
             | "apple-neural-engine"
             | "ascend"
             | "cann"
@@ -240,13 +453,31 @@ impl FromStr for DeviceClass {
             | "bm1684"
             | "rockchip-npu"
             | "rknn"
-            | "horizon-bpu" => Ok(Self::NpuAccelerator),
+            | "horizon-bpu"
+            | "hailo"
+            | "ethos" => Ok(Self::NpuAccelerator),
             "multi-gpu" | "multi_gpu" | "multi" | "multi-accelerator" | "distributed"
-            | "cluster" => Ok(Self::MultiGpu),
-            "edge" | "gateway" | "edge-gateway" | "jetson" => Ok(Self::Edge),
-            "server" | "workstation" | "rack" | "datacenter" | "local-cloud" => Ok(Self::Server),
+            | "multi-device" | "heterogeneous" | "cluster" | "nvlink" => Ok(Self::MultiGpu),
+            "edge" | "gateway" | "edge-gateway" | "jetson" | "nas" | "home-server" | "router"
+            | "industrial-pc" | "ipc" => Ok(Self::Edge),
+            "server" | "workstation" | "rack" | "datacenter" | "local-cloud" | "hpc" | "k8s"
+            | "kubernetes" | "bare-metal" | "cloud-host" => Ok(Self::Server),
             other => Err(format!("unknown device class: {other}")),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DeviceProfileDescriptor {
+    pub device: DeviceClass,
+    pub tier: DeviceTier,
+    pub scope: &'static str,
+    pub aliases: &'static [&'static str],
+}
+
+impl DeviceProfileDescriptor {
+    pub fn aliases_csv(&self) -> String {
+        self.aliases.join("+")
     }
 }
 
@@ -436,6 +667,10 @@ impl HardwareProbe {
                     "KUNLUN_HOME",
                     "SOPHGO_SDK_ROOT",
                     "RKNN_TOOLKIT2",
+                    "HAILO_SDK_ROOT",
+                    "VITIS_AI_HOME",
+                    "ETHOS_U_HOME",
+                    "ETHOS_N_HOME",
                 ])
                 .is_some()
             || self.adapter_hint_contains(&[
@@ -444,6 +679,7 @@ impl HardwareProbe {
                 "ane",
                 "hexagon",
                 "qnn",
+                "tpu",
                 "ascend",
                 "cann",
                 "cambricon",
@@ -453,26 +689,57 @@ impl HardwareProbe {
                 "rknn",
                 "rockchip",
                 "horizon",
+                "bpu",
+                "hailo",
+                "ethos",
+                "vitis",
             ])
     }
 
     fn has_unified_memory_hint(&self) -> bool {
         self.env_flag("NOIRON_UNIFIED_MEMORY")
-            || self.adapter_hint_contains(&["apple", "m1", "m2", "m3", "m4", "unified"])
+            || self.adapter_hint_contains(&[
+                "apple",
+                "apple silicon",
+                "m1",
+                "m2",
+                "m3",
+                "m4",
+                "m5",
+                "unified",
+                "uma",
+            ])
     }
 
     fn has_integrated_gpu_hint(&self) -> bool {
         self.env_flag("NOIRON_INTEGRATED_GPU")
-            || self.adapter_hint_contains(&["integrated", "iris", "uhd", "intel", "apu"])
+            || self.adapter_hint_contains(&[
+                "integrated",
+                "iris",
+                "uhd",
+                "intel",
+                "xe",
+                "apu",
+                "steam deck",
+                "radeon graphics",
+            ])
     }
 
     fn adapter_hint_contains(&self, needles: &[&str]) -> bool {
         self.env_value_any(&[
             "NOIRON_GPU_ADAPTER",
             "WGPU_ADAPTER_NAME",
+            "WEBGPU_ADAPTER_NAME",
             "GPU_DEVICE_NAME",
             "DXGI_ADAPTER_NAME",
             "METAL_DEVICE_NAME",
+            "VULKAN_DEVICE_NAME",
+            "CUDA_DEVICE_NAME",
+            "HIP_DEVICE_NAME",
+            "ONEAPI_DEVICE_NAME",
+            "COREML_DEVICE_NAME",
+            "NNAPI_DEVICE_NAME",
+            "QNN_DEVICE_NAME",
         ])
         .map(|value| {
             let lower = value.to_ascii_lowercase();
@@ -499,7 +766,11 @@ impl HardwareProbe {
             "NVIDIA_VISIBLE_DEVICES",
             "HIP_VISIBLE_DEVICES",
             "ROCR_VISIBLE_DEVICES",
+            "HSA_VISIBLE_DEVICES",
+            "GPU_DEVICE_ORDINAL",
             "ONEAPI_DEVICE_SELECTOR",
+            "ZE_AFFINITY_MASK",
+            "SYCL_DEVICE_FILTER",
             "ASCEND_RT_VISIBLE_DEVICES",
             "ASCEND_VISIBLE_DEVICES",
             "MLU_VISIBLE_DEVICES",
@@ -601,6 +872,8 @@ impl HardwarePlan {
 pub struct DevicePlanGateRow {
     pub device: DeviceClass,
     pub tier: DeviceTier,
+    pub scope: &'static str,
+    pub alias_count: usize,
     pub primary_lane: ComputeLane,
     pub fallback_lane: ComputeLane,
     pub memory_mode: DeviceMemoryMode,
@@ -618,9 +891,15 @@ pub struct DevicePlanGateRow {
 
 impl DevicePlanGateRow {
     pub fn from_plan(plan: &HardwarePlan) -> Self {
+        let descriptor = plan.device.descriptor();
+        let mut failures = validate_device_plan(plan);
+        failures.extend(validate_device_descriptor(descriptor));
+
         Self {
             device: plan.device,
             tier: plan.tier,
+            scope: descriptor.scope,
+            alias_count: descriptor.aliases.len(),
             primary_lane: plan.execution.primary_lane,
             fallback_lane: plan.execution.fallback_lane,
             memory_mode: plan.execution.memory_mode,
@@ -633,7 +912,7 @@ impl DevicePlanGateRow {
             local_kv_token_budget: plan.local_kv_token_budget,
             global_kv_token_budget: plan.global_kv_token_budget,
             latency_budget_ms: plan.latency_budget_ms,
-            failures: validate_device_plan(plan),
+            failures,
         }
     }
 
@@ -647,6 +926,10 @@ impl DevicePlanGateRow {
             .map(|adapter| adapter.as_str())
             .collect::<Vec<_>>()
             .join("+")
+    }
+
+    pub fn aliases_csv(&self) -> String {
+        self.device.descriptor().aliases_csv()
     }
 }
 
@@ -686,11 +969,16 @@ impl DevicePlanGateReport {
         self.rows.iter().map(|row| row.failures.len()).sum()
     }
 
+    pub fn alias_count(&self) -> usize {
+        self.rows.iter().map(|row| row.alias_count).sum()
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
-            "device_gate: passed={} profiles={} failures={}",
+            "device_gate: passed={} profiles={} aliases={} failures={}",
             self.passed(),
             self.rows.len(),
+            self.alias_count(),
             self.failure_count()
         )
     }
@@ -1037,6 +1325,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::Rknn,
                 RuntimeAdapterHint::OpenVino,
                 RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::CustomAccelerator,
                 RuntimeAdapterHint::PortableRust,
             ],
             true,
@@ -1052,6 +1341,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::OneApi,
                 RuntimeAdapterHint::Vulkan,
                 RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::CustomAccelerator,
                 RuntimeAdapterHint::PortableRust,
             ],
             false,
@@ -1067,6 +1357,7 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
                 RuntimeAdapterHint::Nnapi,
                 RuntimeAdapterHint::Qnn,
                 RuntimeAdapterHint::Rknn,
+                RuntimeAdapterHint::CustomAccelerator,
             ],
             true,
         ),
@@ -1245,6 +1536,37 @@ fn validate_device_plan(plan: &HardwarePlan) -> Vec<String> {
     }
     if plan.tier == DeviceTier::Distributed && plan.execution.max_parallel_chunks < 2 {
         failures.push("distributed devices should expose more than one parallel chunk".to_owned());
+    }
+
+    failures
+}
+
+fn validate_device_descriptor(descriptor: DeviceProfileDescriptor) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if descriptor.aliases.is_empty() {
+        failures.push(format!(
+            "device descriptor for {} must include at least one alias",
+            descriptor.device.as_str()
+        ));
+    }
+    if descriptor.tier != descriptor.device.tier() {
+        failures.push(format!(
+            "device descriptor tier {} does not match computed tier {}",
+            descriptor.tier.as_str(),
+            descriptor.device.tier().as_str()
+        ));
+    }
+    for alias in descriptor.aliases {
+        match alias.parse::<DeviceClass>() {
+            Ok(parsed) if parsed == descriptor.device => {}
+            Ok(parsed) => failures.push(format!(
+                "alias {alias} maps to {} instead of {}",
+                parsed.as_str(),
+                descriptor.device.as_str()
+            )),
+            Err(error) => failures.push(format!("alias {alias} is not parseable: {error}")),
+        }
     }
 
     failures
@@ -1439,6 +1761,10 @@ mod tests {
             DeviceClass::IntegratedGpu
         );
         assert_eq!(
+            "steamdeck".parse::<DeviceClass>().unwrap(),
+            DeviceClass::IntegratedGpu
+        );
+        assert_eq!(
             "rtx".parse::<DeviceClass>().unwrap(),
             DeviceClass::DiscreteGpu
         );
@@ -1452,6 +1778,10 @@ mod tests {
         );
         assert_eq!(
             "snapdragon".parse::<DeviceClass>().unwrap(),
+            DeviceClass::NpuAccelerator
+        );
+        assert_eq!(
+            "hailo".parse::<DeviceClass>().unwrap(),
             DeviceClass::NpuAccelerator
         );
         assert_eq!(
@@ -1470,11 +1800,38 @@ mod tests {
             "riscv".parse::<DeviceClass>().unwrap(),
             DeviceClass::Embedded
         );
+        assert_eq!(
+            "wearable".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Mobile
+        );
         assert_eq!("jetson".parse::<DeviceClass>().unwrap(), DeviceClass::Edge);
+        assert_eq!("nas".parse::<DeviceClass>().unwrap(), DeviceClass::Edge);
         assert_eq!(
             "datacenter".parse::<DeviceClass>().unwrap(),
             DeviceClass::Server
         );
+        assert_eq!("hpc".parse::<DeviceClass>().unwrap(), DeviceClass::Server);
+    }
+
+    #[test]
+    fn device_profile_descriptors_roundtrip_aliases() {
+        for device in DeviceClass::explicit_profiles() {
+            let descriptor = device.descriptor();
+
+            assert_eq!(descriptor.device, *device);
+            assert_eq!(descriptor.tier, device.tier());
+            assert!(!descriptor.scope.is_empty());
+            assert!(descriptor.aliases.len() >= 8);
+
+            for alias in descriptor.aliases {
+                assert_eq!(
+                    alias.parse::<DeviceClass>().unwrap(),
+                    *device,
+                    "alias {alias} should resolve to {}",
+                    device.as_str()
+                );
+            }
+        }
     }
 
     #[test]
@@ -1528,6 +1885,7 @@ mod tests {
 
         assert!(report.passed(), "{:?}", report.rows);
         assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
+        assert!(report.alias_count() >= 80);
         assert!(report.summary_line().contains("passed=true"));
     }
 

@@ -95,7 +95,10 @@ The north star is now explicitly scoped around five core requirements:
    while preserving manual overrides. Each plan should also emit a device
    execution profile: primary compute lane, portable fallback lane, memory mode,
    candidate runtime adapters, KV precision policy, prefetch budget, disk-spill
-   policy, and recursive parallelism budget.
+   policy, and recursive parallelism budget. Every explicit profile should also
+   carry a coverage descriptor with common aliases so new device names map into
+   stable policy classes instead of fragmenting the runtime into one-off vendor
+   paths.
 
 5. Runtime boundary / 运行时边界
    `InferenceBackend` and `ModelRuntime` traits remain model-agnostic. The
@@ -165,8 +168,9 @@ The north star is now explicitly scoped around five core requirements:
 12. Device compatibility gate / 全设备兼容门禁
     The CLI should provide a `--device-gate` check that validates every explicit
     hardware profile keeps nonzero KV budgets, bounded prefetch, valid precision
-    policy, adapter hints, and a CPU/portable Rust escape hatch. This makes
-    device adaptation a regression gate rather than a documentation claim.
+    policy, adapter hints, alias roundtrips, and a CPU/portable Rust escape
+    hatch. This makes device adaptation a regression gate rather than a
+    documentation claim.
 
 ## Target Module Fusion / 目标模块融合
 
@@ -212,9 +216,9 @@ modules, not external product dependencies:
   hardware allocation should stay device-agnostic while supporting explicit
   policy profiles for PC, laptop, workstation, server, mobile, embedded,
   NPU/AI accelerator, and heterogeneous multi-GPU deployments. Common aliases
-  such as laptop, RTX, MacBook, iPhone, Snapdragon, Jetson, and datacenter
-  should resolve into stable profiles instead of adding vendor-specific code
-  paths.
+  such as x86_64, laptop, Steam Deck, RTX, MacBook, iPhone, wearable,
+  Snapdragon, Hailo, Jetson, NAS, datacenter, and HPC should resolve into stable
+  profiles instead of adding vendor-specific code paths.
 - Universal execution plans:
   every hardware profile should produce portable runtime adapter hints and
   fallback policies so the same control plane can run on CPU-only machines,
@@ -222,8 +226,8 @@ modules, not external product dependencies:
   multi-accelerator servers without assuming one vendor stack.
 - Device compatibility gate:
   the repository should fail fast when any supported device profile loses valid
-  execution lanes, KV budgets, adapter hints, disk-spill policy, or portable
-  fallback coverage.
+  alias coverage, execution lanes, KV budgets, adapter hints, disk-spill policy,
+  or portable fallback coverage.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -276,8 +280,10 @@ These are algorithmic references, not product dependencies:
   mode, adapter-hint, KV-precision, prefetch, disk-spill, and recursive
   parallelism policies; runtime KV import now honors the device prefetch
   budget; recursive schedules are now grouped into execution waves using the
-  device max-parallel-chunk budget; the CLI can print the full built-in device matrix and run a
-  `--device-gate` compatibility check across every explicit device profile;
+  device max-parallel-chunk budget; every explicit device profile now carries a
+  coverage descriptor with common aliases; the CLI can print the full built-in
+  device matrix and run a `--device-gate` compatibility check across every
+  explicit device profile, including alias roundtrips;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
@@ -321,9 +327,10 @@ These are algorithmic references, not product dependencies:
   production Transformer kernels are connected.
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets, including execution-plan
-  fallbacks for each device class.
+  fallbacks and alias coverage for each device class.
 - The device compatibility gate passes across all explicit profiles and fails
-  if a profile loses valid budgets, adapter hints, or a portable fallback.
+  if a profile loses valid alias mappings, budgets, adapter hints, or a portable
+  fallback.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,

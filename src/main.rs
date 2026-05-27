@@ -437,10 +437,11 @@ fn print_device_matrix_and_exit() -> ! {
 
     println!("Noiron device matrix");
     println!(
-        "profile,tier,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill"
     );
 
     for device in DeviceClass::explicit_profiles() {
+        let descriptor = device.descriptor();
         let plan = allocator.plan(
             HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20),
             TaskProfile::General,
@@ -455,9 +456,11 @@ fn print_device_matrix_and_exit() -> ! {
             .collect::<Vec<_>>()
             .join("+");
         println!(
-            "{},{},{},{},{},{},{},{},{}/{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{}/{},{}",
             device.as_str(),
             plan.tier.as_str(),
+            descriptor.scope,
+            descriptor.aliases_csv(),
             plan.execution.primary_lane.as_str(),
             plan.execution.fallback_lane.as_str(),
             plan.execution.memory_mode.as_str(),
@@ -477,14 +480,16 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
     println!("Noiron device compatibility gate");
     println!("{}", report.summary_line());
     println!(
-        "profile,tier,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,passed"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,passed"
     );
 
     for row in &report.rows {
         println!(
-            "{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{}",
             row.device.as_str(),
             row.tier.as_str(),
+            row.scope,
+            row.aliases_csv(),
             row.primary_lane.as_str(),
             row.fallback_lane.as_str(),
             row.memory_mode.as_str(),
