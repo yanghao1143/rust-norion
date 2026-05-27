@@ -96,6 +96,9 @@ pub struct ProcessRewardInput {
     pub metrics: GenerationMetrics,
     pub quality: f32,
     pub contradiction_count: usize,
+    pub reflection_issue_count: usize,
+    pub critical_reflection_issue_count: usize,
+    pub revision_action_count: usize,
     pub used_memories: usize,
     pub used_experiences: usize,
     pub tier_counts: TierCounts,
@@ -129,7 +132,13 @@ impl ProcessRewarder {
                 quality,
             ),
             hierarchy: hierarchy_reward(input.profile, input.hierarchy),
-            reflection: reflection_reward(quality, input.contradiction_count),
+            reflection: reflection_reward(
+                quality,
+                input.contradiction_count,
+                input.reflection_issue_count,
+                input.critical_reflection_issue_count,
+                input.revision_action_count,
+            ),
             latency: latency_reward(
                 input.route_budget,
                 input.stream_windows,
@@ -201,9 +210,19 @@ fn hierarchy_reward(profile: TaskProfile, hierarchy: HierarchyWeights) -> f32 {
     (1.0 - distance).clamp(0.0, 1.0)
 }
 
-fn reflection_reward(quality: f32, contradiction_count: usize) -> f32 {
-    let contradiction_penalty = (contradiction_count as f32 * 0.20).min(0.70);
-    (quality - contradiction_penalty).clamp(0.0, 1.0)
+fn reflection_reward(
+    quality: f32,
+    contradiction_count: usize,
+    issue_count: usize,
+    critical_issue_count: usize,
+    revision_action_count: usize,
+) -> f32 {
+    let contradiction_penalty = (contradiction_count as f32 * 0.13).min(0.45);
+    let issue_penalty = (issue_count as f32 * 0.04).min(0.20);
+    let critical_penalty = (critical_issue_count as f32 * 0.18).min(0.50);
+    let action_credit = (revision_action_count as f32 * 0.02).min(0.08);
+    (quality - contradiction_penalty - issue_penalty - critical_penalty + action_credit)
+        .clamp(0.0, 1.0)
 }
 
 fn latency_reward(
@@ -278,6 +297,18 @@ fn reward_notes(
         notes.push("memory:useful_reuse_or_gist".to_owned());
     } else if input.used_memories > 0 && input.contradiction_count > 0 {
         notes.push("memory:reuse_needs_penalty".to_owned());
+    }
+
+    if input.critical_reflection_issue_count > 0 {
+        notes.push(format!(
+            "reflection:critical_issues={}",
+            input.critical_reflection_issue_count
+        ));
+    } else if input.reflection_issue_count > 0 {
+        notes.push(format!(
+            "reflection:issues={}:actions={}",
+            input.reflection_issue_count, input.revision_action_count
+        ));
     }
 
     if input.recursive_schedule.requires_recursion {
@@ -382,6 +413,9 @@ mod tests {
             },
             quality,
             contradiction_count,
+            reflection_issue_count: contradiction_count,
+            critical_reflection_issue_count: 0,
+            revision_action_count: contradiction_count,
             used_memories: 2,
             used_experiences: 1,
             tier_counts: TierCounts::default(),
@@ -393,5 +427,23 @@ mod tests {
             stored_runtime_kv_memories: 0,
             gist_records: if quality > 0.45 { 3 } else { 0 },
         }
+    }
+
+    #[test]
+    fn critical_reflection_issues_reduce_reward() {
+        let mut input = input(0.70, 1, 0.45, false);
+        input.reflection_issue_count = 3;
+        input.critical_reflection_issue_count = 2;
+        input.revision_action_count = 3;
+
+        let report = ProcessRewarder::new().score(input);
+
+        assert!(report.components.reflection < 0.30);
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|note| note == "reflection:critical_issues=2")
+        );
     }
 }

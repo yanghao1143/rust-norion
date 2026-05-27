@@ -152,15 +152,15 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, drift, reward, and memory counters
+- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reflection diagnostics, drift, reward, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget and KV usage traces
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can reinforce or penalize used, stored, gist, and runtime-KV memories
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
-- `src/process_reward.rs`: RLVR-style process reward scoring for control decisions
+- `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
-- `src/reflection.rs`: draft reflection and memory admission logic
+- `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
 - `src/state_inspect.rs`: local state inspection report for memory, experience, adaptive router, hierarchy, and tier counts
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait

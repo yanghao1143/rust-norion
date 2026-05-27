@@ -423,6 +423,9 @@ impl NoironEngine {
             metrics,
             quality: report.quality,
             contradiction_count: report.contradictions.len(),
+            reflection_issue_count: report.issues.len(),
+            critical_reflection_issue_count: report.critical_issue_count(),
+            revision_action_count: report.revision_actions.len(),
             used_memories: used_memories.len(),
             used_experiences: used_experiences.len(),
             tier_counts: tier_plan.counts(),
@@ -1045,7 +1048,15 @@ mod tests {
             outcome.drift_report.severity,
             crate::drift::DriftSeverity::Block
         );
-        assert!(outcome.report.store_as_memory);
+        assert!(!outcome.report.store_as_memory);
+        assert!(outcome.report.critical_issue_count() > 0);
+        assert!(
+            outcome
+                .report
+                .issue_codes()
+                .iter()
+                .any(|code| code == "conflicting_certainty_markers")
+        );
         assert!(outcome.stored_memory_id.is_none());
         assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
     }

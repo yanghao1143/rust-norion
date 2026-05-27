@@ -153,8 +153,9 @@ The north star is now explicitly scoped around five core requirements:
    chunk, infer, merge, store, and recursively refine cross-chunk answers.
 
 8. RLVR-style control rewards / 可验证奖励控制
-   Score routing choices, KV reads, hierarchy weights, latency, contradictions,
-   and final quality. Update control state without modifying model weights.
+   Score routing choices, KV reads, hierarchy weights, latency, structured
+   reflection issues, contradictions, revision actions, and final quality.
+   Update control state without modifying model weights.
 
 9. Experience replay / 经验回放
    Extend `experience.rs` from passive retrieval to replayable records:
@@ -212,7 +213,8 @@ modules, not external product dependencies:
   forever.
 - Test-time scaling and RLVR-style rewards:
   reflection should score not only the final answer but also routing choices,
-  KV reads, hierarchy weights, latency, contradictions, and memory admission.
+  KV reads, hierarchy weights, latency, structured issue severity, revision
+  actions, contradictions, and memory admission.
 - Experience replay:
   the experience store should become replayable training data for the control
   plane state while leaving model weights untouched. Records should preserve
@@ -291,7 +293,8 @@ These are algorithmic references, not product dependencies:
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
   allocation
   (initial process reward scoring for route, memory, hierarchy, reflection,
-  latency, and memory admission is in place and persisted with experience;
+  structured reflection issue severity, latency, and memory admission is in
+  place and persisted with experience;
   reward-ranked experience replay can now update router, hierarchy, and KV
   memory state before inference; device-agnostic hardware pressure planning now
   adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
@@ -329,8 +332,9 @@ These are algorithmic references, not product dependencies:
   model id, tokenizer, native window, embedding dimensions, and KV exchange
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
-  records now capture route, hierarchy, KV, recursion, hardware, drift, reward, and
-  memory counters per inference; a built-in benchmark suite now writes one
+  records now capture route, hierarchy, KV, recursion, hardware, structured
+  reflection diagnostics, drift, reward, and memory counters per inference; a
+  built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
   latency ceilings, recursive chunk ceilings, and maximum drift block/rollback
