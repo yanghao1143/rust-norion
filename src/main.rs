@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use rust_norion::{
     CommandPromptMode, CommandRuntime, HeuristicBackend, InferenceRequest, NoironEngine,
-    RuntimeBackend, TaskProfile, TierMigrationAction,
+    RecursiveScheduler, RuntimeBackend, TaskProfile, TierMigrationAction,
 };
 
 fn main() -> std::io::Result<()> {
@@ -13,6 +13,12 @@ fn main() -> std::io::Result<()> {
         &args.experience_path,
         &args.adaptive_path,
     )?;
+    engine.recursive_scheduler = RecursiveScheduler::new(
+        args.native_window_tokens,
+        args.chunk_tokens,
+        args.chunk_overlap_tokens,
+        args.merge_fan_in,
+    );
 
     let outcome = if let Some(runtime_command) = args.runtime_command.clone() {
         let runtime = CommandRuntime::new(runtime_command)
@@ -82,6 +88,16 @@ fn main() -> std::io::Result<()> {
         infini_counts.global_tokens,
         infini_counts.skipped_tokens
     );
+    println!(
+        "recursive: required={} chunks={} merge_rounds={} prompt_tokens={} native_window={} chunk_tokens={} overlap_tokens={}",
+        outcome.recursive_schedule.requires_recursion,
+        outcome.recursive_schedule.chunk_count(),
+        outcome.recursive_schedule.merge_round_count(),
+        outcome.recursive_schedule.prompt_tokens,
+        outcome.recursive_schedule.native_window_tokens,
+        outcome.recursive_schedule.chunk_tokens,
+        outcome.recursive_schedule.overlap_tokens
+    );
     let transformer_counts = outcome.transformer_plan.counts();
     println!(
         "transformer: global={} local={} convolution={}",
@@ -126,6 +142,10 @@ struct Args {
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
+    native_window_tokens: usize,
+    chunk_tokens: usize,
+    chunk_overlap_tokens: usize,
+    merge_fan_in: usize,
 }
 
 impl Args {
@@ -138,6 +158,11 @@ impl Args {
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
+        let default_scheduler = RecursiveScheduler::default();
+        let mut native_window_tokens = default_scheduler.native_window_tokens();
+        let mut chunk_tokens = default_scheduler.chunk_tokens();
+        let mut chunk_overlap_tokens = default_scheduler.overlap_tokens();
+        let mut merge_fan_in = default_scheduler.merge_fan_in();
         let mut index = 0;
 
         while index < raw.len() {
@@ -173,6 +198,22 @@ impl Args {
                     };
                     index += 2;
                 }
+                "--native-window" if index + 1 < raw.len() => {
+                    native_window_tokens = parse_usize(&raw[index + 1], native_window_tokens);
+                    index += 2;
+                }
+                "--chunk-tokens" if index + 1 < raw.len() => {
+                    chunk_tokens = parse_usize(&raw[index + 1], chunk_tokens);
+                    index += 2;
+                }
+                "--chunk-overlap" if index + 1 < raw.len() => {
+                    chunk_overlap_tokens = parse_usize(&raw[index + 1], chunk_overlap_tokens);
+                    index += 2;
+                }
+                "--merge-fan-in" if index + 1 < raw.len() => {
+                    merge_fan_in = parse_usize(&raw[index + 1], merge_fan_in);
+                    index += 2;
+                }
                 "--help" | "-h" => {
                     print_help_and_exit();
                 }
@@ -200,8 +241,16 @@ impl Args {
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
+            native_window_tokens,
+            chunk_tokens,
+            chunk_overlap_tokens,
+            merge_fan_in,
         }
     }
+}
+
+fn parse_usize(value: &str, fallback: usize) -> usize {
+    value.parse::<usize>().unwrap_or(fallback)
 }
 
 fn detect_profile(prompt: &str) -> TaskProfile {
@@ -228,7 +277,36 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] <prompt>"
     );
     std::process::exit(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_recursive_scheduler_flags() {
+        let args = Args::parse(vec![
+            "--profile".to_owned(),
+            "long".to_owned(),
+            "--native-window".to_owned(),
+            "8".to_owned(),
+            "--chunk-tokens".to_owned(),
+            "6".to_owned(),
+            "--chunk-overlap".to_owned(),
+            "2".to_owned(),
+            "--merge-fan-in".to_owned(),
+            "2".to_owned(),
+            "one two three four five six seven eight nine".to_owned(),
+        ]);
+
+        assert_eq!(args.profile, TaskProfile::LongDocument);
+        assert_eq!(args.native_window_tokens, 8);
+        assert_eq!(args.chunk_tokens, 6);
+        assert_eq!(args.chunk_overlap_tokens, 2);
+        assert_eq!(args.merge_fan_in, 2);
+        assert!(args.prompt.contains("nine"));
+    }
 }

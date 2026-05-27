@@ -134,6 +134,7 @@ Implemented modules:
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence and retention policy
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
+- `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/experience.rs`: structured reflection experience store
@@ -160,6 +161,12 @@ testable, and replaceable before connecting a real model backend.
 
 ```powershell
 cargo run -- --profile coding "Build a Rust Noiron inference engine"
+```
+
+Trigger recursive long-context scheduling with a small demo native window:
+
+```powershell
+cargo run -- --profile long --native-window 8 --chunk-tokens 6 --chunk-overlap 2 --merge-fan-in 2 "one two three four five six seven eight nine ten eleven twelve"
 ```
 
 Run through a local command runtime:
@@ -197,10 +204,12 @@ flowchart LR
     Memory --> Tiers[Hot/Warm/Cold Tier Planner]
     Prompt --> Router[Adaptive Router]
     Prompt --> Hierarchy[Hierarchy Controller]
+    Prompt --> Recursive[Recursive Scheduler]
     Prompt --> Experience[Experience Store]
     Hierarchy --> Transformer[Transformer Refactor Plan]
     Memory --> Backend[InferenceBackend]
     Infini --> Backend
+    Recursive --> Backend
     DiskKV --> Memory
     Tiers --> Backend
     Experience --> Backend
@@ -235,19 +244,21 @@ Expected integration loop:
 
 1. embed prompt and retrieve local memory
 2. compute route budget and hierarchy weights
-3. retrieve relevant reflection lessons from the experience store
-4. call the real model backend
-5. reflect on the draft
-6. reinforce or penalize memory
-7. update routing threshold, hierarchy weights, and experience records
+3. plan single-pass or recursive chunk/merge scheduling for the native model window
+4. retrieve relevant reflection lessons from the experience store
+5. call the real model backend
+6. reflect on the draft
+7. reinforce or penalize memory
+8. update routing threshold, hierarchy weights, and experience records
 
 1. 对 prompt 做嵌入并检索本地记忆
 2. 计算路由预算和层级权重
-3. 从经验库检索相关反思 lesson
-4. 调用真实模型后端
-5. 对草稿答案做反思评估
-6. 强化或惩罚记忆
-7. 更新路由阈值、层级权重和经验记录
+3. 针对自研模型原生窗口规划单次推理或递归 chunk/merge 调度
+4. 从经验库检索相关反思 lesson
+5. 调用真实模型后端
+6. 对草稿答案做反思评估
+7. 强化或惩罚记忆
+8. 更新路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 

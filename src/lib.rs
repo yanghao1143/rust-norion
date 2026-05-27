@@ -6,6 +6,7 @@ pub mod hierarchy;
 pub mod infini_memory;
 pub mod kv_cache;
 pub mod kv_quant;
+pub mod recursive_scheduler;
 pub mod reflection;
 pub mod router;
 pub mod runtime;
@@ -28,6 +29,9 @@ pub use kv_cache::{
     KvFusionCache, MemoryEntry, MemoryMatch, MemoryRetentionPolicy, RetentionReport,
 };
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
+pub use recursive_scheduler::{
+    RecursiveChunk, RecursiveMergeRound, RecursiveSchedule, RecursiveScheduler,
+};
 pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 pub use router::{
     GenerationMetrics, NoironRouter, Route, RouteBudget, RouterState, RoutingContext,

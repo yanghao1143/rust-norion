@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
 use crate::router::RouteBudget;
 use crate::transformer::TransformerRefactorPlan;
@@ -20,6 +21,7 @@ pub struct RuntimeRequest {
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub transformer_plan: TransformerRefactorPlan,
+    pub recursive_schedule: RecursiveSchedule,
     pub max_tokens: usize,
 }
 
@@ -67,6 +69,7 @@ impl RuntimeRequest {
             route_budget: context.route_budget,
             hierarchy: context.hierarchy,
             transformer_plan: context.transformer_plan.clone(),
+            recursive_schedule: context.recursive_schedule.clone(),
             max_tokens,
         }
     }
@@ -196,6 +199,10 @@ impl CommandRuntime {
                         &request.infini_memory_hints.join("\n"),
                     )
                     .replace("{experience_hints}", &request.experience_hints.join("\n"))
+                    .replace(
+                        "{recursive_schedule}",
+                        &request.recursive_schedule.summary(),
+                    )
             })
             .collect()
     }
@@ -259,6 +266,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
          hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
          transformer: global_layers={} local_layers={} convolution_layers={}\n\
+         recursive: {}\n\
          memory_hints:\n{}\n\
          infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
@@ -275,6 +283,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         transformer_counts.global,
         transformer_counts.local,
         transformer_counts.convolution,
+        request.recursive_schedule.summary(),
         bullet_list(&request.memory_hints),
         bullet_list(&request.infini_memory_hints),
         bullet_list(&request.experience_hints),
@@ -446,6 +455,7 @@ mod tests {
             Vec::new(),
         );
         let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
         let context = GenerationContext {
             prompt: "build runtime",
             profile: TaskProfile::Coding,
@@ -459,6 +469,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
             experiences: &experiences,
             transformer_plan: &transformer_plan,
         };
@@ -472,6 +483,7 @@ mod tests {
         assert_eq!(seen.memory_hints.len(), 1);
         assert_eq!(seen.infini_memory_hints.len(), 1);
         assert_eq!(seen.experience_hints.len(), 1);
+        assert!(!seen.recursive_schedule.requires_recursion);
         assert!(seen.transformer_plan.is_empty());
     }
 
@@ -489,6 +501,7 @@ mod tests {
         let tier_plan = TieredCachePlan::default();
         let infini_memory_plan = InfiniMemoryPlan::default();
         let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
         let context = GenerationContext {
             prompt: "build runtime",
             profile: TaskProfile::Coding,
@@ -502,6 +515,7 @@ mod tests {
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
             experiences: &[],
             transformer_plan: &transformer_plan,
         };
@@ -532,6 +546,7 @@ mod tests {
         assert!(prompt.contains("memory_hints"));
         assert!(prompt.contains("infini_memory_hints"));
         assert!(prompt.contains("experience_hints"));
+        assert!(prompt.contains("recursive:"));
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
     }
@@ -561,6 +576,7 @@ mod tests {
             },
             hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
             transformer_plan: TransformerRefactorPlan::default(),
+            recursive_schedule: RecursiveSchedule::default(),
             max_tokens: 64,
         }
     }

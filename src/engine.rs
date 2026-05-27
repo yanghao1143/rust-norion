@@ -6,6 +6,7 @@ use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{KvFusionCache, MemoryMatch, MemoryRetentionPolicy, RetentionReport};
+use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
 use crate::tiered_cache::{TierMigration, TieredCachePlan, TieredCacheScheduler};
@@ -36,6 +37,7 @@ pub struct GenerationContext<'a> {
     pub hierarchy: HierarchyWeights,
     pub tier_plan: &'a TieredCachePlan,
     pub infini_memory_plan: &'a InfiniMemoryPlan,
+    pub recursive_schedule: &'a RecursiveSchedule,
     pub experiences: &'a [ExperienceMatch],
     pub transformer_plan: &'a TransformerRefactorPlan,
 }
@@ -54,6 +56,7 @@ pub struct InferenceOutcome {
     pub tier_plan: TieredCachePlan,
     pub tier_migrations: Vec<TierMigration>,
     pub infini_memory_plan: InfiniMemoryPlan,
+    pub recursive_schedule: RecursiveSchedule,
     pub transformer_plan: TransformerRefactorPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
@@ -71,6 +74,7 @@ pub struct NoironEngine {
     pub hierarchy: HierarchyController,
     pub tiered_cache: TieredCacheScheduler,
     pub infini_memory_planner: InfiniMemoryPlanner,
+    pub recursive_scheduler: RecursiveScheduler,
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
@@ -87,6 +91,7 @@ impl Default for NoironEngine {
             hierarchy: HierarchyController::new(),
             tiered_cache: TieredCacheScheduler::new(),
             infini_memory_planner: InfiniMemoryPlanner::new(),
+            recursive_scheduler: RecursiveScheduler::default(),
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
@@ -175,9 +180,10 @@ impl NoironEngine {
         let infini_memory_plan = self
             .infini_memory_planner
             .plan(self.cache.entries(), &used_memories);
+        let recursive_schedule = self.recursive_scheduler.plan(&request.prompt);
         let routing_context = RoutingContext {
             profile: request.profile,
-            context_tokens: approximate_token_count(&request.prompt),
+            context_tokens: recursive_schedule.prompt_tokens,
             cache_hit_rate: used_memories.len() as f32 / 4.0,
             latency_budget_ms: None,
         };
@@ -197,6 +203,7 @@ impl NoironEngine {
             hierarchy,
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
             experiences: &used_experiences,
             transformer_plan: &transformer_plan,
         });
@@ -260,6 +267,7 @@ impl NoironEngine {
             tier_plan,
             tier_migrations,
             infini_memory_plan,
+            recursive_schedule,
             transformer_plan,
             stream_reports,
             used_memories,
@@ -296,6 +304,7 @@ impl InferenceBackend for HeuristicBackend {
         };
         let tier_counts = context.tier_plan.counts();
         let infini_counts = context.infini_memory_plan.counts();
+        let recursive_schedule = context.recursive_schedule;
         let transformer_counts = context.transformer_plan.counts();
         let experience_summary = if context.experiences.is_empty() {
             "no prior experience".to_owned()
@@ -319,6 +328,7 @@ impl InferenceBackend for HeuristicBackend {
              Route budget: {:.0}% attention, {} fast tokens, {} attention tokens. \
              Tier plan: {} hot GPU, {} warm RAM, {} cold disk memories. \
              Infini memory: {} local-window ({} tokens), {} global ({} tokens), {} sparse-skipped ({} tokens) memories. \
+             Recursive schedule: required={}, {} chunks, {} merge rounds, {} prompt tokens, native window {}. \
              Transformer plan: {} global, {} local, {} convolution layers.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
@@ -333,6 +343,11 @@ impl InferenceBackend for HeuristicBackend {
             infini_counts.global_tokens,
             infini_counts.skipped,
             infini_counts.skipped_tokens,
+            recursive_schedule.requires_recursion,
+            recursive_schedule.chunk_count(),
+            recursive_schedule.merge_round_count(),
+            recursive_schedule.prompt_tokens,
+            recursive_schedule.native_window_tokens,
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution
@@ -347,6 +362,11 @@ impl InferenceBackend for HeuristicBackend {
                     0.82,
                 ),
                 ReasoningStep::new("memory", "looked up similar reinforced KV memories", 0.78),
+                ReasoningStep::new(
+                    "recursive_schedule",
+                    "planned single-pass or chunk/merge control for native-window limits",
+                    0.77,
+                ),
                 ReasoningStep::new(
                     "reflection",
                     "draft will be scored before reinforcement",
@@ -498,6 +518,27 @@ mod tests {
         assert_eq!(outcome.infini_memory_plan.counts().local_window, 1);
         assert!(outcome.answer.contains("Tier plan"));
         assert!(outcome.answer.contains("Infini memory"));
+    }
+
+    #[test]
+    fn inference_exposes_recursive_schedule_for_long_prompt() {
+        let mut engine = NoironEngine::new();
+        engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+        let prompt = (0..14)
+            .map(|index| format!("chunk_token_{index}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::LongDocument),
+            &mut backend,
+        );
+
+        assert!(outcome.recursive_schedule.requires_recursion);
+        assert_eq!(outcome.recursive_schedule.chunk_count(), 3);
+        assert_eq!(outcome.recursive_schedule.merge_round_count(), 2);
+        assert!(outcome.answer.contains("Recursive schedule"));
     }
 
     #[test]

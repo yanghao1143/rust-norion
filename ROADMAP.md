@@ -200,6 +200,8 @@ These are algorithmic references, not product dependencies:
 - v0.4: Infini-style global/local KV split and sparse context filtering
   (initial control-plane memory planner with token-budget filtering is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
+  (initial native-window-aware recursive schedule planning, chunk overlap, merge
+  rounds, runtime prompt propagation, and CLI reporting are in place)
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute
   allocation
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
