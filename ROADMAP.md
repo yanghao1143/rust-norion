@@ -113,10 +113,12 @@ The north star is now explicitly scoped around five core requirements:
 
 1. Multi-factor routing / 多因子路由
    Entropy, task profile, context length, cache hit rate, latency budget, and
-   future hardware pressure choose among projection, local-window attention,
-   global attention, and convolutional fusion. Router thresholds should evolve
-   per task profile so coding, writing, general reasoning, and long-document
-   runs do not overwrite each other's compute strategy.
+   hardware pressure choose among projection, local-window attention, global
+   attention, and convolutional fusion. Device compute headroom lets larger
+   accelerator profiles spend more attention on borderline tokens while tiny or
+   overloaded devices stay closer to fast paths. Router thresholds should
+   evolve per task profile so coding, writing, general reasoning, and
+   long-document runs do not overwrite each other's compute strategy.
 
 2. Self-owned Transformer boundary / 自研 Transformer 边界
    Strengthen the runtime trait so the self-developed model exposes tokenizer,
@@ -297,6 +299,8 @@ These are algorithmic references, not product dependencies:
   explicit device profile, including alias roundtrips;
   router thresholds now persist separately for general, coding, writing, and
   long-document profiles;
+  route scoring now consumes hardware pressure and device compute headroom from
+  the hardware plan;
   the CLI can inspect persisted local state without running inference;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)

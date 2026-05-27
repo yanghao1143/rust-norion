@@ -137,6 +137,17 @@ impl DeviceTier {
             Self::Distributed => "distributed",
         }
     }
+
+    pub fn compute_headroom(self) -> f32 {
+        match self {
+            Self::Auto => 0.45,
+            Self::Tiny => 0.08,
+            Self::Constrained => 0.22,
+            Self::Balanced => 0.50,
+            Self::Accelerated => 0.78,
+            Self::Distributed => 1.0,
+        }
+    }
 }
 
 impl DeviceClass {
@@ -849,12 +860,17 @@ impl Default for HardwarePlan {
 }
 
 impl HardwarePlan {
+    pub fn compute_headroom(&self) -> f32 {
+        self.tier.compute_headroom()
+    }
+
     pub fn summary(&self) -> String {
         format!(
-            "device={} tier={} pressure={:.3} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2}) execution=({})",
+            "device={} tier={} pressure={:.3} compute_headroom={:.2} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2}) execution=({})",
             self.device.as_str(),
             self.tier.as_str(),
             self.pressure,
+            self.compute_headroom(),
             self.latency_budget_ms
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "none".to_owned()),
@@ -2009,6 +2025,20 @@ mod tests {
         assert!((snapshot.gpu_load - 0.25).abs() < 0.0001);
         assert!((snapshot.ram_load - 0.50).abs() < 0.0001);
         assert!((snapshot.disk_load - 0.10).abs() < 0.0001);
+    }
+
+    #[test]
+    fn tier_compute_headroom_orders_device_capacity() {
+        assert!(DeviceTier::Tiny.compute_headroom() < DeviceTier::Constrained.compute_headroom());
+        assert!(
+            DeviceTier::Constrained.compute_headroom() < DeviceTier::Balanced.compute_headroom()
+        );
+        assert!(
+            DeviceTier::Balanced.compute_headroom() < DeviceTier::Accelerated.compute_headroom()
+        );
+        assert!(
+            DeviceTier::Accelerated.compute_headroom() < DeviceTier::Distributed.compute_headroom()
+        );
     }
 
     #[test]

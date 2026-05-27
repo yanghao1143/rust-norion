@@ -296,6 +296,8 @@ impl NoironEngine {
             context_tokens: recursive_schedule.prompt_tokens,
             cache_hit_rate: used_memories.len() as f32 / 4.0,
             latency_budget_ms: hardware_plan.latency_budget_ms,
+            hardware_pressure: hardware_plan.pressure,
+            compute_headroom: hardware_plan.compute_headroom(),
         };
         let route_budget = self
             .router
@@ -1097,6 +1099,48 @@ mod tests {
         assert!(outcome.hardware_plan.local_kv_token_budget < 512);
         assert!(outcome.hardware_plan.global_kv_token_budget < 4096);
         assert!(outcome.answer.contains("Hardware plan"));
+    }
+
+    #[test]
+    fn hardware_pressure_flows_into_route_budget() {
+        let prompt = (0..8)
+            .map(|index| format!("ComputeA{index}B{index}C{index}D"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut roomy_engine = NoironEngine::new();
+        roomy_engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::Server,
+            0.10,
+            0.15,
+            0.20,
+            0.10,
+        ));
+        let mut constrained_engine = NoironEngine::new();
+        constrained_engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::Embedded,
+            0.95,
+            0.0,
+            0.92,
+            0.70,
+        ));
+        let mut roomy_backend = HeuristicBackend;
+        let mut constrained_backend = HeuristicBackend;
+
+        let roomy = roomy_engine.infer(
+            InferenceRequest::new(prompt.clone(), TaskProfile::Coding),
+            &mut roomy_backend,
+        );
+        let constrained = constrained_engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding),
+            &mut constrained_backend,
+        );
+
+        assert!(
+            roomy.hardware_plan.compute_headroom() > constrained.hardware_plan.compute_headroom()
+        );
+        assert!(
+            roomy.route_budget.attention_fraction > constrained.route_budget.attention_fraction
+        );
     }
 
     #[test]

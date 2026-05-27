@@ -46,6 +46,8 @@ pub struct RoutingContext {
     pub context_tokens: usize,
     pub cache_hit_rate: f32,
     pub latency_budget_ms: Option<u64>,
+    pub hardware_pressure: f32,
+    pub compute_headroom: f32,
 }
 
 impl Default for RoutingContext {
@@ -55,6 +57,8 @@ impl Default for RoutingContext {
             context_tokens: 0,
             cache_hit_rate: 0.0,
             latency_budget_ms: None,
+            hardware_pressure: 0.0,
+            compute_headroom: 0.5,
         }
     }
 }
@@ -400,8 +404,16 @@ fn routing_score(entropy: f32, context: RoutingContext) -> f32 {
         Some(budget) if budget <= 500 => 0.04,
         _ => 0.0,
     };
+    let compute_headroom = context.compute_headroom.clamp(0.0, 1.0);
+    let hardware_pressure_discount = context.hardware_pressure.clamp(0.0, 1.0) * 0.16;
+    let constrained_device_discount = (0.5 - compute_headroom).max(0.0) * 0.10;
+    let accelerator_bonus = (compute_headroom - 0.5).max(0.0) * 0.12;
 
-    (entropy * 0.72 + task_pressure + context_pressure - cache_discount - latency_discount)
+    (entropy * 0.72 + task_pressure + context_pressure + accelerator_bonus
+        - cache_discount
+        - latency_discount
+        - hardware_pressure_discount
+        - constrained_device_discount)
         .clamp(0.0, 1.0)
 }
 
@@ -513,8 +525,7 @@ mod tests {
             RoutingContext {
                 profile: TaskProfile::LongDocument,
                 context_tokens: 16_384,
-                cache_hit_rate: 0.0,
-                latency_budget_ms: None,
+                ..RoutingContext::default()
             },
         );
 
@@ -536,5 +547,42 @@ mod tests {
 
         assert!(normal.route.uses_attention_budget());
         assert_eq!(constrained.route, Route::FastProjection);
+    }
+
+    #[test]
+    fn hardware_pressure_conserves_attention_budget() {
+        let router = NoironRouter::new();
+        let normal = router.route_entropy("token", 0.76);
+        let constrained = router.route_entropy_with_context(
+            "token",
+            0.76,
+            RoutingContext {
+                hardware_pressure: 0.95,
+                compute_headroom: 0.08,
+                ..RoutingContext::default()
+            },
+        );
+
+        assert!(normal.route.uses_attention_budget());
+        assert_eq!(constrained.route, Route::FastProjection);
+        assert!(constrained.score < normal.score);
+    }
+
+    #[test]
+    fn accelerator_headroom_spends_attention_on_borderline_tokens() {
+        let router = NoironRouter::new();
+        let normal = router.route_entropy("token", 0.68);
+        let accelerated = router.route_entropy_with_context(
+            "token",
+            0.68,
+            RoutingContext {
+                compute_headroom: 1.0,
+                ..RoutingContext::default()
+            },
+        );
+
+        assert_eq!(normal.route, Route::FastProjection);
+        assert!(accelerated.route.uses_attention_budget());
+        assert!(accelerated.score > normal.score);
     }
 }
