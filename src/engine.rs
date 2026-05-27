@@ -6,6 +6,7 @@ use crate::kv_cache::{KvFusionCache, MemoryMatch};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget};
 use crate::tiered_cache::{TieredCachePlan, TieredCacheScheduler};
+use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
 
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
@@ -44,6 +45,7 @@ pub struct InferenceOutcome {
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
+    pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
     pub stored_memory_id: Option<u64>,
     pub router_threshold_after: f32,
@@ -55,6 +57,7 @@ pub struct NoironEngine {
     pub cache: KvFusionCache,
     pub hierarchy: HierarchyController,
     pub tiered_cache: TieredCacheScheduler,
+    pub stream_monitor: TokenStreamMonitor,
     pub reflector: Reflector,
     embedder: TextEmbedder,
 }
@@ -66,6 +69,7 @@ impl Default for NoironEngine {
             cache: KvFusionCache::new(),
             hierarchy: HierarchyController::new(),
             tiered_cache: TieredCacheScheduler::new(),
+            stream_monitor: TokenStreamMonitor::default(),
             reflector: Reflector::new(),
             embedder: TextEmbedder::default(),
         }
@@ -113,6 +117,12 @@ impl NoironEngine {
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
         let metrics = metrics_from_report(&draft, &report, route_budget);
+        let stream_reports = self.stream_monitor.observe_generated(
+            &mut self.router,
+            &draft.answer,
+            report.quality,
+            report.contradictions.len(),
+        );
 
         let stored_memory_id = if report.store_as_memory {
             let memory_text = format!(
@@ -147,6 +157,7 @@ impl NoironEngine {
             route_budget,
             hierarchy,
             tier_plan,
+            stream_reports,
             used_memories,
             stored_memory_id,
             router_threshold_after: self.router.threshold(),
@@ -324,7 +335,11 @@ mod tests {
 
         assert!(outcome.answer.contains("Noiron"));
         assert!(outcome.stored_memory_id.is_some());
-        assert_eq!(engine.router.observations(), 1);
+        assert!(!outcome.stream_reports.is_empty());
+        assert_eq!(
+            engine.router.observations(),
+            outcome.stream_reports.len() as u64 + 1
+        );
         assert!(!engine.cache.is_empty());
     }
 

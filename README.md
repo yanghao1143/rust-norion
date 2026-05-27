@@ -49,6 +49,7 @@ Implemented modules:
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
+- `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/hierarchy.rs`: task-profile hierarchy controller
 - `src/reflection.rs`: draft reflection and memory admission logic
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
@@ -99,7 +100,9 @@ flowchart LR
     Router --> Backend
     Hierarchy --> Backend
     Backend --> Draft[Draft Answer]
+    Draft --> Stream[Token Stream Monitor]
     Draft --> Reflect[Reflection Loop]
+    Stream --> Router
     Reflect --> Memory
     Reflect --> Router
     Reflect --> Hierarchy

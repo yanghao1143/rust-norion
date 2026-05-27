@@ -5,6 +5,7 @@ pub mod kv_cache;
 pub mod reflection;
 pub mod router;
 pub mod tiered_cache;
+pub mod token_stream;
 
 pub use disk_kv::DiskKvStore;
 pub use engine::{
@@ -18,3 +19,4 @@ pub use router::{GenerationMetrics, NoironRouter, Route, RouteBudget, RoutingDec
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TieredCachePlan, TieredCacheScheduler,
 };
+pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};

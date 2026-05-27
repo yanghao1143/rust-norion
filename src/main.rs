@@ -39,6 +39,7 @@ fn main() -> std::io::Result<()> {
         "tiers: hot_gpu={} warm_ram={} cold_disk={}",
         tier_counts.hot_gpu, tier_counts.warm_ram, tier_counts.cold_disk
     );
+    println!("stream_windows={}", outcome.stream_reports.len());
     println!(
         "memory: used={} stored={:?}",
         outcome.used_memories.len(),
