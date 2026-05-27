@@ -17,6 +17,7 @@ pub mod router;
 pub mod runtime;
 pub mod tiered_cache;
 pub mod token_stream;
+pub mod trace;
 pub mod transformer;
 
 pub use adaptive_state::AdaptiveState;
@@ -60,6 +61,7 @@ pub use tiered_cache::{
     TieredCacheScheduler,
 };
 pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};
+pub use trace::{append_trace_jsonl, trace_json_line};
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
     TransformerRefactorPlan,

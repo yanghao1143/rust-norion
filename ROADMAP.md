@@ -238,7 +238,9 @@ These are algorithmic references, not product dependencies:
   context windows feed recursive scheduling; CLI command runtimes can pass
   model id, tokenizer, native window, embedding dimensions, and KV exchange
   flags; active Noiron memory can now be imported into runtime KV and accepted
-  exported runtime KV can be written back into reinforced memory)
+  exported runtime KV can be written back into reinforced memory; JSONL trace
+  records now capture route, hierarchy, KV, recursion, hardware, reward, and
+  memory counters per inference)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 

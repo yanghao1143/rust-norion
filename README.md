@@ -144,6 +144,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
+- `src/trace.rs`: JSONL trace writer for routing, hierarchy, KV, recursion, hardware, reward, and memory counters
 - `src/experience.rs`: structured reflection experience store
 - `src/experience_replay.rs`: reward-ranked experience replay planner
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -184,6 +185,12 @@ Replay high/low reward experience before the next inference:
 
 ```powershell
 cargo run -- --replay 4 --profile coding "Improve Rust Noiron routing from prior experience"
+```
+
+Write one structured JSONL trace record for benchmark comparison:
+
+```powershell
+cargo run -- --trace target/noiron-trace.jsonl --profile coding "Trace Rust Noiron routing and memory decisions"
 ```
 
 Apply universal device-profile hardware pressure hints:
@@ -357,7 +364,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
 - add configurable memory retention policies
-- add structured tracing for every inference loop
+- expand structured tracing into benchmark suites and regression gates
 
 - 用模型侧 embedding 或轻量向量编码器替换当前启发式 embedding
 - 实现自研 Transformer 运行时适配器
@@ -367,4 +374,4 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 增加长上下文路由和记忆复用 benchmark
 - 增加可配置的记忆保留策略
 - 扩展全设备硬件 profile 和真实设备探测适配
-- 为每次推理闭环增加结构化 trace
+- 把结构化 trace 扩展成 benchmark 套件和回归门禁

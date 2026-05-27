@@ -1,10 +1,11 @@
 use std::env;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use rust_norion::{
     CommandPromptMode, CommandRuntime, DeviceClass, GistLevel, HardwareSnapshot, HeuristicBackend,
     InferenceRequest, NoironEngine, RecursiveScheduler, RuntimeBackend, RuntimeMetadata,
-    TaskProfile, TierMigrationAction,
+    TaskProfile, TierMigrationAction, append_trace_jsonl,
 };
 
 fn main() -> std::io::Result<()> {
@@ -33,6 +34,7 @@ fn main() -> std::io::Result<()> {
         None
     };
 
+    let started = Instant::now();
     let outcome = if let Some(runtime_command) = args.runtime_command.clone() {
         let runtime = CommandRuntime::new(runtime_command)
             .args(args.runtime_args.clone())
@@ -50,15 +52,23 @@ fn main() -> std::io::Result<()> {
             &mut backend,
         )
     };
+    let elapsed_ms = started.elapsed().as_millis();
     engine.save_memory(&args.memory_path)?;
     engine.save_experience(&args.experience_path)?;
     engine.save_adaptive_state(&args.adaptive_path)?;
+    if let Some(trace_path) = &args.trace_path {
+        append_trace_jsonl(trace_path, &args.prompt, args.profile, elapsed_ms, &outcome)?;
+    }
 
     println!("Noiron Rust prototype");
     println!("profile: {:?}", args.profile);
     println!("memory_file: {}", args.memory_path.display());
     println!("experience_file: {}", args.experience_path.display());
     println!("adaptive_file: {}", args.adaptive_path.display());
+    println!("elapsed_ms: {}", elapsed_ms);
+    if let Some(trace_path) = &args.trace_path {
+        println!("trace_file: {}", trace_path.display());
+    }
     if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
         println!("runtime_metadata: {}", args.runtime_metadata.summary());
@@ -179,6 +189,7 @@ struct Args {
     memory_path: PathBuf,
     experience_path: PathBuf,
     adaptive_path: PathBuf,
+    trace_path: Option<PathBuf>,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
@@ -202,6 +213,7 @@ impl Args {
         let mut memory_path = PathBuf::from("noiron-memory.tsv");
         let mut experience_path = PathBuf::from("noiron-experience.ndkv");
         let mut adaptive_path = PathBuf::from("noiron-adaptive.ndkv");
+        let mut trace_path = None;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
@@ -236,6 +248,10 @@ impl Args {
                 }
                 "--adaptive" | "-a" if index + 1 < raw.len() => {
                     adaptive_path = PathBuf::from(&raw[index + 1]);
+                    index += 2;
+                }
+                "--trace" if index + 1 < raw.len() => {
+                    trace_path = Some(PathBuf::from(&raw[index + 1]));
                     index += 2;
                 }
                 "--runtime-command" if index + 1 < raw.len() => {
@@ -348,6 +364,7 @@ impl Args {
             memory_path,
             experience_path,
             adaptive_path,
+            trace_path,
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
@@ -398,7 +415,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -422,6 +439,8 @@ mod tests {
             "2".to_owned(),
             "--replay".to_owned(),
             "3".to_owned(),
+            "--trace".to_owned(),
+            "trace.jsonl".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
@@ -446,6 +465,7 @@ mod tests {
         assert_eq!(args.chunk_overlap_tokens, 2);
         assert_eq!(args.merge_fan_in, 2);
         assert_eq!(args.replay_limit, 3);
+        assert_eq!(args.trace_path.unwrap(), PathBuf::from("trace.jsonl"));
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
         assert_eq!(args.runtime_metadata.native_context_window, 4096);
