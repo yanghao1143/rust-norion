@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use crate::kv_cache::{MemoryEntry, MemoryMatch};
 
@@ -10,11 +11,60 @@ pub enum MemoryTier {
     ColdDisk,
 }
 
+impl MemoryTier {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::HotGpu => "hot_gpu",
+            Self::WarmRam => "warm_ram",
+            Self::ColdDisk => "cold_disk",
+        }
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Self::HotGpu => 0,
+            Self::WarmRam => 1,
+            Self::ColdDisk => 2,
+        }
+    }
+}
+
+impl FromStr for MemoryTier {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "hot_gpu" => Ok(Self::HotGpu),
+            "warm_ram" => Ok(Self::WarmRam),
+            "cold_disk" => Ok(Self::ColdDisk),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryPlacement {
     pub id: u64,
     pub tier: MemoryTier,
     pub score: f32,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TierMigrationAction {
+    New,
+    Promote,
+    Demote,
+    Retain,
+    Evict,
+}
+
+#[derive(Debug, Clone)]
+pub struct TierMigration {
+    pub id: u64,
+    pub from: Option<MemoryTier>,
+    pub to: Option<MemoryTier>,
+    pub action: TierMigrationAction,
     pub reason: String,
 }
 
@@ -34,6 +84,63 @@ impl TieredCachePlan {
 
     pub fn placement_for(&self, id: u64) -> Option<&MemoryPlacement> {
         self.placements.iter().find(|placement| placement.id == id)
+    }
+
+    pub fn migrations_from(&self, previous: &TieredCachePlan) -> Vec<TierMigration> {
+        let previous_by_id = previous
+            .placements
+            .iter()
+            .map(|placement| (placement.id, placement))
+            .collect::<HashMap<_, _>>();
+        let current_by_id = self
+            .placements
+            .iter()
+            .map(|placement| (placement.id, placement))
+            .collect::<HashMap<_, _>>();
+        let mut migrations = Vec::new();
+
+        for current in &self.placements {
+            let Some(previous) = previous_by_id.get(&current.id) else {
+                migrations.push(TierMigration {
+                    id: current.id,
+                    from: None,
+                    to: Some(current.tier),
+                    action: TierMigrationAction::New,
+                    reason: format!("new:{}", current.reason),
+                });
+                continue;
+            };
+
+            let action = if current.tier.rank() < previous.tier.rank() {
+                TierMigrationAction::Promote
+            } else if current.tier.rank() > previous.tier.rank() {
+                TierMigrationAction::Demote
+            } else {
+                TierMigrationAction::Retain
+            };
+
+            migrations.push(TierMigration {
+                id: current.id,
+                from: Some(previous.tier),
+                to: Some(current.tier),
+                action,
+                reason: format!("{} -> {}", previous.reason, current.reason),
+            });
+        }
+
+        for previous in &previous.placements {
+            if !current_by_id.contains_key(&previous.id) {
+                migrations.push(TierMigration {
+                    id: previous.id,
+                    from: Some(previous.tier),
+                    to: None,
+                    action: TierMigrationAction::Evict,
+                    reason: format!("evict:{}", previous.reason),
+                });
+            }
+        }
+
+        migrations
     }
 
     pub fn counts(&self) -> TierCounts {
@@ -158,12 +265,10 @@ impl TieredCacheScheduler {
 }
 
 fn placement_reason(tier: MemoryTier, score: f32, active_similarity: f32) -> String {
-    let tier_label = match tier {
-        MemoryTier::HotGpu => "hot_gpu",
-        MemoryTier::WarmRam => "warm_ram",
-        MemoryTier::ColdDisk => "cold_disk",
-    };
-    format!("{tier_label}:score={score:.3}:active_similarity={active_similarity:.3}")
+    format!(
+        "{}:score={score:.3}:active_similarity={active_similarity:.3}",
+        tier.as_str()
+    )
 }
 
 #[cfg(test)]
@@ -196,6 +301,30 @@ mod tests {
         assert_eq!(plan.placement_for(7).unwrap().tier, MemoryTier::ColdDisk);
     }
 
+    #[test]
+    fn migrations_capture_new_promote_demote_retain_and_evict() {
+        let previous = TieredCachePlan::new(vec![
+            placement(1, MemoryTier::ColdDisk),
+            placement(2, MemoryTier::HotGpu),
+            placement(3, MemoryTier::WarmRam),
+            placement(4, MemoryTier::WarmRam),
+        ]);
+        let current = TieredCachePlan::new(vec![
+            placement(1, MemoryTier::HotGpu),
+            placement(2, MemoryTier::WarmRam),
+            placement(3, MemoryTier::WarmRam),
+            placement(5, MemoryTier::ColdDisk),
+        ]);
+
+        let migrations = current.migrations_from(&previous);
+
+        assert_eq!(action_for(&migrations, 1), TierMigrationAction::Promote);
+        assert_eq!(action_for(&migrations, 2), TierMigrationAction::Demote);
+        assert_eq!(action_for(&migrations, 3), TierMigrationAction::Retain);
+        assert_eq!(action_for(&migrations, 4), TierMigrationAction::Evict);
+        assert_eq!(action_for(&migrations, 5), TierMigrationAction::New);
+    }
+
     fn entry(id: u64, strength: f32, hits: u64, failures: u64, last_score: f32) -> MemoryEntry {
         MemoryEntry {
             id,
@@ -206,5 +335,22 @@ mod tests {
             failures,
             last_score,
         }
+    }
+
+    fn placement(id: u64, tier: MemoryTier) -> MemoryPlacement {
+        MemoryPlacement {
+            id,
+            tier,
+            score: id as f32,
+            reason: format!("placement {id}"),
+        }
+    }
+
+    fn action_for(migrations: &[TierMigration], id: u64) -> TierMigrationAction {
+        migrations
+            .iter()
+            .find(|migration| migration.id == id)
+            .map(|migration| migration.action)
+            .expect("migration should exist")
     }
 }

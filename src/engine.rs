@@ -7,7 +7,7 @@ use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::kv_cache::{KvFusionCache, MemoryMatch};
 use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
-use crate::tiered_cache::{TieredCachePlan, TieredCacheScheduler};
+use crate::tiered_cache::{TierMigration, TieredCachePlan, TieredCacheScheduler};
 use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
 use crate::transformer::{TransformerPlanner, TransformerRefactorPlan};
 
@@ -50,6 +50,7 @@ pub struct InferenceOutcome {
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
+    pub tier_migrations: Vec<TierMigration>,
     pub transformer_plan: TransformerRefactorPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
@@ -69,6 +70,7 @@ pub struct NoironEngine {
     pub transformer_planner: TransformerPlanner,
     pub experience: ExperienceStore,
     pub reflector: Reflector,
+    last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
 }
 
@@ -83,6 +85,7 @@ impl Default for NoironEngine {
             transformer_planner: TransformerPlanner::default(),
             experience: ExperienceStore::new(),
             reflector: Reflector::new(),
+            last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
         }
     }
@@ -137,12 +140,14 @@ impl NoironEngine {
         AdaptiveState {
             router: self.router.state(),
             hierarchy: self.hierarchy.state(),
+            tier_plan: self.last_tier_plan.clone(),
         }
     }
 
     pub fn restore_adaptive_state(&mut self, state: AdaptiveState) {
         self.router.restore_state(state.router);
         self.hierarchy.restore_state(state.hierarchy);
+        self.last_tier_plan = state.tier_plan;
     }
 
     pub fn save_adaptive_state(&self, path: impl AsRef<Path>) -> io::Result<()> {
@@ -160,6 +165,7 @@ impl NoironEngine {
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
         let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
+        let tier_migrations = tier_plan.migrations_from(&self.last_tier_plan);
         let routing_context = RoutingContext {
             profile: request.profile,
             context_tokens: approximate_token_count(&request.prompt),
@@ -232,6 +238,7 @@ impl NoironEngine {
             stream_windows: stream_reports.len(),
             hierarchy,
         });
+        self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
 
         InferenceOutcome {
             answer: report.revised_answer.clone(),
@@ -240,6 +247,7 @@ impl NoironEngine {
             route_budget,
             hierarchy,
             tier_plan,
+            tier_migrations,
             transformer_plan,
             stream_reports,
             used_memories,
@@ -428,6 +436,7 @@ fn char_weight(ch: char) -> f32 {
 mod tests {
     use super::*;
     use crate::reflection::DraftToken;
+    use crate::tiered_cache::TierMigrationAction;
 
     #[test]
     fn inference_updates_router_and_memory() {
@@ -464,7 +473,44 @@ mod tests {
         );
 
         assert_eq!(outcome.tier_plan.placements().len(), 1);
+        assert_eq!(outcome.tier_migrations.len(), 1);
         assert!(outcome.answer.contains("Tier plan"));
+    }
+
+    #[test]
+    fn inference_tracks_tier_migrations_across_runs() {
+        let mut cache = KvFusionCache::new();
+        cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
+        let mut engine = NoironEngine::with_cache(cache);
+        let mut backend = HeuristicBackend;
+
+        let first = engine.infer(
+            InferenceRequest::new("Rust Noiron tiered memory", TaskProfile::Coding),
+            &mut backend,
+        );
+        let second = engine.infer(
+            InferenceRequest::new("Rust Noiron tiered memory", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(
+            first
+                .tier_migrations
+                .iter()
+                .any(|migration| migration.action == TierMigrationAction::New)
+        );
+        assert!(
+            second
+                .tier_migrations
+                .iter()
+                .any(|migration| migration.from.is_some())
+        );
+        assert!(
+            second
+                .tier_migrations
+                .iter()
+                .any(|migration| migration.action != TierMigrationAction::New)
+        );
     }
 
     #[test]

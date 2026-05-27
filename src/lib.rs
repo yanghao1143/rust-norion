@@ -32,7 +32,8 @@ pub use runtime::{
     RuntimeResponse, RuntimeToken,
 };
 pub use tiered_cache::{
-    MemoryPlacement, MemoryTier, TierCounts, TieredCachePlan, TieredCacheScheduler,
+    MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
+    TieredCacheScheduler,
 };
 pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};
 pub use transformer::{

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use rust_norion::{
     CommandPromptMode, CommandRuntime, HeuristicBackend, InferenceRequest, NoironEngine,
-    RuntimeBackend, TaskProfile,
+    RuntimeBackend, TaskProfile, TierMigrationAction,
 };
 
 fn main() -> std::io::Result<()> {
@@ -64,6 +64,14 @@ fn main() -> std::io::Result<()> {
         "tiers: hot_gpu={} warm_ram={} cold_disk={}",
         tier_counts.hot_gpu, tier_counts.warm_ram, tier_counts.cold_disk
     );
+    println!(
+        "tier_migrations: new={} promote={} demote={} retain={} evict={}",
+        count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::New),
+        count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::Promote),
+        count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::Demote),
+        count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::Retain),
+        count_tier_migrations(&outcome.tier_migrations, TierMigrationAction::Evict)
+    );
     let transformer_counts = outcome.transformer_plan.counts();
     println!(
         "transformer: global={} local={} convolution={}",
@@ -79,6 +87,16 @@ fn main() -> std::io::Result<()> {
     );
 
     Ok(())
+}
+
+fn count_tier_migrations(
+    migrations: &[rust_norion::TierMigration],
+    action: TierMigrationAction,
+) -> usize {
+    migrations
+        .iter()
+        .filter(|migration| migration.action == action)
+        .count()
 }
 
 #[derive(Debug, Clone)]

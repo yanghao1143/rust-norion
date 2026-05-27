@@ -62,11 +62,11 @@ Implemented modules:
 已实现模块：
 
 - `src/router.rs`: multi-factor adaptive router
-- `src/adaptive_state.rs`: persisted router and hierarchy control state
+- `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
-- `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler
+- `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/experience.rs`: structured reflection experience store
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner

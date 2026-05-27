@@ -132,7 +132,8 @@ These are algorithmic references, not product dependencies:
 - v0.2: multi-factor router, self-developed runtime contract, explicit
   sovereignty constraints
 - v0.3: 4/8-bit KV quantization, retention policy, automatic tier migration
-  (initial local q4 disk-KV persistence is in place)
+  (initial local q4 disk-KV persistence plus persisted tier migration tracing
+  are in place)
 - v0.4: Infini-style global/local KV split and sparse context filtering
 - v0.5: hierarchical gist memory and recursive long-context scheduler
 - v0.6: RLVR-style process rewards, experience replay, hardware-aware compute

@@ -4,11 +4,13 @@ use std::path::Path;
 use crate::disk_kv::DiskKvStore;
 use crate::hierarchy::{HierarchyState, HierarchyWeights};
 use crate::router::RouterState;
+use crate::tiered_cache::{MemoryPlacement, MemoryTier, TieredCachePlan};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct AdaptiveState {
     pub router: RouterState,
     pub hierarchy: HierarchyState,
+    pub tier_plan: TieredCachePlan,
 }
 
 impl AdaptiveState {
@@ -27,6 +29,10 @@ impl AdaptiveState {
                 self.hierarchy.current.convolution
             )
             .as_bytes(),
+        )?;
+        store.put(
+            "adaptive/tier_plan",
+            serialize_tier_plan(&self.tier_plan).as_bytes(),
         )?;
         store.compact()
     }
@@ -52,7 +58,17 @@ impl AdaptiveState {
             return Ok(None);
         };
 
-        Ok(Some(Self { router, hierarchy }))
+        let tier_plan = if let Some(tier_bytes) = store.get("adaptive/tier_plan")? {
+            parse_tier_plan(&String::from_utf8_lossy(&tier_bytes))
+        } else {
+            TieredCachePlan::default()
+        };
+
+        Ok(Some(Self {
+            router,
+            hierarchy,
+            tier_plan,
+        }))
     }
 }
 
@@ -83,6 +99,78 @@ fn parse_hierarchy_state(value: &str) -> Option<HierarchyState> {
     })
 }
 
+fn serialize_tier_plan(plan: &TieredCachePlan) -> String {
+    plan.placements()
+        .iter()
+        .map(|placement| {
+            format!(
+                "{}\t{}\t{:.6}\t{}",
+                placement.id,
+                placement.tier.as_str(),
+                placement.score,
+                escape_field(&placement.reason)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_tier_plan(value: &str) -> TieredCachePlan {
+    let placements = value
+        .lines()
+        .filter_map(parse_memory_placement)
+        .collect::<Vec<_>>();
+    TieredCachePlan::new(placements)
+}
+
+fn parse_memory_placement(value: &str) -> Option<MemoryPlacement> {
+    let fields = value.split('\t').collect::<Vec<_>>();
+    if fields.len() != 4 {
+        return None;
+    }
+
+    Some(MemoryPlacement {
+        id: fields[0].parse::<u64>().ok()?,
+        tier: fields[1].parse::<MemoryTier>().ok()?,
+        score: fields[2].parse::<f32>().ok()?,
+        reason: unescape_field(fields[3]),
+    })
+}
+
+fn escape_field(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
+fn unescape_field(value: &str) -> String {
+    let mut out = String::new();
+    let mut chars = value.chars();
+
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+
+        match chars.next() {
+            Some('t') => out.push('\t'),
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +188,12 @@ mod tests {
             hierarchy: HierarchyState {
                 current: HierarchyWeights::new(0.2, 0.6, 0.2),
             },
+            tier_plan: TieredCachePlan::new(vec![MemoryPlacement {
+                id: 7,
+                tier: MemoryTier::WarmRam,
+                score: 0.42,
+                reason: "warm\tstate".to_owned(),
+            }]),
         };
 
         state.save_to_disk_kv(&path).unwrap();
@@ -108,6 +202,9 @@ mod tests {
         assert!((loaded.router.threshold - 0.61).abs() < 0.0001);
         assert_eq!(loaded.router.observations, 17);
         assert!((loaded.hierarchy.current.local - 0.6).abs() < 0.0001);
+        let placement = loaded.tier_plan.placement_for(7).unwrap();
+        assert_eq!(placement.tier, MemoryTier::WarmRam);
+        assert_eq!(placement.reason, "warm\tstate");
         cleanup(path);
     }
 
