@@ -162,7 +162,7 @@ Implemented modules:
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, optional model-side embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
-- `src/state_inspect.rs`: local state inspection report for memory, experience, reflection diagnostics, adaptive router, hierarchy, and tier counts
+- `src/state_inspect.rs`: local state inspection report for memory, experience, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -209,11 +209,20 @@ Inspect persisted local state without running inference:
 cargo run -- --inspect-state --inspect-limit 5
 ```
 
+The report includes effective memory retention/compaction policy values and a
+memory-vector dimension histogram, so runtime embedding-space changes or
+fallback/runtime mixing can be audited before another inference writes more
+durable state.
+
 查看本地持久化状态，但不执行推理：
 
 ```powershell
 cargo run -- --inspect-state --inspect-limit 5
 ```
+
+报告会包含实际生效的记忆保留 / 压缩策略，以及持久化 memory vector
+维度直方图，便于在继续写入长期状态前检查自研 runtime embedding 空间变化或
+fallback/runtime 混用。
 
 Write one structured JSONL trace record for benchmark comparison:
 

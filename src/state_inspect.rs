@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 use crate::engine::NoironEngine;
 use crate::hierarchy::{
     HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
 };
+use crate::kv_cache::{MemoryCompactionPolicy, MemoryRetentionPolicy};
 use crate::process_reward::RewardAction;
 use crate::router::{ProfileObservations, ProfileThresholds};
 use crate::tiered_cache::TierCounts;
@@ -12,10 +14,17 @@ use crate::tiered_cache::TierCounts;
 pub struct StateMemorySummary {
     pub id: u64,
     pub key: String,
+    pub vector_dimensions: usize,
     pub strength: f32,
     pub hits: u64,
     pub failures: u64,
     pub last_score: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateMemoryVectorDimensions {
+    pub dimensions: usize,
+    pub count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +52,9 @@ pub struct StateInspectionReport {
     pub profile_hierarchy_weights: ProfileHierarchyWeights,
     pub profile_hierarchy_observations: ProfileHierarchyObservations,
     pub tier_counts: TierCounts,
+    pub memory_retention_policy: MemoryRetentionPolicy,
+    pub memory_compaction_policy: MemoryCompactionPolicy,
+    pub memory_vector_dimensions: Vec<StateMemoryVectorDimensions>,
     pub top_memories: Vec<StateMemorySummary>,
     pub top_experiences: Vec<StateExperienceSummary>,
 }
@@ -75,6 +87,7 @@ impl StateInspectionReport {
             .map(|(_, entry)| StateMemorySummary {
                 id: entry.id,
                 key: compact(&entry.key, 120),
+                vector_dimensions: entry.vector.len(),
                 strength: entry.strength,
                 hits: entry.hits,
                 failures: entry.failures,
@@ -131,6 +144,9 @@ impl StateInspectionReport {
             profile_hierarchy_weights: adaptive_state.hierarchy.profile_weights,
             profile_hierarchy_observations: adaptive_state.hierarchy.profile_observations,
             tier_counts: adaptive_state.tier_plan.counts(),
+            memory_retention_policy: engine.memory_retention_policy,
+            memory_compaction_policy: engine.memory_compaction_policy.clone(),
+            memory_vector_dimensions: memory_vector_dimensions(engine),
             top_memories,
             top_experiences,
         }
@@ -138,7 +154,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{})",
+            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) memory_vector_dimensions={}",
             self.memory_count,
             self.experience_count,
             self.router_threshold,
@@ -156,9 +172,34 @@ impl StateInspectionReport {
             self.profile_hierarchy_weights.long_document.local,
             self.tier_counts.hot_gpu,
             self.tier_counts.warm_ram,
-            self.tier_counts.cold_disk
+            self.tier_counts.cold_disk,
+            format_memory_vector_dimensions(&self.memory_vector_dimensions)
         )
     }
+}
+
+fn memory_vector_dimensions(engine: &NoironEngine) -> Vec<StateMemoryVectorDimensions> {
+    let mut buckets = BTreeMap::<usize, usize>::new();
+    for entry in engine.cache.entries() {
+        *buckets.entry(entry.vector.len()).or_insert(0) += 1;
+    }
+
+    buckets
+        .into_iter()
+        .map(|(dimensions, count)| StateMemoryVectorDimensions { dimensions, count })
+        .collect()
+}
+
+fn format_memory_vector_dimensions(buckets: &[StateMemoryVectorDimensions]) -> String {
+    if buckets.is_empty() {
+        return "none".to_owned();
+    }
+
+    buckets
+        .iter()
+        .map(|bucket| format!("{}:{}", bucket.dimensions, bucket.count))
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
 fn compact(text: &str, max_chars: usize) -> String {
@@ -186,7 +227,22 @@ mod tests {
             engine
                 .cache
                 .store_or_fuse("inspectable reinforced memory", vec![1.0, 0.0, 0.0], 0.9);
+        let fallback_memory_id =
+            engine
+                .cache
+                .store_or_fuse("fallback embedding memory", vec![0.0, 1.0, 0.0, 0.0], 0.7);
         engine.cache.reinforce(memory_id, 0.8);
+        engine.set_memory_retention_policy(MemoryRetentionPolicy {
+            stale_after: 12,
+            decay_rate: 0.12,
+            remove_below_strength: 0.08,
+            remove_after_failures: 7,
+        });
+        engine.set_memory_compaction_policy(MemoryCompactionPolicy {
+            similarity_threshold: 0.91,
+            max_candidates: 64,
+            max_merges: 4,
+        });
         engine.experience.record(ExperienceInput {
             prompt: "inspect state".to_owned(),
             profile: TaskProfile::Coding,
@@ -223,16 +279,43 @@ mod tests {
 
         let report = StateInspectionReport::from_engine(&engine, 3);
 
-        assert_eq!(report.memory_count, 1);
+        assert_eq!(report.memory_count, 2);
         assert_eq!(report.experience_count, 1);
         assert_eq!(report.top_memories[0].id, memory_id);
         assert!(report.top_memories[0].key.contains("inspectable"));
+        assert_eq!(report.top_memories[0].vector_dimensions, 3);
+        assert!(
+            report
+                .top_memories
+                .iter()
+                .any(|memory| memory.id == fallback_memory_id && memory.vector_dimensions == 4)
+        );
+        assert_eq!(
+            report.memory_vector_dimensions,
+            vec![
+                StateMemoryVectorDimensions {
+                    dimensions: 3,
+                    count: 1
+                },
+                StateMemoryVectorDimensions {
+                    dimensions: 4,
+                    count: 1
+                }
+            ]
+        );
+        assert_eq!(report.memory_retention_policy.stale_after, 12);
+        assert_eq!(report.memory_compaction_policy.max_merges, 4);
         assert_eq!(
             report.top_experiences[0].reward_action,
             RewardAction::Reinforce
         );
         assert_eq!(report.top_experiences[0].reflection_issues, 1);
         assert_eq!(report.top_experiences[0].revision_actions, 1);
-        assert!(report.summary_line().contains("memories=1"));
+        assert!(report.summary_line().contains("memories=2"));
+        assert!(
+            report
+                .summary_line()
+                .contains("memory_vector_dimensions=3:1|4:1")
+        );
     }
 }

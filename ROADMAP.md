@@ -233,8 +233,9 @@ modules, not external product dependencies:
   memory reuse, and roll back adaptive state when the drift is severe.
 - State inspection:
   persisted memory, experience, global/profile router thresholds, hierarchy
-  weights, and tier counts should be inspectable from the CLI without running a
-  new inference.
+  weights, tier counts, effective memory policies, and persisted memory vector
+  dimension buckets should be inspectable from the CLI without running a new
+  inference.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -335,7 +336,8 @@ These are algorithmic references, not product dependencies:
   reflection now performs one low-risk repair pass for non-critical weak drafts
   and blocks stale runtime-KV admission when the final answer came from a
   repaired draft;
-  the CLI can inspect persisted local state without running inference;
+  the CLI can inspect persisted local state without running inference, including
+  effective memory policies and persisted memory vector dimensions;
   drift guard now gates memory writes, runtime KV
   admission, used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
@@ -386,8 +388,9 @@ These are algorithmic references, not product dependencies:
   rollback, configurable retention, protected-id memory compaction, and
   inspectable local state.
 - The CLI can inspect memory count, experience count, adaptive global/profile
-  router state, hierarchy weights, tier counts, and top memories/lessons from
-  persisted local files without invoking a model runtime.
+  router state, hierarchy weights, tier counts, effective memory policies,
+  memory-vector dimension buckets, and top memories/lessons from persisted
+  local files without invoking a model runtime.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves tokenizer, model-side embedding,

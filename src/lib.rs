@@ -78,7 +78,9 @@ pub use runtime::{
     RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
     RuntimeTokenId, parse_runtime_response_json, runtime_request_json,
 };
-pub use state_inspect::{StateExperienceSummary, StateInspectionReport, StateMemorySummary};
+pub use state_inspect::{
+    StateExperienceSummary, StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
+};
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
     TieredCacheScheduler,

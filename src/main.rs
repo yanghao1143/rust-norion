@@ -37,11 +37,12 @@ fn main() -> std::io::Result<()> {
     }
 
     if args.inspect_state {
-        let engine = NoironEngine::load_full_state(
+        let mut engine = NoironEngine::load_full_state(
             &args.memory_path,
             &args.experience_path,
             &args.adaptive_path,
         )?;
+        configure_engine(&mut engine, &args);
         let report = StateInspectionReport::from_engine(&engine, args.inspect_limit);
         print_state_inspection_report(&args, &report);
         return Ok(());
@@ -531,6 +532,30 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
         report.profile_hierarchy_observations.writing,
         report.profile_hierarchy_observations.long_document
     );
+    println!(
+        "memory_retention_policy: stale_after={} decay_rate={:.3} remove_below_strength={:.3} remove_after_failures={}",
+        report.memory_retention_policy.stale_after,
+        report.memory_retention_policy.decay_rate,
+        report.memory_retention_policy.remove_below_strength,
+        report.memory_retention_policy.remove_after_failures
+    );
+    println!(
+        "memory_compaction_policy: similarity_threshold={:.3} max_candidates={} max_merges={}",
+        report.memory_compaction_policy.similarity_threshold,
+        report.memory_compaction_policy.max_candidates,
+        report.memory_compaction_policy.max_merges
+    );
+    if report.memory_vector_dimensions.is_empty() {
+        println!("memory_vector_dimensions: none");
+    } else {
+        let dimensions = report
+            .memory_vector_dimensions
+            .iter()
+            .map(|bucket| format!("{}:{}", bucket.dimensions, bucket.count))
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("memory_vector_dimensions: {dimensions}");
+    }
 
     println!("top_memories:");
     if report.top_memories.is_empty() {
@@ -538,8 +563,9 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
     } else {
         for memory in &report.top_memories {
             println!(
-                "  id={} strength={:.3} hits={} failures={} last_score={:.3} key={}",
+                "  id={} dims={} strength={:.3} hits={} failures={} last_score={:.3} key={}",
                 memory.id,
+                memory.vector_dimensions,
                 memory.strength,
                 memory.hits,
                 memory.failures,
