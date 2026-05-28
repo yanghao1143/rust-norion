@@ -203,6 +203,8 @@ impl NoironEngine {
             router: self.router.state(),
             hierarchy: self.hierarchy.state(),
             tier_plan: self.last_tier_plan.clone(),
+            memory_retention_policy: self.memory_retention_policy,
+            memory_compaction_policy: self.memory_compaction_policy.clone(),
         }
     }
 
@@ -210,6 +212,8 @@ impl NoironEngine {
         self.router.restore_state(state.router);
         self.hierarchy.restore_state(state.hierarchy);
         self.last_tier_plan = state.tier_plan;
+        self.memory_retention_policy = state.memory_retention_policy;
+        self.memory_compaction_policy = state.memory_compaction_policy;
     }
 
     pub fn save_adaptive_state(&self, path: impl AsRef<Path>) -> io::Result<()> {
@@ -1477,6 +1481,17 @@ mod tests {
         let prompt = "Rust Noiron persistent runtime KV memory";
 
         let mut engine = NoironEngine::new();
+        engine.set_memory_retention_policy(MemoryRetentionPolicy {
+            stale_after: 11,
+            decay_rate: 0.12,
+            remove_below_strength: 0.08,
+            remove_after_failures: 7,
+        });
+        engine.set_memory_compaction_policy(MemoryCompactionPolicy {
+            similarity_threshold: 0.91,
+            max_candidates: 64,
+            max_merges: 4,
+        });
         let mut first_backend = RuntimeBackend::new(LocalTransformerRuntime::default());
         let first = engine.infer(
             InferenceRequest::new(prompt, TaskProfile::Coding),
@@ -1491,6 +1506,10 @@ mod tests {
 
         let mut restored =
             NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+        assert_eq!(restored.memory_retention_policy.stale_after, 11);
+        assert!((restored.memory_retention_policy.decay_rate - 0.12).abs() < 0.0001);
+        assert_eq!(restored.memory_compaction_policy.max_candidates, 64);
+        assert_eq!(restored.memory_compaction_policy.max_merges, 4);
         let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::default());
         let second = restored.infer(
             InferenceRequest::new(prompt, TaskProfile::Coding),
@@ -1556,6 +1575,17 @@ mod tests {
             token_count: 8,
         });
         engine.hierarchy.adapt_to_profile(TaskProfile::Coding);
+        engine.set_memory_retention_policy(MemoryRetentionPolicy {
+            stale_after: 9,
+            decay_rate: 0.18,
+            remove_below_strength: 0.11,
+            remove_after_failures: 6,
+        });
+        engine.set_memory_compaction_policy(MemoryCompactionPolicy {
+            similarity_threshold: 0.89,
+            max_candidates: 48,
+            max_merges: 3,
+        });
         let state = engine.adaptive_state();
 
         let mut restored = NoironEngine::new();
@@ -1566,6 +1596,10 @@ mod tests {
         assert!(
             (restored.hierarchy.current().local - engine.hierarchy.current().local).abs() < 0.0001
         );
+        assert_eq!(restored.memory_retention_policy.stale_after, 9);
+        assert!((restored.memory_retention_policy.decay_rate - 0.18).abs() < 0.0001);
+        assert_eq!(restored.memory_compaction_policy.max_candidates, 48);
+        assert_eq!(restored.memory_compaction_policy.max_merges, 3);
     }
 
     fn temp_path(label: &str, extension: &str) -> std::path::PathBuf {

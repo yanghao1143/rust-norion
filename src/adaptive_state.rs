@@ -5,6 +5,7 @@ use crate::disk_kv::DiskKvStore;
 use crate::hierarchy::{
     HierarchyState, HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights,
 };
+use crate::kv_cache::{MemoryCompactionPolicy, MemoryRetentionPolicy};
 use crate::router::{ProfileObservations, ProfileThresholds, RouterState};
 use crate::tiered_cache::{MemoryPlacement, MemoryTier, TieredCachePlan};
 
@@ -13,6 +14,8 @@ pub struct AdaptiveState {
     pub router: RouterState,
     pub hierarchy: HierarchyState,
     pub tier_plan: TieredCachePlan,
+    pub memory_retention_policy: MemoryRetentionPolicy,
+    pub memory_compaction_policy: MemoryCompactionPolicy,
 }
 
 impl AdaptiveState {
@@ -43,6 +46,14 @@ impl AdaptiveState {
             "adaptive/tier_plan",
             serialize_tier_plan(&self.tier_plan).as_bytes(),
         )?;
+        store.put(
+            "adaptive/memory_retention",
+            serialize_memory_retention_policy(self.memory_retention_policy).as_bytes(),
+        )?;
+        store.put(
+            "adaptive/memory_compaction",
+            serialize_memory_compaction_policy(&self.memory_compaction_policy).as_bytes(),
+        )?;
         store.compact()
     }
 
@@ -72,11 +83,27 @@ impl AdaptiveState {
         } else {
             TieredCachePlan::default()
         };
+        let memory_retention_policy =
+            if let Some(retention_bytes) = store.get("adaptive/memory_retention")? {
+                parse_memory_retention_policy(&String::from_utf8_lossy(&retention_bytes))
+                    .unwrap_or_default()
+            } else {
+                MemoryRetentionPolicy::default()
+            };
+        let memory_compaction_policy =
+            if let Some(compaction_bytes) = store.get("adaptive/memory_compaction")? {
+                parse_memory_compaction_policy(&String::from_utf8_lossy(&compaction_bytes))
+                    .unwrap_or_default()
+            } else {
+                MemoryCompactionPolicy::default()
+            };
 
         Ok(Some(Self {
             router,
             hierarchy,
             tier_plan,
+            memory_retention_policy,
+            memory_compaction_policy,
         }))
     }
 }
@@ -217,6 +244,50 @@ fn parse_tier_plan(value: &str) -> TieredCachePlan {
     TieredCachePlan::new(placements)
 }
 
+fn serialize_memory_retention_policy(policy: MemoryRetentionPolicy) -> String {
+    format!(
+        "{}\t{:.6}\t{:.6}\t{}",
+        policy.stale_after,
+        policy.decay_rate,
+        policy.remove_below_strength,
+        policy.remove_after_failures
+    )
+}
+
+fn parse_memory_retention_policy(value: &str) -> Option<MemoryRetentionPolicy> {
+    let fields = value.split('\t').collect::<Vec<_>>();
+    if fields.len() != 4 {
+        return None;
+    }
+
+    Some(MemoryRetentionPolicy {
+        stale_after: fields[0].parse::<u64>().ok()?.max(1),
+        decay_rate: fields[1].parse::<f32>().ok()?.clamp(0.0, 0.95),
+        remove_below_strength: fields[2].parse::<f32>().ok()?.clamp(0.0, 3.0),
+        remove_after_failures: fields[3].parse::<u64>().ok()?.max(1),
+    })
+}
+
+fn serialize_memory_compaction_policy(policy: &MemoryCompactionPolicy) -> String {
+    format!(
+        "{:.6}\t{}\t{}",
+        policy.similarity_threshold, policy.max_candidates, policy.max_merges
+    )
+}
+
+fn parse_memory_compaction_policy(value: &str) -> Option<MemoryCompactionPolicy> {
+    let fields = value.split('\t').collect::<Vec<_>>();
+    if fields.len() != 3 {
+        return None;
+    }
+
+    Some(MemoryCompactionPolicy {
+        similarity_threshold: fields[0].parse::<f32>().ok()?.clamp(0.10, 0.999),
+        max_candidates: fields[1].parse::<usize>().ok()?.max(2),
+        max_merges: fields[2].parse::<usize>().ok()?,
+    })
+}
+
 fn parse_memory_placement(value: &str) -> Option<MemoryPlacement> {
     let fields = value.split('\t').collect::<Vec<_>>();
     if fields.len() != 4 {
@@ -312,6 +383,17 @@ mod tests {
                 score: 0.42,
                 reason: "warm\tstate".to_owned(),
             }]),
+            memory_retention_policy: MemoryRetentionPolicy {
+                stale_after: 11,
+                decay_rate: 0.12,
+                remove_below_strength: 0.08,
+                remove_after_failures: 7,
+            },
+            memory_compaction_policy: MemoryCompactionPolicy {
+                similarity_threshold: 0.91,
+                max_candidates: 64,
+                max_merges: 4,
+            },
         };
 
         state.save_to_disk_kv(&path).unwrap();
@@ -327,6 +409,43 @@ mod tests {
         let placement = loaded.tier_plan.placement_for(7).unwrap();
         assert_eq!(placement.tier, MemoryTier::WarmRam);
         assert_eq!(placement.reason, "warm\tstate");
+        assert_eq!(loaded.memory_retention_policy.stale_after, 11);
+        assert!((loaded.memory_retention_policy.decay_rate - 0.12).abs() < 0.0001);
+        assert!((loaded.memory_retention_policy.remove_below_strength - 0.08).abs() < 0.0001);
+        assert_eq!(loaded.memory_retention_policy.remove_after_failures, 7);
+        assert!((loaded.memory_compaction_policy.similarity_threshold - 0.91).abs() < 0.0001);
+        assert_eq!(loaded.memory_compaction_policy.max_candidates, 64);
+        assert_eq!(loaded.memory_compaction_policy.max_merges, 4);
+        cleanup(path);
+    }
+
+    #[test]
+    fn adaptive_state_loads_legacy_files_without_memory_policies() {
+        let path = temp_path("adaptive-state-legacy");
+        {
+            let mut store = DiskKvStore::open(&path).unwrap();
+            store.put("adaptive/router", b"0.610000\t17").unwrap();
+            store
+                .put("adaptive/hierarchy", b"0.200000\t0.600000\t0.200000")
+                .unwrap();
+            store.compact().unwrap();
+        }
+
+        let loaded = AdaptiveState::load_from_disk_kv(&path).unwrap().unwrap();
+
+        assert!((loaded.router.threshold - 0.61).abs() < 0.0001);
+        assert_eq!(loaded.router.observations, 17);
+        assert!((loaded.hierarchy.current.local - 0.6).abs() < 0.0001);
+        assert_eq!(
+            loaded.memory_retention_policy.stale_after,
+            MemoryRetentionPolicy::default().stale_after
+        );
+        assert!(
+            (loaded.memory_compaction_policy.similarity_threshold
+                - MemoryCompactionPolicy::default().similarity_threshold)
+                .abs()
+                < 0.0001
+        );
         cleanup(path);
     }
 

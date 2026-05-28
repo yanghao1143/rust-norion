@@ -297,11 +297,11 @@ These are algorithmic references, not product dependencies:
   migration tracing are in place; engine memory now defaults to append-only
   DiskKvStore persistence with legacy TSV migration; retention and batch
   KV-Fusion compaction policies are configurable through engine setters and CLI
-  flags with conservative clamping; batch KV-Fusion compaction can merge
-  near-duplicate persistent memories while protecting ids used by the current
-  inference; a KV quantization benchmark gate now checks deterministic q4/q8
-  accuracy, compression ratio, and elapsed time before compression policy
-  changes are accepted)
+  flags with conservative clamping and persist through adaptive state; batch
+  KV-Fusion compaction can merge near-duplicate persistent memories while
+  protecting ids used by the current inference; a KV quantization benchmark
+  gate now checks deterministic q4/q8 accuracy, compression ratio, and elapsed
+  time before compression policy changes are accepted)
 - v0.4: Infini-style global/local KV split and sparse context filtering
   (initial control-plane memory planner with token-budget filtering is in place)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
@@ -401,6 +401,9 @@ These are algorithmic references, not product dependencies:
   router state, hierarchy weights, tier counts, effective memory policies,
   memory-vector dimension buckets, and top memories/lessons from persisted
   local files without invoking a model runtime.
+- Adaptive state persistence covers router thresholds, hierarchy weights, tier
+  placement, and memory governance policies, while legacy adaptive files
+  without policy keys still load with conservative defaults.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves tokenizer, model-side embedding,

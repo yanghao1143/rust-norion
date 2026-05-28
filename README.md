@@ -463,10 +463,12 @@ as `.legacy.tsv` backups when migrated to disk KV.
 `noiron-memory.tsv` 仍可读取；迁移到磁盘 KV 时会保留为 `.legacy.tsv` 备份。
 
 `NoironEngine::save_full_state` and `NoironEngine::load_full_state` round-trip
-memory, experience, and adaptive state together, so a later run can retrieve
-prior lessons and import persisted KV into the runtime.
+memory, experience, and adaptive state together. The adaptive state includes
+router thresholds, hierarchy weights, the latest tier plan, and memory
+retention/compaction policies, so a later run can retrieve prior lessons,
+import persisted KV into the runtime, and keep the learned governance knobs.
 
-`NoironEngine::save_full_state` 与 `NoironEngine::load_full_state` 会把记忆、经验和自适应状态一起往返保存，因此后续运行可以检索旧经验，并把持久化 KV 导入 runtime。
+`NoironEngine::save_full_state` 与 `NoironEngine::load_full_state` 会把记忆、经验和自适应状态一起往返保存。自适应状态包含 router 阈值、层级权重、最新 tier plan，以及记忆 retention / compaction 策略，因此后续运行可以检索旧经验、把持久化 KV 导入 runtime，并延续已经学习到的治理参数。
 
 After each inference, the engine now applies retention and then batch
 KV-Fusion compaction. Current-run memory ids are protected, while older
@@ -483,14 +485,15 @@ Retention and compaction can be tuned locally with
 `--compaction-max-merges`. Values are clamped to conservative ranges, and
 `--compaction-max-merges 0` disables batch merging for a run. JSONL traces
 include the effective retention and compaction policy values alongside the
-result counters.
+result counters. When these flags are provided, they override the persisted
+policy for that run and are saved again with the adaptive state.
 
 可以通过 `--retention-stale-after`、`--retention-decay-rate`、
 `--retention-remove-below`、`--retention-remove-after-failures`、
 `--compaction-threshold`、`--compaction-max-candidates` 和
 `--compaction-max-merges` 本地调整记忆衰减与合并策略。参数会被限制在保守范围内，
 `--compaction-max-merges 0` 可以在单次运行中关闭批量合并。JSONL trace 会同时记录
-实际生效的 retention / compaction 策略和值以及执行结果计数。
+实际生效的 retention / compaction 策略和值以及执行结果计数。传入这些参数时，会覆盖本轮加载到的持久化策略，并随自适应状态再次保存。
 
 ## Test / 测试
 
