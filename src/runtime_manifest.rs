@@ -104,12 +104,17 @@ impl RuntimeManifest {
         &self,
         execution: &DeviceExecutionPlan,
     ) -> Option<RuntimeAdapterHint> {
-        execution
+        let device_supported = execution
             .adapter_hints
             .iter()
             .copied()
-            .find(|adapter| self.adapter_hints.contains(adapter))
-            .or_else(|| self.adapter_hints.first().copied())
+            .find(|adapter| self.adapter_hints.contains(adapter));
+
+        if execution.adapter_hints.is_empty() {
+            device_supported.or_else(|| self.adapter_hints.first().copied())
+        } else {
+            device_supported
+        }
     }
 
     pub fn preferred_adapter_with_observations(
@@ -416,6 +421,25 @@ mod tests {
             manifest.preferred_adapter_for(&execution),
             Some(RuntimeAdapterHint::Wgpu)
         );
+    }
+
+    #[test]
+    fn manifest_does_not_pick_adapter_outside_device_plan() {
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+            .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust]);
+        let execution = DeviceExecutionPlan {
+            primary_lane: ComputeLane::DiscreteGpu,
+            fallback_lane: ComputeLane::CpuVector,
+            memory_mode: DeviceMemoryMode::GpuResident,
+            adapter_hints: vec![RuntimeAdapterHint::Cuda, RuntimeAdapterHint::Wgpu],
+            max_parallel_chunks: 4,
+            kv_prefetch_blocks: 4,
+            hot_kv_precision_bits: 8,
+            cold_kv_precision_bits: 4,
+            allow_disk_spill: true,
+        };
+
+        assert_eq!(manifest.preferred_adapter_for(&execution), None);
     }
 
     #[test]

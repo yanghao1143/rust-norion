@@ -4,6 +4,7 @@ use std::thread;
 
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::kv_cache::{MemoryCompactionPolicy, MemoryRetentionPolicy};
+use crate::runtime_manifest::RuntimeManifest;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceClass {
@@ -1179,15 +1180,27 @@ pub struct DevicePlanGateRow {
     pub global_kv_token_budget: usize,
     pub latency_budget_ms: Option<u64>,
     pub memory_governance: MemoryGovernancePlan,
+    pub runtime_adapter: Option<RuntimeAdapterHint>,
     pub failures: Vec<String>,
 }
 
 impl DevicePlanGateRow {
-    pub fn from_plan(plan: &HardwarePlan, governance: MemoryGovernancePlan) -> Self {
+    pub fn from_plan(
+        plan: &HardwarePlan,
+        governance: MemoryGovernancePlan,
+        runtime_manifest: &RuntimeManifest,
+    ) -> Self {
         let descriptor = plan.device.descriptor();
         let mut failures = validate_device_plan(plan);
         failures.extend(validate_memory_governance_plan(&governance));
         failures.extend(validate_device_descriptor(descriptor));
+        let runtime_adapter = runtime_manifest.preferred_adapter_for(&plan.execution);
+        failures.extend(validate_runtime_manifest_for_device(
+            runtime_manifest,
+            plan.device,
+            &plan.execution,
+            runtime_adapter,
+        ));
 
         Self {
             device: plan.device,
@@ -1207,6 +1220,7 @@ impl DevicePlanGateRow {
             global_kv_token_budget: plan.global_kv_token_budget,
             latency_budget_ms: plan.latency_budget_ms,
             memory_governance: governance,
+            runtime_adapter,
             failures,
         }
     }
@@ -1226,6 +1240,12 @@ impl DevicePlanGateRow {
     pub fn aliases_csv(&self) -> String {
         self.device.descriptor().aliases_csv()
     }
+
+    pub fn runtime_adapter_name(&self) -> &'static str {
+        self.runtime_adapter
+            .map(RuntimeAdapterHint::as_str)
+            .unwrap_or("none")
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1240,6 +1260,12 @@ impl DevicePlanGateReport {
 
     pub fn evaluate_with_allocator(allocator: &HardwareAllocator) -> Self {
         let base_hierarchy = HierarchyWeights::default();
+        let runtime_manifest = RuntimeManifest::self_developed(
+            "noiron-gate-transformer",
+            "noiron-gate-tokenizer",
+            65_536,
+            256,
+        );
         let rows = DeviceClass::explicit_profiles()
             .iter()
             .map(|device| {
@@ -1254,7 +1280,7 @@ impl DevicePlanGateReport {
                     MemoryRetentionPolicy::default(),
                     MemoryCompactionPolicy::default(),
                 );
-                DevicePlanGateRow::from_plan(&plan, governance)
+                DevicePlanGateRow::from_plan(&plan, governance, &runtime_manifest)
             })
             .collect();
 
@@ -2069,6 +2095,44 @@ fn validate_device_plan(plan: &HardwarePlan) -> Vec<String> {
     }
     if plan.tier == DeviceTier::Distributed && plan.execution.max_parallel_chunks < 2 {
         failures.push("distributed devices should expose more than one parallel chunk".to_owned());
+    }
+
+    failures
+}
+
+fn validate_runtime_manifest_for_device(
+    manifest: &RuntimeManifest,
+    device: DeviceClass,
+    execution: &DeviceExecutionPlan,
+    runtime_adapter: Option<RuntimeAdapterHint>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if !manifest.supports_device(device) {
+        failures.push(format!(
+            "runtime manifest does not support device {}",
+            device.as_str()
+        ));
+    }
+    if runtime_adapter.is_none() {
+        failures.push(format!(
+            "runtime manifest has no adapter intersection with device {}",
+            device.as_str()
+        ));
+    }
+    if let Some(adapter) = runtime_adapter {
+        if !execution.adapter_hints.contains(&adapter) {
+            failures.push(format!(
+                "runtime adapter {} is outside device execution adapter hints",
+                adapter.as_str()
+            ));
+        }
+        if !manifest.adapter_hints.contains(&adapter) {
+            failures.push(format!(
+                "runtime adapter {} is outside manifest adapter hints",
+                adapter.as_str()
+            ));
+        }
     }
 
     failures

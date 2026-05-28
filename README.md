@@ -340,14 +340,16 @@ runtime adapter hint、KV 精度、预取数量、磁盘溢出策略、local/glo
 
 Run the device compatibility gate. It fails with exit code `2` if any supported
 device profile loses its alias coverage, execution plan, KV budget, adapter
-hints, portable fallback path, or bounded memory governance policy:
+hints, portable fallback path, bounded memory governance policy, or a valid
+self-developed runtime-manifest adapter intersection:
 
 ```powershell
 cargo run -- --device-gate
 ```
 
 运行全设备兼容门禁。如果任一设备 profile 缺失别名覆盖、执行计划、KV budget、
-adapter hint、可移植降级路径或有界 memory governance 策略，命令会以退出码 `2` 失败：
+adapter hint、可移植降级路径、有界 memory governance 策略，或无法与自研 runtime
+manifest 形成合法 adapter 交集，命令会以退出码 `2` 失败：
 
 ```powershell
 cargo run -- --device-gate

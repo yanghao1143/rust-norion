@@ -725,12 +725,12 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
     println!("Noiron device compatibility gate");
     println!("{}", report.summary_line());
     println!(
-        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges,passed"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,runtime_adapter,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges,passed"
     );
 
     for row in &report.rows {
         println!(
-            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{},{:.3},{:.3},{},{:.3},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{},{:.3},{:.3},{},{:.3},{},{},{}",
             row.device.as_str(),
             row.tier.as_str(),
             row.scope,
@@ -739,6 +739,7 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
             row.fallback_lane.as_str(),
             row.memory_mode.as_str(),
             row.adapters_csv(),
+            row.runtime_adapter_name(),
             row.max_parallel_chunks,
             row.kv_prefetch_blocks,
             row.hot_kv_precision_bits,
