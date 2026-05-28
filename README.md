@@ -163,7 +163,7 @@ Implemented modules:
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, optional model-side embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
 - `src/state_inspect.rs`: local state inspection report for memory, experience, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
-- `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait
+- `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob now feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
 ## Non-Goals / 非目标
@@ -442,6 +442,12 @@ and optional `trace` entries.
 `rust-norion-runtime-request-v1`，stdout 需要返回
 `rust-norion-runtime-response-v1`，其中包含 `answer`，并可选包含 `tokens` 与
 `trace`，方便 Noiron 控制层继续做 token 监控与反思。
+
+When runtime tokens include `entropy` and/or `logprob`, the engine folds those
+token-level signals into the main generation perplexity used by drift checks,
+router/hierarchy adaptation, process reward scoring, and experience replay.
+
+当 runtime tokens 带有 `entropy` 或 `logprob` 时，引擎会把这些 token 级信号合入主生成 perplexity，并用于 drift 检查、router / hierarchy 自适应、process reward 评分和经验回放。
 
 Run through the built-in Rust-native local runtime prototype:
 

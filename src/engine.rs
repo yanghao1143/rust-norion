@@ -739,16 +739,51 @@ fn metrics_from_report(
     let token_count =
         approximate_token_count(&report.revised_answer).max(approximate_token_count(&draft.answer));
     let route_pressure = (1.0 - route_budget.attention_fraction).max(0.0) * 2.5;
-    let perplexity = 4.0
+    let baseline_perplexity = 4.0
         + (1.0 - report.quality) * 24.0
         + route_pressure
         + report.contradictions.len() as f32 * 3.5;
+    let perplexity = draft_token_perplexity(draft)
+        .map(|runtime_perplexity| baseline_perplexity * 0.55 + runtime_perplexity * 0.45)
+        .unwrap_or(baseline_perplexity);
 
     GenerationMetrics {
         perplexity,
         semantic_consistency: report.quality,
         contradiction_count: report.contradictions.len(),
         token_count,
+    }
+}
+
+fn draft_token_perplexity(draft: &InferenceDraft) -> Option<f32> {
+    if draft.tokens.is_empty() {
+        return None;
+    }
+
+    let mut total = 0.0;
+    let mut count = 0;
+    for token in &draft.tokens {
+        match (token.entropy, token.logprob) {
+            (Some(entropy), Some(logprob)) => {
+                total += 2.0 + entropy.clamp(0.0, 4.0) * 4.0 + (-logprob).max(0.0).min(12.0);
+                count += 1;
+            }
+            (Some(entropy), None) => {
+                total += 2.0 + entropy.clamp(0.0, 4.0) * 4.0;
+                count += 1;
+            }
+            (None, Some(logprob)) => {
+                total += 2.0 + (-logprob).max(0.0).min(12.0);
+                count += 1;
+            }
+            (None, None) => {}
+        }
+    }
+
+    if count == 0 {
+        None
+    } else {
+        Some(total / count as f32)
     }
 }
 
@@ -1309,6 +1344,64 @@ mod tests {
         assert!(
             roomy.route_budget.attention_fraction > constrained.route_budget.attention_fraction
         );
+    }
+
+    #[test]
+    fn runtime_token_uncertainty_raises_generation_perplexity() {
+        let low_entropy = InferenceDraft::new(
+            "A stable local runtime answer with enough detail to pass reflection.",
+            vec![],
+        )
+        .with_tokens(vec![
+            DraftToken {
+                text: "stable".to_owned(),
+                logprob: Some(-0.05),
+                entropy: Some(0.05),
+            },
+            DraftToken {
+                text: "answer".to_owned(),
+                logprob: Some(-0.08),
+                entropy: Some(0.08),
+            },
+        ]);
+        let high_entropy = InferenceDraft::new(
+            "A stable local runtime answer with enough detail to pass reflection.",
+            vec![],
+        )
+        .with_tokens(vec![
+            DraftToken {
+                text: "unstable".to_owned(),
+                logprob: Some(-2.5),
+                entropy: Some(0.95),
+            },
+            DraftToken {
+                text: "answer".to_owned(),
+                logprob: Some(-1.8),
+                entropy: Some(0.85),
+            },
+        ]);
+        let report = ReflectionReport {
+            quality: 0.88,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: low_entropy.answer.clone(),
+            store_as_memory: true,
+            lesson: "runtime token metrics should affect Noiron feedback".to_owned(),
+        };
+        let budget = RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 3,
+            attention_fraction: 0.25,
+        };
+
+        let low = metrics_from_report(&low_entropy, &report, budget);
+        let high = metrics_from_report(&high_entropy, &report, budget);
+
+        assert!(high.perplexity > low.perplexity + 2.0);
+        assert_eq!(high.semantic_consistency, low.semantic_consistency);
     }
 
     #[test]

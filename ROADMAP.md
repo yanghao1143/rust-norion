@@ -344,6 +344,9 @@ These are algorithmic references, not product dependencies:
   long-document profiles;
   route scoring now consumes hardware pressure and device compute headroom from
   the hardware plan;
+  runtime token entropy/logprob now feeds the main generation metrics used by
+  drift checks, router/hierarchy adaptation, process rewards, and experience
+  replay instead of remaining limited to token-window monitoring;
   experience records now persist route budgets plus used/stored/gist/runtime-KV
   memory ids, structured reflection issues, and revision actions for replay;
   reflection now performs one low-risk repair pass for non-critical weak drafts
@@ -395,6 +398,9 @@ These are algorithmic references, not product dependencies:
 - Every control decision can be traced: route, memory, hierarchy, reflection,
   drift, reward, device-derived hardware KV budgets, effective memory policies,
   and adaptive-state update.
+- Runtime token uncertainty is part of the control feedback loop: token
+  entropy/logprob can raise generation perplexity and influence drift, reward,
+  routing, hierarchy, and experience updates.
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
