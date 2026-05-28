@@ -428,6 +428,13 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
 }
 
 fn configure_engine(engine: &mut NoironEngine, args: &Args) {
+    let hardware_snapshot = HardwareSnapshot::new(
+        args.device,
+        args.cpu_load,
+        args.gpu_load,
+        args.ram_load,
+        args.disk_load,
+    );
     engine.recursive_scheduler = RecursiveScheduler::new(
         args.native_window_tokens,
         args.chunk_tokens,
@@ -435,20 +442,26 @@ fn configure_engine(engine: &mut NoironEngine, args: &Args) {
         args.merge_fan_in,
     );
     engine.set_auto_replay_limit(args.auto_replay_limit);
-    engine.set_memory_retention_policy(memory_retention_policy_from_args(engine, args));
-    engine.set_memory_compaction_policy(memory_compaction_policy_from_args(engine, args));
-    engine.set_hardware_snapshot(HardwareSnapshot::new(
-        args.device,
-        args.cpu_load,
-        args.gpu_load,
-        args.ram_load,
-        args.disk_load,
+    engine.set_hardware_snapshot(hardware_snapshot);
+    let governance_plan = engine.hardware_allocator.memory_governance_plan(
+        hardware_snapshot,
+        engine.memory_retention_policy,
+        engine.memory_compaction_policy.clone(),
+    );
+    engine.set_memory_retention_policy(memory_retention_policy_from_args(
+        governance_plan.retention_policy,
+        args,
+    ));
+    engine.set_memory_compaction_policy(memory_compaction_policy_from_args(
+        governance_plan.compaction_policy,
+        args,
     ));
 }
 
-fn memory_retention_policy_from_args(engine: &NoironEngine, args: &Args) -> MemoryRetentionPolicy {
-    let mut policy = engine.memory_retention_policy;
-
+fn memory_retention_policy_from_args(
+    mut policy: MemoryRetentionPolicy,
+    args: &Args,
+) -> MemoryRetentionPolicy {
     if let Some(value) = args.retention_stale_after {
         policy.stale_after = value.max(1);
     }
@@ -466,11 +479,9 @@ fn memory_retention_policy_from_args(engine: &NoironEngine, args: &Args) -> Memo
 }
 
 fn memory_compaction_policy_from_args(
-    engine: &NoironEngine,
+    mut policy: MemoryCompactionPolicy,
     args: &Args,
 ) -> MemoryCompactionPolicy {
-    let mut policy = engine.memory_compaction_policy.clone();
-
     if let Some(value) = args.compaction_similarity_threshold {
         policy.similarity_threshold = value.clamp(0.10, 0.999);
     }
@@ -1416,6 +1427,8 @@ mod tests {
     #[test]
     fn configure_engine_applies_memory_policy_flags() {
         let args = Args::parse(vec![
+            "--device".to_owned(),
+            "microcontroller".to_owned(),
             "--retention-stale-after".to_owned(),
             "9".to_owned(),
             "--retention-decay-rate".to_owned(),
@@ -1442,6 +1455,41 @@ mod tests {
         assert_eq!(engine.memory_compaction_policy.similarity_threshold, 0.10);
         assert_eq!(engine.memory_compaction_policy.max_candidates, 2);
         assert_eq!(engine.memory_compaction_policy.max_merges, 0);
+    }
+
+    #[test]
+    fn configure_engine_applies_device_memory_governance_defaults() {
+        let tiny_args = Args::parse(vec![
+            "--device".to_owned(),
+            "microcontroller".to_owned(),
+            "--cpu-load".to_owned(),
+            "30".to_owned(),
+            "--ram-load".to_owned(),
+            "35".to_owned(),
+        ]);
+        let server_args = Args::parse(vec![
+            "--device".to_owned(),
+            "server".to_owned(),
+            "--cpu-load".to_owned(),
+            "10".to_owned(),
+            "--gpu-load".to_owned(),
+            "15".to_owned(),
+            "--ram-load".to_owned(),
+            "20".to_owned(),
+        ]);
+        let mut tiny_engine = NoironEngine::new();
+        let mut server_engine = NoironEngine::new();
+
+        configure_engine(&mut tiny_engine, &tiny_args);
+        configure_engine(&mut server_engine, &server_args);
+
+        assert!(tiny_engine.memory_retention_policy.stale_after < 64);
+        assert!(tiny_engine.memory_retention_policy.decay_rate > 0.04);
+        assert!(tiny_engine.memory_compaction_policy.max_candidates < 512);
+        assert!(tiny_engine.memory_compaction_policy.similarity_threshold > 0.92);
+        assert!(server_engine.memory_retention_policy.stale_after > 64);
+        assert!(server_engine.memory_retention_policy.decay_rate < 0.04);
+        assert!(server_engine.memory_compaction_policy.max_candidates > 512);
     }
 
     #[test]

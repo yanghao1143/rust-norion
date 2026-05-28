@@ -29,7 +29,7 @@ pub struct MemoryMatch {
     pub vector: Vec<f32>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MemoryRetentionPolicy {
     pub stale_after: u64,
     pub decay_rate: f32,
@@ -48,7 +48,7 @@ impl Default for MemoryRetentionPolicy {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MemoryCompactionPolicy {
     pub similarity_threshold: f32,
     pub max_candidates: usize,

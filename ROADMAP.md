@@ -169,7 +169,8 @@ The north star is now explicitly scoped around five core requirements:
     CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded,
     browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and
     server targets to decide when to lower compute, shrink windows, evict
-    memory, or spend extra attention on hard tasks.
+    memory, tighten retention/compaction governance, or spend extra attention
+    on hard tasks.
 
 11. Universal execution planning / 全设备执行计划
     Map every supported device profile to a primary compute lane, fallback lane,
@@ -331,7 +332,10 @@ These are algorithmic references, not product dependencies:
   coverage descriptor with broad aliases and a generic CPU fallback class; the
   CLI can print the full built-in device matrix and run a `--device-gate`
   compatibility check across every explicit device profile, including alias
-  roundtrips;
+  roundtrips; device/pressure-aware memory governance now adjusts retention and
+  KV-Fusion compaction defaults so tiny, browser-WASM, mobile, and overloaded
+  devices keep smaller durable memory state while accelerated and distributed
+  profiles can retain and scan more context;
   router thresholds now persist separately for general, coding, writing, and
   long-document profiles;
   hierarchy weights now persist separately for general, coding, writing, and
@@ -414,6 +418,9 @@ These are algorithmic references, not product dependencies:
 - Hardware adaptation is profile-driven and test-covered across constrained
   devices and high-capacity accelerator targets, including execution-plan
   fallbacks and alias coverage for each device class.
+- Memory governance is also hardware-aware: every supported device profile
+  produces bounded retention/compaction policy defaults, and explicit CLI flags
+  remain authoritative overrides.
 - The device compatibility gate passes across all explicit profiles and fails
   if a profile loses valid alias mappings, budgets, adapter hints, or a portable
   fallback.

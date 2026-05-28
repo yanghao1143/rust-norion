@@ -393,6 +393,14 @@ the first supported adapter and still fall back to portable Rust/CPU paths.
 每个硬件计划还会生成 `DeviceExecutionPlan`：主计算通道、降级通道、内存模式、候选
 runtime adapter、冷热 KV 精度、预取数量、磁盘溢出策略和递归 chunk 并行预算。这些是策略提示，不是硬依赖；真实自研 runtime 可以选择第一个已支持 adapter，同时始终保留 Rust/CPU 可移植降级路径。
 
+The hardware allocator also derives a `MemoryGovernancePlan`. Tiny,
+constrained, and overloaded devices decay memory sooner, scan fewer compaction
+candidates, and merge only near-identical entries; accelerated and distributed
+profiles keep longer-lived memories and can scan wider KV-Fusion candidate
+sets. CLI retention/compaction flags still override these device defaults.
+
+硬件分配器也会生成 `MemoryGovernancePlan`。tiny、constrained 和高压力设备会更快衰减记忆、减少 compaction 候选扫描，并只合并高度相似的条目；accelerated 和 distributed profile 可以保留更长生命周期的记忆，并扩大 KV-Fusion 候选扫描范围。CLI 的 retention / compaction 参数仍然优先覆盖这些设备默认值。
+
 Probe override environment variables include `NOIRON_DEVICE_PROFILE`,
 `NOIRON_CPU_LOAD`, `NOIRON_GPU_LOAD`, `NOIRON_RAM_LOAD`, `NOIRON_DISK_LOAD`,
 GPU hints such as `CUDA_VISIBLE_DEVICES`, `NVIDIA_VISIBLE_DEVICES`,
@@ -494,6 +502,14 @@ policy for that run and are saved again with the adaptive state.
 `--compaction-max-merges` 本地调整记忆衰减与合并策略。参数会被限制在保守范围内，
 `--compaction-max-merges 0` 可以在单次运行中关闭批量合并。JSONL trace 会同时记录
 实际生效的 retention / compaction 策略和值以及执行结果计数。传入这些参数时，会覆盖本轮加载到的持久化策略，并随自适应状态再次保存。
+
+If no retention/compaction flags are supplied, the loaded adaptive policy is
+first adjusted by the current device profile and pressure, then persisted again
+with the run. This keeps the same memory system usable on microcontroller,
+browser-WASM, mobile, CPU-only, server, and multi-GPU targets without one
+global default.
+
+如果没有传入 retention / compaction 参数，已加载的自适应策略会先按当前设备 profile 和压力自动调整，再随本轮状态持久化。这样同一套记忆系统可以在 microcontroller、browser-WASM、mobile、CPU-only、server 和 multi-GPU 目标上使用，而不是依赖单一全局默认值。
 
 ## Test / 测试
 
