@@ -129,11 +129,12 @@ The target algorithm stack is model-weight independent:
 
 ## Current Status / 当前状态
 
-This repository currently contains a working control-plane prototype. It does
-not yet include the self-developed Transformer runtime or production inference
-kernels.
+This repository currently contains a working control-plane prototype, a
+deterministic local Transformer-style runtime prototype, and a
+manifest-backed production runtime boundary. It does not yet include
+production inference kernels.
 
-当前仓库已经包含一个可运行的控制层原型，但还没有接入自研 Transformer 运行时或生产级推理内核。
+当前仓库已经包含一个可运行的控制层原型、确定性的本地 Transformer 风格运行时原型，以及基于 manifest 的生产运行时边界；但还没有接入生产级推理内核。
 
 Implemented modules:
 
@@ -163,6 +164,7 @@ Implemented modules:
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, KV import/export ABI hooks, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
+- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, and KV import limits before a real self-developed forward kernel is connected
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob now feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
@@ -693,6 +695,16 @@ accepted.
 `RuntimeManifest` 会在加载生产权重之前记录自研 runtime 契约：模型 ID、tokenizer ID、原生上下文窗口、embedding 维度、Transformer 层数 / 头数 / 窗口形状、本地资产路径、KV 导入导出限制、4/8-bit KV 量化策略、支持的设备类别和优先 adapter hints。内置 local runtime 已经持有这份 manifest，因此后续自研模型版本可以先校验契约，而不把控制层绑定到第三方权重格式。
 原型校验允许无文件的内嵌/demo runtime；生产校验会要求 weights 和 tokenizer 资产真实存在且是本地文件，然后才允许接入。
 
+`ProductionTransformerRuntime` turns that manifest into a hard production
+boundary. Construction succeeds only after production asset validation and the
+current device gate both pass; the runtime then exposes metadata,
+architecture, bootstrap tokenizer/embedding access, selected adapter, the
+stable runtime device contract, and bounded KV import. Its `generate` method
+intentionally returns a clear "kernel not connected" error until a real
+self-developed forward kernel is plugged in behind the boundary.
+
+`ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入能力。它的 `generate` 会在真实自研 forward kernel 接入前明确返回 “kernel not connected”，避免把原型路径误当成生产推理。
+
 `RuntimeBackend` reports the runtime's native context window back to the engine,
 so recursive long-context scheduling can use the actual self-developed model
 window instead of a hardcoded control-plane default.
@@ -795,8 +807,8 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 - prefer model-side embeddings from the self-developed runtime for memory lookup
   and writes, with a portable Rust heuristic fallback
-- implement a production self-developed Transformer runtime adapter backed by
-  `RuntimeManifest` asset-file and architecture validation
+- connect a real self-developed forward kernel behind the
+  `ProductionTransformerRuntime` manifest/device boundary
 - expand mixed-precision 4/8-bit KV quantization benchmarks and policies
 - add Infini-style global/local KV separation and sparse context filtering
 - add recursive scheduling for inputs beyond the native model window
@@ -806,7 +818,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - expand the built-in benchmark suite into regression gates
 
 - 记忆检索和写入优先使用自研 runtime 的模型侧 embedding，并保留可移植 Rust 启发式 fallback
-- 基于 `RuntimeManifest` 的资产文件和架构校验实现生产级自研 Transformer 运行时适配器
+- 在 `ProductionTransformerRuntime` 的 manifest / 设备边界后面接入真实自研 forward kernel
 - 扩展 4/8-bit 混合精度 KV 量化 benchmark 和策略
 - 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
 - 增加超过模型原生窗口输入的递归调度

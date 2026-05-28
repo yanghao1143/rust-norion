@@ -435,7 +435,11 @@ These are algorithmic references, not product dependencies:
   inference outcomes, traces, and benchmark summaries now filter adapter
   observations against the current device execution plan, and runtime responses
   are checked against the requested model id, architecture envelope, and device
-  adapter hints before exported runtime KV can be admitted)
+  adapter hints before exported runtime KV can be admitted; a
+  `ProductionTransformerRuntime` boundary now binds production manifests to
+  existing local assets, the current device contract, adapter intersection,
+  bootstrap tokenizer/embedding access, and bounded KV import while explicitly
+  failing generation until a real self-developed forward kernel is connected)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -481,6 +485,10 @@ These are algorithmic references, not product dependencies:
   and tokenizer assets before a self-developed model runtime is accepted, and
   the CLI exposes that gate directly for local/CI checks with explicit
   Transformer layer/head/window shape validation.
+- The production runtime adapter boundary is explicit: it can only be
+  constructed after manifest and device gates pass, it exposes selected adapter
+  and runtime device contract state, and it refuses generation until a real
+  self-developed forward kernel is wired behind it.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained
