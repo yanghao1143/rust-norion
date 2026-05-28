@@ -193,7 +193,16 @@ impl RuntimeRequest {
         let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences(
             context.experiences,
             &runtime_metadata.model_id,
-        );
+        )
+        .into_iter()
+        .filter(|observation| {
+            context
+                .hardware_plan
+                .execution
+                .adapter_hints
+                .contains(&observation.adapter)
+        })
+        .collect();
 
         Self {
             prompt: context.prompt.to_owned(),
@@ -1368,6 +1377,12 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
         match self.runtime.generate(request) {
             Ok(response) => {
                 self.last_error = None;
+                let runtime_contract_violations = validate_runtime_response_contract(
+                    &response.diagnostics,
+                    &runtime_metadata,
+                    runtime_architecture,
+                    &context.hardware_plan,
+                );
                 let trace = if response.trace.is_empty() {
                     trace_from_tokens(&response.tokens)
                 } else {
@@ -1390,7 +1405,16 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                         0.78,
                     ));
                 }
-                let exported_kv_blocks = if runtime_metadata.supports_kv_export {
+                for violation in &runtime_contract_violations {
+                    trace.push(ReasoningStep::new(
+                        "runtime_contract_violation",
+                        violation.clone(),
+                        0.05,
+                    ));
+                }
+                let exported_kv_blocks = if runtime_metadata.supports_kv_export
+                    && runtime_contract_violations.is_empty()
+                {
                     match self.runtime.export_kv() {
                         Ok(blocks) if !blocks.is_empty() => {
                             trace.push(ReasoningStep::new(
@@ -1414,6 +1438,9 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                     Vec::new()
                 };
                 let mut diagnostics = response.diagnostics;
+                if !runtime_contract_violations.is_empty() {
+                    diagnostics.selected_adapter = None;
+                }
                 diagnostics.imported_kv_blocks = imported_kv_blocks;
                 diagnostics.exported_kv_blocks = exported_kv_blocks.len();
                 InferenceDraft::new(response.answer, trace)
@@ -1482,6 +1509,71 @@ fn runtime_kv_blocks_from_context(
             RuntimeKvBlock::new(0, index, index, index + 1, key, value)
         })
         .collect()
+}
+
+fn validate_runtime_response_contract(
+    diagnostics: &RuntimeDiagnostics,
+    metadata: &RuntimeMetadata,
+    architecture: TransformerRuntimeArchitecture,
+    hardware_plan: &HardwarePlan,
+) -> Vec<String> {
+    let mut violations = Vec::new();
+
+    if let Some(adapter) = diagnostics
+        .selected_adapter
+        .as_deref()
+        .and_then(parse_runtime_adapter_hint)
+    {
+        if !hardware_plan.execution.adapter_hints.contains(&adapter) {
+            violations.push(format!(
+                "runtime selected adapter {} outside device execution adapter hints {}",
+                adapter.as_str(),
+                hardware_plan
+                    .execution
+                    .adapter_hints
+                    .iter()
+                    .map(|hint| hint.as_str())
+                    .collect::<Vec<_>>()
+                    .join("+")
+            ));
+        }
+    } else if diagnostics.selected_adapter.is_some() {
+        violations.push(format!(
+            "runtime selected unknown adapter {}",
+            diagnostics.selected_adapter.as_deref().unwrap_or_default()
+        ));
+    }
+
+    if let Some(model_id) = diagnostics.model_id.as_deref() {
+        if !metadata.model_id.is_empty() && model_id != metadata.model_id {
+            violations.push(format!(
+                "runtime diagnostics model_id {model_id} differs from request model_id {}",
+                metadata.model_id
+            ));
+        }
+    }
+    if diagnostics.layer_count > architecture.layer_count {
+        violations.push(format!(
+            "runtime diagnostics layer_count {} exceeds request layer_count {}",
+            diagnostics.layer_count, architecture.layer_count
+        ));
+    }
+    if diagnostics.hidden_size > 0 && diagnostics.hidden_size != architecture.hidden_size {
+        violations.push(format!(
+            "runtime diagnostics hidden_size {} differs from request hidden_size {}",
+            diagnostics.hidden_size, architecture.hidden_size
+        ));
+    }
+    if diagnostics.local_window_tokens > 0
+        && diagnostics.local_window_tokens != architecture.local_window_tokens
+    {
+        violations.push(format!(
+            "runtime diagnostics local_window_tokens {} differs from request local_window_tokens {}",
+            diagnostics.local_window_tokens, architecture.local_window_tokens
+        ));
+    }
+
+    violations
 }
 
 fn fit_runtime_vector(vector: &[f32], dimensions: Option<usize>) -> Vec<f32> {
@@ -1554,6 +1646,36 @@ mod tests {
                 entropy: Some(0.2),
             }];
             Ok(response)
+        }
+    }
+
+    fn sample_generation_context<'a>(
+        prompt: &'a str,
+        memories: &'a [MemoryMatch],
+        experiences: &'a [ExperienceMatch],
+        tier_plan: &'a TieredCachePlan,
+        infini_memory_plan: &'a InfiniMemoryPlan,
+        recursive_schedule: &'a RecursiveSchedule,
+        hardware_plan: &'a HardwarePlan,
+        transformer_plan: &'a TransformerRefactorPlan,
+    ) -> GenerationContext<'a> {
+        GenerationContext {
+            prompt,
+            profile: TaskProfile::Coding,
+            memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan,
+            infini_memory_plan,
+            recursive_schedule,
+            hardware_plan,
+            experiences,
+            transformer_plan,
         }
     }
 
@@ -1647,6 +1769,71 @@ mod tests {
         assert!(seen.transformer_plan.is_empty());
     }
 
+    #[test]
+    fn runtime_request_filters_adapter_observations_to_device_plan() {
+        let experiences = vec![
+            ExperienceMatch {
+                id: 1,
+                prompt: "prompt".to_owned(),
+                lesson: "portable lesson".to_owned(),
+                quality: 0.9,
+                score: 0.88,
+                gist_hints: Vec::new(),
+                reflection_issue_codes: Vec::new(),
+                revision_actions: Vec::new(),
+                process_reward: 0.81,
+                reward_action: crate::process_reward::RewardAction::Reinforce,
+                runtime_model_id: Some("mock-self-transformer".to_owned()),
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_forward_energy: Some(0.2),
+                runtime_kv_influence: Some(0.1),
+                recursive_runtime_calls: None,
+            },
+            ExperienceMatch {
+                id: 2,
+                prompt: "prompt".to_owned(),
+                lesson: "cuda lesson".to_owned(),
+                quality: 0.99,
+                score: 0.99,
+                gist_hints: Vec::new(),
+                reflection_issue_codes: Vec::new(),
+                revision_actions: Vec::new(),
+                process_reward: 0.99,
+                reward_action: crate::process_reward::RewardAction::Reinforce,
+                runtime_model_id: Some("mock-self-transformer".to_owned()),
+                runtime_selected_adapter: Some("cuda".to_owned()),
+                runtime_forward_energy: Some(0.1),
+                runtime_kv_influence: Some(0.9),
+                recursive_runtime_calls: None,
+            },
+        ];
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let context = sample_generation_context(
+            "filter adapters",
+            &[],
+            &experiences,
+            &tier_plan,
+            &infini_memory_plan,
+            &recursive_schedule,
+            &hardware_plan,
+            &transformer_plan,
+        );
+        let mut backend = RuntimeBackend::new(MockRuntime::default());
+
+        let _draft = backend.generate(context);
+        let seen = backend.runtime().seen.as_ref().unwrap();
+
+        assert_eq!(seen.runtime_adapter_observations.len(), 1);
+        assert_eq!(
+            seen.runtime_adapter_observations[0].adapter,
+            RuntimeAdapterHint::PortableRust
+        );
+    }
+
     #[derive(Debug, Default, Clone)]
     struct SelfDevelopedRuntime {
         imported_blocks: usize,
@@ -1726,6 +1913,52 @@ mod tests {
                 "generated with max import {}",
                 request.runtime_metadata.max_kv_import_blocks
             )))
+        }
+    }
+
+    #[derive(Debug, Default, Clone)]
+    struct ContractViolatingRuntime {
+        exported: bool,
+    }
+
+    impl ModelRuntime for ContractViolatingRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("contract-runtime", "noiron-wordpiece", 65_536, 256)
+                .with_kv_exchange(false, true)
+        }
+
+        fn architecture(&self) -> TransformerRuntimeArchitecture {
+            TransformerRuntimeArchitecture::new(24, 256, 8, 4, 8192)
+        }
+
+        fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+            self.exported = true;
+            Ok(vec![RuntimeKvBlock::new(
+                2,
+                0,
+                0,
+                2,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )])
+        }
+
+        fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            Ok(
+                RuntimeResponse::new("contract violating answer").with_diagnostics(
+                    RuntimeDiagnostics {
+                        model_id: Some("contract-runtime".to_owned()),
+                        selected_adapter: Some("cuda".to_owned()),
+                        layer_count: 24,
+                        hidden_size: 256,
+                        local_window_tokens: 8192,
+                        forward_energy: Some(0.2),
+                        kv_influence: Some(0.1),
+                        imported_kv_blocks: 0,
+                        exported_kv_blocks: 1,
+                    },
+                ),
+            )
         }
     }
 
@@ -1925,6 +2158,41 @@ mod tests {
 
         assert_eq!(backend.runtime().imported_blocks, 1);
         assert!(draft.answer.contains("max import 1"));
+    }
+
+    #[test]
+    fn runtime_response_contract_blocks_out_of_device_adapter_and_kv_export() {
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let context = sample_generation_context(
+            "contract gate",
+            &[],
+            &[],
+            &tier_plan,
+            &infini_memory_plan,
+            &recursive_schedule,
+            &hardware_plan,
+            &transformer_plan,
+        );
+        let mut backend = RuntimeBackend::new(ContractViolatingRuntime::default());
+
+        let draft = backend.generate(context);
+
+        assert!(draft.answer.contains("contract violating answer"));
+        assert!(draft.exported_kv_blocks.is_empty());
+        assert!(!backend.runtime().exported);
+        assert_eq!(draft.runtime_diagnostics.selected_adapter, None);
+        assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 0);
+        assert!(draft.trace.iter().any(|step| {
+            step.label == "runtime_contract_violation"
+                && step
+                    .content
+                    .contains("outside device execution adapter hints")
+                && step.confidence < 0.10
+        }));
     }
 
     #[test]
