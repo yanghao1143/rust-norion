@@ -141,7 +141,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, auto-replay recursive cost-pressure gate, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, auto-replay recursive cost-pressure floor/ceiling gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
@@ -321,12 +321,13 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
-Benchmark summaries include recursive case counts, compacted memory counts, and
-drift watch/block/rollback counts, so long-context coverage, memory-growth, or
-safety regressions in the self-evolution loop can fail the gate even when
-average quality still looks acceptable.
+Benchmark summaries include recursive case counts, compacted memory counts,
+auto-replay recursive pressure, and drift watch/block/rollback counts, so
+long-context coverage, missing pressure signals, excessive recursive replay
+cost, memory-growth, or safety regressions in the self-evolution loop can fail
+the gate even when average quality still looks acceptable.
 
-Benchmark 汇总会包含递归 case 数、memory compaction 计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、memory compaction 计数、auto-replay 递归压力以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

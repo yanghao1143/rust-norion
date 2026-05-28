@@ -97,6 +97,7 @@ pub struct BenchmarkGate {
     pub min_recursive_cases: Option<usize>,
     pub min_recursive_runtime_calls: Option<usize>,
     pub min_auto_replay_recursive_items: Option<usize>,
+    pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_drift_blocks: Option<usize>,
     pub max_drift_rollbacks: Option<usize>,
@@ -112,6 +113,7 @@ impl Default for BenchmarkGate {
             min_recursive_cases: None,
             min_recursive_runtime_calls: None,
             min_auto_replay_recursive_items: None,
+            min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
@@ -736,6 +738,19 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_auto_replay_recursive_call_pressure) =
+            gate.min_auto_replay_recursive_call_pressure
+        {
+            let auto_replay_recursive_call_pressure =
+                self.max_auto_replay_recursive_call_pressure();
+            if auto_replay_recursive_call_pressure < min_auto_replay_recursive_call_pressure {
+                failures.push(format!(
+                    "auto_replay_recursive_call_pressure {:.3} below minimum {:.3}",
+                    auto_replay_recursive_call_pressure, min_auto_replay_recursive_call_pressure
+                ));
+            }
+        }
+
         if let Some(max_auto_replay_recursive_call_pressure) =
             gate.max_auto_replay_recursive_call_pressure
         {
@@ -1010,6 +1025,7 @@ mod tests {
             min_recursive_cases: None,
             min_recursive_runtime_calls: None,
             min_auto_replay_recursive_items: None,
+            min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
@@ -1112,6 +1128,55 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("auto_replay_recursive_items"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_recursive_call_pressure"))
+        );
+    }
+
+    #[test]
+    fn gate_reports_missing_auto_replay_recursive_pressure() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "missing_replay_pressure".to_owned(),
+                profile: TaskProfile::LongDocument,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: true,
+                recursive_chunks: 4,
+                recursive_waves: 2,
+                recursive_runtime_calls: 7,
+                auto_replay_applied: 1,
+                auto_replay_recursive_runtime_items: 1,
+                auto_replay_recursive_runtime_calls: 7,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_kv_exported: 0,
+                runtime_kv_stored: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_auto_replay_recursive_call_pressure = Some(0.01);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("below minimum"))
         );
         assert!(
             report
