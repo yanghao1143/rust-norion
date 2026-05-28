@@ -9,9 +9,10 @@ use rust_norion::{
     InferenceRequest, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary,
     LocalTransformerRuntime, MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime,
     NoironEngine, PersistentRoundtripInput, PersistentRoundtripReport, RecursiveScheduler,
-    RuntimeBackend, RuntimeMetadata, StateInspectionReport, TaskProfile, TierMigrationAction,
-    TraceSchemaGateReport, append_trace_jsonl, append_trace_jsonl_with_case,
-    default_benchmark_cases, evaluate_trace_schema_jsonl,
+    RuntimeAssetPaths, RuntimeBackend, RuntimeManifest, RuntimeManifestValidation, RuntimeMetadata,
+    StateInspectionReport, TaskProfile, TierMigrationAction, TraceSchemaGateReport,
+    append_trace_jsonl, append_trace_jsonl_with_case, default_benchmark_cases,
+    evaluate_trace_schema_jsonl,
 };
 
 fn main() -> std::io::Result<()> {
@@ -32,6 +33,15 @@ fn main() -> std::io::Result<()> {
         let gate_report = summary.evaluate(&args.kv_quant_gate());
         print_kv_quant_gate_report(&summary, &gate_report);
         if !gate_report.passed {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+    if args.runtime_manifest_gate {
+        let manifest = args.runtime_manifest();
+        let validation = manifest.validate_for_production();
+        print_runtime_manifest_gate_report(&manifest, &validation);
+        if !validation.passed() {
             std::process::exit(2);
         }
         return Ok(());
@@ -841,6 +851,50 @@ fn print_kv_quant_gate_report(
     }
 }
 
+fn print_runtime_manifest_gate_report(
+    manifest: &RuntimeManifest,
+    validation: &RuntimeManifestValidation,
+) {
+    println!("Noiron runtime manifest gate");
+    println!(
+        "runtime_manifest_gate: passed={} errors={} warnings={}",
+        validation.passed(),
+        validation.errors.len(),
+        validation.warnings.len()
+    );
+    println!(
+        "runtime_metadata: {}",
+        manifest.runtime_metadata().summary()
+    );
+    println!(
+        "runtime_assets: weights={} tokenizer={} config={}",
+        option_path_display(manifest.assets.weights.as_ref()),
+        option_path_display(manifest.assets.tokenizer.as_ref()),
+        option_path_display(manifest.assets.config.as_ref())
+    );
+    println!(
+        "runtime_kv_policy: import={} export={} max_import={} max_export={} kv_bits={}/{}",
+        manifest.kv_policy.import_enabled,
+        manifest.kv_policy.export_enabled,
+        manifest.kv_policy.max_import_blocks,
+        manifest.kv_policy.max_export_blocks,
+        manifest.quantization.hot_kv.width(),
+        manifest.quantization.cold_kv.width()
+    );
+
+    for warning in &validation.warnings {
+        println!("runtime_manifest_warning: {warning}");
+    }
+    for error in &validation.errors {
+        println!("runtime_manifest_error: {error}");
+    }
+}
+
+fn option_path_display(path: Option<&PathBuf>) -> String {
+    path.map(|path| path.display().to_string())
+        .unwrap_or_else(|| "none".to_owned())
+}
+
 fn count_gists(records: &[rust_norion::GistRecord], level: GistLevel) -> usize {
     records
         .iter()
@@ -885,6 +939,10 @@ struct Args {
     device_gate: bool,
     kv_quant_gate: bool,
     kv_quant_max_total_us: Option<u128>,
+    runtime_manifest_gate: bool,
+    runtime_weights_path: Option<PathBuf>,
+    runtime_tokenizer_path: Option<PathBuf>,
+    runtime_config_path: Option<PathBuf>,
     inspect_state: bool,
     inspect_limit: usize,
     local_runtime: bool,
@@ -940,6 +998,10 @@ impl Args {
         let mut device_gate = false;
         let mut kv_quant_gate = false;
         let mut kv_quant_max_total_us = None;
+        let mut runtime_manifest_gate = false;
+        let mut runtime_weights_path = None;
+        let mut runtime_tokenizer_path = None;
+        let mut runtime_config_path = None;
         let mut inspect_state = false;
         let mut inspect_limit = 5;
         let mut local_runtime = false;
@@ -1085,6 +1147,22 @@ impl Args {
                 "--kv-quant-max-total-us" if index + 1 < raw.len() => {
                     kv_quant_max_total_us = Some(parse_u128(&raw[index + 1], u128::MAX));
                     kv_quant_gate = true;
+                    index += 2;
+                }
+                "--runtime-manifest-gate" => {
+                    runtime_manifest_gate = true;
+                    index += 1;
+                }
+                "--runtime-weights" if index + 1 < raw.len() => {
+                    runtime_weights_path = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
+                "--runtime-tokenizer-path" if index + 1 < raw.len() => {
+                    runtime_tokenizer_path = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
+                "--runtime-config" if index + 1 < raw.len() => {
+                    runtime_config_path = Some(PathBuf::from(&raw[index + 1]));
                     index += 2;
                 }
                 "--inspect-state" => {
@@ -1296,6 +1374,10 @@ impl Args {
             device_gate,
             kv_quant_gate,
             kv_quant_max_total_us,
+            runtime_manifest_gate,
+            runtime_weights_path,
+            runtime_tokenizer_path,
+            runtime_config_path,
             inspect_state,
             inspect_limit,
             local_runtime,
@@ -1363,6 +1445,21 @@ impl Args {
         }
 
         gate
+    }
+
+    fn runtime_manifest(&self) -> RuntimeManifest {
+        let mut assets = RuntimeAssetPaths::new();
+        if let Some(path) = &self.runtime_weights_path {
+            assets = assets.with_weights(path.clone());
+        }
+        if let Some(path) = &self.runtime_tokenizer_path {
+            assets = assets.with_tokenizer(path.clone());
+        }
+        if let Some(path) = &self.runtime_config_path {
+            assets = assets.with_config(path.clone());
+        }
+
+        RuntimeManifest::from_metadata(self.runtime_metadata.clone()).with_assets(assets)
     }
 
     fn kv_quant_gate(&self) -> KvQuantBenchmarkGate {
@@ -1439,7 +1536,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1447,6 +1544,8 @@ fn print_help_and_exit() -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::{self, File};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn parses_recursive_scheduler_flags() {
@@ -1512,6 +1611,13 @@ mod tests {
             "--device-gate".to_owned(),
             "--kv-quant-max-total-us".to_owned(),
             "100000".to_owned(),
+            "--runtime-manifest-gate".to_owned(),
+            "--runtime-weights".to_owned(),
+            "weights.noiron".to_owned(),
+            "--runtime-tokenizer-path".to_owned(),
+            "tokenizer.noiron".to_owned(),
+            "--runtime-config".to_owned(),
+            "config.noiron".to_owned(),
             "--inspect-state".to_owned(),
             "--inspect-limit".to_owned(),
             "2".to_owned(),
@@ -1599,6 +1705,19 @@ mod tests {
         assert!(args.device_gate);
         assert!(args.kv_quant_gate);
         assert_eq!(args.kv_quant_max_total_us, Some(100000));
+        assert!(args.runtime_manifest_gate);
+        assert_eq!(
+            args.runtime_weights_path.as_ref().unwrap(),
+            &PathBuf::from("weights.noiron")
+        );
+        assert_eq!(
+            args.runtime_tokenizer_path.as_ref().unwrap(),
+            &PathBuf::from("tokenizer.noiron")
+        );
+        assert_eq!(
+            args.runtime_config_path.as_ref().unwrap(),
+            &PathBuf::from("config.noiron")
+        );
         assert!(args.inspect_state);
         assert_eq!(args.inspect_limit, 2);
         assert!(args.local_runtime);
@@ -1617,6 +1736,49 @@ mod tests {
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);
         assert!(args.prompt.contains("nine"));
+    }
+
+    #[test]
+    fn runtime_manifest_gate_builds_production_manifest_from_cli_assets() {
+        let asset_dir = temp_asset_dir("runtime-manifest-cli-assets");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        let config = asset_dir.join("config.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        File::create(&config).unwrap();
+        let args = Args::parse(vec![
+            "--runtime-manifest-gate".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "65536".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "256".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--runtime-config".to_owned(),
+            config.display().to_string(),
+        ]);
+
+        let manifest = args.runtime_manifest();
+        let validation = manifest.validate_for_production();
+
+        assert!(args.runtime_manifest_gate);
+        assert_eq!(manifest.metadata.model_id, "self-owned-transformer");
+        assert_eq!(manifest.metadata.tokenizer, "self-bpe");
+        assert_eq!(manifest.metadata.native_context_window, 65_536);
+        assert_eq!(manifest.metadata.embedding_dimensions, 256);
+        assert!(manifest.metadata.supports_kv_import);
+        assert!(manifest.metadata.supports_kv_export);
+        assert!(validation.passed(), "{validation:?}");
+        fs::remove_dir_all(asset_dir).unwrap();
     }
 
     #[test]
@@ -1718,5 +1880,13 @@ mod tests {
         ]);
 
         assert_eq!(args.device, DeviceClass::CpuOnly);
+    }
+
+    fn temp_asset_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{name}-{unique}"))
     }
 }
