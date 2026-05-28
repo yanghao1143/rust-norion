@@ -265,7 +265,8 @@ modules, not external product dependencies:
 - Device compatibility gate:
   the repository should fail fast when any supported device profile loses valid
   alias coverage, execution lanes, KV budgets, adapter hints, disk-spill policy,
-  memory governance policy, or portable fallback coverage.
+  memory governance policy, portable fallback coverage, or the stable
+  `runtime_device_contract` ABI consumed by external self-developed runtimes.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -472,7 +473,8 @@ These are algorithmic references, not product dependencies:
   remain authoritative overrides.
 - The device compatibility gate passes across all explicit profiles and fails
   if a profile loses valid alias mappings, budgets, adapter hints, memory
-  governance bounds, or a portable fallback.
+  governance bounds, a portable fallback, or required `runtime_device_contract`
+  fields.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,

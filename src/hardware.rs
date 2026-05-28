@@ -1218,6 +1218,7 @@ pub struct DevicePlanGateRow {
     pub runtime_max_export_blocks: usize,
     pub runtime_hot_kv_precision_bits: u8,
     pub runtime_cold_kv_precision_bits: u8,
+    pub runtime_device_contract: String,
     pub failures: Vec<String>,
 }
 
@@ -1229,6 +1230,11 @@ impl DevicePlanGateRow {
     ) -> Self {
         let descriptor = plan.device.descriptor();
         let mut failures = validate_device_plan(plan);
+        let runtime_device_contract = plan.runtime_contract_summary();
+        failures.extend(validate_runtime_device_contract(
+            plan,
+            &runtime_device_contract,
+        ));
         failures.extend(validate_memory_governance_plan(&governance));
         failures.extend(validate_device_descriptor(descriptor));
         let runtime_adapter = runtime_manifest.preferred_adapter_for(&plan.execution);
@@ -1264,6 +1270,7 @@ impl DevicePlanGateRow {
             runtime_max_export_blocks: runtime_manifest.kv_policy.max_export_blocks,
             runtime_hot_kv_precision_bits: runtime_manifest.quantization.hot_kv.width(),
             runtime_cold_kv_precision_bits: runtime_manifest.quantization.cold_kv.width(),
+            runtime_device_contract,
             failures,
         }
     }
@@ -2143,6 +2150,65 @@ fn validate_device_plan(plan: &HardwarePlan) -> Vec<String> {
     failures
 }
 
+fn validate_runtime_device_contract(plan: &HardwarePlan, contract: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    if contract.trim().is_empty() {
+        failures.push("runtime_device_contract must not be empty".to_owned());
+        return failures;
+    }
+    if contract.contains('\n') || contract.contains('\r') {
+        failures.push("runtime_device_contract must be a single line".to_owned());
+    }
+    if contract.contains(',') {
+        failures.push("runtime_device_contract must avoid CSV-breaking commas".to_owned());
+    }
+
+    let expected_fields = [
+        format!("device={}", plan.device.as_str()),
+        format!("tier={}", plan.tier.as_str()),
+        format!("pressure={:.3}", plan.pressure),
+        format!("compute_headroom={:.2}", plan.compute_headroom()),
+        format!("primary={}", plan.execution.primary_lane.as_str()),
+        format!("fallback={}", plan.execution.fallback_lane.as_str()),
+        format!("memory={}", plan.execution.memory_mode.as_str()),
+        "adapters=".to_owned(),
+        format!("parallel_chunks={}", plan.execution.max_parallel_chunks),
+        format!("kv_prefetch={}", plan.execution.kv_prefetch_blocks),
+        format!(
+            "kv_bits={}/{}",
+            plan.execution.hot_kv_precision_bits, plan.execution.cold_kv_precision_bits
+        ),
+        format!("disk_spill={}", plan.execution.allow_disk_spill),
+        format!("local_kv_tokens={}", plan.local_kv_token_budget),
+        format!("global_kv_tokens={}", plan.global_kv_token_budget),
+        format!(
+            "latency_budget_ms={}",
+            plan.latency_budget_ms
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ),
+    ];
+
+    for field in expected_fields {
+        if !contract.contains(&field) {
+            failures.push(format!(
+                "runtime_device_contract missing required field {field}"
+            ));
+        }
+    }
+
+    for adapter in &plan.execution.adapter_hints {
+        if !contract.contains(adapter.as_str()) {
+            failures.push(format!(
+                "runtime_device_contract missing adapter {}",
+                adapter.as_str()
+            ));
+        }
+    }
+
+    failures
+}
+
 fn validate_runtime_manifest_for_device(
     manifest: &RuntimeManifest,
     device: DeviceClass,
@@ -2781,9 +2847,58 @@ mod tests {
         assert_eq!(tiny.runtime_cold_kv_precision_bits, 4);
         assert!(tiny.kv_prefetch_blocks <= tiny.runtime_max_import_blocks);
         assert!(tiny.hot_kv_precision_bits <= tiny.runtime_hot_kv_precision_bits);
+        assert!(
+            tiny.runtime_device_contract
+                .contains("device=microcontroller")
+        );
+        assert!(tiny.runtime_device_contract.contains("tier=tiny"));
+        assert!(tiny.runtime_device_contract.contains("primary="));
+        assert!(
+            tiny.runtime_device_contract
+                .contains("fallback=cpu-portable")
+        );
+        assert!(
+            tiny.runtime_device_contract
+                .contains("adapters=portable-rust")
+        );
+        assert!(tiny.runtime_device_contract.contains("kv_prefetch="));
+        assert!(tiny.runtime_device_contract.contains("kv_bits="));
+        assert!(tiny.runtime_device_contract.contains("local_kv_tokens="));
+        assert!(!tiny.runtime_device_contract.contains(','));
         assert!(server.memory_governance.retention_policy.stale_after > 64);
         assert!(server.memory_governance.compaction_policy.max_candidates > 512);
         assert!(server.kv_prefetch_blocks <= server.runtime_max_import_blocks);
+        assert!(server.runtime_device_contract.contains("device=server"));
+        assert!(
+            server
+                .runtime_device_contract
+                .contains("primary=discrete-gpu")
+        );
+        assert!(server.runtime_device_contract.contains("adapters="));
+    }
+
+    #[test]
+    fn runtime_device_contract_validation_reports_missing_fields() {
+        let plan = HardwareAllocator::new().plan(
+            HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.30, 0.45, 0.20),
+            TaskProfile::General,
+            4096,
+            HierarchyWeights::default(),
+        );
+
+        let failures = validate_runtime_device_contract(&plan, "device=cpu primary=cpu-vector");
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("tier=constrained"))
+        );
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("kv_prefetch"))
+        );
+        assert!(failures.iter().any(|failure| failure.contains("adapter")));
     }
 
     #[test]
