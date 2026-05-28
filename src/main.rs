@@ -740,40 +740,68 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
     println!("Noiron device compatibility gate");
     println!("{}", report.summary_line());
     println!(
-        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,runtime_adapter,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges,passed"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,runtime_adapter,parallel_chunks,kv_prefetch,kv_bits,disk_spill,runtime_kv_import,runtime_kv_export,runtime_max_import,runtime_max_export,runtime_kv_bits,local_kv_tokens,global_kv_tokens,latency_budget_ms,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges,passed"
     );
 
     for row in &report.rows {
-        println!(
-            "{},{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{},{:.3},{:.3},{},{:.3},{},{},{}",
-            row.device.as_str(),
-            row.tier.as_str(),
-            row.scope,
+        let fields = vec![
+            row.device.as_str().to_owned(),
+            row.tier.as_str().to_owned(),
+            row.scope.to_owned(),
             row.aliases_csv(),
-            row.primary_lane.as_str(),
-            row.fallback_lane.as_str(),
-            row.memory_mode.as_str(),
+            row.primary_lane.as_str().to_owned(),
+            row.fallback_lane.as_str().to_owned(),
+            row.memory_mode.as_str().to_owned(),
             row.adapters_csv(),
-            row.runtime_adapter_name(),
-            row.max_parallel_chunks,
-            row.kv_prefetch_blocks,
-            row.hot_kv_precision_bits,
-            row.cold_kv_precision_bits,
-            row.allow_disk_spill,
-            row.local_kv_token_budget,
-            row.global_kv_token_budget,
+            row.runtime_adapter_name().to_owned(),
+            row.max_parallel_chunks.to_string(),
+            row.kv_prefetch_blocks.to_string(),
+            format!(
+                "{}/{}",
+                row.hot_kv_precision_bits, row.cold_kv_precision_bits
+            ),
+            row.allow_disk_spill.to_string(),
+            row.runtime_kv_import_enabled.to_string(),
+            row.runtime_kv_export_enabled.to_string(),
+            row.runtime_max_import_blocks.to_string(),
+            row.runtime_max_export_blocks.to_string(),
+            format!(
+                "{}/{}",
+                row.runtime_hot_kv_precision_bits, row.runtime_cold_kv_precision_bits
+            ),
+            row.local_kv_token_budget.to_string(),
+            row.global_kv_token_budget.to_string(),
             row.latency_budget_ms
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "none".to_owned()),
-            row.memory_governance.retention_policy.stale_after,
-            row.memory_governance.retention_policy.decay_rate,
-            row.memory_governance.retention_policy.remove_below_strength,
-            row.memory_governance.retention_policy.remove_after_failures,
-            row.memory_governance.compaction_policy.similarity_threshold,
-            row.memory_governance.compaction_policy.max_candidates,
-            row.memory_governance.compaction_policy.max_merges,
-            row.passed()
-        );
+            row.memory_governance
+                .retention_policy
+                .stale_after
+                .to_string(),
+            format!("{:.3}", row.memory_governance.retention_policy.decay_rate),
+            format!(
+                "{:.3}",
+                row.memory_governance.retention_policy.remove_below_strength
+            ),
+            row.memory_governance
+                .retention_policy
+                .remove_after_failures
+                .to_string(),
+            format!(
+                "{:.3}",
+                row.memory_governance.compaction_policy.similarity_threshold
+            ),
+            row.memory_governance
+                .compaction_policy
+                .max_candidates
+                .to_string(),
+            row.memory_governance
+                .compaction_policy
+                .max_merges
+                .to_string(),
+            row.passed().to_string(),
+        ];
+        println!("{}", fields.join(","));
 
         for failure in &row.failures {
             println!("device_gate_failure: {}: {}", row.device.as_str(), failure);

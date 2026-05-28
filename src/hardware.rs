@@ -1181,6 +1181,12 @@ pub struct DevicePlanGateRow {
     pub latency_budget_ms: Option<u64>,
     pub memory_governance: MemoryGovernancePlan,
     pub runtime_adapter: Option<RuntimeAdapterHint>,
+    pub runtime_kv_import_enabled: bool,
+    pub runtime_kv_export_enabled: bool,
+    pub runtime_max_import_blocks: usize,
+    pub runtime_max_export_blocks: usize,
+    pub runtime_hot_kv_precision_bits: u8,
+    pub runtime_cold_kv_precision_bits: u8,
     pub failures: Vec<String>,
 }
 
@@ -1221,6 +1227,12 @@ impl DevicePlanGateRow {
             latency_budget_ms: plan.latency_budget_ms,
             memory_governance: governance,
             runtime_adapter,
+            runtime_kv_import_enabled: runtime_manifest.kv_policy.import_enabled,
+            runtime_kv_export_enabled: runtime_manifest.kv_policy.export_enabled,
+            runtime_max_import_blocks: runtime_manifest.kv_policy.max_import_blocks,
+            runtime_max_export_blocks: runtime_manifest.kv_policy.max_export_blocks,
+            runtime_hot_kv_precision_bits: runtime_manifest.quantization.hot_kv.width(),
+            runtime_cold_kv_precision_bits: runtime_manifest.quantization.cold_kv.width(),
             failures,
         }
     }
@@ -2107,6 +2119,14 @@ fn validate_runtime_manifest_for_device(
     runtime_adapter: Option<RuntimeAdapterHint>,
 ) -> Vec<String> {
     let mut failures = Vec::new();
+    let validation = manifest.validate();
+
+    failures.extend(
+        validation
+            .errors
+            .iter()
+            .map(|error| format!("runtime manifest validation error: {error}")),
+    );
 
     if !manifest.supports_device(device) {
         failures.push(format!(
@@ -2133,6 +2153,37 @@ fn validate_runtime_manifest_for_device(
                 adapter.as_str()
             ));
         }
+    }
+    if manifest.kv_policy.import_enabled {
+        if manifest.kv_policy.max_import_blocks == 0 {
+            failures.push(
+                "runtime manifest enables KV import but max_import_blocks is zero".to_owned(),
+            );
+        }
+        if execution.kv_prefetch_blocks > manifest.kv_policy.max_import_blocks {
+            failures.push(format!(
+                "device KV prefetch {} exceeds runtime manifest max_import_blocks {}",
+                execution.kv_prefetch_blocks, manifest.kv_policy.max_import_blocks
+            ));
+        }
+    }
+    if manifest.kv_policy.export_enabled && manifest.kv_policy.max_export_blocks == 0 {
+        failures
+            .push("runtime manifest enables KV export but max_export_blocks is zero".to_owned());
+    }
+    if execution.hot_kv_precision_bits > manifest.quantization.hot_kv.width() {
+        failures.push(format!(
+            "device hot KV precision {} exceeds runtime manifest hot KV precision {}",
+            execution.hot_kv_precision_bits,
+            manifest.quantization.hot_kv.width()
+        ));
+    }
+    if execution.cold_kv_precision_bits > manifest.quantization.cold_kv.width() {
+        failures.push(format!(
+            "device cold KV precision {} exceeds runtime manifest cold KV precision {}",
+            execution.cold_kv_precision_bits,
+            manifest.quantization.cold_kv.width()
+        ));
     }
 
     failures
@@ -2694,8 +2745,51 @@ mod tests {
 
         assert!(tiny.memory_governance.retention_policy.stale_after < 64);
         assert!(tiny.memory_governance.compaction_policy.max_candidates < 512);
+        assert!(tiny.runtime_kv_import_enabled);
+        assert_eq!(tiny.runtime_hot_kv_precision_bits, 8);
+        assert_eq!(tiny.runtime_cold_kv_precision_bits, 4);
+        assert!(tiny.kv_prefetch_blocks <= tiny.runtime_max_import_blocks);
+        assert!(tiny.hot_kv_precision_bits <= tiny.runtime_hot_kv_precision_bits);
         assert!(server.memory_governance.retention_policy.stale_after > 64);
         assert!(server.memory_governance.compaction_policy.max_candidates > 512);
+        assert!(server.kv_prefetch_blocks <= server.runtime_max_import_blocks);
+    }
+
+    #[test]
+    fn runtime_manifest_gate_bounds_kv_prefetch_and_precision() {
+        let execution = DeviceExecutionPlan {
+            primary_lane: ComputeLane::CpuVector,
+            fallback_lane: ComputeLane::CpuPortable,
+            memory_mode: DeviceMemoryMode::TieredDisk,
+            adapter_hints: vec![RuntimeAdapterHint::PortableRust],
+            max_parallel_chunks: 1,
+            kv_prefetch_blocks: 4,
+            hot_kv_precision_bits: 8,
+            cold_kv_precision_bits: 4,
+            allow_disk_spill: true,
+        };
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 4096, 128)
+            .with_kv_policy(crate::runtime_manifest::RuntimeKvPolicy {
+                import_enabled: true,
+                export_enabled: true,
+                max_import_blocks: 2,
+                max_export_blocks: 1,
+            })
+            .with_quantization(crate::runtime_manifest::RuntimeQuantizationPolicy {
+                hot_kv: crate::kv_quant::QuantizationBits::Four,
+                cold_kv: crate::kv_quant::QuantizationBits::Four,
+                weights: None,
+            });
+
+        let failures = validate_runtime_manifest_for_device(
+            &manifest,
+            DeviceClass::CpuOnly,
+            &execution,
+            Some(RuntimeAdapterHint::PortableRust),
+        );
+
+        assert!(failures.iter().any(|failure| failure.contains("prefetch")));
+        assert!(failures.iter().any(|failure| failure.contains("hot KV")));
     }
 
     #[test]
