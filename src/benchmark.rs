@@ -344,6 +344,8 @@ pub struct PersistentRoundtripInput {
     pub second_used_memories: usize,
     pub second_used_experiences: usize,
     pub second_imported_runtime_kv_blocks: usize,
+    pub second_runtime_adapter_observations: usize,
+    pub second_runtime_adapter_best_score: Option<f32>,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -357,6 +359,8 @@ pub struct PersistentRoundtripReport {
     pub second_used_memories: usize,
     pub second_used_experiences: usize,
     pub second_imported_runtime_kv_blocks: usize,
+    pub second_runtime_adapter_observations: usize,
+    pub second_runtime_adapter_best_score: Option<f32>,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -381,6 +385,21 @@ impl PersistentRoundtripReport {
         }
         if input.second_imported_runtime_kv_blocks == 0 {
             failures.push("second run did not import persisted runtime KV".to_owned());
+        }
+        if input.second_runtime_adapter_observations == 0 {
+            failures.push(
+                "second run did not derive runtime adapter observations from persisted experience"
+                    .to_owned(),
+            );
+        }
+        if input
+            .second_runtime_adapter_best_score
+            .filter(|score| score.is_finite() && *score > 0.0)
+            .is_none()
+        {
+            failures.push(
+                "second run did not expose a positive runtime adapter observation score".to_owned(),
+            );
         }
         if input.second_quality < 0.50 {
             failures.push(format!(
@@ -408,6 +427,8 @@ impl PersistentRoundtripReport {
             second_used_memories: input.second_used_memories,
             second_used_experiences: input.second_used_experiences,
             second_imported_runtime_kv_blocks: input.second_imported_runtime_kv_blocks,
+            second_runtime_adapter_observations: input.second_runtime_adapter_observations,
+            second_runtime_adapter_best_score: input.second_runtime_adapter_best_score,
             second_quality: input.second_quality,
             first_drift_severity: input.first_drift_severity,
             second_drift_severity: input.second_drift_severity,
@@ -417,13 +438,15 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} second_used_memories={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} second_used_memories={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
             self.second_used_memories,
             self.second_used_experiences,
             self.second_imported_runtime_kv_blocks,
+            self.second_runtime_adapter_observations,
+            option_f32_display(self.second_runtime_adapter_best_score),
             self.second_quality,
             self.first_drift_severity.as_str(),
             self.second_drift_severity.as_str(),
@@ -1017,6 +1040,8 @@ mod tests {
             second_used_memories: 2,
             second_used_experiences: 1,
             second_imported_runtime_kv_blocks: 2,
+            second_runtime_adapter_observations: 1,
+            second_runtime_adapter_best_score: Some(0.84),
             second_quality: 0.82,
             first_drift_severity: DriftSeverity::Watch,
             second_drift_severity: DriftSeverity::Stable,
@@ -1024,6 +1049,11 @@ mod tests {
 
         assert!(report.passed);
         assert!(report.summary_line().contains("passed=true"));
+        assert!(
+            report
+                .summary_line()
+                .contains("second_runtime_adapter_observations=1")
+        );
 
         let failed = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
             first_stored_memory: false,
@@ -1031,12 +1061,20 @@ mod tests {
             second_used_memories: 0,
             second_used_experiences: 0,
             second_imported_runtime_kv_blocks: 0,
+            second_runtime_adapter_observations: 0,
+            second_runtime_adapter_best_score: None,
             second_quality: 0.2,
             first_drift_severity: DriftSeverity::Stable,
             second_drift_severity: DriftSeverity::Block,
         });
 
         assert!(!failed.passed);
-        assert!(failed.failures.len() >= 5);
+        assert!(failed.failures.len() >= 7);
+        assert!(
+            failed
+                .failures
+                .iter()
+                .any(|failure| failure.contains("adapter observations"))
+        );
     }
 }

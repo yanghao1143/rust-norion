@@ -291,15 +291,17 @@ cargo run -- --kv-quant-gate
 ```
 
 Run a persistence roundtrip gate that writes state, reloads it, and verifies the
-second local-runtime pass uses persisted memory, persisted experience, and
-imported runtime KV:
+second local-runtime pass uses persisted memory, persisted experience, imported
+runtime KV, and runtime adapter observations derived from the persisted
+diagnostics:
 
 ```powershell
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
 运行持久化 roundtrip 门禁：第一轮写入状态，第二轮重新加载，并验证 local runtime
-确实使用了持久化 memory、experience 和导入的 runtime KV：
+确实使用了持久化 memory、experience、导入的 runtime KV，以及从持久化 diagnostics
+派生出的 runtime adapter observation：
 
 ```powershell
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"

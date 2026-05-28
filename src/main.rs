@@ -420,6 +420,11 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
             second_used_memories: second.used_memories.len(),
             second_used_experiences: second.used_experiences.len(),
             second_imported_runtime_kv_blocks,
+            second_runtime_adapter_observations: second.runtime_adapter_observations.len(),
+            second_runtime_adapter_best_score: second
+                .runtime_adapter_observations
+                .first()
+                .map(|observation| observation.score),
             second_quality: second.report.quality,
             first_drift_severity: first.drift_report.severity,
             second_drift_severity: second.drift_report.severity,
