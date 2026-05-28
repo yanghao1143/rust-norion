@@ -151,7 +151,10 @@ impl ModelRuntime for LocalTransformerRuntime {
         };
         let selected_adapter = self
             .manifest
-            .preferred_adapter_for(&request.hardware_plan.execution)
+            .preferred_adapter_with_observations(
+                &request.hardware_plan.execution,
+                &request.runtime_adapter_observations,
+            )
             .map(|adapter| adapter.as_str().to_owned());
         let answer = format!(
             "Local Transformer runtime result for '{}'. The self-developed runtime used manifest {}, {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It executed {} deterministic Transformer layers with state energy {:.3} and KV influence {:.3}: {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
@@ -634,6 +637,7 @@ mod tests {
             memory_hints: Vec::new(),
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
+            runtime_adapter_observations: Vec::new(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,
@@ -681,6 +685,7 @@ mod tests {
             memory_hints: vec!["hot memory".to_owned()],
             infini_memory_hints: Vec::new(),
             experience_hints: vec!["reuse prior route".to_owned()],
+            runtime_adapter_observations: Vec::new(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,
@@ -719,6 +724,60 @@ mod tests {
     }
 
     #[test]
+    fn local_runtime_uses_observed_adapter_when_device_allows_it() {
+        let mut runtime = LocalTransformerRuntime::default();
+        let mut hardware_plan = crate::hardware::HardwarePlan::default();
+        hardware_plan.execution.adapter_hints = vec![
+            crate::hardware::RuntimeAdapterHint::CpuSimd,
+            crate::hardware::RuntimeAdapterHint::PortableRust,
+        ];
+        let request = RuntimeRequest {
+            prompt: "Select observed local adapter".to_owned(),
+            profile: TaskProfile::Coding,
+            runtime_metadata: runtime.metadata(),
+            memory_hints: Vec::new(),
+            infini_memory_hints: Vec::new(),
+            experience_hints: Vec::new(),
+            runtime_adapter_observations: vec![crate::runtime::RuntimeAdapterObservation::new(
+                crate::hardware::RuntimeAdapterHint::CpuSimd,
+                0.89,
+                0.88,
+                0.91,
+                Some(0.18),
+                Some(0.42),
+                42,
+            )],
+            route_budget: crate::router::RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 2,
+                fast_tokens: 1,
+                attention_fraction: 0.66,
+            },
+            hierarchy: crate::hierarchy::HierarchyWeights::new(0.2, 0.6, 0.2),
+            transformer_plan: crate::transformer::TransformerPlanner::new(6, 128).plan(
+                TaskProfile::Coding,
+                crate::hierarchy::HierarchyWeights::new(0.2, 0.6, 0.2),
+                crate::router::RouteBudget {
+                    threshold: 0.5,
+                    attention_tokens: 2,
+                    fast_tokens: 1,
+                    attention_fraction: 0.66,
+                },
+            ),
+            recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
+            hardware_plan,
+            max_tokens: 64,
+        };
+
+        let response = runtime.generate(request).unwrap();
+
+        assert_eq!(
+            response.diagnostics.selected_adapter.as_deref(),
+            Some("cpu-simd")
+        );
+    }
+
+    #[test]
     fn imported_kv_changes_local_forward_state() {
         let request = RuntimeRequest {
             prompt: "Build local Noiron runtime".to_owned(),
@@ -727,6 +786,7 @@ mod tests {
             memory_hints: Vec::new(),
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
+            runtime_adapter_observations: Vec::new(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,

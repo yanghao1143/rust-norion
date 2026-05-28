@@ -77,9 +77,10 @@ pub use router::{
     RouterState, RoutingContext, RoutingDecision,
 };
 pub use runtime::{
-    CommandPromptMode, CommandRuntime, CommandWireFormat, ModelRuntime, RuntimeBackend,
-    RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
-    RuntimeTokenId, parse_runtime_response_json, runtime_request_json,
+    CommandPromptMode, CommandRuntime, CommandWireFormat, ModelRuntime, RuntimeAdapterObservation,
+    RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
+    RuntimeResponse, RuntimeToken, RuntimeTokenId, parse_runtime_response_json,
+    runtime_request_json,
 };
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,

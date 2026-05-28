@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::hardware::{DeviceClass, DeviceExecutionPlan, RuntimeAdapterHint};
 use crate::kv_quant::QuantizationBits;
-use crate::runtime::RuntimeMetadata;
+use crate::runtime::{RuntimeAdapterObservation, RuntimeMetadata};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeManifest {
@@ -110,6 +110,27 @@ impl RuntimeManifest {
             .copied()
             .find(|adapter| self.adapter_hints.contains(adapter))
             .or_else(|| self.adapter_hints.first().copied())
+    }
+
+    pub fn preferred_adapter_with_observations(
+        &self,
+        execution: &DeviceExecutionPlan,
+        observations: &[RuntimeAdapterObservation],
+    ) -> Option<RuntimeAdapterHint> {
+        let fallback = self.preferred_adapter_for(execution);
+        observations
+            .iter()
+            .filter(|observation| observation.score >= 0.50)
+            .filter(|observation| execution.adapter_hints.contains(&observation.adapter))
+            .filter(|observation| self.adapter_hints.contains(&observation.adapter))
+            .max_by(|left, right| {
+                left.score
+                    .partial_cmp(&right.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| right.experience_id.cmp(&left.experience_id))
+            })
+            .map(|observation| observation.adapter)
+            .or(fallback)
     }
 
     pub fn validate(&self) -> RuntimeManifestValidation {
@@ -394,6 +415,65 @@ mod tests {
         assert_eq!(
             manifest.preferred_adapter_for(&execution),
             Some(RuntimeAdapterHint::Wgpu)
+        );
+    }
+
+    #[test]
+    fn manifest_uses_runtime_observations_within_device_adapter_bounds() {
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+            .with_adapter_hints(vec![
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::PortableRust,
+            ]);
+        let execution = DeviceExecutionPlan {
+            primary_lane: ComputeLane::DiscreteGpu,
+            fallback_lane: ComputeLane::CpuVector,
+            memory_mode: DeviceMemoryMode::GpuResident,
+            adapter_hints: vec![
+                RuntimeAdapterHint::Cuda,
+                RuntimeAdapterHint::Vulkan,
+                RuntimeAdapterHint::Wgpu,
+            ],
+            max_parallel_chunks: 4,
+            kv_prefetch_blocks: 4,
+            hot_kv_precision_bits: 8,
+            cold_kv_precision_bits: 4,
+            allow_disk_spill: true,
+        };
+        let observations = vec![
+            RuntimeAdapterObservation::new(
+                RuntimeAdapterHint::Wgpu,
+                0.62,
+                0.60,
+                0.70,
+                Some(0.20),
+                Some(0.10),
+                1,
+            ),
+            RuntimeAdapterObservation::new(
+                RuntimeAdapterHint::Vulkan,
+                0.91,
+                0.90,
+                0.92,
+                Some(0.16),
+                Some(0.40),
+                2,
+            ),
+            RuntimeAdapterObservation::new(
+                RuntimeAdapterHint::PortableRust,
+                0.99,
+                0.99,
+                0.99,
+                Some(0.10),
+                Some(0.60),
+                3,
+            ),
+        ];
+
+        assert_eq!(
+            manifest.preferred_adapter_with_observations(&execution, &observations),
+            Some(RuntimeAdapterHint::Vulkan)
         );
     }
 

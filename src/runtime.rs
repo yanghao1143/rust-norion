@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::engine::{GenerationContext, InferenceBackend};
-use crate::hardware::HardwarePlan;
+use crate::experience::ExperienceMatch;
+use crate::hardware::{HardwarePlan, RuntimeAdapterHint};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::recursive_scheduler::RecursiveSchedule;
@@ -115,6 +116,7 @@ pub struct RuntimeRequest {
     pub memory_hints: Vec<String>,
     pub infini_memory_hints: Vec<String>,
     pub experience_hints: Vec<String>,
+    pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub transformer_plan: TransformerRefactorPlan,
@@ -129,6 +131,11 @@ impl RuntimeRequest {
         max_tokens: usize,
         runtime_metadata: RuntimeMetadata,
     ) -> Self {
+        let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences(
+            context.experiences,
+            &runtime_metadata.model_id,
+        );
+
         Self {
             prompt: context.prompt.to_owned(),
             profile: context.profile,
@@ -179,6 +186,7 @@ impl RuntimeRequest {
                     )
                 })
                 .collect(),
+            runtime_adapter_observations,
             route_budget: context.route_budget,
             hierarchy: context.hierarchy,
             transformer_plan: context.transformer_plan.clone(),
@@ -186,6 +194,102 @@ impl RuntimeRequest {
             hardware_plan: context.hardware_plan.clone(),
             max_tokens,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeAdapterObservation {
+    pub adapter: RuntimeAdapterHint,
+    pub score: f32,
+    pub reward: f32,
+    pub quality: f32,
+    pub forward_energy: Option<f32>,
+    pub kv_influence: Option<f32>,
+    pub experience_id: u64,
+}
+
+impl RuntimeAdapterObservation {
+    pub fn new(
+        adapter: RuntimeAdapterHint,
+        score: f32,
+        reward: f32,
+        quality: f32,
+        forward_energy: Option<f32>,
+        kv_influence: Option<f32>,
+        experience_id: u64,
+    ) -> Self {
+        Self {
+            adapter,
+            score: score.clamp(0.0, 1.0),
+            reward: reward.clamp(0.0, 1.0),
+            quality: quality.clamp(0.0, 1.0),
+            forward_energy: forward_energy.filter(|value| value.is_finite()),
+            kv_influence: kv_influence.filter(|value| value.is_finite()),
+            experience_id,
+        }
+    }
+
+    pub fn from_experiences(experiences: &[ExperienceMatch], runtime_model_id: &str) -> Vec<Self> {
+        let mut observations = experiences
+            .iter()
+            .filter(|experience| {
+                runtime_model_id.is_empty()
+                    || experience
+                        .runtime_model_id
+                        .as_deref()
+                        .map(|model_id| model_id == runtime_model_id)
+                        .unwrap_or(true)
+            })
+            .filter_map(|experience| {
+                let adapter =
+                    parse_runtime_adapter_hint(experience.runtime_selected_adapter.as_deref()?)?;
+                let base = experience.score * 0.38
+                    + experience.process_reward * 0.34
+                    + experience.quality * 0.22;
+                let kv_bonus = experience
+                    .runtime_kv_influence
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0)
+                    * 0.06;
+                let energy_penalty = experience
+                    .runtime_forward_energy
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0)
+                    * 0.04;
+                Some(Self::new(
+                    adapter,
+                    base + kv_bonus - energy_penalty,
+                    experience.process_reward,
+                    experience.quality,
+                    experience.runtime_forward_energy,
+                    experience.runtime_kv_influence,
+                    experience.id,
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        observations.sort_by(|left, right| {
+            right
+                .score
+                .partial_cmp(&left.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.experience_id.cmp(&right.experience_id))
+        });
+        observations.truncate(6);
+        observations
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "adapter={} score={:.3} reward={:.3} quality={:.3} forward_energy={} kv_influence={} experience={}",
+            self.adapter.as_str(),
+            self.score,
+            self.reward,
+            self.quality,
+            option_f32_display(self.forward_energy),
+            option_f32_display(self.kv_influence),
+            self.experience_id
+        )
     }
 }
 
@@ -381,6 +485,15 @@ impl CommandRuntime {
                     )
                     .replace("{experience_hints}", &request.experience_hints.join("\n"))
                     .replace(
+                        "{runtime_adapter_observations}",
+                        &request
+                            .runtime_adapter_observations
+                            .iter()
+                            .map(RuntimeAdapterObservation::summary)
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    )
+                    .replace(
                         "{recursive_schedule}",
                         &request.recursive_schedule.summary(),
                     )
@@ -468,6 +581,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          memory_hints:\n{}\n\
          infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
+         runtime_adapter_observations:\n{}\n\
          prompt:\n{}",
         request.runtime_metadata.summary(),
         request.profile,
@@ -488,6 +602,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         bullet_list(&request.memory_hints),
         bullet_list(&request.infini_memory_hints),
         bullet_list(&request.experience_hints),
+        bullet_runtime_adapter_observations(&request.runtime_adapter_observations),
         request.prompt
     )
 }
@@ -557,6 +672,12 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         .iter()
         .map(|adapter| adapter.as_str())
         .collect::<Vec<_>>();
+    let runtime_adapter_observations = request
+        .runtime_adapter_observations
+        .iter()
+        .map(runtime_adapter_observation_json)
+        .collect::<Vec<_>>()
+        .join(",");
 
     format!(
         "{{\
@@ -624,7 +745,8 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          }},\
          \"memory_hints\":{},\
          \"infini_memory_hints\":{},\
-         \"experience_hints\":{}\
+         \"experience_hints\":{},\
+         \"runtime_adapter_observations\":[{}]\
          }}",
         json_string("rust-norion-runtime-request-v1"),
         json_string(&request.prompt),
@@ -676,7 +798,8 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         json_str_array(request.hardware_plan.notes.iter().map(String::as_str)),
         json_str_array(request.memory_hints.iter().map(String::as_str)),
         json_str_array(request.infini_memory_hints.iter().map(String::as_str)),
-        json_str_array(request.experience_hints.iter().map(String::as_str))
+        json_str_array(request.experience_hints.iter().map(String::as_str)),
+        runtime_adapter_observations
     )
 }
 
@@ -761,6 +884,33 @@ fn option_u64_json(value: Option<u64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "null".to_owned())
+}
+
+fn option_f32_json(value: Option<f32>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{value:.6}"))
+        .unwrap_or_else(|| "null".to_owned())
+}
+
+fn option_f32_display(value: Option<f32>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "none".to_owned())
+}
+
+fn runtime_adapter_observation_json(observation: &RuntimeAdapterObservation) -> String {
+    format!(
+        "{{\"adapter\":{},\"score\":{:.6},\"reward\":{:.6},\"quality\":{:.6},\"forward_energy\":{},\"kv_influence\":{},\"experience_id\":{}}}",
+        json_string(observation.adapter.as_str()),
+        observation.score,
+        observation.reward,
+        observation.quality,
+        option_f32_json(observation.forward_energy),
+        option_f32_json(observation.kv_influence),
+        observation.experience_id
+    )
 }
 
 fn json_str_array<'a, I>(items: I) -> String
@@ -979,6 +1129,43 @@ fn bullet_list(items: &[String]) -> String {
         .map(|item| format!("- {item}"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn bullet_runtime_adapter_observations(items: &[RuntimeAdapterObservation]) -> String {
+    if items.is_empty() {
+        return "- none".to_owned();
+    }
+
+    items
+        .iter()
+        .map(|item| format!("- {}", item.summary()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_runtime_adapter_hint(value: &str) -> Option<RuntimeAdapterHint> {
+    match value {
+        "portable-rust" => Some(RuntimeAdapterHint::PortableRust),
+        "cpu-simd" => Some(RuntimeAdapterHint::CpuSimd),
+        "wgpu" => Some(RuntimeAdapterHint::Wgpu),
+        "webgpu" => Some(RuntimeAdapterHint::WebGpu),
+        "vulkan" => Some(RuntimeAdapterHint::Vulkan),
+        "metal" => Some(RuntimeAdapterHint::Metal),
+        "cuda" => Some(RuntimeAdapterHint::Cuda),
+        "rocm" => Some(RuntimeAdapterHint::Rocm),
+        "oneapi" => Some(RuntimeAdapterHint::OneApi),
+        "directml" => Some(RuntimeAdapterHint::DirectMl),
+        "coreml" => Some(RuntimeAdapterHint::CoreMl),
+        "nnapi" => Some(RuntimeAdapterHint::Nnapi),
+        "qnn" => Some(RuntimeAdapterHint::Qnn),
+        "openvino" => Some(RuntimeAdapterHint::OpenVino),
+        "cann" => Some(RuntimeAdapterHint::Cann),
+        "mlu" => Some(RuntimeAdapterHint::Mlu),
+        "rknn" => Some(RuntimeAdapterHint::Rknn),
+        "multi-device" => Some(RuntimeAdapterHint::MultiDevice),
+        "custom-accelerator" => Some(RuntimeAdapterHint::CustomAccelerator),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1308,6 +1495,12 @@ mod tests {
         assert_eq!(seen.memory_hints.len(), 1);
         assert_eq!(seen.infini_memory_hints.len(), 1);
         assert_eq!(seen.experience_hints.len(), 1);
+        assert_eq!(seen.runtime_adapter_observations.len(), 1);
+        assert_eq!(
+            seen.runtime_adapter_observations[0].adapter,
+            RuntimeAdapterHint::PortableRust
+        );
+        assert!(seen.runtime_adapter_observations[0].score > 0.70);
         assert!(!seen.recursive_schedule.requires_recursion);
         assert!(seen.hardware_plan.local_kv_token_budget > 0);
         assert!(seen.transformer_plan.is_empty());
@@ -1624,6 +1817,9 @@ mod tests {
         assert!(payload.contains("\"template\":\"none\""));
         assert!(payload.contains("\"memory_hints\":[\"memory hint\"]"));
         assert_eq!(extract_json_array_field(&payload, "layers").unwrap(), "[]");
+        assert!(payload.contains("\"runtime_adapter_observations\":["));
+        assert!(payload.contains("\"adapter\":\"cpu-simd\""));
+        assert!(payload.contains("\"experience_id\":9"));
     }
 
     #[test]
@@ -1718,6 +1914,15 @@ mod tests {
             memory_hints: vec!["memory hint".to_owned()],
             infini_memory_hints: vec!["LocalWindow:memory hint score=0.900".to_owned()],
             experience_hints: vec!["experience hint".to_owned()],
+            runtime_adapter_observations: vec![RuntimeAdapterObservation::new(
+                RuntimeAdapterHint::CpuSimd,
+                0.82,
+                0.80,
+                0.86,
+                Some(0.20),
+                Some(0.30),
+                9,
+            )],
             route_budget: RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,

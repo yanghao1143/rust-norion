@@ -148,7 +148,7 @@ Implemented modules:
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence, retention policy, embedding-dimension-aware similarity, and batch semantic compaction for near-duplicate memories
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
 - `src/kv_quant.rs`: self-owned 4/8-bit uniform KV vector quantization
-- `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, model-side embedding, deterministic global/local/convolution forward layers, imported-KV influence, generation, and KV import/export
+- `src/local_runtime.rs`: Rust-native self-developed Transformer-style runtime prototype implementing tokenizer, model-side embedding, deterministic global/local/convolution forward layers, imported-KV influence, generation, KV import/export, and device-bounded adapter selection informed by prior runtime diagnostics
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
@@ -161,8 +161,8 @@ Implemented modules:
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, optional model-side embedding, KV import/export ABI hooks, and structured JSON command-runtime request/response wiring
-- `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, KV policy, quantization policy, supported device classes, and adapter hints
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, optional model-side embedding, KV import/export ABI hooks, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
+- `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob now feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
@@ -460,11 +460,16 @@ the engine carries those fields into trace JSONL as `runtime_diagnostics`.
 The same diagnostics are persisted into experience records, so replay can later
 know which self-developed runtime, adapter, forward energy, and KV influence
 produced a useful or weak control path.
+Runtime requests also derive bounded adapter observations from those experience
+matches. A self-developed runtime manifest first respects the current device
+execution plan, then can prefer a historically stronger adapter only when that
+adapter is supported by both the device plan and the runtime manifest.
 
 当 runtime tokens 带有 `entropy` 或 `logprob` 时，引擎会把这些 token 级信号合入主生成 perplexity，并用于 drift 检查、router / hierarchy 自适应、process reward 评分和经验回放。
 同一组聚合后的 token 不确定性也会写入 trace JSONL 的 `runtime_tokens`，包括平均 entropy、平均负 logprob 与派生的 uncertainty perplexity。
 runtime response 也可以返回结构化 `diagnostics`，让本地或命令行 runtime 上报模型 ID、选中的 adapter、执行层数、hidden size、本地窗口、forward energy、KV influence 以及 KV 导入导出计数；engine 会把这些字段作为 `runtime_diagnostics` 写入 trace JSONL。
 同一组 diagnostics 也会持久化进 experience 记录，因此后续经验回放能知道是哪一个自研 runtime、adapter、forward energy 和 KV influence 产生了有效或较弱的控制路径。
+runtime request 还会从这些经验匹配中提炼有边界的 adapter observation。自研 runtime manifest 会先遵守当前设备执行计划，然后只在 adapter 同时被设备计划和 runtime manifest 支持时，才优先选择历史表现更强的 adapter。
 
 Run through the built-in Rust-native local runtime prototype:
 
