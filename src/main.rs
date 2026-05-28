@@ -649,7 +649,7 @@ fn print_device_matrix_and_exit() -> ! {
 
     println!("Noiron device matrix");
     println!(
-        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges"
     );
 
     for device in DeviceClass::explicit_profiles() {
@@ -669,7 +669,7 @@ fn print_device_matrix_and_exit() -> ! {
             .collect::<Vec<_>>()
             .join("+");
         println!(
-            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{:.3},{:.3},{},{:.3},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{},{:.3},{:.3},{},{:.3},{},{}",
             device.as_str(),
             plan.tier.as_str(),
             descriptor.scope,
@@ -683,6 +683,11 @@ fn print_device_matrix_and_exit() -> ! {
             plan.execution.hot_kv_precision_bits,
             plan.execution.cold_kv_precision_bits,
             plan.execution.allow_disk_spill,
+            plan.local_kv_token_budget,
+            plan.global_kv_token_budget,
+            plan.latency_budget_ms
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned()),
             governance.retention_policy.stale_after,
             governance.retention_policy.decay_rate,
             governance.retention_policy.remove_below_strength,

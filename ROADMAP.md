@@ -335,7 +335,9 @@ These are algorithmic references, not product dependencies:
   roundtrips; device/pressure-aware memory governance now adjusts retention and
   KV-Fusion compaction defaults so tiny, browser-WASM, mobile, and overloaded
   devices keep smaller durable memory state while accelerated and distributed
-  profiles can retain and scan more context;
+  profiles can retain and scan more context; `--list-devices` now prints the
+  same local/global KV token budgets and latency budget used by the engine so
+  device matrix review covers actual runtime boundaries, not only adapter hints;
   router thresholds now persist separately for general, coding, writing, and
   long-document profiles;
   hierarchy weights now persist separately for general, coding, writing, and

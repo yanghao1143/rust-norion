@@ -322,7 +322,8 @@ cargo run -- --list-devices
 
 The matrix includes each profile's scope, common aliases, primary compute lane,
 portable fallback lane, memory mode, runtime adapter hints, KV precision,
-prefetch count, disk-spill policy, and recursive parallelism budget.
+prefetch count, disk-spill policy, local/global KV token budgets, latency
+budget, retention/compaction defaults, and recursive parallelism budget.
 
 打印内置全设备执行矩阵：
 
@@ -331,7 +332,7 @@ cargo run -- --list-devices
 ```
 
 矩阵会列出每个 profile 的覆盖范围、常见别名、主计算通道、可移植降级通道、内存模式、
-runtime adapter hint、KV 精度、预取数量、磁盘溢出策略和递归并行预算。
+runtime adapter hint、KV 精度、预取数量、磁盘溢出策略、local/global KV token budget、延迟预算、retention / compaction 默认值和递归并行预算。
 
 Run the device compatibility gate. It fails with exit code `2` if any supported
 device profile loses its alias coverage, execution plan, KV budget, adapter
