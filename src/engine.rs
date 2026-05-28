@@ -2,6 +2,7 @@ use std::io;
 use std::path::Path;
 
 use crate::adaptive_state::AdaptiveState;
+use crate::agent_team::{AgentTeamInput, AgentTeamPlan, AgentTeamPlanner};
 use crate::drift::{DriftGuard, DriftInput, DriftReport};
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
 use crate::experience_replay::{
@@ -27,6 +28,7 @@ use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext
 use crate::runtime::RuntimeAdapterObservation;
 use crate::tiered_cache::{TierMigration, TieredCachePlan, TieredCacheScheduler};
 use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
+use crate::toolsmith::{ToolsmithInput, ToolsmithPlan, ToolsmithPlanner};
 use crate::transformer::{TransformerPlanner, TransformerRefactorPlan};
 
 #[derive(Debug, Clone)]
@@ -56,6 +58,8 @@ pub struct GenerationContext<'a> {
     pub recursive_schedule: &'a RecursiveSchedule,
     pub hardware_plan: &'a HardwarePlan,
     pub experiences: &'a [ExperienceMatch],
+    pub toolsmith_plan: &'a ToolsmithPlan,
+    pub agent_team_plan: &'a AgentTeamPlan,
     pub transformer_plan: &'a TransformerRefactorPlan,
 }
 
@@ -75,6 +79,8 @@ impl<'a> GenerationContext<'a> {
             recursive_schedule: self.recursive_schedule,
             hardware_plan: self.hardware_plan,
             experiences: self.experiences,
+            toolsmith_plan: self.toolsmith_plan,
+            agent_team_plan: self.agent_team_plan,
             transformer_plan: self.transformer_plan,
         }
     }
@@ -110,6 +116,8 @@ pub struct InferenceOutcome {
     pub recursive_schedule: RecursiveSchedule,
     pub hardware_plan: HardwarePlan,
     pub transformer_plan: TransformerRefactorPlan,
+    pub toolsmith_plan: ToolsmithPlan,
+    pub agent_team_plan: AgentTeamPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
     pub used_experiences: Vec<ExperienceMatch>,
@@ -213,6 +221,8 @@ pub struct NoironEngine {
     pub recursive_scheduler: RecursiveScheduler,
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
+    pub toolsmith_planner: ToolsmithPlanner,
+    pub agent_team_planner: AgentTeamPlanner,
     pub experience: ExperienceStore,
     pub experience_replay_planner: ExperienceReplayPlanner,
     pub gist_generator: GistGenerator,
@@ -239,6 +249,8 @@ impl Default for NoironEngine {
             recursive_scheduler: RecursiveScheduler::default(),
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
+            toolsmith_planner: ToolsmithPlanner::new(),
+            agent_team_planner: AgentTeamPlanner::new(),
             experience: ExperienceStore::new(),
             experience_replay_planner: ExperienceReplayPlanner::new(),
             gist_generator: GistGenerator::new(),
@@ -443,6 +455,23 @@ impl NoironEngine {
         let transformer_plan =
             self.transformer_planner
                 .plan(request.profile, hierarchy, route_budget);
+        let toolsmith_plan = self.toolsmith_planner.plan(ToolsmithInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            memories: &used_memories,
+            experiences: &used_experiences,
+            hardware_plan: &hardware_plan,
+        });
+        let agent_team_plan = self.agent_team_planner.plan(AgentTeamInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            memories: &used_memories,
+            experiences: &used_experiences,
+            hardware_plan: &hardware_plan,
+            route_budget,
+            recursive_schedule: &recursive_schedule,
+            toolsmith_plan: &toolsmith_plan,
+        });
 
         let generation_context = GenerationContext {
             prompt: &request.prompt,
@@ -455,6 +484,8 @@ impl NoironEngine {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &used_experiences,
+            toolsmith_plan: &toolsmith_plan,
+            agent_team_plan: &agent_team_plan,
             transformer_plan: &transformer_plan,
         };
         let (draft, recursive_runtime_calls) =
@@ -584,6 +615,8 @@ impl NoironEngine {
             stored_gist_memories: stored_gist_memory_ids.len(),
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
             gist_records: gist_records.len(),
+            toolsmith_plan: toolsmith_plan.clone(),
+            agent_team_plan: agent_team_plan.clone(),
         });
         let experience_id = self.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),
@@ -637,6 +670,8 @@ impl NoironEngine {
             recursive_schedule,
             hardware_plan,
             transformer_plan,
+            toolsmith_plan,
+            agent_team_plan,
             stream_reports,
             used_memories,
             used_experiences,
@@ -729,6 +764,25 @@ impl InferenceBackend for HeuristicBackend {
         let recursive_schedule = context.recursive_schedule;
         let hardware_plan = context.hardware_plan;
         let transformer_counts = context.transformer_plan.counts();
+        let toolsmith_summary = context.toolsmith_plan.summary();
+        let agent_team_summary = context.agent_team_plan.summary();
+        let agent_team_messages = if context.agent_team_plan.messages.is_empty() {
+            "none".to_owned()
+        } else {
+            context.agent_team_plan.message_summaries(3).join("; ")
+        };
+        let toolsmith_blueprints = if context.toolsmith_plan.blueprints.is_empty() {
+            "none".to_owned()
+        } else {
+            context
+                .toolsmith_plan
+                .blueprints
+                .iter()
+                .take(2)
+                .map(|blueprint| blueprint.summary())
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
         let experience_summary = if context.experiences.is_empty() {
             "no prior experience".to_owned()
         } else {
@@ -767,7 +821,9 @@ impl InferenceBackend for HeuristicBackend {
              Infini memory: {} local-window ({} tokens), {} global ({} tokens), {} sparse-skipped ({} tokens) memories. \
              Recursive schedule: required={}, {} chunks, {} merge rounds, {} execution waves, max parallel {}, {} prompt tokens, native window {}. \
              Hardware plan: {}. \
-             Transformer plan: template {}, {} global, {} local, {} convolution layers.",
+             Transformer plan: template {}, {} global, {} local, {} convolution layers. \
+             Toolsmith plan: {toolsmith_summary}. Tool blueprints: {toolsmith_blueprints}. \
+             Agent team: {agent_team_summary}. Team messages: {agent_team_messages}.",
             compact(&context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
             context.route_budget.fast_tokens,
@@ -813,6 +869,16 @@ impl InferenceBackend for HeuristicBackend {
                     "reflection",
                     "draft will be scored before reinforcement",
                     0.84,
+                ),
+                ReasoningStep::new(
+                    "toolsmith",
+                    "planned Rust-only tool blueprints behind local safety gates",
+                    0.80,
+                ),
+                ReasoningStep::new(
+                    "agent_team",
+                    "coordinated read-only sub-agent lanes through a summarized blackboard",
+                    0.82,
                 ),
             ],
         )

@@ -1,8 +1,10 @@
+use crate::agent_team::AgentTeamPlan;
 use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::InfiniMemoryCounts;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::router::{GenerationMetrics, RouteBudget};
 use crate::tiered_cache::TierCounts;
+use crate::toolsmith::ToolsmithPlan;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RewardAction {
@@ -110,6 +112,8 @@ pub struct ProcessRewardInput {
     pub stored_gist_memories: usize,
     pub stored_runtime_kv_memories: usize,
     pub gist_records: usize,
+    pub toolsmith_plan: ToolsmithPlan,
+    pub agent_team_plan: AgentTeamPlan,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -156,7 +160,10 @@ impl ProcessRewarder {
                 input.stored_runtime_kv_memories,
             ),
         };
-        let total = weighted_total(components);
+        let total = coordination_adjusted_total(
+            toolsmith_adjusted_total(weighted_total(components), &input.toolsmith_plan),
+            &input.agent_team_plan,
+        );
         let action = if total >= 0.72 {
             RewardAction::Reinforce
         } else if total <= 0.42 {
@@ -284,6 +291,29 @@ fn weighted_total(components: ProcessRewardComponents) -> f32 {
         .clamp(0.0, 1.0)
 }
 
+fn toolsmith_adjusted_total(total: f32, plan: &ToolsmithPlan) -> f32 {
+    if !plan.passed_rust_gate() {
+        return (total - 0.18).clamp(0.0, 1.0);
+    }
+    if plan.ready_count() > 0 {
+        return (total + 0.04).clamp(0.0, 1.0);
+    }
+    total
+}
+
+fn coordination_adjusted_total(total: f32, plan: &AgentTeamPlan) -> f32 {
+    if !plan.enabled {
+        return total;
+    }
+    if !plan.collision_free() {
+        return (total - 0.12).clamp(0.0, 1.0);
+    }
+    if plan.evolution_signal_count() > 0 {
+        return (total + 0.03).clamp(0.0, 1.0);
+    }
+    total
+}
+
 fn reward_notes(
     input: &ProcessRewardInput,
     components: ProcessRewardComponents,
@@ -341,6 +371,8 @@ fn reward_notes(
             input.stored_runtime_kv_memories
         ));
     }
+    notes.extend(input.toolsmith_plan.reward_notes());
+    notes.extend(input.agent_team_plan.reward_notes());
 
     notes.push(format!(
         "total:{total:.3}:{}",
@@ -457,6 +489,8 @@ mod tests {
             stored_gist_memories: if quality > 0.45 { 1 } else { 0 },
             stored_runtime_kv_memories: 0,
             gist_records: if quality > 0.45 { 3 } else { 0 },
+            toolsmith_plan: ToolsmithPlan::default(),
+            agent_team_plan: AgentTeamPlan::default(),
         }
     }
 

@@ -694,6 +694,8 @@ mod tests {
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
             runtime_adapter_observations: Vec::new(),
+            toolsmith_plan: crate::toolsmith::ToolsmithPlan::default(),
+            agent_team_plan: crate::agent_team::AgentTeamPlan::default(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,
@@ -743,6 +745,8 @@ mod tests {
             infini_memory_hints: Vec::new(),
             experience_hints: vec!["reuse prior route".to_owned()],
             runtime_adapter_observations: Vec::new(),
+            toolsmith_plan: crate::toolsmith::ToolsmithPlan::default(),
+            agent_team_plan: crate::agent_team::AgentTeamPlan::default(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,
@@ -805,6 +809,8 @@ mod tests {
                 Some(0.42),
                 42,
             )],
+            toolsmith_plan: crate::toolsmith::ToolsmithPlan::default(),
+            agent_team_plan: crate::agent_team::AgentTeamPlan::default(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,
@@ -846,6 +852,8 @@ mod tests {
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
             runtime_adapter_observations: Vec::new(),
+            toolsmith_plan: crate::toolsmith::ToolsmithPlan::default(),
+            agent_team_plan: crate::agent_team::AgentTeamPlan::default(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,

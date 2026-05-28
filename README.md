@@ -153,20 +153,22 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay recursive cost pressure, hardware execution, the stable runtime device contract, KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/toolsmith.rs`: Rust-only local tool blueprint planner that can propose gated helper CLIs, reject non-Rust tool surfaces, and carry build/validation outlines into runtime requests and reward notes
+- `src/agent_team.rs`: read-only sub-agent/team blackboard planner with single-writer isolation, conflict summaries, collision-free checks, and bounded evolution hints for the main control loop
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay recursive cost pressure, hardware execution, the stable runtime device contract, KV budgets, Toolsmith, Agent Team, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward, runtime-diagnostic, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable recursive call pressure and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles, and a runtime-manifest device gate for current-device execution contracts, adapter intersections, KV prefetch limits, and hot/cold KV precision bounds
-- `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties
+- `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties, Rust-only Toolsmith gate adjustments, and Agent Team collision-free coordination adjustments
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, KV import/export ABI hooks, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
-- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, and kernel-exported KV block shape/range/finite-value validity, with a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel behind the boundary
+- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, and a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel behind the boundary
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
-- `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob now feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
+- `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob, Rust-only Toolsmith planning, and read-only Agent Team planning feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
 ## Non-Goals / 非目标
@@ -647,6 +649,9 @@ flowchart LR
     Hardware --> DeviceExec[Device Execution Plan]
     Prompt --> Experience[Experience Store]
     Hierarchy --> Transformer[Transformer Refactor Plan]
+    Prompt --> Toolsmith[Rust-Only Toolsmith]
+    Prompt --> AgentTeam[Read-Only Agent Team]
+    Toolsmith --> AgentTeam
     Memory --> Backend[InferenceBackend]
     Infini --> Backend
     Recursive --> Backend
@@ -658,6 +663,8 @@ flowchart LR
     Tiers --> Backend
     Experience --> Backend
     Transformer --> Backend
+    Toolsmith --> Backend
+    AgentTeam --> Backend
     Router --> Backend
     Hierarchy --> Backend
     Backend --> Draft[Draft Answer]
@@ -666,6 +673,8 @@ flowchart LR
     Reflect --> Drift[Drift Guard]
     Reflect --> Gist[Hierarchical Gist Memory]
     Reflect --> Reward[Process Reward]
+    Toolsmith --> Reward
+    AgentTeam --> Reward
     Stream --> Router
     Reflect --> Experience[Experience Store]
     Drift --> Experience
@@ -725,13 +734,16 @@ not connected" error. With `ProductionForwardKernel` attached, the kernel
 receives the manifest, asset summary, device gate, imported KV blocks, and
 Noiron runtime request, then returns answer text, token uncertainty, trace,
 diagnostics, and exported KV blocks through the same `RuntimeBackend` path.
-Kernel-exported KV is validated at this boundary before it can reach
-`RuntimeBackend`: layer/head ids must fit the manifest architecture, token
-ranges must be valid for the request or recursive schedule, key/value vectors
-must be non-empty and dimension-compatible, and all values must be finite.
+Imported KV from the Noiron control plane is validated before it is accepted,
+and kernel-exported KV is validated before it can reach `RuntimeBackend`:
+layer/head ids must fit the manifest architecture, token ranges must be valid,
+key/value vectors must be non-empty and dimension-compatible, vector sizes must
+fit the manifest/token span bound, and all values must be finite. Runtime KV
+imports generated from active memories are also assigned layer/head ids within
+the runtime architecture instead of assuming one unbounded head per memory.
 
 `ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。
-生产 kernel 导出的 KV 会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须适配当前请求或递归调度，key/value 不能为空且维度一致，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。
+Noiron 控制层导入的 KV 会先经过校验再被生产 runtime 接受，生产 kernel 导出的 KV 也会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须合法，key/value 不能为空且维度一致，向量长度必须符合 manifest 与 token span 上界，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。由活跃记忆生成的 runtime KV import 也会按 runtime 架构分配有界的 layer/head，而不是假设每条记忆都能占用一个无限 head。
 
 `RuntimeBackend` reports the runtime's native context window back to the engine,
 so recursive long-context scheduling can use the actual self-developed model
@@ -806,14 +818,17 @@ Expected integration loop:
    then select a portable execution plan
 6. optionally replay high/low reward experience into router, hierarchy, and KV state
 7. retrieve relevant reflection lessons from the experience store
-8. import active KV memory into the runtime, call the real model backend, and
+8. plan Rust-only helper-tool blueprints and read-only Agent Team coordination
+   when the prompt calls for local capability growth
+9. import active KV memory into the runtime, call the real model backend, and
    collect exported runtime KV
-9. reflect on the draft
-10. generate document, section, and paragraph-level gist records
-11. run drift gates before durable memory or runtime KV admission
-12. score route, memory, hierarchy, latency, and admission with process rewards
-13. reinforce or penalize memory, including accepted exported runtime KV
-14. update or roll back routing threshold, hierarchy weights, and experience records
+10. reflect on the draft
+11. generate document, section, and paragraph-level gist records
+12. run drift gates before durable memory or runtime KV admission
+13. score route, memory, hierarchy, latency, Toolsmith gates, Agent Team
+   isolation, and admission with process rewards
+14. reinforce or penalize memory, including accepted exported runtime KV
+15. update or roll back routing threshold, hierarchy weights, and experience records
 
 1. 优先用模型 runtime 对 prompt 做嵌入；不可用时使用可移植 Rust fallback，然后检索本地记忆
 2. 读取模型 id、tokenizer、原生上下文窗口、embedding 维度和 KV 交换能力等 runtime metadata
@@ -822,13 +837,14 @@ Expected integration loop:
 5. 根据 CPU-only、集显、独显、统一内存、移动端、嵌入式、NPU/AI 加速器、多 GPU、边缘设备或服务器压力调整延迟、KV budget 和层级权重，并选择带降级路径的执行计划
 6. 可选地把高/低 reward 经验回放到 router、hierarchy 和 KV 状态
 7. 从经验库检索相关反思 lesson
-8. 把活跃 KV 记忆导入 runtime，调用真实模型后端，并收集 runtime 导出的 KV
-9. 对草稿答案做反思评估
-10. 生成 document、section、paragraph 三级 gist 记忆
-11. 在持久记忆或 runtime KV 准入前执行漂移门控
-12. 对路由、记忆、层级、延迟和记忆准入做过程奖励评分
-13. 强化或惩罚记忆，包括通过反思准入的 runtime 导出 KV
-14. 更新或回滚路由阈值、层级权重和经验记录
+8. 当 prompt 需要本地能力增长时，规划 Rust-only 辅助工具蓝图和只读 Agent Team 协同
+9. 把活跃 KV 记忆导入 runtime，调用真实模型后端，并收集 runtime 导出的 KV
+10. 对草稿答案做反思评估
+11. 生成 document、section、paragraph 三级 gist 记忆
+12. 在持久记忆或 runtime KV 准入前执行漂移门控
+13. 对路由、记忆、层级、延迟、Toolsmith 门禁、Agent Team 隔离和记忆准入做过程奖励评分
+14. 强化或惩罚记忆，包括通过反思准入的 runtime 导出 KV
+15. 更新或回滚路由阈值、层级权重和经验记录
 
 ## Roadmap / 路线图
 

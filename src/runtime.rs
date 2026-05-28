@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use crate::agent_team::AgentTeamPlan;
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::experience::ExperienceMatch;
 use crate::hardware::{HardwarePlan, RuntimeAdapterHint};
@@ -16,6 +17,7 @@ use crate::runtime_manifest::{
     TransformerRuntimeArchitecture, default_transformer_runtime_architecture,
 };
 use crate::tiered_cache::MemoryTier;
+use crate::toolsmith::{ToolBlueprint, ToolsmithPlan};
 use crate::transformer::{AttentionKind, TransformerRefactorPlan};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,6 +177,8 @@ pub struct RuntimeRequest {
     pub infini_memory_hints: Vec<String>,
     pub experience_hints: Vec<String>,
     pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
+    pub toolsmith_plan: ToolsmithPlan,
+    pub agent_team_plan: AgentTeamPlan,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub transformer_plan: TransformerRefactorPlan,
@@ -248,6 +252,8 @@ impl RuntimeRequest {
                 })
                 .collect(),
             runtime_adapter_observations,
+            toolsmith_plan: context.toolsmith_plan.clone(),
+            agent_team_plan: context.agent_team_plan.clone(),
             route_budget: context.route_budget,
             hierarchy: context.hierarchy,
             transformer_plan: context.transformer_plan.clone(),
@@ -577,6 +583,22 @@ impl CommandRuntime {
                     )
                     .replace("{experience_hints}", &request.experience_hints.join("\n"))
                     .replace(
+                        "{tool_blueprints}",
+                        &request
+                            .toolsmith_plan
+                            .blueprints
+                            .iter()
+                            .map(ToolBlueprint::summary)
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    )
+                    .replace("{toolsmith_plan}", &request.toolsmith_plan.summary())
+                    .replace("{agent_team_plan}", &request.agent_team_plan.summary())
+                    .replace(
+                        "{agent_team_messages}",
+                        &request.agent_team_plan.message_summaries(8).join("\n"),
+                    )
+                    .replace(
                         "{runtime_adapter_observations}",
                         &request
                             .runtime_adapter_observations
@@ -692,6 +714,10 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          memory_hints:\n{}\n\
          infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
+         toolsmith: {}\n\
+         tool_blueprints:\n{}\n\
+         agent_team: {}\n\
+         agent_team_messages:\n{}\n\
          runtime_adapter_observations:\n{}\n\
          prompt:\n{}",
         request.runtime_metadata.summary(),
@@ -715,6 +741,10 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         bullet_list(&request.memory_hints),
         bullet_list(&request.infini_memory_hints),
         bullet_list(&request.experience_hints),
+        request.toolsmith_plan.summary(),
+        bullet_tool_blueprints(&request.toolsmith_plan.blueprints),
+        request.agent_team_plan.summary(),
+        bullet_list(&request.agent_team_plan.message_summaries(8)),
         bullet_runtime_adapter_observations(&request.runtime_adapter_observations),
         request.prompt
     )
@@ -791,6 +821,16 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         .map(runtime_adapter_observation_json)
         .collect::<Vec<_>>()
         .join(",");
+    let tool_blueprints = request
+        .toolsmith_plan
+        .blueprints
+        .iter()
+        .map(tool_blueprint_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    let agent_team_messages = request.agent_team_plan.message_summaries(16);
+    let agent_team_conflicts = request.agent_team_plan.conflict_summaries(8);
+    let agent_team_evolution = request.agent_team_plan.evolution_summaries(8);
 
     format!(
         "{{\
@@ -871,6 +911,40 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"memory_hints\":{},\
          \"infini_memory_hints\":{},\
          \"experience_hints\":{},\
+         \"toolsmith\":{{\
+         \"rust_only\":{},\
+         \"exploration_required\":{},\
+         \"blueprint_count\":{},\
+         \"ready\":{},\
+         \"held\":{},\
+         \"rejected\":{},\
+         \"gate_passed\":{},\
+         \"notes\":{},\
+         \"rejected_requests\":{},\
+         \"blueprints\":[{}]\
+         }},\
+         \"agent_team\":{{\
+         \"enabled\":{},\
+         \"summary\":{},\
+         \"run_id\":{},\
+         \"main_thread_goal\":{},\
+         \"agents\":{},\
+         \"messages\":{},\
+         \"conflicts\":{},\
+         \"unresolved_conflicts\":{},\
+         \"evolution_signals\":{},\
+         \"collision_free\":{},\
+         \"isolation\":{{\
+         \"single_writer\":{},\
+         \"read_only_subagents\":{},\
+         \"namespace\":{},\
+         \"allowed_outputs\":{},\
+         \"denied_capabilities\":{}\
+         }},\
+         \"message_summaries\":{},\
+         \"conflict_summaries\":{},\
+         \"evolution_summaries\":{}\
+         }},\
          \"runtime_adapter_observations\":[{}]\
          }}",
         json_string("rust-norion-runtime-request-v1"),
@@ -934,6 +1008,54 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         json_str_array(request.memory_hints.iter().map(String::as_str)),
         json_str_array(request.infini_memory_hints.iter().map(String::as_str)),
         json_str_array(request.experience_hints.iter().map(String::as_str)),
+        request.toolsmith_plan.rust_only,
+        request.toolsmith_plan.exploration_required,
+        request.toolsmith_plan.blueprint_count(),
+        request.toolsmith_plan.ready_count(),
+        request.toolsmith_plan.held_count(),
+        request.toolsmith_plan.rejected_count(),
+        request.toolsmith_plan.passed_rust_gate(),
+        json_str_array(request.toolsmith_plan.notes.iter().map(String::as_str)),
+        json_str_array(
+            request
+                .toolsmith_plan
+                .rejected_requests
+                .iter()
+                .map(String::as_str)
+        ),
+        tool_blueprints,
+        request.agent_team_plan.enabled,
+        json_string(&request.agent_team_plan.summary()),
+        json_string(&request.agent_team_plan.run_id),
+        json_string(&request.agent_team_plan.main_thread_goal),
+        request.agent_team_plan.active_agent_count(),
+        request.agent_team_plan.message_count(),
+        request.agent_team_plan.conflict_count(),
+        request.agent_team_plan.unresolved_conflict_count(),
+        request.agent_team_plan.evolution_signal_count(),
+        request.agent_team_plan.collision_free(),
+        request.agent_team_plan.isolation.single_writer,
+        request.agent_team_plan.isolation.read_only_subagents,
+        json_string(&request.agent_team_plan.isolation.namespace),
+        json_str_array(
+            request
+                .agent_team_plan
+                .isolation
+                .allowed_outputs
+                .iter()
+                .map(String::as_str)
+        ),
+        json_str_array(
+            request
+                .agent_team_plan
+                .isolation
+                .denied_capabilities
+                .iter()
+                .map(String::as_str)
+        ),
+        json_str_array(agent_team_messages.iter().map(String::as_str)),
+        json_str_array(agent_team_conflicts.iter().map(String::as_str)),
+        json_str_array(agent_team_evolution.iter().map(String::as_str)),
         runtime_adapter_observations
     )
 }
@@ -1045,6 +1167,25 @@ fn runtime_adapter_observation_json(observation: &RuntimeAdapterObservation) -> 
         option_f32_json(observation.forward_energy),
         option_f32_json(observation.kv_influence),
         observation.experience_id
+    )
+}
+
+fn tool_blueprint_json(blueprint: &ToolBlueprint) -> String {
+    format!(
+        "{{\"id\":{},\"name\":{},\"intent\":{},\"trigger\":{},\"rust_crate\":{},\"entrypoint\":{},\"status\":{},\"allowed_io\":{},\"denied_capabilities\":{},\"build_steps\":{},\"validation_steps\":{},\"source_outline\":{},\"gate_notes\":{}}}",
+        json_string(&blueprint.id),
+        json_string(&blueprint.name),
+        json_string(blueprint.intent.as_str()),
+        json_string(&blueprint.trigger),
+        json_string(&blueprint.rust_crate),
+        json_string(&blueprint.entrypoint),
+        json_string(blueprint.status.as_str()),
+        json_str_array(blueprint.allowed_io.iter().map(String::as_str)),
+        json_str_array(blueprint.denied_capabilities.iter().map(String::as_str)),
+        json_str_array(blueprint.build_steps.iter().map(String::as_str)),
+        json_str_array(blueprint.validation_steps.iter().map(String::as_str)),
+        json_str_array(blueprint.source_outline.iter().map(String::as_str)),
+        json_str_array(blueprint.gate_notes.iter().map(String::as_str))
     )
 }
 
@@ -1278,6 +1419,18 @@ fn bullet_runtime_adapter_observations(items: &[RuntimeAdapterObservation]) -> S
         .join("\n")
 }
 
+fn bullet_tool_blueprints(items: &[ToolBlueprint]) -> String {
+    if items.is_empty() {
+        return "- none".to_owned();
+    }
+
+    items
+        .iter()
+        .map(|item| format!("- {}", item.summary()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn parse_runtime_adapter_hint(value: &str) -> Option<RuntimeAdapterHint> {
     match value {
         "portable-rust" => Some(RuntimeAdapterHint::PortableRust),
@@ -1357,7 +1510,8 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
         let runtime_metadata = self.runtime.metadata();
         let runtime_architecture = self.runtime.architecture();
-        let import_blocks = runtime_kv_blocks_from_context(&context, &runtime_metadata);
+        let import_blocks =
+            runtime_kv_blocks_from_context(&context, &runtime_metadata, runtime_architecture);
         let imported_kv_blocks = if runtime_metadata.supports_kv_import && !import_blocks.is_empty()
         {
             match self.runtime.import_kv(&import_blocks) {
@@ -1472,6 +1626,7 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
 fn runtime_kv_blocks_from_context(
     context: &GenerationContext<'_>,
     metadata: &RuntimeMetadata,
+    architecture: TransformerRuntimeArchitecture,
 ) -> Vec<RuntimeKvBlock> {
     if !metadata.supports_kv_import {
         return Vec::new();
@@ -1516,7 +1671,16 @@ fn runtime_kv_blocks_from_context(
                 .collect::<Vec<_>>();
             let value = fit_runtime_vector(&weighted, dimensions);
 
-            RuntimeKvBlock::new(0, index, index, index + 1, key, value)
+            let kv_heads = architecture.kv_heads.max(1);
+            let layer_count = architecture.layer_count.max(1);
+            RuntimeKvBlock::new(
+                (index / kv_heads) % layer_count,
+                index % kv_heads,
+                index,
+                index + 1,
+                key,
+                value,
+            )
         })
         .collect()
 }
@@ -1626,7 +1790,18 @@ mod tests {
     use crate::infini_memory::{InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryScope};
     use crate::kv_cache::MemoryMatch;
     use crate::tiered_cache::TieredCachePlan;
+    use crate::toolsmith::ToolsmithPlan;
     use crate::transformer::TransformerRefactorPlan;
+
+    fn default_agent_team_plan() -> &'static AgentTeamPlan {
+        static PLAN: std::sync::OnceLock<AgentTeamPlan> = std::sync::OnceLock::new();
+        PLAN.get_or_init(AgentTeamPlan::default)
+    }
+
+    fn default_toolsmith_plan() -> &'static ToolsmithPlan {
+        static PLAN: std::sync::OnceLock<ToolsmithPlan> = std::sync::OnceLock::new();
+        PLAN.get_or_init(ToolsmithPlan::default)
+    }
 
     #[derive(Debug, Default, Clone)]
     struct MockRuntime {
@@ -1685,6 +1860,8 @@ mod tests {
             recursive_schedule,
             hardware_plan,
             experiences,
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
             transformer_plan,
         }
     }
@@ -1747,6 +1924,8 @@ mod tests {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &experiences,
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
             transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(MockRuntime::default()).with_max_tokens(128);
@@ -1847,6 +2026,7 @@ mod tests {
     #[derive(Debug, Default, Clone)]
     struct SelfDevelopedRuntime {
         imported_blocks: usize,
+        imported_heads: Vec<usize>,
     }
 
     impl ModelRuntime for SelfDevelopedRuntime {
@@ -1873,6 +2053,8 @@ mod tests {
 
         fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
             self.imported_blocks += blocks.len();
+            self.imported_heads
+                .extend(blocks.iter().map(|block| block.head));
             Ok(blocks.len())
         }
 
@@ -2048,6 +2230,8 @@ mod tests {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
             transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
@@ -2055,6 +2239,7 @@ mod tests {
         let draft = backend.generate(context);
 
         assert_eq!(backend.runtime().imported_blocks, 1);
+        assert_eq!(backend.runtime().imported_heads, vec![0]);
         assert_eq!(draft.exported_kv_blocks.len(), 1);
         assert!(
             draft
@@ -2068,6 +2253,51 @@ mod tests {
                 .iter()
                 .any(|step| step.label == "runtime_kv_export")
         );
+    }
+
+    #[test]
+    fn runtime_backend_bounds_imported_kv_heads_to_runtime_architecture() {
+        let memories = (0..6)
+            .map(|index| MemoryMatch {
+                id: 100 + index,
+                key: format!("hot runtime memory {index}"),
+                similarity: 0.95,
+                strength: 1.10,
+                vector: vec![0.1 + index as f32, 0.2, 0.3],
+            })
+            .collect::<Vec<_>>();
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let mut hardware_plan = HardwarePlan::default();
+        hardware_plan.execution.kv_prefetch_blocks = 6;
+        let context = GenerationContext {
+            prompt: "bound runtime kv heads",
+            profile: TaskProfile::Coding,
+            memories: &memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+        let _draft = backend.generate(context);
+
+        assert_eq!(backend.runtime().imported_blocks, 6);
+        assert_eq!(backend.runtime().imported_heads, vec![0, 1, 2, 3, 0, 1]);
     }
 
     #[test]
@@ -2110,6 +2340,8 @@ mod tests {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
             transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
@@ -2160,6 +2392,8 @@ mod tests {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
             transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(ManifestBoundRuntime::default());
@@ -2251,6 +2485,8 @@ mod tests {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
             transformer_plan: &transformer_plan,
         };
         let mut backend = RuntimeBackend::new(FailingRuntime);
@@ -2494,6 +2730,8 @@ mod tests {
                 Some(0.30),
                 9,
             )],
+            toolsmith_plan: ToolsmithPlan::default(),
+            agent_team_plan: AgentTeamPlan::default(),
             route_budget: RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 2,

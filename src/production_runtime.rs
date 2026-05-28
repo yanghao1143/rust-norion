@@ -262,7 +262,8 @@ impl ModelRuntime for ProductionTransformerRuntime {
             .kv_policy
             .max_import_blocks
             .min(self.device_gate.kv_prefetch_blocks);
-        self.imported_kv_blocks = blocks.iter().take(max_blocks).cloned().collect();
+        self.imported_kv_blocks.clear();
+        self.imported_kv_blocks = validate_imported_kv_blocks(blocks, max_blocks, &self.manifest)?;
 
         Ok(self.imported_kv_blocks.len())
     }
@@ -318,6 +319,27 @@ impl ModelRuntime for ProductionTransformerRuntime {
     }
 }
 
+fn validate_imported_kv_blocks(
+    blocks: &[RuntimeKvBlock],
+    max_blocks: usize,
+    manifest: &RuntimeManifest,
+) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+    let mut accepted = Vec::new();
+    for (index, block) in blocks.iter().take(max_blocks).enumerate() {
+        validate_kv_block(
+            index,
+            block,
+            manifest,
+            manifest.metadata.native_context_window,
+            "imported",
+            "control plane supplied invalid imported KV block",
+        )?;
+        accepted.push(block.clone());
+    }
+
+    Ok(accepted)
+}
+
 fn validate_exported_kv_blocks(
     blocks: Vec<RuntimeKvBlock>,
     manifest: &RuntimeManifest,
@@ -335,44 +357,51 @@ fn validate_exported_kv_blocks(
         )));
     }
 
-    let mut accepted = Vec::new();
-    for (index, block) in blocks
-        .into_iter()
-        .take(manifest.kv_policy.max_export_blocks)
-        .enumerate()
-    {
-        validate_exported_kv_block(index, &block, manifest, request)?;
-        accepted.push(block);
-    }
-
-    Ok(accepted)
-}
-
-fn validate_exported_kv_block(
-    index: usize,
-    block: &RuntimeKvBlock,
-    manifest: &RuntimeManifest,
-    request: &RuntimeRequest,
-) -> Result<(), RuntimeError> {
-    let architecture = manifest.architecture;
     let token_upper_bound = manifest
         .metadata
         .native_context_window
         .max(request.runtime_metadata.native_context_window)
         .max(request.recursive_schedule.prompt_tokens)
         .saturating_add(request.max_tokens.max(1));
+    let mut accepted = Vec::new();
+    for (index, block) in blocks
+        .into_iter()
+        .take(manifest.kv_policy.max_export_blocks)
+        .enumerate()
+    {
+        validate_kv_block(
+            index,
+            &block,
+            manifest,
+            token_upper_bound,
+            "exported",
+            "production kernel returned invalid exported KV block",
+        )?;
+        accepted.push(block);
+    }
 
+    Ok(accepted)
+}
+
+fn validate_kv_block(
+    index: usize,
+    block: &RuntimeKvBlock,
+    manifest: &RuntimeManifest,
+    token_upper_bound: usize,
+    direction: &str,
+    prefix: &str,
+) -> Result<(), RuntimeError> {
+    let architecture = manifest.architecture;
     let token_span = block.token_end.saturating_sub(block.token_start).max(1);
     let per_token_vector_bound = architecture
         .hidden_size
         .max(manifest.metadata.embedding_dimensions)
-        .max(request.runtime_metadata.embedding_dimensions)
         .max(1);
     let vector_bound = per_token_vector_bound.saturating_mul(token_span);
 
     let error = |reason: String| {
         RuntimeError::new(format!(
-            "production kernel returned invalid exported KV block {index} for model_id={}: {reason}",
+            "{prefix} {index} for model_id={}: {reason}",
             manifest.metadata.model_id
         ))
     };
@@ -397,7 +426,7 @@ fn validate_exported_kv_block(
     }
     if block.token_end > token_upper_bound {
         return Err(error(format!(
-            "token_end {} exceeds request-local KV bound {}",
+            "token_end {} exceeds KV token bound {}",
             block.token_end, token_upper_bound
         )));
     }
@@ -421,10 +450,12 @@ fn validate_exported_kv_block(
         )));
     }
     if !block.key.iter().all(|value| value.is_finite()) {
-        return Err(error("key contains non-finite value".to_owned()));
+        return Err(error(format!("{direction} key contains non-finite value")));
     }
     if !block.value.iter().all(|value| value.is_finite()) {
-        return Err(error("value contains non-finite value".to_owned()));
+        return Err(error(format!(
+            "{direction} value contains non-finite value"
+        )));
     }
 
     Ok(())
@@ -653,6 +684,68 @@ mod tests {
     }
 
     #[test]
+    fn production_runtime_rejects_invalid_imported_kv() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-invalid-import-kv");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let mut runtime =
+            ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan()).unwrap();
+
+        runtime
+            .import_kv(&[RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2])])
+            .unwrap();
+        assert_eq!(runtime.imported_kv_blocks().len(), 1);
+
+        let cases = vec![
+            (
+                "layer",
+                RuntimeKvBlock::new(6, 0, 0, 1, vec![0.1], vec![0.2]),
+                "layer 6 exceeds manifest layer_count 6",
+            ),
+            (
+                "head",
+                RuntimeKvBlock::new(0, 2, 0, 1, vec![0.1], vec![0.2]),
+                "head 2 exceeds manifest kv_heads 2",
+            ),
+            (
+                "range",
+                RuntimeKvBlock::new(0, 0, 2, 2, vec![0.1], vec![0.2]),
+                "token range 2..2 is empty or reversed",
+            ),
+            (
+                "dimension",
+                RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2, 0.3]),
+                "key/value dimensions differ",
+            ),
+            (
+                "finite",
+                RuntimeKvBlock::new(0, 0, 0, 1, vec![f32::NAN], vec![0.2]),
+                "imported key contains non-finite value",
+            ),
+        ];
+
+        for (label, block, expected) in cases {
+            let mut invalid_runtime = runtime.clone();
+
+            let error = invalid_runtime.import_kv(&[block]).unwrap_err();
+
+            assert!(
+                error.message().contains("invalid imported KV block 0"),
+                "{label}: {}",
+                error.message()
+            );
+            assert!(
+                error.message().contains(expected),
+                "{label}: {}",
+                error.message()
+            );
+            assert!(invalid_runtime.imported_kv_blocks().is_empty(), "{label}");
+        }
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
     fn production_runtime_generate_errors_until_forward_kernel_is_connected() {
         let (asset_dir, weights, tokenizer, _config) = create_assets("production-runtime-generate");
         let manifest = production_manifest(&weights, &tokenizer);
@@ -807,6 +900,8 @@ mod tests {
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
             runtime_adapter_observations: Vec::new(),
+            toolsmith_plan: crate::toolsmith::ToolsmithPlan::default(),
+            agent_team_plan: crate::agent_team::AgentTeamPlan::default(),
             route_budget: crate::router::RouteBudget {
                 threshold: 0.5,
                 attention_tokens: 1,

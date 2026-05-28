@@ -1,4 +1,5 @@
 pub mod adaptive_state;
+pub mod agent_team;
 pub mod benchmark;
 pub mod disk_kv;
 pub mod drift;
@@ -23,10 +24,15 @@ pub mod runtime_manifest;
 pub mod state_inspect;
 pub mod tiered_cache;
 pub mod token_stream;
+pub mod toolsmith;
 pub mod trace;
 pub mod transformer;
 
 pub use adaptive_state::AdaptiveState;
+pub use agent_team::{
+    AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
+    AgentNode, AgentRole, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,
+};
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport, BenchmarkSummary,
     KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
@@ -101,6 +107,9 @@ pub use tiered_cache::{
     TieredCacheScheduler,
 };
 pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};
+pub use toolsmith::{
+    ToolBlueprint, ToolBuildStatus, ToolIntent, ToolsmithInput, ToolsmithPlan, ToolsmithPlanner,
+};
 pub use trace::{
     TraceSchemaGateReport, append_trace_jsonl, append_trace_jsonl_with_case,
     evaluate_trace_schema_jsonl, evaluate_trace_schema_line, trace_json_line,

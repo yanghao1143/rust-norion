@@ -139,6 +139,42 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"transformer\":{",
     },
     TraceRequiredField {
+        name: "toolsmith",
+        marker: "\"toolsmith\":{",
+    },
+    TraceRequiredField {
+        name: "toolsmith_blueprints",
+        marker: "\"blueprint_summaries\":",
+    },
+    TraceRequiredField {
+        name: "toolsmith_gate",
+        marker: "\"gate_passed\":",
+    },
+    TraceRequiredField {
+        name: "agent_team",
+        marker: "\"agent_team\":{",
+    },
+    TraceRequiredField {
+        name: "agent_team_isolation",
+        marker: "\"isolation\":{",
+    },
+    TraceRequiredField {
+        name: "agent_team_messages",
+        marker: "\"messages\":",
+    },
+    TraceRequiredField {
+        name: "agent_team_conflicts",
+        marker: "\"conflicts\":",
+    },
+    TraceRequiredField {
+        name: "agent_team_evolution",
+        marker: "\"evolution_signals\":",
+    },
+    TraceRequiredField {
+        name: "agent_team_collision_free",
+        marker: "\"collision_free\":",
+    },
+    TraceRequiredField {
         name: "memory",
         marker: "\"memory\":{",
     },
@@ -280,6 +316,15 @@ pub fn trace_json_line_with_case(
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = outcome.auto_replay_report.as_ref();
     let best_adapter_observation = outcome.runtime_adapter_observations.first();
+    let toolsmith_blueprints = outcome
+        .toolsmith_plan
+        .blueprints
+        .iter()
+        .map(|blueprint| blueprint.summary())
+        .collect::<Vec<_>>();
+    let agent_team_messages = outcome.agent_team_plan.message_summaries(16);
+    let agent_team_conflicts = outcome.agent_team_plan.conflict_summaries(8);
+    let agent_team_evolution = outcome.agent_team_plan.evolution_summaries(8);
 
     format!(
         "{{\
@@ -303,6 +348,8 @@ pub fn trace_json_line_with_case(
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
+         \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
+         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
@@ -401,6 +448,34 @@ pub fn trace_json_line_with_case(
         transformer_counts.global,
         transformer_counts.local,
         transformer_counts.convolution,
+        outcome.toolsmith_plan.rust_only,
+        outcome.toolsmith_plan.exploration_required,
+        outcome.toolsmith_plan.blueprint_count(),
+        outcome.toolsmith_plan.ready_count(),
+        outcome.toolsmith_plan.held_count(),
+        outcome.toolsmith_plan.rejected_count(),
+        outcome.toolsmith_plan.passed_rust_gate(),
+        string_array_json(&outcome.toolsmith_plan.notes),
+        string_array_json(&outcome.toolsmith_plan.rejected_requests),
+        string_array_json(&toolsmith_blueprints),
+        outcome.agent_team_plan.enabled,
+        json_escape(&outcome.agent_team_plan.summary()),
+        json_escape(&outcome.agent_team_plan.run_id),
+        json_escape(&outcome.agent_team_plan.main_thread_goal),
+        outcome.agent_team_plan.active_agent_count(),
+        outcome.agent_team_plan.message_count(),
+        outcome.agent_team_plan.conflict_count(),
+        outcome.agent_team_plan.unresolved_conflict_count(),
+        outcome.agent_team_plan.evolution_signal_count(),
+        outcome.agent_team_plan.collision_free(),
+        outcome.agent_team_plan.isolation.single_writer,
+        outcome.agent_team_plan.isolation.read_only_subagents,
+        json_escape(&outcome.agent_team_plan.isolation.namespace),
+        string_array_json(&outcome.agent_team_plan.isolation.allowed_outputs),
+        string_array_json(&outcome.agent_team_plan.isolation.denied_capabilities),
+        string_array_json(&agent_team_messages),
+        string_array_json(&agent_team_conflicts),
+        string_array_json(&agent_team_evolution),
         outcome.stream_reports.len(),
         outcome.used_memories.len(),
         option_u64_json(outcome.stored_memory_id),
@@ -596,6 +671,11 @@ mod tests {
         assert!(line.contains("\"runtime_calls\":"));
         assert!(line.contains("\"max_parallel_chunks\":"));
         assert!(line.contains("\"template\":\"coding_local\""));
+        assert!(line.contains("\"toolsmith\":"));
+        assert!(line.contains("\"blueprint_summaries\":"));
+        assert!(line.contains("\"gate_passed\":"));
+        assert!(line.contains("\"agent_team\":"));
+        assert!(line.contains("\"collision_free\":"));
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"auto_replay\":"));

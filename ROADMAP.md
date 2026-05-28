@@ -79,8 +79,8 @@ The north star is now explicitly scoped around five core requirements:
 2. `rust-norion` control plane / 控制平面
    Multi-factor router, hierarchy controller, recursive scheduler,
    Hot/Warm/Cold cache scheduler, sparse KV filter, reflection loop, RLVR-style
-   process rewards, drift guard, experience replay, and persisted adaptive
-   state.
+   process rewards, drift guard, Rust-only Toolsmith planning, read-only Agent
+   Team coordination, experience replay, and persisted adaptive state.
 
 3. Memory system / 记忆系统
    Infini-attention-style global/local KV split, hierarchical gist memory,
@@ -197,6 +197,13 @@ The north star is now explicitly scoped around five core requirements:
     only adapters supported by both manifest and device execution plan, and fail
     when KV prefetch or hot/cold precision requirements exceed manifest bounds.
 
+14. Rust-only Toolsmith and read-only Agent Team / Rust-only 工具匠与只读 Agent Team
+    When the control loop needs new local helper capabilities, it can plan
+    small Rust-only tool blueprints with explicit build and validation gates.
+    Agent-style decomposition stays read-only: sub-agents write structured
+    messages, risks, gates, and evolution hints into a blackboard, while the
+    main thread remains the only writer to code, memory, and adaptive state.
+
 ## Target Module Fusion / 目标模块融合
 
 The following algorithmic ideas are merged into the project goal as owned local
@@ -278,6 +285,15 @@ modules, not external product dependencies:
   production manifests should be checked against the current target device plan,
   including the emitted `runtime_device_contract`, adapter intersection,
   KV-import prefetch budget, and hot/cold KV precision bounds.
+- Rust-only Toolsmith:
+  `toolsmith.rs` should propose local helper-tool blueprints only as Rust
+  source with explicit build/validation steps, reject non-Rust tool requests,
+  and carry bounded summaries into runtime requests, traces, and reward notes.
+- Read-only Agent Team:
+  `agent_team.rs` should decompose complex local work into read-only lanes with
+  single-writer isolation, conflict summaries, collision-free gates, and
+  bounded evolution signals. Sub-agents can inform the control plane but cannot
+  directly mutate code, memory, or adaptive state.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -445,7 +461,13 @@ These are algorithmic references, not product dependencies:
   uncertainty, trace, diagnostics, and exported KV blocks; exported KV from
   production kernels is now ABI-validated for manifest layer/head bounds,
   request/recursive token ranges, non-empty matching key/value dimensions, and
-  finite float values before it can reach `RuntimeBackend`; the CLI can now
+  finite float values before it can reach `RuntimeBackend`; imported KV from
+  the Noiron control plane is now validated before a production runtime accepts
+  it, and `RuntimeBackend` maps imported KV memory blocks onto manifest-bounded
+  layer/head ids instead of assuming unbounded heads; Rust-only Toolsmith
+  planning and read-only Agent Team coordination now flow through engine
+  outcomes, runtime requests, JSON traces, and process reward notes so local
+  capability growth remains traceable and gated; the CLI can now
   select that boundary with `--production-runtime` for normal inference and
   benchmark runs)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
@@ -456,7 +478,7 @@ These are algorithmic references, not product dependencies:
 - The default build can run without external model weights or closed services.
 - Every control decision can be traced: route, memory, hierarchy, reflection,
   drift, reward, device-derived hardware KV budgets, effective memory policies,
-  and adaptive-state update.
+  Toolsmith planning, Agent Team coordination, and adaptive-state update.
 - Runtime token uncertainty is part of the control feedback loop: token
   entropy/logprob can raise generation perplexity and influence drift, reward,
   routing, hierarchy, and experience updates; trace JSONL now emits the
@@ -505,6 +527,15 @@ These are algorithmic references, not product dependencies:
   layer/head ids, token ranges, empty vectors, mismatched key/value dimensions,
   oversized vectors, or non-finite values must fail before any long-term memory
   admission path can see the blocks.
+- Production runtime imported KV cannot bypass the same boundary: invalid
+  control-plane KV imports must clear the pending import set and fail before a
+  production kernel receives them.
+- Runtime-generated KV import blocks are bounded by the target Transformer
+  architecture layer/head shape, so active memory import cannot create
+  out-of-manifest heads on self-developed runtimes.
+- Toolsmith and Agent Team control surfaces stay local and constrained:
+  Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
+  read-only with single-writer isolation and trace/reward visibility.
 - The CLI can execute the production runtime boundary through
   `--production-runtime`, so production manifest/device failures and the
   kernel-not-connected state are observable in the same control loop used by

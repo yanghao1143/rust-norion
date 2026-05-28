@@ -322,6 +322,7 @@ fn main() -> std::io::Result<()> {
         transformer_counts.local,
         transformer_counts.convolution
     );
+    println!("agent_team: {}", outcome.agent_team_plan.summary());
     println!("stream_windows={}", outcome.stream_reports.len());
     println!(
         "memory: used={} stored={:?} experience_used={} experience={}",
