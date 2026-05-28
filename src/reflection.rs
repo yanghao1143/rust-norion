@@ -42,6 +42,7 @@ pub struct InferenceDraft {
     pub trace: Vec<ReasoningStep>,
     pub tokens: Vec<DraftToken>,
     pub exported_kv_blocks: Vec<RuntimeKvBlock>,
+    pub runtime_diagnostics: RuntimeDiagnostics,
 }
 
 impl InferenceDraft {
@@ -51,6 +52,7 @@ impl InferenceDraft {
             trace,
             tokens: Vec::new(),
             exported_kv_blocks: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
         }
     }
 
@@ -62,6 +64,50 @@ impl InferenceDraft {
     pub fn with_exported_kv_blocks(mut self, blocks: Vec<RuntimeKvBlock>) -> Self {
         self.exported_kv_blocks = blocks;
         self
+    }
+
+    pub fn with_runtime_diagnostics(mut self, diagnostics: RuntimeDiagnostics) -> Self {
+        self.runtime_diagnostics = diagnostics;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeDiagnostics {
+    pub model_id: Option<String>,
+    pub selected_adapter: Option<String>,
+    pub layer_count: usize,
+    pub hidden_size: usize,
+    pub local_window_tokens: usize,
+    pub forward_energy: Option<f32>,
+    pub kv_influence: Option<f32>,
+    pub imported_kv_blocks: usize,
+    pub exported_kv_blocks: usize,
+}
+
+impl RuntimeDiagnostics {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn has_forward_signal(&self) -> bool {
+        self.layer_count > 0 || self.forward_energy.is_some() || self.kv_influence.is_some()
+    }
+}
+
+impl Default for RuntimeDiagnostics {
+    fn default() -> Self {
+        Self {
+            model_id: None,
+            selected_adapter: None,
+            layer_count: 0,
+            hidden_size: 0,
+            local_window_tokens: 0,
+            forward_energy: None,
+            kv_influence: None,
+            imported_kv_blocks: 0,
+            exported_kv_blocks: 0,
+        }
     }
 }
 

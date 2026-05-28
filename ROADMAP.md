@@ -391,7 +391,10 @@ These are algorithmic references, not product dependencies:
   metadata; `RuntimeManifest` now captures self-developed model metadata,
   Transformer shape, local asset paths, KV import/export limits, quantization
   policy, supported devices, and adapter hints so future runtime versions can
-  be validated before production kernels are loaded)
+  be validated before production kernels are loaded; runtime responses can now
+  carry structured forward diagnostics, and trace JSONL records model id,
+  selected adapter, executed layers, hidden size, local window, forward energy,
+  KV influence, and runtime KV import/export counts)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -406,6 +409,10 @@ These are algorithmic references, not product dependencies:
   routing, hierarchy, and experience updates; trace JSONL now emits the
   aggregate runtime token counts, average entropy, average negative logprob, and
   derived uncertainty perplexity, and the schema gate requires that block.
+- Runtime forward diagnostics are observable: local and command runtimes can
+  report model id, selected adapter, executed layer count, hidden size, local
+  window, forward energy, KV influence, and runtime KV exchange counters, and
+  the trace schema gate requires the diagnostics block.
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate

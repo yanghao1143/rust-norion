@@ -1,6 +1,7 @@
 use crate::engine::{InferenceRequest, NoironEngine};
 use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::RuntimeKvBlock;
+use crate::reflection::RuntimeDiagnostics;
 use crate::runtime::{
     ModelRuntime, RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
     RuntimeResponse, RuntimeToken, RuntimeTokenId,
@@ -148,6 +149,10 @@ impl ModelRuntime for LocalTransformerRuntime {
             TaskProfile::Writing => "global continuity and style preservation",
             TaskProfile::LongDocument => "convolutional compression plus global memory recall",
         };
+        let selected_adapter = self
+            .manifest
+            .preferred_adapter_for(&request.hardware_plan.execution)
+            .map(|adapter| adapter.as_str().to_owned());
         let answer = format!(
             "Local Transformer runtime result for '{}'. The self-developed runtime used manifest {}, {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It executed {} deterministic Transformer layers with state energy {:.3} and KV influence {:.3}: {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
             compact(&request.prompt, 96),
@@ -166,7 +171,18 @@ impl ModelRuntime for LocalTransformerRuntime {
             request.hardware_plan.execution.memory_mode.as_str(),
             request.hardware_plan.execution.fallback_lane.as_str(),
         );
-        let mut response = RuntimeResponse::new(answer.clone());
+        let mut response =
+            RuntimeResponse::new(answer.clone()).with_diagnostics(RuntimeDiagnostics {
+                model_id: Some(self.manifest.metadata.model_id.clone()),
+                selected_adapter: selected_adapter.clone(),
+                layer_count: forward.layer_summaries.len(),
+                hidden_size: self.manifest.architecture.hidden_size,
+                local_window_tokens: self.manifest.architecture.local_window_tokens,
+                forward_energy: Some(forward.energy),
+                kv_influence: Some(forward.kv_influence),
+                imported_kv_blocks: self.imported_kv_blocks.len(),
+                exported_kv_blocks: self.exported_kv_blocks.len(),
+            });
         response.tokens = answer
             .split_whitespace()
             .map(|text| RuntimeToken {
@@ -209,8 +225,7 @@ impl ModelRuntime for LocalTransformerRuntime {
                     request.hardware_plan.execution.primary_lane.as_str(),
                     request.hardware_plan.execution.fallback_lane.as_str(),
                     request.hardware_plan.execution.memory_mode.as_str(),
-                    self.manifest
-                        .preferred_adapter_for(&request.hardware_plan.execution)
+                    selected_adapter
                 ),
                 0.80,
             ),
@@ -644,6 +659,15 @@ mod tests {
         let exported = runtime.export_kv().unwrap();
 
         assert!(response.answer.contains("manifest noiron-v2-transformer"));
+        assert_eq!(
+            response.diagnostics.model_id.as_deref(),
+            Some("noiron-v2-transformer")
+        );
+        assert_eq!(response.diagnostics.layer_count, 6);
+        assert_eq!(response.diagnostics.hidden_size, 48);
+        assert_eq!(response.diagnostics.local_window_tokens, 16_384);
+        assert!(response.diagnostics.forward_energy.unwrap() > 0.0);
+        assert!(response.diagnostics.has_forward_signal());
         assert!(exported.len() <= 2);
     }
 
@@ -756,6 +780,11 @@ mod tests {
 
         assert!(outcome.answer.contains("Local Transformer runtime"));
         assert!(outcome.exported_runtime_kv_blocks > 0);
+        assert!(outcome.runtime_diagnostics.has_forward_signal());
+        assert_eq!(
+            outcome.runtime_diagnostics.model_id.as_deref(),
+            Some("noiron-local-transformer")
+        );
         assert!(!outcome.stored_runtime_kv_memory_ids.is_empty());
     }
 

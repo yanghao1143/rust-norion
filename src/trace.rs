@@ -59,6 +59,18 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"runtime_tokens\":{",
     },
     TraceRequiredField {
+        name: "runtime_diagnostics",
+        marker: "\"runtime_diagnostics\":{",
+    },
+    TraceRequiredField {
+        name: "forward_energy",
+        marker: "\"forward_energy\":",
+    },
+    TraceRequiredField {
+        name: "kv_influence",
+        marker: "\"kv_influence\":",
+    },
+    TraceRequiredField {
         name: "uncertainty_perplexity",
         marker: "\"uncertainty_perplexity\":",
     },
@@ -250,6 +262,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"layer_count\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
@@ -290,6 +303,16 @@ pub fn trace_json_line_with_case(
         option_f32_json(outcome.runtime_token_metrics.average_neg_logprob),
         option_f32_json(outcome.runtime_token_metrics.uncertainty_perplexity),
         outcome.runtime_token_metrics.has_uncertainty_signal(),
+        option_owned_string_json(outcome.runtime_diagnostics.model_id.as_deref()),
+        option_owned_string_json(outcome.runtime_diagnostics.selected_adapter.as_deref()),
+        outcome.runtime_diagnostics.layer_count,
+        outcome.runtime_diagnostics.hidden_size,
+        outcome.runtime_diagnostics.local_window_tokens,
+        option_f32_json(outcome.runtime_diagnostics.forward_energy),
+        option_f32_json(outcome.runtime_diagnostics.kv_influence),
+        outcome.runtime_diagnostics.imported_kv_blocks,
+        outcome.runtime_diagnostics.exported_kv_blocks,
+        outcome.runtime_diagnostics.has_forward_signal(),
         outcome.hierarchy.global,
         outcome.hierarchy.local,
         outcome.hierarchy.convolution,
@@ -426,6 +449,10 @@ fn option_string_json(value: Option<&str>) -> String {
         .unwrap_or_else(|| "null".to_owned())
 }
 
+fn option_owned_string_json(value: Option<&str>) -> String {
+    option_string_json(value)
+}
+
 fn string_array_json(items: &[String]) -> String {
     let values = items
         .iter()
@@ -491,6 +518,10 @@ mod tests {
         assert!(line.contains("\"average_entropy\":"));
         assert!(line.contains("\"average_neg_logprob\":"));
         assert!(line.contains("\"uncertainty_perplexity\":"));
+        assert!(line.contains("\"runtime_diagnostics\":"));
+        assert!(line.contains("\"forward_energy\":"));
+        assert!(line.contains("\"kv_influence\":"));
+        assert!(line.contains("\"has_forward_signal\":"));
         assert!(line.contains("\"hierarchy\":"));
         assert!(line.contains("\"primary_lane\":"));
         assert!(line.contains("\"adapter_hints\":"));

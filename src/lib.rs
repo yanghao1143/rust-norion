@@ -69,7 +69,9 @@ pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,
     RecursiveScheduler,
 };
-pub use reflection::{DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
+pub use reflection::{
+    DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector, RuntimeDiagnostics,
+};
 pub use router::{
     GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds, Route, RouteBudget,
     RouterState, RoutingContext, RoutingDecision,

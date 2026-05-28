@@ -9,7 +9,7 @@ use crate::hardware::HardwarePlan;
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::recursive_scheduler::RecursiveSchedule;
-use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
+use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 use crate::router::RouteBudget;
 use crate::tiered_cache::MemoryTier;
 use crate::transformer::{AttentionKind, TransformerRefactorPlan};
@@ -211,6 +211,7 @@ pub struct RuntimeResponse {
     pub answer: String,
     pub tokens: Vec<RuntimeToken>,
     pub trace: Vec<ReasoningStep>,
+    pub diagnostics: RuntimeDiagnostics,
 }
 
 impl RuntimeResponse {
@@ -219,7 +220,13 @@ impl RuntimeResponse {
             answer: answer.into(),
             tokens: Vec::new(),
             trace: Vec::new(),
+            diagnostics: RuntimeDiagnostics::default(),
         }
+    }
+
+    pub fn with_diagnostics(mut self, diagnostics: RuntimeDiagnostics) -> Self {
+        self.diagnostics = diagnostics;
+        self
     }
 }
 
@@ -713,7 +720,24 @@ pub fn parse_runtime_response_json(payload: &str) -> Result<RuntimeResponse, Run
             )
         })
         .collect();
+    response.diagnostics = extract_json_object_field(payload, "diagnostics")
+        .map(parse_runtime_diagnostics)
+        .unwrap_or_default();
     Ok(response)
+}
+
+fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
+    RuntimeDiagnostics {
+        model_id: extract_json_string_field(payload, "model_id"),
+        selected_adapter: extract_json_string_field(payload, "selected_adapter"),
+        layer_count: extract_json_usize_field(payload, "layer_count").unwrap_or(0),
+        hidden_size: extract_json_usize_field(payload, "hidden_size").unwrap_or(0),
+        local_window_tokens: extract_json_usize_field(payload, "local_window_tokens").unwrap_or(0),
+        forward_energy: extract_json_finite_number_field(payload, "forward_energy"),
+        kv_influence: extract_json_finite_number_field(payload, "kv_influence"),
+        imported_kv_blocks: extract_json_usize_field(payload, "imported_kv_blocks").unwrap_or(0),
+        exported_kv_blocks: extract_json_usize_field(payload, "exported_kv_blocks").unwrap_or(0),
+    }
 }
 
 fn task_profile_str(profile: TaskProfile) -> &'static str {
@@ -779,8 +803,20 @@ fn extract_json_number_field(source: &str, field: &str) -> Option<f32> {
     extract_json_field(source, field).and_then(|value| value.trim().parse::<f32>().ok())
 }
 
+fn extract_json_finite_number_field(source: &str, field: &str) -> Option<f32> {
+    extract_json_number_field(source, field).filter(|value| value.is_finite())
+}
+
+fn extract_json_usize_field(source: &str, field: &str) -> Option<usize> {
+    extract_json_field(source, field).and_then(|value| value.trim().parse::<usize>().ok())
+}
+
 fn extract_json_array_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
     extract_json_field(source, field).filter(|value| value.trim_start().starts_with('['))
+}
+
+fn extract_json_object_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
+    extract_json_field(source, field).filter(|value| value.trim_start().starts_with('{'))
 }
 
 fn extract_json_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
@@ -1069,9 +1105,13 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                 } else {
                     Vec::new()
                 };
+                let mut diagnostics = response.diagnostics;
+                diagnostics.imported_kv_blocks = imported_kv_blocks;
+                diagnostics.exported_kv_blocks = exported_kv_blocks.len();
                 InferenceDraft::new(response.answer, trace)
                     .with_tokens(tokens)
                     .with_exported_kv_blocks(exported_kv_blocks)
+                    .with_runtime_diagnostics(diagnostics)
             }
             Err(error) => {
                 self.last_error = Some(error.clone());
@@ -1593,7 +1633,18 @@ mod tests {
             ],
             "trace": [
                 {"label": "runtime", "content": "generated with JSON ABI", "confidence": 0.91}
-            ]
+            ],
+            "diagnostics": {
+                "model_id": "json-self-runtime",
+                "selected_adapter": "portable-rust",
+                "layer_count": 24,
+                "hidden_size": 256,
+                "local_window_tokens": 4096,
+                "forward_energy": 0.42,
+                "kv_influence": 0.18,
+                "imported_kv_blocks": 2,
+                "exported_kv_blocks": 3
+            }
         }"#;
 
         let response = parse_runtime_response_json(payload).unwrap();
@@ -1604,6 +1655,21 @@ mod tests {
         assert_eq!(response.tokens[1].entropy, Some(0.4));
         assert_eq!(response.trace[0].label, "runtime");
         assert!((response.trace[0].confidence - 0.91).abs() < 0.0001);
+        assert_eq!(
+            response.diagnostics.model_id.as_deref(),
+            Some("json-self-runtime")
+        );
+        assert_eq!(
+            response.diagnostics.selected_adapter.as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(response.diagnostics.layer_count, 24);
+        assert_eq!(response.diagnostics.hidden_size, 256);
+        assert_eq!(response.diagnostics.local_window_tokens, 4096);
+        assert_eq!(response.diagnostics.forward_energy, Some(0.42));
+        assert_eq!(response.diagnostics.kv_influence, Some(0.18));
+        assert_eq!(response.diagnostics.imported_kv_blocks, 2);
+        assert_eq!(response.diagnostics.exported_kv_blocks, 3);
     }
 
     #[test]

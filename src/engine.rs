@@ -20,7 +20,9 @@ use crate::process_reward::{
     ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
-use crate::reflection::{InferenceDraft, ReasoningStep, ReflectionReport, Reflector};
+use crate::reflection::{
+    InferenceDraft, ReasoningStep, ReflectionReport, Reflector, RuntimeDiagnostics,
+};
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
 use crate::tiered_cache::{TierMigration, TieredCachePlan, TieredCacheScheduler};
 use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
@@ -75,6 +77,7 @@ pub struct InferenceOutcome {
     pub auto_replay_report: Option<ExperienceReplayReport>,
     pub metrics: GenerationMetrics,
     pub runtime_token_metrics: RuntimeTokenMetrics,
+    pub runtime_diagnostics: RuntimeDiagnostics,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
@@ -429,6 +432,7 @@ impl NoironEngine {
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
         let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
+        let runtime_diagnostics = draft.runtime_diagnostics.clone();
         let metrics = metrics_from_report(&draft, &report, route_budget, runtime_token_metrics);
         let gist_records =
             self.gist_generator
@@ -586,6 +590,7 @@ impl NoironEngine {
             auto_replay_report,
             metrics,
             runtime_token_metrics,
+            runtime_diagnostics,
             route_budget,
             hierarchy,
             tier_plan,

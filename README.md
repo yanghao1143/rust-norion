@@ -152,7 +152,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, hierarchy, KV, recursion, hardware execution and KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, hardware execution and KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -451,9 +451,14 @@ router/hierarchy adaptation, process reward scoring, and experience replay.
 The same aggregate token uncertainty is emitted in trace JSONL as
 `runtime_tokens`, including average entropy, average negative logprob, and the
 derived uncertainty perplexity.
+Runtime responses may also return structured `diagnostics` so local or command
+runtimes can expose model id, selected adapter, executed layer count, hidden
+size, local window, forward energy, KV influence, and KV import/export counts;
+the engine carries those fields into trace JSONL as `runtime_diagnostics`.
 
 当 runtime tokens 带有 `entropy` 或 `logprob` 时，引擎会把这些 token 级信号合入主生成 perplexity，并用于 drift 检查、router / hierarchy 自适应、process reward 评分和经验回放。
 同一组聚合后的 token 不确定性也会写入 trace JSONL 的 `runtime_tokens`，包括平均 entropy、平均负 logprob 与派生的 uncertainty perplexity。
+runtime response 也可以返回结构化 `diagnostics`，让本地或命令行 runtime 上报模型 ID、选中的 adapter、执行层数、hidden size、本地窗口、forward energy、KV influence 以及 KV 导入导出计数；engine 会把这些字段作为 `runtime_diagnostics` 写入 trace JSONL。
 
 Run through the built-in Rust-native local runtime prototype:
 
