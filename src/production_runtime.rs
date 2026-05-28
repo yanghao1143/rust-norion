@@ -41,6 +41,23 @@ impl RuntimeAssetSummary {
             config_path,
         })
     }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "weights={} weights_bytes={} tokenizer={} tokenizer_bytes={} config={} config_bytes={}",
+            self.weights_path.display(),
+            self.weights_bytes,
+            self.tokenizer_path.display(),
+            self.tokenizer_bytes,
+            self.config_path
+                .as_deref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "none".to_owned()),
+            self.config_bytes
+                .map(|bytes| bytes.to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

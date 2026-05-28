@@ -548,6 +548,25 @@ import/export, token trace, and generation.
 Transformer runtime 将要实现的同一套 ABI：tokenizer、embedding、原生上下文窗口、
 global/local/convolution 分层执行、导入 KV 对 forward 状态的影响、KV 导入/导出、token trace 和生成接口。
 
+Run through the manifest-backed production runtime boundary:
+
+```powershell
+cargo run -- --production-runtime --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu "Build a Rust Noiron production runtime boundary"
+```
+
+This path uses the real production gate and `RuntimeBackend` integration, then
+fails generation with a clear kernel-not-connected runtime error until a
+self-developed Transformer forward kernel is wired behind
+`ProductionTransformerRuntime`.
+
+通过 manifest-backed 生产 runtime 边界运行：
+
+```powershell
+cargo run -- --production-runtime --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu "Build a Rust Noiron production runtime boundary"
+```
+
+这条路径会使用真实生产门禁和 `RuntimeBackend` 集成；在真实自研 Transformer forward kernel 接到 `ProductionTransformerRuntime` 后面之前，生成阶段会明确返回 kernel-not-connected runtime error。
+
 By default, the demo writes local memory to `noiron-memory.ndkv`, structured
 reflection experience to `noiron-experience.ndkv`, and adaptive router/hierarchy
 state to `noiron-adaptive.ndkv`. These files are ignored by Git because they are
@@ -718,21 +737,24 @@ The CLI exposes this metadata through `--runtime-model-id`,
 `--runtime-kv-heads`, `--runtime-local-window`, `--runtime-weights`,
 `--runtime-tokenizer-path`, `--runtime-config`, and `--runtime-manifest-gate`
 turn the same metadata into an executable production manifest check before the
-runtime is used. The same explicit architecture flags also configure the
-built-in local runtime prototype. Runtime metadata and the structured JSON
-request ABI carry the effective Transformer layer/head/window shape, KV
-import/export block limits, and hot/cold KV precision, so an external
-self-developed runtime can enforce the same manifest policy the control plane
-validated. Command runtimes receive that architecture in both the text payload
-and `runtime_architecture` JSON object, and `{runtime_architecture}` can be used
-inside `--runtime-arg` templates. They also receive the device execution
-contract through `{runtime_device_contract}` so an external self-developed
-runtime can select CUDA, ROCm, Metal, WGPU, WebGPU, DirectML, CoreML, NNAPI,
-QNN, OpenVINO, CANN, MLU, RKNN, portable Rust, or custom adapters without a
-vendor-specific control path.
+runtime is used. `--production-runtime` uses the same manifest and current
+device plan to instantiate the manifest-backed production boundary. The same
+explicit architecture flags also configure the built-in local runtime
+prototype. Runtime metadata and the structured JSON request ABI carry the
+effective Transformer layer/head/window shape, KV import/export block limits,
+and hot/cold KV precision, so an external self-developed runtime can enforce
+the same manifest policy the control plane validated. Command runtimes receive
+that architecture in both the text payload and `runtime_architecture` JSON
+object, and `{runtime_architecture}` can be used inside `--runtime-arg`
+templates. They also receive the device execution contract through
+`{runtime_device_contract}` so an external self-developed runtime can select
+CUDA, ROCm, Metal, WGPU, WebGPU, DirectML, CoreML, NNAPI, QNN, OpenVINO, CANN,
+MLU, RKNN, portable Rust, or custom adapters without a vendor-specific control
+path.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
+`--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界。
 同一组显式架构参数也会配置内置 local runtime prototype。
 runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。
 

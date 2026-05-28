@@ -439,7 +439,9 @@ These are algorithmic references, not product dependencies:
   `ProductionTransformerRuntime` boundary now binds production manifests to
   existing local assets, the current device contract, adapter intersection,
   bootstrap tokenizer/embedding access, and bounded KV import while explicitly
-  failing generation until a real self-developed forward kernel is connected)
+  failing generation until a real self-developed forward kernel is connected;
+  the CLI can now select that boundary with `--production-runtime` for normal
+  inference and benchmark runs)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -489,6 +491,10 @@ These are algorithmic references, not product dependencies:
   constructed after manifest and device gates pass, it exposes selected adapter
   and runtime device contract state, and it refuses generation until a real
   self-developed forward kernel is wired behind it.
+- The CLI can execute the production runtime boundary through
+  `--production-runtime`, so production manifest/device failures and the
+  kernel-not-connected state are observable in the same control loop used by
+  local prototypes and command runtimes.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained
