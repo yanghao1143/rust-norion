@@ -1,9 +1,195 @@
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 
 use crate::engine::InferenceOutcome;
 use crate::hierarchy::TaskProfile;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceSchemaGateReport {
+    pub passed: bool,
+    pub checked_lines: usize,
+    pub failures: Vec<String>,
+}
+
+impl TraceSchemaGateReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "trace_schema_gate: passed={} lines={} failures={}",
+            self.passed,
+            self.checked_lines,
+            self.failures.len()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TraceRequiredField {
+    name: &'static str,
+    marker: &'static str,
+}
+
+const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
+    TraceRequiredField {
+        name: "schema",
+        marker: "\"schema\":\"rust-norion-trace-v1\"",
+    },
+    TraceRequiredField {
+        name: "case",
+        marker: "\"case\":",
+    },
+    TraceRequiredField {
+        name: "profile",
+        marker: "\"profile\":",
+    },
+    TraceRequiredField {
+        name: "reflection",
+        marker: "\"reflection\":{",
+    },
+    TraceRequiredField {
+        name: "revision_passes",
+        marker: "\"revision_passes\":",
+    },
+    TraceRequiredField {
+        name: "route",
+        marker: "\"route\":{",
+    },
+    TraceRequiredField {
+        name: "hierarchy",
+        marker: "\"hierarchy\":{",
+    },
+    TraceRequiredField {
+        name: "hardware",
+        marker: "\"hardware\":{",
+    },
+    TraceRequiredField {
+        name: "adapter_hints",
+        marker: "\"adapter_hints\":",
+    },
+    TraceRequiredField {
+        name: "recursive",
+        marker: "\"recursive\":{",
+    },
+    TraceRequiredField {
+        name: "execution_waves",
+        marker: "\"execution_waves\":",
+    },
+    TraceRequiredField {
+        name: "tiers",
+        marker: "\"tiers\":{",
+    },
+    TraceRequiredField {
+        name: "infini_memory",
+        marker: "\"infini_memory\":{",
+    },
+    TraceRequiredField {
+        name: "transformer",
+        marker: "\"transformer\":{",
+    },
+    TraceRequiredField {
+        name: "memory",
+        marker: "\"memory\":{",
+    },
+    TraceRequiredField {
+        name: "runtime_kv_exported",
+        marker: "\"runtime_kv_exported\":",
+    },
+    TraceRequiredField {
+        name: "runtime_kv_stored",
+        marker: "\"runtime_kv_stored\":",
+    },
+    TraceRequiredField {
+        name: "drift",
+        marker: "\"drift\":{",
+    },
+    TraceRequiredField {
+        name: "rollback_adaptive",
+        marker: "\"rollback_adaptive\":",
+    },
+    TraceRequiredField {
+        name: "process_reward",
+        marker: "\"process_reward\":{",
+    },
+    TraceRequiredField {
+        name: "auto_replay",
+        marker: "\"auto_replay\":{",
+    },
+    TraceRequiredField {
+        name: "retention",
+        marker: "\"retention\":{",
+    },
+    TraceRequiredField {
+        name: "remove_below_strength",
+        marker: "\"remove_below_strength\":",
+    },
+    TraceRequiredField {
+        name: "remove_after_failures",
+        marker: "\"remove_after_failures\":",
+    },
+    TraceRequiredField {
+        name: "memory_compaction",
+        marker: "\"memory_compaction\":{",
+    },
+    TraceRequiredField {
+        name: "similarity_threshold",
+        marker: "\"similarity_threshold\":",
+    },
+    TraceRequiredField {
+        name: "max_merges",
+        marker: "\"max_merges\":",
+    },
+    TraceRequiredField {
+        name: "experience_id",
+        marker: "\"experience_id\":",
+    },
+];
+
+pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSchemaGateReport> {
+    let content = fs::read_to_string(path)?;
+    let mut checked_lines = 0;
+    let mut failures = Vec::new();
+
+    for (index, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        checked_lines += 1;
+        failures.extend(
+            evaluate_trace_schema_line(line)
+                .into_iter()
+                .map(|failure| format!("line {}: {failure}", index + 1)),
+        );
+    }
+
+    if checked_lines == 0 {
+        failures.push("trace file did not contain any non-empty JSONL records".to_owned());
+    }
+
+    Ok(TraceSchemaGateReport {
+        passed: failures.is_empty(),
+        checked_lines,
+        failures,
+    })
+}
+
+pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let line = line.trim();
+
+    if !line.starts_with('{') || !line.ends_with('}') {
+        failures.push("record is not a single JSON object line".to_owned());
+    }
+
+    for field in TRACE_REQUIRED_FIELDS {
+        if !line.contains(field.marker) {
+            failures.push(format!("missing trace field {}", field.name));
+        }
+    }
+
+    failures
+}
 
 pub fn trace_json_line(
     prompt: &str,
@@ -245,6 +431,7 @@ fn json_escape(value: &str) -> String {
 mod tests {
     use super::*;
     use crate::engine::{HeuristicBackend, InferenceRequest, NoironEngine};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn trace_line_contains_core_control_decisions() {
@@ -309,5 +496,70 @@ mod tests {
         );
 
         assert!(line.contains("\"case\":\"general_case\""));
+    }
+
+    #[test]
+    fn trace_schema_gate_accepts_generated_trace_line() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace schema gate", TaskProfile::Coding),
+            &mut backend,
+        );
+        let line = trace_json_line("trace schema gate", TaskProfile::Coding, 5, &outcome);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_reports_missing_required_fields() {
+        let failures = evaluate_trace_schema_line("{\"schema\":\"other\"}");
+
+        assert!(failures.iter().any(|failure| failure.contains("schema")));
+        assert!(failures.iter().any(|failure| failure.contains("route")));
+        assert!(failures.iter().any(|failure| failure.contains("retention")));
+    }
+
+    #[test]
+    fn trace_schema_jsonl_gate_checks_non_empty_records() {
+        let path = temp_path("trace-schema");
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace schema jsonl", TaskProfile::General),
+            &mut backend,
+        );
+        fs::write(
+            &path,
+            format!(
+                "\n{}\n",
+                trace_json_line("trace schema jsonl", TaskProfile::General, 8, &outcome)
+            ),
+        )
+        .unwrap();
+
+        let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+        assert!(report.passed, "{:?}", report.failures);
+        assert_eq!(report.checked_lines, 1);
+        assert!(report.summary_line().contains("passed=true"));
+        cleanup(path);
+    }
+
+    fn temp_path(label: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-{label}-{}-{nanos}.jsonl",
+            std::process::id()
+        ))
+    }
+
+    fn cleanup(path: std::path::PathBuf) {
+        let _ = fs::remove_file(path);
     }
 }

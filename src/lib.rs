@@ -87,7 +87,9 @@ pub use tiered_cache::{
 };
 pub use token_stream::{TokenObservation, TokenStreamMonitor, TokenWindowReport};
 pub use trace::{
-    append_trace_jsonl, append_trace_jsonl_with_case, trace_json_line, trace_json_line_with_case,
+    TraceSchemaGateReport, append_trace_jsonl, append_trace_jsonl_with_case,
+    evaluate_trace_schema_jsonl, evaluate_trace_schema_line, trace_json_line,
+    trace_json_line_with_case,
 };
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
