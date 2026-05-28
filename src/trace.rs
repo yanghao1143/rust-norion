@@ -67,6 +67,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"adapter_hints\":",
     },
     TraceRequiredField {
+        name: "local_kv_token_budget",
+        marker: "\"local_kv_token_budget\":",
+    },
+    TraceRequiredField {
+        name: "global_kv_token_budget",
+        marker: "\"global_kv_token_budget\":",
+    },
+    TraceRequiredField {
         name: "recursive",
         marker: "\"recursive\":{",
     },
@@ -234,7 +242,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
-         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
+         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
@@ -273,6 +281,8 @@ pub fn trace_json_line_with_case(
         outcome.hardware_plan.tier.as_str(),
         outcome.hardware_plan.pressure,
         option_u64_json(outcome.hardware_plan.latency_budget_ms),
+        outcome.hardware_plan.local_kv_token_budget,
+        outcome.hardware_plan.global_kv_token_budget,
         outcome.hardware_plan.execution.primary_lane.as_str(),
         outcome.hardware_plan.execution.fallback_lane.as_str(),
         outcome.hardware_plan.execution.memory_mode.as_str(),
@@ -458,6 +468,8 @@ mod tests {
         assert!(line.contains("\"hierarchy\":"));
         assert!(line.contains("\"primary_lane\":"));
         assert!(line.contains("\"adapter_hints\":"));
+        assert!(line.contains("\"local_kv_token_budget\":"));
+        assert!(line.contains("\"global_kv_token_budget\":"));
         assert!(line.contains("\"execution_waves\":"));
         assert!(line.contains("\"max_parallel_chunks\":"));
         assert!(line.contains("\"template\":\"coding_local\""));

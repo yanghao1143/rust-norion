@@ -152,7 +152,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, hierarchy, KV, recursion, hardware, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, hierarchy, KV, recursion, hardware execution and KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -243,13 +243,13 @@ cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchm
 ```
 
 Validate an existing trace JSONL file against the required local control-plane
-schema fields:
+schema fields, including device-derived hardware KV budgets:
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
 ```
 
-检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段：
+检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括设备推导出的硬件 KV budget：
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl

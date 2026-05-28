@@ -235,8 +235,8 @@ modules, not external product dependencies:
 - Trace schema gate:
   benchmark and inference JSONL traces should have an executable field-presence
   gate for the control-plane schema so route, memory, drift, reward, hardware,
-  recursion, runtime-KV, retention, and compaction diagnostics cannot silently
-  disappear.
+  hardware KV budgets, recursion, runtime-KV, retention, and compaction
+  diagnostics cannot silently disappear.
 - State inspection:
   persisted memory, experience, global/profile router thresholds, hierarchy
   weights, tier counts, effective memory policies, and persisted memory vector
@@ -367,9 +367,9 @@ These are algorithmic references, not product dependencies:
   model id, tokenizer, native window, embedding dimensions, and KV exchange
   flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
-  records now capture route, hierarchy, KV, recursion, hardware, structured
-  reflection diagnostics, drift, reward, effective memory policies, and memory
-  counters per inference, with a CLI trace schema gate for required
+  records now capture route, hierarchy, KV, recursion, hardware execution,
+  hardware KV budgets, structured reflection diagnostics, drift, reward,
+  effective memory policies, and memory counters per inference, with a CLI trace schema gate for required
   control-plane fields; a
   built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
@@ -390,7 +390,8 @@ These are algorithmic references, not product dependencies:
 
 - The default build can run without external model weights or closed services.
 - Every control decision can be traced: route, memory, hierarchy, reflection,
-  drift, reward, effective memory policies, and adaptive-state update.
+  drift, reward, device-derived hardware KV budgets, effective memory policies,
+  and adaptive-state update.
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
