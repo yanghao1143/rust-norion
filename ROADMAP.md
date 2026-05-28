@@ -400,7 +400,9 @@ These are algorithmic references, not product dependencies:
   and adaptive-state update.
 - Runtime token uncertainty is part of the control feedback loop: token
   entropy/logprob can raise generation perplexity and influence drift, reward,
-  routing, hierarchy, and experience updates.
+  routing, hierarchy, and experience updates; trace JSONL now emits the
+  aggregate runtime token counts, average entropy, average negative logprob, and
+  derived uncertainty perplexity, and the schema gate requires that block.
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate

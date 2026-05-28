@@ -74,6 +74,7 @@ pub struct InferenceOutcome {
     pub report: ReflectionReport,
     pub auto_replay_report: Option<ExperienceReplayReport>,
     pub metrics: GenerationMetrics,
+    pub runtime_token_metrics: RuntimeTokenMetrics,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
@@ -98,6 +99,79 @@ pub struct InferenceOutcome {
     pub memory_compaction_report: MemoryCompactionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeTokenMetrics {
+    pub token_count: usize,
+    pub entropy_count: usize,
+    pub logprob_count: usize,
+    pub average_entropy: Option<f32>,
+    pub average_neg_logprob: Option<f32>,
+    pub uncertainty_perplexity: Option<f32>,
+}
+
+impl RuntimeTokenMetrics {
+    pub fn from_draft(draft: &InferenceDraft) -> Self {
+        let mut entropy_total = 0.0;
+        let mut entropy_count = 0;
+        let mut neg_logprob_total = 0.0;
+        let mut logprob_count = 0;
+        let mut loss_total = 0.0;
+        let mut loss_count = 0;
+
+        for token in &draft.tokens {
+            let entropy = token.entropy.and_then(bounded_entropy);
+            let neg_logprob = token.logprob.and_then(bounded_neg_logprob);
+
+            if let Some(entropy) = entropy {
+                entropy_total += entropy;
+                entropy_count += 1;
+            }
+            if let Some(neg_logprob) = neg_logprob {
+                neg_logprob_total += neg_logprob;
+                logprob_count += 1;
+            }
+
+            match (entropy, neg_logprob) {
+                (Some(entropy), Some(neg_logprob)) => {
+                    loss_total += 2.0 + entropy * 4.0 + neg_logprob;
+                    loss_count += 1;
+                }
+                (Some(entropy), None) => {
+                    loss_total += 2.0 + entropy * 4.0;
+                    loss_count += 1;
+                }
+                (None, Some(neg_logprob)) => {
+                    loss_total += 2.0 + neg_logprob;
+                    loss_count += 1;
+                }
+                (None, None) => {}
+            }
+        }
+
+        Self {
+            token_count: draft.tokens.len(),
+            entropy_count,
+            logprob_count,
+            average_entropy: average(entropy_total, entropy_count),
+            average_neg_logprob: average(neg_logprob_total, logprob_count),
+            uncertainty_perplexity: average(loss_total, loss_count),
+        }
+    }
+
+    pub fn has_uncertainty_signal(self) -> bool {
+        self.uncertainty_perplexity.is_some()
+    }
+}
+
+fn bounded_entropy(value: f32) -> Option<f32> {
+    value.is_finite().then(|| value.clamp(0.0, 4.0))
+}
+
+fn bounded_neg_logprob(value: f32) -> Option<f32> {
+    let value = -value;
+    value.is_finite().then(|| value.max(0.0).min(12.0))
 }
 
 #[derive(Debug, Clone)]
@@ -354,7 +428,8 @@ impl NoironEngine {
             transformer_plan: &transformer_plan,
         });
         let report = self.reflector.reflect(&request.prompt, &draft);
-        let metrics = metrics_from_report(&draft, &report, route_budget);
+        let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
+        let metrics = metrics_from_report(&draft, &report, route_budget, runtime_token_metrics);
         let gist_records =
             self.gist_generator
                 .generate(&request.prompt, &report.revised_answer, report.quality);
@@ -510,6 +585,7 @@ impl NoironEngine {
             report,
             auto_replay_report,
             metrics,
+            runtime_token_metrics,
             route_budget,
             hierarchy,
             tier_plan,
@@ -735,6 +811,7 @@ fn metrics_from_report(
     draft: &InferenceDraft,
     report: &ReflectionReport,
     route_budget: RouteBudget,
+    runtime_token_metrics: RuntimeTokenMetrics,
 ) -> GenerationMetrics {
     let token_count =
         approximate_token_count(&report.revised_answer).max(approximate_token_count(&draft.answer));
@@ -743,7 +820,8 @@ fn metrics_from_report(
         + (1.0 - report.quality) * 24.0
         + route_pressure
         + report.contradictions.len() as f32 * 3.5;
-    let perplexity = draft_token_perplexity(draft)
+    let perplexity = runtime_token_metrics
+        .uncertainty_perplexity
         .map(|runtime_perplexity| baseline_perplexity * 0.55 + runtime_perplexity * 0.45)
         .unwrap_or(baseline_perplexity);
 
@@ -755,31 +833,7 @@ fn metrics_from_report(
     }
 }
 
-fn draft_token_perplexity(draft: &InferenceDraft) -> Option<f32> {
-    if draft.tokens.is_empty() {
-        return None;
-    }
-
-    let mut total = 0.0;
-    let mut count = 0;
-    for token in &draft.tokens {
-        match (token.entropy, token.logprob) {
-            (Some(entropy), Some(logprob)) => {
-                total += 2.0 + entropy.clamp(0.0, 4.0) * 4.0 + (-logprob).max(0.0).min(12.0);
-                count += 1;
-            }
-            (Some(entropy), None) => {
-                total += 2.0 + entropy.clamp(0.0, 4.0) * 4.0;
-                count += 1;
-            }
-            (None, Some(logprob)) => {
-                total += 2.0 + (-logprob).max(0.0).min(12.0);
-                count += 1;
-            }
-            (None, None) => {}
-        }
-    }
-
+fn average(total: f32, count: usize) -> Option<f32> {
     if count == 0 {
         None
     } else {
@@ -1397,11 +1451,47 @@ mod tests {
             attention_fraction: 0.25,
         };
 
-        let low = metrics_from_report(&low_entropy, &report, budget);
-        let high = metrics_from_report(&high_entropy, &report, budget);
+        let low_token_metrics = RuntimeTokenMetrics::from_draft(&low_entropy);
+        let high_token_metrics = RuntimeTokenMetrics::from_draft(&high_entropy);
+        let low = metrics_from_report(&low_entropy, &report, budget, low_token_metrics);
+        let high = metrics_from_report(&high_entropy, &report, budget, high_token_metrics);
 
+        assert!(
+            high_token_metrics.average_entropy.unwrap()
+                > low_token_metrics.average_entropy.unwrap()
+        );
+        assert!(
+            high_token_metrics.uncertainty_perplexity.unwrap()
+                > low_token_metrics.uncertainty_perplexity.unwrap()
+        );
         assert!(high.perplexity > low.perplexity + 2.0);
         assert_eq!(high.semantic_consistency, low.semantic_consistency);
+    }
+
+    #[test]
+    fn runtime_token_metrics_ignore_non_finite_runtime_values() {
+        let draft = InferenceDraft::new("runtime returned partial token metadata", vec![])
+            .with_tokens(vec![
+                DraftToken {
+                    text: "bad-entropy".to_owned(),
+                    logprob: Some(f32::NAN),
+                    entropy: Some(f32::INFINITY),
+                },
+                DraftToken {
+                    text: "valid".to_owned(),
+                    logprob: Some(-0.5),
+                    entropy: Some(0.25),
+                },
+            ]);
+
+        let metrics = RuntimeTokenMetrics::from_draft(&draft);
+
+        assert_eq!(metrics.token_count, 2);
+        assert_eq!(metrics.entropy_count, 1);
+        assert_eq!(metrics.logprob_count, 1);
+        assert_eq!(metrics.average_entropy, Some(0.25));
+        assert_eq!(metrics.average_neg_logprob, Some(0.5));
+        assert_eq!(metrics.uncertainty_perplexity, Some(3.5));
     }
 
     #[test]

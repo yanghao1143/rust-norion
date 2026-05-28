@@ -152,7 +152,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, hierarchy, KV, recursion, hardware execution and KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, hierarchy, KV, recursion, hardware execution and KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -243,13 +243,14 @@ cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchm
 ```
 
 Validate an existing trace JSONL file against the required local control-plane
-schema fields, including device-derived hardware KV budgets:
+schema fields, including runtime token uncertainty and device-derived hardware
+KV budgets:
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
 ```
 
-检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括设备推导出的硬件 KV budget：
+检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性与设备推导出的硬件 KV budget：
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
@@ -446,8 +447,12 @@ and optional `trace` entries.
 When runtime tokens include `entropy` and/or `logprob`, the engine folds those
 token-level signals into the main generation perplexity used by drift checks,
 router/hierarchy adaptation, process reward scoring, and experience replay.
+The same aggregate token uncertainty is emitted in trace JSONL as
+`runtime_tokens`, including average entropy, average negative logprob, and the
+derived uncertainty perplexity.
 
 当 runtime tokens 带有 `entropy` 或 `logprob` 时，引擎会把这些 token 级信号合入主生成 perplexity，并用于 drift 检查、router / hierarchy 自适应、process reward 评分和经验回放。
+同一组聚合后的 token 不确定性也会写入 trace JSONL 的 `runtime_tokens`，包括平均 entropy、平均负 logprob 与派生的 uncertainty perplexity。
 
 Run through the built-in Rust-native local runtime prototype:
 

@@ -55,6 +55,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"route\":{",
     },
     TraceRequiredField {
+        name: "runtime_tokens",
+        marker: "\"runtime_tokens\":{",
+    },
+    TraceRequiredField {
+        name: "uncertainty_perplexity",
+        marker: "\"uncertainty_perplexity\":",
+    },
+    TraceRequiredField {
         name: "hierarchy",
         marker: "\"hierarchy\":{",
     },
@@ -241,6 +249,7 @@ pub fn trace_json_line_with_case(
          \"reflection\":{{\"issues\":{},\"critical_issues\":{},\"max_severity\":\"{}\",\"issue_codes\":{},\"revision_actions\":{},\"revision_passes\":{}}},\
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
+         \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
@@ -274,6 +283,13 @@ pub fn trace_json_line_with_case(
         outcome.route_budget.attention_fraction,
         outcome.route_budget.attention_tokens,
         outcome.route_budget.fast_tokens,
+        outcome.runtime_token_metrics.token_count,
+        outcome.runtime_token_metrics.entropy_count,
+        outcome.runtime_token_metrics.logprob_count,
+        option_f32_json(outcome.runtime_token_metrics.average_entropy),
+        option_f32_json(outcome.runtime_token_metrics.average_neg_logprob),
+        option_f32_json(outcome.runtime_token_metrics.uncertainty_perplexity),
+        outcome.runtime_token_metrics.has_uncertainty_signal(),
         outcome.hierarchy.global,
         outcome.hierarchy.local,
         outcome.hierarchy.convolution,
@@ -398,6 +414,12 @@ fn option_u64_json(value: Option<u64>) -> String {
         .unwrap_or_else(|| "null".to_owned())
 }
 
+fn option_f32_json(value: Option<f32>) -> String {
+    value
+        .map(|value| format!("{value:.6}"))
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 fn option_string_json(value: Option<&str>) -> String {
     value
         .map(|value| format!("\"{}\"", json_escape(value)))
@@ -465,6 +487,10 @@ mod tests {
         assert!(line.contains("\"issue_codes\":"));
         assert!(line.contains("\"revision_passes\":"));
         assert!(line.contains("\"route\":"));
+        assert!(line.contains("\"runtime_tokens\":"));
+        assert!(line.contains("\"average_entropy\":"));
+        assert!(line.contains("\"average_neg_logprob\":"));
+        assert!(line.contains("\"uncertainty_perplexity\":"));
         assert!(line.contains("\"hierarchy\":"));
         assert!(line.contains("\"primary_lane\":"));
         assert!(line.contains("\"adapter_hints\":"));
