@@ -352,7 +352,8 @@ These are algorithmic references, not product dependencies:
   recursive runtime call costs now feed replay metrics so expensive successful
   long-context paths are weaker control-plane exemplars than efficient ones,
   and replay summaries/traces expose recursive call pressure for regression
-  checks;
+  checks; benchmark gates can now require auto-replay recursive coverage and
+  cap replay recursive call pressure;
   reflection now performs one low-risk repair pass for non-critical weak drafts
   and blocks stale runtime-KV admission when the final answer came from a
   repaired draft;
