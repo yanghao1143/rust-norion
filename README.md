@@ -143,7 +143,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, auto-replay recursive cost-pressure floor/ceiling gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal and KV-export gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering
@@ -296,6 +296,20 @@ cargo run -- --local-runtime --benchmark target/noiron-recursive-runtime.jsonl -
 cargo run -- --local-runtime --benchmark target/noiron-recursive-runtime.jsonl --benchmark-gate --benchmark-min-recursive-cases 1 --benchmark-min-recursive-runtime-calls 4 --runtime-native-window 64 --chunk-tokens 32 --chunk-overlap 8
 ```
 
+Run the benchmark suite through the manifest-backed production boundary with
+the deterministic reference kernel, then require runtime forward diagnostics,
+runtime KV export, and trace schema validity in the same check:
+
+```powershell
+cargo run -- --production-reference-kernel --benchmark target/noiron-production-reference.jsonl --trace-schema-gate target/noiron-production-reference.jsonl --benchmark-gate --benchmark-min-runtime-forward-cases 4 --benchmark-min-runtime-kv-exported 4 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
+```
+
+通过 manifest-backed 生产边界和确定性 reference kernel 跑完整 benchmark，并在同一次检查里要求 runtime forward diagnostics、runtime KV export 和 trace schema 都有效：
+
+```powershell
+cargo run -- --production-reference-kernel --benchmark target/noiron-production-reference.jsonl --trace-schema-gate target/noiron-production-reference.jsonl --benchmark-gate --benchmark-min-runtime-forward-cases 4 --benchmark-min-runtime-kv-exported 4 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
+```
+
 Run the KV quantization gate for reproducible 4/8-bit compression accuracy,
 payload ratio, and latency checks:
 
@@ -345,12 +359,14 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 ```
 
 Benchmark summaries include recursive case counts, compacted memory counts,
-auto-replay recursive pressure, and drift watch/block/rollback counts, so
-long-context coverage, missing pressure signals, excessive recursive replay
-cost, memory-growth, or safety regressions in the self-evolution loop can fail
-the gate even when average quality still looks acceptable.
+runtime forward-signal case counts, runtime KV export counts, auto-replay
+recursive pressure, and drift watch/block/rollback counts, so long-context
+coverage, missing runtime diagnostics, missing KV exchange, missing pressure
+signals, excessive recursive replay cost, memory-growth, or safety regressions
+in the self-evolution loop can fail the gate even when average quality still
+looks acceptable.
 
-Benchmark 汇总会包含递归 case 数、memory compaction 计数、auto-replay 递归压力以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、memory compaction 计数、runtime forward-signal case 数、runtime KV export 计数、auto-replay 递归压力以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、runtime diagnostics 缺失、KV 交换缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

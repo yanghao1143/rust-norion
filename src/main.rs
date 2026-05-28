@@ -575,7 +575,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} stored_memories={} compacted_memories={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.elapsed_ms,
@@ -594,6 +594,7 @@ fn print_benchmark_summary(
             result.used_memories,
             result.stored_memories,
             result.compacted_memories,
+            result.runtime_forward_signal,
             result.runtime_kv_exported,
             result.runtime_kv_stored,
             result.runtime_adapter_observations,
@@ -1022,6 +1023,8 @@ struct Args {
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
     benchmark_max_auto_replay_recursive_call_pressure: Option<f32>,
+    benchmark_min_runtime_forward_cases: Option<usize>,
+    benchmark_min_runtime_kv_exported: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
     benchmark_max_drift_rollbacks: Option<usize>,
     benchmark_roundtrip: bool,
@@ -1088,6 +1091,8 @@ impl Args {
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
         let mut benchmark_max_auto_replay_recursive_call_pressure = None;
+        let mut benchmark_min_runtime_forward_cases = None;
+        let mut benchmark_min_runtime_kv_exported = None;
         let mut benchmark_max_drift_blocks = None;
         let mut benchmark_max_drift_rollbacks = None;
         let mut benchmark_roundtrip = false;
@@ -1219,6 +1224,16 @@ impl Args {
                 "--benchmark-max-auto-replay-recursive-call-pressure" if index + 1 < raw.len() => {
                     benchmark_max_auto_replay_recursive_call_pressure =
                         Some(parse_f32(&raw[index + 1], 1.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-forward-cases" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_forward_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-kv-exported" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_kv_exported = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1504,6 +1519,8 @@ impl Args {
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure,
+            benchmark_min_runtime_forward_cases,
+            benchmark_min_runtime_kv_exported,
             benchmark_max_drift_blocks,
             benchmark_max_drift_rollbacks,
             benchmark_roundtrip,
@@ -1580,6 +1597,12 @@ impl Args {
         }
         if let Some(value) = self.benchmark_max_auto_replay_recursive_call_pressure {
             gate.max_auto_replay_recursive_call_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_min_runtime_forward_cases {
+            gate.min_runtime_forward_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_exported {
+            gate.min_runtime_kv_exported = Some(value);
         }
         if let Some(value) = self.benchmark_max_drift_blocks {
             gate.max_drift_blocks = Some(value);
@@ -1735,7 +1758,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1801,6 +1824,10 @@ mod tests {
             "0.05".to_owned(),
             "--benchmark-max-auto-replay-recursive-call-pressure".to_owned(),
             "0.25".to_owned(),
+            "--benchmark-min-runtime-forward-cases".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-runtime-kv-exported".to_owned(),
+            "4".to_owned(),
             "--benchmark-max-drift-blocks".to_owned(),
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
@@ -1909,6 +1936,10 @@ mod tests {
                 .max_auto_replay_recursive_call_pressure,
             Some(0.25)
         );
+        assert_eq!(args.benchmark_min_runtime_forward_cases, Some(4));
+        assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
+        assert_eq!(args.benchmark_gate().min_runtime_forward_cases, Some(4));
+        assert_eq!(args.benchmark_gate().min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_max_drift_blocks, Some(0));
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
         assert!(args.benchmark_roundtrip);
@@ -2210,6 +2241,76 @@ mod tests {
         assert_eq!(outcome.runtime_diagnostics.layer_count, 6);
         assert!(outcome.exported_runtime_kv_blocks > 0);
         assert!(outcome.report.quality > 0.46);
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_reference_kernel_benchmark_passes_runtime_and_trace_gates() {
+        let asset_dir = temp_asset_dir("production-reference-benchmark");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let trace_path = asset_dir.join("benchmark.jsonl");
+        let args = Args::parse(vec![
+            "--production-reference-kernel".to_owned(),
+            "--benchmark".to_owned(),
+            trace_path.display().to_string(),
+            "--benchmark-gate".to_owned(),
+            "--benchmark-min-quality".to_owned(),
+            "0.45".to_owned(),
+            "--benchmark-min-reward".to_owned(),
+            "0.35".to_owned(),
+            "--benchmark-min-runtime-forward-cases".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-runtime-kv-exported".to_owned(),
+            "4".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "64".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "1024".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]);
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &args);
+        let runtime = args.production_runtime().unwrap();
+        let mut backend = RuntimeBackend::new(runtime);
+
+        let summary = run_benchmark(&mut engine, &mut backend, &trace_path).unwrap();
+        let gate_report = summary.evaluate(&args.benchmark_gate());
+        let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+        assert_eq!(summary.len(), 4);
+        assert_eq!(summary.runtime_forward_cases(), 4);
+        assert!(summary.total_runtime_kv_exported() >= 4);
+        assert!(summary.summary_line().contains("runtime_forward_cases=4"));
+        assert!(summary.summary_line().contains("runtime_kv_exported="));
+        assert!(gate_report.passed, "{:?}", gate_report.failures);
+        assert!(trace_report.passed, "{:?}", trace_report.failures);
+        assert_eq!(trace_report.checked_lines, 4);
+        assert!(backend.last_error().is_none());
 
         fs::remove_dir_all(asset_dir).unwrap();
     }

@@ -520,7 +520,9 @@ These are algorithmic references, not product dependencies:
   can execute end to end through `RuntimeBackend`, including token uncertainty,
   runtime diagnostics, imported-KV influence, exported KV validation, trace, and
   process-reward feedback, while remaining explicitly replaceable by a trained
-  self-developed kernel.
+  self-developed kernel. Benchmark gates can require a minimum number of runtime
+  forward-signal cases and exported runtime KV blocks so the reference
+  production ABI remains a regression target, not just a demo path.
 - Production runtime manifests have a hard local-file gate for required weights
   and tokenizer assets before a self-developed model runtime is accepted, and
   the CLI exposes that gate directly for local/CI checks with explicit
@@ -568,6 +570,7 @@ These are algorithmic references, not product dependencies:
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
-  recursive scheduling coverage, recursive scheduling budgets, auto-replay
-  recursive pressure coverage/bounds, drift block/rollback counts, or
-  persistent state reuse regress.
+  recursive scheduling coverage, recursive scheduling budgets, runtime
+  forward diagnostics, runtime KV export, auto-replay recursive pressure
+  coverage/bounds, drift block/rollback counts, or persistent state reuse
+  regress.

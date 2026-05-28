@@ -81,6 +81,7 @@ pub struct BenchmarkCaseResult {
     pub used_memories: usize,
     pub stored_memories: usize,
     pub compacted_memories: usize,
+    pub runtime_forward_signal: bool,
     pub runtime_kv_exported: usize,
     pub runtime_kv_stored: usize,
     pub runtime_adapter_observations: usize,
@@ -99,6 +100,8 @@ pub struct BenchmarkGate {
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
+    pub min_runtime_forward_cases: Option<usize>,
+    pub min_runtime_kv_exported: Option<usize>,
     pub max_drift_blocks: Option<usize>,
     pub max_drift_rollbacks: Option<usize>,
 }
@@ -115,6 +118,8 @@ impl Default for BenchmarkGate {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_runtime_forward_cases: None,
+            min_runtime_kv_exported: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         }
@@ -512,6 +517,7 @@ impl BenchmarkSummary {
             used_memories: outcome.used_memories.len(),
             stored_memories,
             compacted_memories: outcome.memory_compaction_report.merged.len(),
+            runtime_forward_signal: outcome.runtime_diagnostics.has_forward_signal(),
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
             runtime_kv_stored: outcome.stored_runtime_kv_memory_ids.len(),
             runtime_adapter_observations: outcome.runtime_adapter_observations.len(),
@@ -556,6 +562,20 @@ impl BenchmarkSummary {
             .iter()
             .map(|result| result.runtime_kv_stored)
             .sum()
+    }
+
+    pub fn total_runtime_kv_exported(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_kv_exported)
+            .sum()
+    }
+
+    pub fn runtime_forward_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_forward_signal)
+            .count()
     }
 
     pub fn total_runtime_adapter_observations(&self) -> usize {
@@ -764,6 +784,26 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_forward_cases) = gate.min_runtime_forward_cases {
+            let runtime_forward_cases = self.runtime_forward_cases();
+            if runtime_forward_cases < min_runtime_forward_cases {
+                failures.push(format!(
+                    "runtime_forward_cases {} below minimum {}",
+                    runtime_forward_cases, min_runtime_forward_cases
+                ));
+            }
+        }
+
+        if let Some(min_runtime_kv_exported) = gate.min_runtime_kv_exported {
+            let runtime_kv_exported = self.total_runtime_kv_exported();
+            if runtime_kv_exported < min_runtime_kv_exported {
+                failures.push(format!(
+                    "runtime_kv_exported {} below minimum {}",
+                    runtime_kv_exported, min_runtime_kv_exported
+                ));
+            }
+        }
+
         if let Some(max_drift_blocks) = gate.max_drift_blocks {
             let drift_blocks = self.drift_blocks();
             if drift_blocks > max_drift_blocks {
@@ -792,7 +832,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} stored_memories={} compacted_memories={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -807,6 +847,8 @@ impl BenchmarkSummary {
             self.max_auto_replay_recursive_call_pressure(),
             self.total_stored_memories(),
             self.total_compacted_memories(),
+            self.runtime_forward_cases(),
+            self.total_runtime_kv_exported(),
             self.total_runtime_kv_stored(),
             self.total_runtime_adapter_observations(),
             option_f32_display(self.max_runtime_adapter_score()),
@@ -1027,6 +1069,8 @@ mod tests {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_runtime_forward_cases: None,
+            min_runtime_kv_exported: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         };
@@ -1109,6 +1153,7 @@ mod tests {
                 used_memories: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
+                runtime_forward_signal: false,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -1159,6 +1204,7 @@ mod tests {
                 used_memories: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
+                runtime_forward_signal: false,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -1187,6 +1233,72 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_runtime_forward_and_kv_export() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_boundary".to_owned(),
+                profile: TaskProfile::Coding,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: false,
+                runtime_kv_exported: 0,
+                runtime_kv_stored: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_forward_cases = Some(1);
+        gate.min_runtime_kv_exported = Some(1);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_forward_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_exported"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                runtime_forward_signal: true,
+                runtime_kv_exported: 2,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.runtime_forward_cases(), 1);
+        assert_eq!(passing.total_runtime_kv_exported(), 2);
+        assert!(passing.summary_line().contains("runtime_forward_cases=1"));
+        assert!(passing.summary_line().contains("runtime_kv_exported=2"));
+    }
+
+    #[test]
     fn gate_reports_drift_failures() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
@@ -1208,6 +1320,7 @@ mod tests {
                 used_memories: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
+                runtime_forward_signal: false,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
