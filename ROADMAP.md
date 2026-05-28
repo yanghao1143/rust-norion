@@ -355,7 +355,10 @@ These are algorithmic references, not product dependencies:
   checks; benchmark gates can now require auto-replay recursive coverage and
   cap replay recursive call pressure; replay planning now keeps at least one
   recursive runtime sample when the limit allows so long-context cost learning
-  is not starved by short high-reward samples;
+  is not starved by short high-reward samples; replay pressure now parses
+  recursive chunks, waves, parallelism, and runtime calls from reward notes so
+  long-document costs are scored against the recursive schedule instead of
+  being diluted by route token counts;
   reflection now performs one low-risk repair pass for non-critical weak drafts
   and blocks stale runtime-KV admission when the final answer came from a
   repaired draft;

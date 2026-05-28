@@ -93,6 +93,8 @@ impl ExperienceReplayPlanner {
         memory_ids.sort_unstable();
         memory_ids.dedup();
 
+        let recursive_stats = RecursiveReplayStats::from_notes(&record.process_reward.notes);
+
         Some(ExperienceReplayItem {
             experience_id: record.id,
             profile: record.profile,
@@ -110,9 +112,10 @@ impl ExperienceReplayPlanner {
             route_budget: record.route_budget,
             memory_ids,
             runtime_diagnostics: record.runtime_diagnostics.clone(),
-            recursive_runtime_calls: recursive_runtime_calls_from_notes(
-                &record.process_reward.notes,
-            ),
+            recursive_runtime_calls: recursive_stats
+                .and_then(|stats| stats.runtime_calls)
+                .or_else(|| recursive_runtime_calls_from_notes(&record.process_reward.notes)),
+            recursive_stats,
             priority,
             lesson: record.lesson.clone(),
         })
@@ -156,6 +159,7 @@ pub struct ExperienceReplayItem {
     pub memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
     pub recursive_runtime_calls: Option<usize>,
+    pub recursive_stats: Option<RecursiveReplayStats>,
     pub priority: f32,
     pub lesson: String,
 }
@@ -166,21 +170,83 @@ impl ExperienceReplayItem {
     }
 
     pub fn recursive_call_pressure(&self) -> f32 {
-        recursive_call_pressure(self.recursive_runtime_calls, self.route_token_count())
+        recursive_call_pressure(
+            self.recursive_runtime_calls,
+            self.recursive_stats,
+            self.route_token_count(),
+        )
     }
 }
 
-fn recursive_call_pressure(recursive_runtime_calls: Option<usize>, token_count: usize) -> f32 {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecursiveReplayStats {
+    pub chunks: Option<usize>,
+    pub merge_rounds: Option<usize>,
+    pub waves: Option<usize>,
+    pub parallel: Option<usize>,
+    pub runtime_calls: Option<usize>,
+}
+
+impl RecursiveReplayStats {
+    pub fn from_notes(notes: &[String]) -> Option<Self> {
+        notes
+            .iter()
+            .filter(|note| note.starts_with("recursive:"))
+            .find_map(|note| {
+                let stats = Self {
+                    chunks: recursive_note_value(note, "chunks="),
+                    merge_rounds: recursive_note_value(note, "merge_rounds="),
+                    waves: recursive_note_value(note, "waves="),
+                    parallel: recursive_note_value(note, "parallel="),
+                    runtime_calls: recursive_note_value(note, "runtime_calls="),
+                };
+
+                (stats.chunks.is_some()
+                    || stats.merge_rounds.is_some()
+                    || stats.waves.is_some()
+                    || stats.parallel.is_some()
+                    || stats.runtime_calls.is_some())
+                .then_some(stats)
+            })
+    }
+}
+
+fn recursive_note_value(note: &str, key: &str) -> Option<usize> {
+    note.split(':')
+        .find_map(|part| part.strip_prefix(key))
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+}
+
+fn recursive_call_pressure(
+    recursive_runtime_calls: Option<usize>,
+    recursive_stats: Option<RecursiveReplayStats>,
+    token_count: usize,
+) -> f32 {
     let Some(calls) = recursive_runtime_calls else {
         return 0.0;
     };
-    let expected_calls = token_count.max(1);
+
+    let expected_calls = recursive_stats
+        .and_then(|stats| stats.chunks)
+        .unwrap_or_else(|| token_count.max(1))
+        .max(1);
     if calls <= expected_calls {
         return 0.0;
     }
 
-    (calls.saturating_sub(expected_calls) as f32 / (expected_calls.max(4) * 12) as f32)
-        .clamp(0.0, 0.35)
+    let excess_pressure =
+        calls.saturating_sub(expected_calls) as f32 / (expected_calls.max(4) * 3) as f32;
+    let wave_pressure = recursive_stats
+        .and_then(|stats| stats.waves)
+        .map(|waves| (waves.saturating_sub(1) as f32 / 48.0).min(0.10))
+        .unwrap_or(0.0);
+    let parallel_relief = recursive_stats
+        .and_then(|stats| stats.parallel)
+        .map(|parallel| ((parallel.saturating_sub(1) as f32) * 0.015).min(0.05))
+        .unwrap_or(0.0);
+
+    (excess_pressure + wave_pressure - parallel_relief).clamp(0.0, 0.35)
 }
 
 fn critical_reflection_issue_count(record: &ExperienceRecord) -> usize {
@@ -332,6 +398,16 @@ mod tests {
             .unwrap();
         assert_eq!(penalized.critical_reflection_issue_count, 1);
         assert_eq!(penalized.revision_action_count, 1);
+        assert_eq!(
+            reinforced.recursive_stats,
+            Some(RecursiveReplayStats {
+                chunks: Some(4),
+                merge_rounds: Some(2),
+                waves: Some(2),
+                parallel: Some(2),
+                runtime_calls: Some(7),
+            })
+        );
     }
 
     #[test]
@@ -374,8 +450,35 @@ mod tests {
         assert!(
             plan.items
                 .iter()
+                .find(|item| item.recursive_runtime_calls == Some(96))
+                .unwrap()
+                .recursive_call_pressure()
+                > 0.0
+        );
+        assert!(
+            plan.items
+                .iter()
                 .any(|item| item.experience_id == 1 || item.experience_id == 2)
         );
+    }
+
+    #[test]
+    fn recursive_pressure_uses_schedule_stats_not_route_token_count() {
+        let planner = ExperienceReplayPlanner::new();
+        let mut recursive = record(7, 0.88, RewardAction::Reinforce);
+        recursive.route_budget.fast_tokens = 2_222;
+        recursive.route_budget.attention_tokens = 0;
+        recursive.process_reward.notes = vec![
+            "recursive:chunks=89:merge_rounds=4:waves=23:parallel=4:runtime_calls=121".to_owned(),
+        ];
+
+        let plan = planner.plan(&[recursive], 1);
+        let item = &plan.items[0];
+
+        assert_eq!(item.recursive_runtime_calls, Some(121));
+        assert_eq!(item.recursive_stats.unwrap().chunks, Some(89));
+        assert!(item.route_token_count() > 2_000);
+        assert!(item.recursive_call_pressure() > 0.0);
     }
 
     fn record(id: u64, reward: f32, action: RewardAction) -> ExperienceRecord {
@@ -471,6 +574,7 @@ mod tests {
 
         assert_eq!(plan.items.len(), 1);
         assert_eq!(plan.items[0].recursive_runtime_calls, Some(7));
+        assert_eq!(plan.items[0].recursive_stats.unwrap().chunks, Some(4));
     }
 
     #[test]

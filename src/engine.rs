@@ -1186,6 +1186,7 @@ fn char_weight(ch: char) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::experience_replay::RecursiveReplayStats;
     use crate::hardware::{DeviceClass, RuntimeAdapterHint};
     use crate::local_runtime::LocalTransformerRuntime;
     use crate::process_reward::ProcessRewardComponents;
@@ -2204,6 +2205,13 @@ mod tests {
             memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
             recursive_runtime_calls,
+            recursive_stats: recursive_runtime_calls.map(|runtime_calls| RecursiveReplayStats {
+                chunks: Some(4),
+                merge_rounds: Some(2),
+                waves: Some(2),
+                parallel: Some(2),
+                runtime_calls: Some(runtime_calls),
+            }),
             priority: 0.86,
             lesson: "long-context recursive replay path".to_owned(),
         }
