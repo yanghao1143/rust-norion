@@ -34,6 +34,15 @@ pub struct StateExperienceSummary {
     pub quality: f32,
     pub process_reward: f32,
     pub reward_action: RewardAction,
+    pub runtime_model_id: Option<String>,
+    pub runtime_selected_adapter: Option<String>,
+    pub runtime_layer_count: usize,
+    pub runtime_hidden_size: usize,
+    pub runtime_local_window_tokens: usize,
+    pub runtime_forward_energy: Option<f32>,
+    pub runtime_kv_influence: Option<f32>,
+    pub runtime_imported_kv_blocks: usize,
+    pub runtime_exported_kv_blocks: usize,
     pub reflection_issues: usize,
     pub critical_reflection_issues: usize,
     pub revision_actions: usize,
@@ -120,6 +129,15 @@ impl StateInspectionReport {
                 quality: record.quality,
                 process_reward: record.process_reward.total,
                 reward_action: record.process_reward.action,
+                runtime_model_id: record.runtime_diagnostics.model_id.clone(),
+                runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
+                runtime_layer_count: record.runtime_diagnostics.layer_count,
+                runtime_hidden_size: record.runtime_diagnostics.hidden_size,
+                runtime_local_window_tokens: record.runtime_diagnostics.local_window_tokens,
+                runtime_forward_energy: record.runtime_diagnostics.forward_energy,
+                runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
+                runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
                 reflection_issues: record.reflection_issues.len(),
                 critical_reflection_issues: record
                     .reflection_issues
@@ -269,7 +287,17 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
-            runtime_diagnostics: crate::reflection::RuntimeDiagnostics::default(),
+            runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
+                model_id: Some("inspect-runtime".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                layer_count: 12,
+                hidden_size: 128,
+                local_window_tokens: 4096,
+                forward_energy: Some(0.34),
+                kv_influence: Some(0.56),
+                imported_kv_blocks: 2,
+                exported_kv_blocks: 3,
+            },
             process_reward: ProcessRewardReport {
                 total: 0.88,
                 action: RewardAction::Reinforce,
@@ -310,6 +338,23 @@ mod tests {
             report.top_experiences[0].reward_action,
             RewardAction::Reinforce
         );
+        assert_eq!(
+            report.top_experiences[0].runtime_model_id.as_deref(),
+            Some("inspect-runtime")
+        );
+        assert_eq!(
+            report.top_experiences[0]
+                .runtime_selected_adapter
+                .as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(report.top_experiences[0].runtime_layer_count, 12);
+        assert_eq!(report.top_experiences[0].runtime_hidden_size, 128);
+        assert_eq!(report.top_experiences[0].runtime_local_window_tokens, 4096);
+        assert_eq!(report.top_experiences[0].runtime_forward_energy, Some(0.34));
+        assert_eq!(report.top_experiences[0].runtime_kv_influence, Some(0.56));
+        assert_eq!(report.top_experiences[0].runtime_imported_kv_blocks, 2);
+        assert_eq!(report.top_experiences[0].runtime_exported_kv_blocks, 3);
         assert_eq!(report.top_experiences[0].reflection_issues, 1);
         assert_eq!(report.top_experiences[0].revision_actions, 1);
         assert!(report.summary_line().contains("memories=2"));
