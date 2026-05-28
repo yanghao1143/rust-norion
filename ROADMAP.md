@@ -368,9 +368,10 @@ These are algorithmic references, not product dependencies:
   similarity now penalizes mismatched vector dimensions so memories from
   different runtime embedding spaces do not over-fuse; `RuntimeBackend` now
   injects runtime metadata into each request, command runtime prompts expose
-  the ABI boundary, and backend native context windows feed recursive scheduling; CLI command runtimes can pass
-  model id, tokenizer, native window, embedding dimensions, and KV exchange
-  flags; active Noiron memory can now be imported into runtime KV and accepted
+  the ABI boundary, and backend native context windows feed recursive scheduling; runtime metadata now carries
+  KV import/export limits plus hot/cold KV precision into both text and JSON
+  request surfaces; CLI command runtimes can pass model id, tokenizer, native
+  window, embedding dimensions, and KV exchange flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
   records now capture route, hierarchy, KV, recursion, hardware execution,
   hardware KV budgets, structured reflection diagnostics, drift, reward,

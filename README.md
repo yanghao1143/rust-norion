@@ -662,8 +662,13 @@ window instead of a hardcoded control-plane default.
 The CLI exposes this metadata through `--runtime-model-id`,
 `--runtime-tokenizer`, `--runtime-native-window`, `--runtime-embedding-dims`,
 `--runtime-kv-import`, `--runtime-kv-export`, and `--runtime-kv-exchange`.
+Runtime metadata and the structured JSON request ABI also carry the effective
+KV import/export block limits and hot/cold KV precision, so an external
+self-developed runtime can enforce the same manifest policy the control plane
+validated.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
+runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
 vectors as runtime KV blocks before generation. After generation, exported KV
@@ -672,11 +677,13 @@ memory only when reflection admits the answer as useful.
 
 启用 KV 交换后，`RuntimeBackend` 会在生成前把活跃且非冷层的记忆向量导入为 runtime KV block。生成后，runtime 导出的 KV block 会随草稿返回；只有当反思模块认为答案有价值时，引擎才会把这些 KV 写回强化记忆。
 
-Runtime KV import is capped by `DeviceExecutionPlan.kv_prefetch_blocks`, so
-constrained devices can keep the runtime KV working set small while larger
-accelerator profiles can prefetch more memory.
+Runtime KV import is capped by the smaller of
+`DeviceExecutionPlan.kv_prefetch_blocks` and the runtime metadata /
+`RuntimeManifest` max import limit, so constrained devices can keep the runtime
+KV working set small while each self-developed runtime can enforce its own
+safe KV exchange boundary.
 
-Runtime KV 导入数量会受 `DeviceExecutionPlan.kv_prefetch_blocks` 限制，因此低配设备可以保持较小 KV 工作集，高容量加速器设备则可以预取更多记忆。
+Runtime KV 导入数量会受 `DeviceExecutionPlan.kv_prefetch_blocks` 与 runtime metadata / `RuntimeManifest` 最大导入上限两者中的较小值限制，因此低配设备可以保持较小 KV 工作集，每个自研 runtime 也能执行自己的安全 KV 交换边界。
 
 Recursive long-context schedules are also grouped into execution waves using
 `DeviceExecutionPlan.max_parallel_chunks`: constrained devices run fewer chunks
