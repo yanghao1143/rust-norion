@@ -23,6 +23,10 @@ pub struct RuntimeMetadata {
     pub embedding_dimensions: usize,
     pub supports_kv_import: bool,
     pub supports_kv_export: bool,
+    pub max_kv_import_blocks: usize,
+    pub max_kv_export_blocks: usize,
+    pub hot_kv_precision_bits: u8,
+    pub cold_kv_precision_bits: u8,
 }
 
 impl RuntimeMetadata {
@@ -39,24 +43,70 @@ impl RuntimeMetadata {
             embedding_dimensions,
             supports_kv_import: false,
             supports_kv_export: false,
+            max_kv_import_blocks: 0,
+            max_kv_export_blocks: 0,
+            hot_kv_precision_bits: 8,
+            cold_kv_precision_bits: 4,
         }
     }
 
     pub fn with_kv_exchange(mut self, import: bool, export: bool) -> Self {
         self.supports_kv_import = import;
         self.supports_kv_export = export;
+        self.max_kv_import_blocks = if import {
+            self.max_kv_import_blocks.max(8)
+        } else {
+            0
+        };
+        self.max_kv_export_blocks = if export {
+            self.max_kv_export_blocks.max(4)
+        } else {
+            0
+        };
+        self
+    }
+
+    pub fn with_kv_limits(mut self, max_import_blocks: usize, max_export_blocks: usize) -> Self {
+        self.max_kv_import_blocks = if self.supports_kv_import {
+            max_import_blocks.max(1)
+        } else {
+            0
+        };
+        self.max_kv_export_blocks = if self.supports_kv_export {
+            max_export_blocks.max(1)
+        } else {
+            0
+        };
+        self
+    }
+
+    pub fn with_kv_precision(mut self, hot_bits: u8, cold_bits: u8) -> Self {
+        self.hot_kv_precision_bits = if matches!(hot_bits, 4 | 8) {
+            hot_bits
+        } else {
+            8
+        };
+        self.cold_kv_precision_bits = if matches!(cold_bits, 4 | 8) {
+            cold_bits
+        } else {
+            4
+        };
         self
     }
 
     pub fn summary(&self) -> String {
         format!(
-            "model_id={} tokenizer={} native_context_window={} embedding_dimensions={} kv_import={} kv_export={}",
+            "model_id={} tokenizer={} native_context_window={} embedding_dimensions={} kv_import={} kv_export={} max_kv_import_blocks={} max_kv_export_blocks={} kv_bits={}/{}",
             self.model_id,
             self.tokenizer,
             self.native_context_window,
             self.embedding_dimensions,
             self.supports_kv_import,
-            self.supports_kv_export
+            self.supports_kv_export,
+            self.max_kv_import_blocks,
+            self.max_kv_export_blocks,
+            self.hot_kv_precision_bits,
+            self.cold_kv_precision_bits
         )
     }
 }
@@ -70,6 +120,10 @@ impl Default for RuntimeMetadata {
             embedding_dimensions: 0,
             supports_kv_import: false,
             supports_kv_export: false,
+            max_kv_import_blocks: 0,
+            max_kv_export_blocks: 0,
+            hot_kv_precision_bits: 8,
+            cold_kv_precision_bits: 4,
         }
     }
 }
@@ -691,7 +745,11 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"native_context_window\":{},\
          \"embedding_dimensions\":{},\
          \"supports_kv_import\":{},\
-         \"supports_kv_export\":{}\
+         \"supports_kv_export\":{},\
+         \"max_kv_import_blocks\":{},\
+         \"max_kv_export_blocks\":{},\
+         \"hot_kv_precision_bits\":{},\
+         \"cold_kv_precision_bits\":{}\
          }},\
          \"route\":{{\
          \"threshold\":{:.6},\
@@ -758,6 +816,10 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         request.runtime_metadata.embedding_dimensions,
         request.runtime_metadata.supports_kv_import,
         request.runtime_metadata.supports_kv_export,
+        request.runtime_metadata.max_kv_import_blocks,
+        request.runtime_metadata.max_kv_export_blocks,
+        request.runtime_metadata.hot_kv_precision_bits,
+        request.runtime_metadata.cold_kv_precision_bits,
         request.route_budget.threshold,
         request.route_budget.attention_fraction,
         request.route_budget.attention_tokens,
@@ -1324,7 +1386,17 @@ fn runtime_kv_blocks_from_context(
     } else {
         None
     };
-    let prefetch_limit = context.hardware_plan.execution.kv_prefetch_blocks.max(1);
+    let manifest_limit = if metadata.max_kv_import_blocks > 0 {
+        metadata.max_kv_import_blocks
+    } else {
+        context.hardware_plan.execution.kv_prefetch_blocks
+    };
+    let prefetch_limit = context
+        .hardware_plan
+        .execution
+        .kv_prefetch_blocks
+        .min(manifest_limit)
+        .max(1);
 
     context
         .memories
@@ -1554,6 +1626,37 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default, Clone)]
+    struct ManifestBoundRuntime {
+        imported_blocks: usize,
+    }
+
+    impl ModelRuntime for ManifestBoundRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new(
+                "manifest-bound-transformer",
+                "noiron-wordpiece",
+                65_536,
+                256,
+            )
+            .with_kv_exchange(true, true)
+            .with_kv_limits(1, 2)
+            .with_kv_precision(4, 4)
+        }
+
+        fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+            self.imported_blocks += blocks.len();
+            Ok(blocks.len())
+        }
+
+        fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            Ok(RuntimeResponse::new(format!(
+                "generated with max import {}",
+                request.runtime_metadata.max_kv_import_blocks
+            )))
+        }
+    }
+
     #[test]
     fn self_developed_runtime_abi_exposes_tokens_embeddings_and_kv_exchange() {
         let mut runtime = SelfDevelopedRuntime::default();
@@ -1697,6 +1800,56 @@ mod tests {
     }
 
     #[test]
+    fn runtime_kv_import_respects_manifest_import_limit() {
+        let memories = vec![
+            MemoryMatch {
+                id: 7,
+                key: "hot runtime memory one".to_owned(),
+                similarity: 0.95,
+                strength: 1.25,
+                vector: vec![0.1, 0.2, 0.3],
+            },
+            MemoryMatch {
+                id: 8,
+                key: "hot runtime memory two".to_owned(),
+                similarity: 0.90,
+                strength: 1.10,
+                vector: vec![0.4, 0.5, 0.6],
+            },
+        ];
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let mut hardware_plan = HardwarePlan::default();
+        hardware_plan.execution.kv_prefetch_blocks = 4;
+        let context = GenerationContext {
+            prompt: "limit runtime kv with manifest",
+            profile: TaskProfile::Coding,
+            memories: &memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(ManifestBoundRuntime::default());
+
+        let draft = backend.generate(context);
+
+        assert_eq!(backend.runtime().imported_blocks, 1);
+        assert!(draft.answer.contains("max import 1"));
+    }
+
+    #[test]
     fn default_runtime_abi_keeps_command_runtime_compatible() {
         let runtime = CommandRuntime::new("runner");
 
@@ -1776,6 +1929,8 @@ mod tests {
         assert!(prompt.contains("runtime:"));
         assert!(prompt.contains("model_id=sample-transformer"));
         assert!(prompt.contains("native_context_window=8192"));
+        assert!(prompt.contains("max_kv_import_blocks=8"));
+        assert!(prompt.contains("kv_bits=8/4"));
         assert!(prompt.contains("memory_hints"));
         assert!(prompt.contains("infini_memory_hints"));
         assert!(prompt.contains("experience_hints"));
@@ -1804,6 +1959,22 @@ mod tests {
         assert_eq!(
             extract_json_string_field(&payload, "model_id").unwrap(),
             "sample-transformer"
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "max_kv_import_blocks").unwrap(),
+            8.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "max_kv_export_blocks").unwrap(),
+            4.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "hot_kv_precision_bits").unwrap(),
+            8.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "cold_kv_precision_bits").unwrap(),
+            4.0
         );
         assert_eq!(
             extract_json_number_field(&payload, "attention_tokens").unwrap(),

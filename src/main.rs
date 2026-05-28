@@ -1222,6 +1222,7 @@ impl Args {
         } else {
             prompt_parts.join(" ")
         };
+        runtime_metadata = normalize_runtime_metadata(runtime_metadata);
         let profile = profile.unwrap_or_else(|| detect_profile(&prompt));
         if device == DeviceClass::Auto {
             let detected = HardwareSnapshot::auto_detect();
@@ -1332,6 +1333,25 @@ impl Args {
 
         gate
     }
+}
+
+fn normalize_runtime_metadata(metadata: RuntimeMetadata) -> RuntimeMetadata {
+    let hot_bits = metadata.hot_kv_precision_bits;
+    let cold_bits = metadata.cold_kv_precision_bits;
+    let max_import_blocks = if metadata.supports_kv_import {
+        metadata.max_kv_import_blocks.max(8)
+    } else {
+        0
+    };
+    let max_export_blocks = if metadata.supports_kv_export {
+        metadata.max_kv_export_blocks.max(4)
+    } else {
+        0
+    };
+
+    metadata
+        .with_kv_limits(max_import_blocks, max_export_blocks)
+        .with_kv_precision(hot_bits, cold_bits)
 }
 
 fn parse_usize(value: &str, fallback: usize) -> usize {
@@ -1516,6 +1536,10 @@ mod tests {
         assert_eq!(args.runtime_metadata.embedding_dimensions, 128);
         assert!(args.runtime_metadata.supports_kv_import);
         assert!(args.runtime_metadata.supports_kv_export);
+        assert_eq!(args.runtime_metadata.max_kv_import_blocks, 8);
+        assert_eq!(args.runtime_metadata.max_kv_export_blocks, 4);
+        assert_eq!(args.runtime_metadata.hot_kv_precision_bits, 8);
+        assert_eq!(args.runtime_metadata.cold_kv_precision_bits, 4);
         assert_eq!(args.device, DeviceClass::CpuOnly);
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);

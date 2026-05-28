@@ -91,6 +91,14 @@ impl RuntimeManifest {
         self.metadata
             .clone()
             .with_kv_exchange(self.kv_policy.import_enabled, self.kv_policy.export_enabled)
+            .with_kv_limits(
+                self.kv_policy.max_import_blocks,
+                self.kv_policy.max_export_blocks,
+            )
+            .with_kv_precision(
+                self.quantization.hot_kv.width(),
+                self.quantization.cold_kv.width(),
+            )
     }
 
     pub fn supports_device(&self, device: DeviceClass) -> bool {
@@ -395,6 +403,10 @@ mod tests {
         let metadata = manifest.runtime_metadata();
         assert!(metadata.supports_kv_import);
         assert!(metadata.supports_kv_export);
+        assert_eq!(metadata.max_kv_import_blocks, 8);
+        assert_eq!(metadata.max_kv_export_blocks, 4);
+        assert_eq!(metadata.hot_kv_precision_bits, 8);
+        assert_eq!(metadata.cold_kv_precision_bits, 4);
         assert_eq!(metadata.native_context_window, 65_536);
         assert_eq!(metadata.embedding_dimensions, 256);
     }
