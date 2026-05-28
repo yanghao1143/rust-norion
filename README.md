@@ -435,14 +435,17 @@ prefetch count, disk-spill policy, and recursive parallel chunk budget. These
 are policy hints, not hard dependencies; a real self-developed runtime can pick
 the first supported adapter and still fall back to portable Rust/CPU paths.
 The same fields are exposed to command runtimes as a stable
-`runtime_device_contract` text line and `{runtime_device_contract}` argument
-template, while JSON runtimes receive them under `hardware.execution`.
+`runtime_device_contract` text line, `{runtime_device_contract}` argument
+template, and `hardware.runtime_device_contract` in the structured JSON wire
+format. JSON runtimes also receive the expanded fields under
+`hardware.execution`.
 
 每个硬件计划还会生成 `DeviceExecutionPlan`：主计算通道、降级通道、内存模式、候选
 runtime adapter、冷热 KV 精度、预取数量、磁盘溢出策略和递归 chunk 并行预算。这些是策略提示，不是硬依赖；真实自研 runtime 可以选择第一个已支持 adapter，同时始终保留 Rust/CPU 可移植降级路径。
-同一组字段也会作为稳定的 `runtime_device_contract` 文本行和
-`{runtime_device_contract}` 参数模板暴露给命令行 runtime；JSON runtime 则从
-`hardware.execution` 读取。
+同一组字段也会作为稳定的 `runtime_device_contract` 文本行、
+`{runtime_device_contract}` 参数模板，以及结构化 JSON wire format 里的
+`hardware.runtime_device_contract` 暴露给命令行 runtime；JSON runtime 也能从
+`hardware.execution` 读取展开后的字段。
 
 The hardware allocator also derives a `MemoryGovernancePlan`. Tiny,
 constrained, and overloaded devices decay memory sooner, scan fewer compaction
@@ -721,7 +724,7 @@ vendor-specific control path.
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
 同一组显式架构参数也会配置内置 local runtime prototype。
-runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。
+runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
 vectors as runtime KV blocks before generation. After generation, exported KV

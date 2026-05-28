@@ -425,9 +425,10 @@ These are algorithmic references, not product dependencies:
   device execution contract, adapter intersection, KV prefetch budget, and
   hot/cold KV precision bounds; the same explicit architecture flags configure
   the local Rust runtime prototype and command-runtime request ABI; command
-  runtimes now receive `{runtime_device_contract}` so external self-developed
-  backends can choose portable or accelerated adapters from the same hardware
-  plan; runtime responses can now carry structured
+  runtimes now receive `{runtime_device_contract}` and structured JSON requests
+  carry `hardware.runtime_device_contract` so external self-developed backends
+  can choose portable or accelerated adapters from the same hardware plan
+  without reconstructing the contract from expanded fields; runtime responses can now carry structured
   forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
   KV influence, and runtime KV import/export counts; runtime requests now

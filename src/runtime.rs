@@ -843,6 +843,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"device\":{},\
          \"tier\":{},\
          \"pressure\":{:.6},\
+         \"runtime_device_contract\":{},\
          \"latency_budget_ms\":{},\
          \"local_kv_token_budget\":{},\
          \"global_kv_token_budget\":{},\
@@ -908,6 +909,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         json_string(request.hardware_plan.device.as_str()),
         json_string(request.hardware_plan.tier.as_str()),
         request.hardware_plan.pressure,
+        json_string(&request.hardware_plan.runtime_contract_summary()),
         option_u64_json(request.hardware_plan.latency_budget_ms),
         request.hardware_plan.local_kv_token_budget,
         request.hardware_plan.global_kv_token_budget,
@@ -2365,6 +2367,10 @@ mod tests {
         assert_eq!(
             extract_json_string_field(&payload, "primary_lane").unwrap(),
             "cpu-vector"
+        );
+        assert_eq!(
+            extract_json_string_field(&payload, "runtime_device_contract").unwrap(),
+            request.hardware_plan.runtime_contract_summary()
         );
         assert!(payload.contains("\"execution_waves\""));
         assert!(payload.contains("\"max_parallel_chunks\""));
