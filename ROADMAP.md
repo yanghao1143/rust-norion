@@ -349,6 +349,8 @@ These are algorithmic references, not product dependencies:
   replay instead of remaining limited to token-window monitoring;
   experience records now persist route budgets plus used/stored/gist/runtime-KV
   memory ids, structured reflection issues, and revision actions for replay;
+  recursive runtime call costs now feed replay metrics so expensive successful
+  long-context paths are weaker control-plane exemplars than efficient ones;
   reflection now performs one low-risk repair pass for non-critical weak drafts
   and blocks stale runtime-KV admission when the final answer came from a
   repaired draft;

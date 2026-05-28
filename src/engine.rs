@@ -885,18 +885,28 @@ fn average(total: f32, count: usize) -> Option<f32> {
 
 fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
     let token_count = (item.route_budget.attention_tokens + item.route_budget.fast_tokens).max(1);
+    let recursive_call_pressure = replay_recursive_call_pressure(item, token_count);
     match item.action {
         RewardAction::Reinforce => GenerationMetrics {
-            perplexity: (6.0 + (1.0 - item.reward) * 8.0 + item.stream_windows as f32 * 0.03)
-                .clamp(3.0, 18.0),
-            semantic_consistency: item.quality.max(item.reward).clamp(0.0, 1.0),
-            contradiction_count: item.contradiction_count,
+            perplexity: (6.0
+                + (1.0 - item.reward) * 8.0
+                + item.stream_windows as f32 * 0.03
+                + recursive_call_pressure * 14.0)
+                .clamp(3.0, 24.0),
+            semantic_consistency: (item.quality.max(item.reward) - recursive_call_pressure * 0.18)
+                .clamp(0.0, 1.0),
+            contradiction_count: item.contradiction_count
+                + usize::from(recursive_call_pressure >= 0.18 && item.reward < 0.90),
             token_count,
         },
         RewardAction::Penalize => GenerationMetrics {
-            perplexity: (18.0 + (1.0 - item.reward) * 18.0 + item.stream_windows as f32 * 0.05)
-                .clamp(12.0, 48.0),
-            semantic_consistency: item.quality.min(item.reward).clamp(0.0, 1.0),
+            perplexity: (18.0
+                + (1.0 - item.reward) * 18.0
+                + item.stream_windows as f32 * 0.05
+                + recursive_call_pressure * 18.0)
+                .clamp(12.0, 56.0),
+            semantic_consistency: (item.quality.min(item.reward) - recursive_call_pressure * 0.12)
+                .clamp(0.0, 1.0),
             contradiction_count: item
                 .contradiction_count
                 .max(item.critical_reflection_issue_count)
@@ -912,6 +922,19 @@ fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
             token_count,
         },
     }
+}
+
+fn replay_recursive_call_pressure(item: &ExperienceReplayItem, token_count: usize) -> f32 {
+    let Some(calls) = item.recursive_runtime_calls else {
+        return 0.0;
+    };
+    let expected_calls = token_count.max(1);
+    if calls <= expected_calls {
+        return 0.0;
+    }
+
+    (calls.saturating_sub(expected_calls) as f32 / (expected_calls.max(4) * 12) as f32)
+        .clamp(0.0, 0.35)
 }
 
 fn approximate_token_count(text: &str) -> usize {
@@ -1270,6 +1293,19 @@ mod tests {
         let report = second.auto_replay_report.as_ref().unwrap();
         assert!(report.applied >= 1);
         assert!(report.reinforced >= 1 || report.penalized >= 1);
+    }
+
+    #[test]
+    fn replay_metrics_penalize_excessive_recursive_runtime_calls() {
+        let cheap = replay_item_with_recursive_calls(Some(2));
+        let expensive = replay_item_with_recursive_calls(Some(96));
+
+        let cheap_metrics = replay_metrics(&cheap);
+        let expensive_metrics = replay_metrics(&expensive);
+
+        assert!(expensive_metrics.perplexity > cheap_metrics.perplexity);
+        assert!(expensive_metrics.semantic_consistency < cheap_metrics.semantic_consistency);
+        assert!(expensive_metrics.quality_score() < cheap_metrics.quality_score());
     }
 
     #[test]
@@ -2156,5 +2192,33 @@ mod tests {
 
     fn cleanup(path: std::path::PathBuf) {
         let _ = fs::remove_file(path);
+    }
+
+    fn replay_item_with_recursive_calls(
+        recursive_runtime_calls: Option<usize>,
+    ) -> ExperienceReplayItem {
+        ExperienceReplayItem {
+            experience_id: 42,
+            profile: TaskProfile::LongDocument,
+            action: RewardAction::Reinforce,
+            reward: 0.86,
+            quality: 0.88,
+            contradiction_count: 0,
+            reflection_issue_count: 0,
+            critical_reflection_issue_count: 0,
+            revision_action_count: 0,
+            stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.54,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
+            memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
+            recursive_runtime_calls,
+            priority: 0.86,
+            lesson: "long-context recursive replay path".to_owned(),
+        }
     }
 }
