@@ -11,8 +11,8 @@ use rust_norion::{
     NoironEngine, PersistentRoundtripInput, PersistentRoundtripReport, RecursiveScheduler,
     RuntimeAssetPaths, RuntimeBackend, RuntimeManifest, RuntimeManifestValidation, RuntimeMetadata,
     StateInspectionReport, TaskProfile, TierMigrationAction, TraceSchemaGateReport,
-    append_trace_jsonl, append_trace_jsonl_with_case, default_benchmark_cases,
-    evaluate_trace_schema_jsonl,
+    TransformerRuntimeArchitecture, append_trace_jsonl, append_trace_jsonl_with_case,
+    default_benchmark_cases, evaluate_trace_schema_jsonl,
 };
 
 fn main() -> std::io::Result<()> {
@@ -102,7 +102,7 @@ fn main() -> std::io::Result<()> {
             let mut backend = RuntimeBackend::new(runtime);
             run_benchmark(&mut engine, &mut backend, &benchmark_path)?
         } else if args.local_runtime {
-            let runtime = LocalTransformerRuntime::with_metadata(args.runtime_metadata.clone());
+            let runtime = LocalTransformerRuntime::with_manifest(args.runtime_manifest());
             let mut backend = RuntimeBackend::new(runtime);
             run_benchmark(&mut engine, &mut backend, &benchmark_path)?
         } else {
@@ -151,7 +151,7 @@ fn main() -> std::io::Result<()> {
             None,
         )?
     } else if args.local_runtime {
-        let runtime = LocalTransformerRuntime::with_metadata(args.runtime_metadata.clone());
+        let runtime = LocalTransformerRuntime::with_manifest(args.runtime_manifest());
         let mut backend = RuntimeBackend::new(runtime);
         run_timed_inference(
             &mut engine,
@@ -873,6 +873,14 @@ fn print_runtime_manifest_gate_report(
         option_path_display(manifest.assets.config.as_ref())
     );
     println!(
+        "runtime_architecture: layers={} hidden={} attention_heads={} kv_heads={} local_window={}",
+        manifest.architecture.layer_count,
+        manifest.architecture.hidden_size,
+        manifest.architecture.attention_heads,
+        manifest.architecture.kv_heads,
+        manifest.architecture.local_window_tokens
+    );
+    println!(
         "runtime_kv_policy: import={} export={} max_import={} max_export={} kv_bits={}/{}",
         manifest.kv_policy.import_enabled,
         manifest.kv_policy.export_enabled,
@@ -943,6 +951,11 @@ struct Args {
     runtime_weights_path: Option<PathBuf>,
     runtime_tokenizer_path: Option<PathBuf>,
     runtime_config_path: Option<PathBuf>,
+    runtime_layer_count: Option<usize>,
+    runtime_hidden_size: Option<usize>,
+    runtime_attention_heads: Option<usize>,
+    runtime_kv_heads: Option<usize>,
+    runtime_local_window_tokens: Option<usize>,
     inspect_state: bool,
     inspect_limit: usize,
     local_runtime: bool,
@@ -1002,6 +1015,11 @@ impl Args {
         let mut runtime_weights_path = None;
         let mut runtime_tokenizer_path = None;
         let mut runtime_config_path = None;
+        let mut runtime_layer_count = None;
+        let mut runtime_hidden_size = None;
+        let mut runtime_attention_heads = None;
+        let mut runtime_kv_heads = None;
+        let mut runtime_local_window_tokens = None;
         let mut inspect_state = false;
         let mut inspect_limit = 5;
         let mut local_runtime = false;
@@ -1163,6 +1181,26 @@ impl Args {
                 }
                 "--runtime-config" if index + 1 < raw.len() => {
                     runtime_config_path = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
+                "--runtime-layers" if index + 1 < raw.len() => {
+                    runtime_layer_count = Some(parse_usize(&raw[index + 1], 0));
+                    index += 2;
+                }
+                "--runtime-hidden-size" if index + 1 < raw.len() => {
+                    runtime_hidden_size = Some(parse_usize(&raw[index + 1], 0));
+                    index += 2;
+                }
+                "--runtime-attention-heads" if index + 1 < raw.len() => {
+                    runtime_attention_heads = Some(parse_usize(&raw[index + 1], 0));
+                    index += 2;
+                }
+                "--runtime-kv-heads" if index + 1 < raw.len() => {
+                    runtime_kv_heads = Some(parse_usize(&raw[index + 1], 0));
+                    index += 2;
+                }
+                "--runtime-local-window" if index + 1 < raw.len() => {
+                    runtime_local_window_tokens = Some(parse_usize(&raw[index + 1], 0));
                     index += 2;
                 }
                 "--inspect-state" => {
@@ -1378,6 +1416,11 @@ impl Args {
             runtime_weights_path,
             runtime_tokenizer_path,
             runtime_config_path,
+            runtime_layer_count,
+            runtime_hidden_size,
+            runtime_attention_heads,
+            runtime_kv_heads,
+            runtime_local_window_tokens,
             inspect_state,
             inspect_limit,
             local_runtime,
@@ -1459,7 +1502,19 @@ impl Args {
             assets = assets.with_config(path.clone());
         }
 
-        RuntimeManifest::from_metadata(self.runtime_metadata.clone()).with_assets(assets)
+        let manifest = RuntimeManifest::from_metadata(self.runtime_metadata.clone());
+        let defaults = manifest.architecture;
+        let architecture = TransformerRuntimeArchitecture::new(
+            self.runtime_layer_count.unwrap_or(defaults.layer_count),
+            self.runtime_hidden_size.unwrap_or(defaults.hidden_size),
+            self.runtime_attention_heads
+                .unwrap_or(defaults.attention_heads),
+            self.runtime_kv_heads.unwrap_or(defaults.kv_heads),
+            self.runtime_local_window_tokens
+                .unwrap_or(defaults.local_window_tokens),
+        );
+
+        manifest.with_assets(assets).with_architecture(architecture)
     }
 
     fn kv_quant_gate(&self) -> KvQuantBenchmarkGate {
@@ -1536,7 +1591,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1618,6 +1673,16 @@ mod tests {
             "tokenizer.noiron".to_owned(),
             "--runtime-config".to_owned(),
             "config.noiron".to_owned(),
+            "--runtime-layers".to_owned(),
+            "18".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "128".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "8".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "2048".to_owned(),
             "--inspect-state".to_owned(),
             "--inspect-limit".to_owned(),
             "2".to_owned(),
@@ -1718,6 +1783,11 @@ mod tests {
             args.runtime_config_path.as_ref().unwrap(),
             &PathBuf::from("config.noiron")
         );
+        assert_eq!(args.runtime_layer_count, Some(18));
+        assert_eq!(args.runtime_hidden_size, Some(128));
+        assert_eq!(args.runtime_attention_heads, Some(8));
+        assert_eq!(args.runtime_kv_heads, Some(4));
+        assert_eq!(args.runtime_local_window_tokens, Some(2048));
         assert!(args.inspect_state);
         assert_eq!(args.inspect_limit, 2);
         assert!(args.local_runtime);
@@ -1732,6 +1802,14 @@ mod tests {
         assert_eq!(args.runtime_metadata.max_kv_export_blocks, 4);
         assert_eq!(args.runtime_metadata.hot_kv_precision_bits, 8);
         assert_eq!(args.runtime_metadata.cold_kv_precision_bits, 4);
+        assert_eq!(args.runtime_manifest().architecture.layer_count, 18);
+        assert_eq!(args.runtime_manifest().architecture.hidden_size, 128);
+        assert_eq!(args.runtime_manifest().architecture.attention_heads, 8);
+        assert_eq!(args.runtime_manifest().architecture.kv_heads, 4);
+        assert_eq!(
+            args.runtime_manifest().architecture.local_window_tokens,
+            2048
+        );
         assert_eq!(args.device, DeviceClass::CpuOnly);
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);
@@ -1758,6 +1836,16 @@ mod tests {
             "65536".to_owned(),
             "--runtime-embedding-dims".to_owned(),
             "256".to_owned(),
+            "--runtime-layers".to_owned(),
+            "32".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "256".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "8".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "8192".to_owned(),
             "--runtime-kv-exchange".to_owned(),
             "--runtime-weights".to_owned(),
             weights.display().to_string(),
@@ -1775,9 +1863,72 @@ mod tests {
         assert_eq!(manifest.metadata.tokenizer, "self-bpe");
         assert_eq!(manifest.metadata.native_context_window, 65_536);
         assert_eq!(manifest.metadata.embedding_dimensions, 256);
+        assert_eq!(manifest.architecture.layer_count, 32);
+        assert_eq!(manifest.architecture.hidden_size, 256);
+        assert_eq!(manifest.architecture.attention_heads, 8);
+        assert_eq!(manifest.architecture.kv_heads, 4);
+        assert_eq!(manifest.architecture.local_window_tokens, 8_192);
         assert!(manifest.metadata.supports_kv_import);
         assert!(manifest.metadata.supports_kv_export);
         assert!(validation.passed(), "{validation:?}");
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn runtime_manifest_gate_rejects_invalid_cli_architecture() {
+        let asset_dir = temp_asset_dir("runtime-manifest-invalid-architecture");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let args = Args::parse(vec![
+            "--runtime-manifest-gate".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "130".to_owned(),
+            "--runtime-layers".to_owned(),
+            "12".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "130".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "8".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "16".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "8192".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+        ]);
+
+        let validation = args.runtime_manifest().validate_for_production();
+
+        assert!(!validation.passed());
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("hidden_size must be divisible"))
+        );
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("kv_heads must not exceed"))
+        );
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("local_window_tokens must not exceed"))
+        );
         fs::remove_dir_all(asset_dir).unwrap();
     }
 

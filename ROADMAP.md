@@ -406,9 +406,11 @@ These are algorithmic references, not product dependencies:
   be validated before production kernels are loaded; production manifest
   validation now requires weights and tokenizer assets to exist as local files
   while keeping prototype/demo validation non-blocking; the CLI now exposes a
-  `--runtime-manifest-gate` with weights/tokenizer/config asset flags so this
-  contract can fail before a production runtime is used; runtime responses can
-  now carry structured forward diagnostics, and trace JSONL records model id,
+  `--runtime-manifest-gate` with explicit layer/head/window architecture plus
+  weights/tokenizer/config asset flags so this contract can fail before a
+  production runtime is used; the same explicit architecture flags configure
+  the local Rust runtime prototype; runtime responses can now carry structured
+  forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
   KV influence, and runtime KV import/export counts)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
@@ -454,7 +456,8 @@ These are algorithmic references, not product dependencies:
   integration end to end before production Transformer kernels are connected.
 - Production runtime manifests have a hard local-file gate for required weights
   and tokenizer assets before a self-developed model runtime is accepted, and
-  the CLI exposes that gate directly for local/CI checks.
+  the CLI exposes that gate directly for local/CI checks with explicit
+  Transformer layer/head/window shape validation.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained

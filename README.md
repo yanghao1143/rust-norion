@@ -305,17 +305,17 @@ cargo run -- --kv-quant-gate
 ```
 
 Run the production runtime manifest gate before connecting a self-developed
-Transformer runtime. This checks metadata, architecture defaults, KV policy, and
-that required local weights/tokenizer asset files exist:
+Transformer runtime. This checks metadata, explicit architecture shape, KV
+policy, and that required local weights/tokenizer asset files exist:
 
 ```powershell
-cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
+cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
 ```
 
-接入生产自研 Transformer runtime 前，先运行 runtime manifest 门禁。它会检查元数据、架构默认值、KV policy，并确认本地 weights/tokenizer 资产文件真实存在：
+接入生产自研 Transformer runtime 前，先运行 runtime manifest 门禁。它会检查元数据、显式架构形状、KV policy，并确认本地 weights/tokenizer 资产文件真实存在：
 
 ```powershell
-cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
+cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
 ```
 
 Run a persistence roundtrip gate that writes state, reloads it, and verifies the
@@ -681,15 +681,19 @@ window instead of a hardcoded control-plane default.
 The CLI exposes this metadata through `--runtime-model-id`,
 `--runtime-tokenizer`, `--runtime-native-window`, `--runtime-embedding-dims`,
 `--runtime-kv-import`, `--runtime-kv-export`, and `--runtime-kv-exchange`.
-`--runtime-weights`, `--runtime-tokenizer-path`, `--runtime-config`, and
-`--runtime-manifest-gate` turn the same metadata into an executable production
-manifest check before the runtime is used. Runtime metadata and the structured
-JSON request ABI also carry the effective KV import/export block limits and
-hot/cold KV precision, so an external self-developed runtime can enforce the
-same manifest policy the control plane validated.
+`--runtime-layers`, `--runtime-hidden-size`, `--runtime-attention-heads`,
+`--runtime-kv-heads`, `--runtime-local-window`, `--runtime-weights`,
+`--runtime-tokenizer-path`, `--runtime-config`, and `--runtime-manifest-gate`
+turn the same metadata into an executable production manifest check before the
+runtime is used. The same explicit architecture flags also configure the
+built-in local runtime prototype. Runtime metadata and the structured JSON
+request ABI carry the effective KV import/export block limits and hot/cold KV
+precision, so an external self-developed runtime can enforce the same manifest
+policy the control plane validated.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
-`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
+`--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
+同一组显式架构参数也会配置内置 local runtime prototype。
 runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
