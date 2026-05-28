@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::hardware::{HardwarePlan, RuntimeAdapterHint, RuntimeManifestDeviceGateReport};
 use crate::kv_exchange::RuntimeKvBlock;
+use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
 use crate::runtime::{
     ModelRuntime, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse,
-    RuntimeTokenId,
+    RuntimeToken, RuntimeTokenId,
 };
 use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
 
@@ -66,6 +68,65 @@ pub struct ProductionTransformerRuntime {
     device_gate: RuntimeManifestDeviceGateReport,
     assets: RuntimeAssetSummary,
     imported_kv_blocks: Vec<RuntimeKvBlock>,
+    exported_kv_blocks: Vec<RuntimeKvBlock>,
+    kernel: Option<Arc<dyn ProductionForwardKernel>>,
+}
+
+pub trait ProductionForwardKernel: std::fmt::Debug + Send + Sync {
+    fn generate(
+        &self,
+        context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError>;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProductionKernelContext<'a> {
+    pub manifest: &'a RuntimeManifest,
+    pub device_gate: &'a RuntimeManifestDeviceGateReport,
+    pub assets: &'a RuntimeAssetSummary,
+    pub imported_kv_blocks: &'a [RuntimeKvBlock],
+    pub request: &'a RuntimeRequest,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProductionKernelOutput {
+    pub answer: String,
+    pub tokens: Vec<RuntimeToken>,
+    pub trace: Vec<ReasoningStep>,
+    pub diagnostics: RuntimeDiagnostics,
+    pub exported_kv_blocks: Vec<RuntimeKvBlock>,
+}
+
+impl ProductionKernelOutput {
+    pub fn new(answer: impl Into<String>) -> Self {
+        Self {
+            answer: answer.into(),
+            tokens: Vec::new(),
+            trace: Vec::new(),
+            diagnostics: RuntimeDiagnostics::default(),
+            exported_kv_blocks: Vec::new(),
+        }
+    }
+
+    pub fn with_tokens(mut self, tokens: Vec<RuntimeToken>) -> Self {
+        self.tokens = tokens;
+        self
+    }
+
+    pub fn with_trace(mut self, trace: Vec<ReasoningStep>) -> Self {
+        self.trace = trace;
+        self
+    }
+
+    pub fn with_diagnostics(mut self, diagnostics: RuntimeDiagnostics) -> Self {
+        self.diagnostics = diagnostics;
+        self
+    }
+
+    pub fn with_exported_kv_blocks(mut self, blocks: Vec<RuntimeKvBlock>) -> Self {
+        self.exported_kv_blocks = blocks;
+        self
+    }
 }
 
 impl ProductionTransformerRuntime {
@@ -100,6 +161,8 @@ impl ProductionTransformerRuntime {
             device_gate,
             assets,
             imported_kv_blocks: Vec::new(),
+            exported_kv_blocks: Vec::new(),
+            kernel: None,
         })
     }
 
@@ -127,14 +190,40 @@ impl ProductionTransformerRuntime {
         &self.imported_kv_blocks
     }
 
+    pub fn exported_kv_blocks(&self) -> &[RuntimeKvBlock] {
+        &self.exported_kv_blocks
+    }
+
+    pub fn with_kernel<K>(mut self, kernel: K) -> Self
+    where
+        K: ProductionForwardKernel + 'static,
+    {
+        self.kernel = Some(Arc::new(kernel));
+        self
+    }
+
+    pub fn with_shared_kernel(mut self, kernel: Arc<dyn ProductionForwardKernel>) -> Self {
+        self.kernel = Some(kernel);
+        self
+    }
+
+    pub fn kernel_connected(&self) -> bool {
+        self.kernel.is_some()
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
-            "production_runtime: model_id={} device={} adapter={} weights_bytes={} tokenizer_bytes={} kernel=not-connected",
+            "production_runtime: model_id={} device={} adapter={} weights_bytes={} tokenizer_bytes={} kernel={}",
             self.manifest.metadata.model_id,
             self.device_gate.device.as_str(),
             self.device_gate.runtime_adapter_name(),
             self.assets.weights_bytes,
-            self.assets.tokenizer_bytes
+            self.assets.tokenizer_bytes,
+            if self.kernel_connected() {
+                "connected"
+            } else {
+                "not-connected"
+            }
         )
     }
 }
@@ -179,10 +268,48 @@ impl ModelRuntime for ProductionTransformerRuntime {
     }
 
     fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
-        Ok(Vec::new())
+        if !self.manifest.kv_policy.export_enabled {
+            self.exported_kv_blocks.clear();
+            return Ok(Vec::new());
+        }
+
+        Ok(self
+            .exported_kv_blocks
+            .iter()
+            .take(self.manifest.kv_policy.max_export_blocks)
+            .cloned()
+            .collect())
     }
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        if let Some(kernel) = &self.kernel {
+            let output = kernel.generate(ProductionKernelContext {
+                manifest: &self.manifest,
+                device_gate: &self.device_gate,
+                assets: &self.assets,
+                imported_kv_blocks: &self.imported_kv_blocks,
+                request: &request,
+            })?;
+            self.exported_kv_blocks = output
+                .exported_kv_blocks
+                .into_iter()
+                .take(self.manifest.kv_policy.max_export_blocks)
+                .collect();
+
+            let mut response =
+                RuntimeResponse::new(output.answer).with_diagnostics(normalize_kernel_diagnostics(
+                    output.diagnostics,
+                    &self.manifest,
+                    &self.device_gate,
+                    self.imported_kv_blocks.len(),
+                    self.exported_kv_blocks.len(),
+                ));
+            response.tokens = output.tokens;
+            response.trace = output.trace;
+
+            return Ok(response);
+        }
+
         Err(RuntimeError::new(format!(
             "production Transformer kernel is not connected for model_id={} adapter={} device={}; manifest assets and device contract passed, but a self-developed forward kernel must implement generate for prompt '{}'",
             self.manifest.metadata.model_id,
@@ -191,6 +318,35 @@ impl ModelRuntime for ProductionTransformerRuntime {
             compact(&request.prompt, 96)
         )))
     }
+}
+
+fn normalize_kernel_diagnostics(
+    mut diagnostics: RuntimeDiagnostics,
+    manifest: &RuntimeManifest,
+    device_gate: &RuntimeManifestDeviceGateReport,
+    imported_kv_blocks: usize,
+    exported_kv_blocks: usize,
+) -> RuntimeDiagnostics {
+    if diagnostics.model_id.is_none() {
+        diagnostics.model_id = Some(manifest.metadata.model_id.clone());
+    }
+    if diagnostics.selected_adapter.is_none() {
+        diagnostics.selected_adapter = device_gate
+            .runtime_adapter
+            .map(|adapter| adapter.as_str().to_owned());
+    }
+    if diagnostics.layer_count == 0 {
+        diagnostics.layer_count = manifest.architecture.layer_count;
+    }
+    if diagnostics.hidden_size == 0 {
+        diagnostics.hidden_size = manifest.architecture.hidden_size;
+    }
+    if diagnostics.local_window_tokens == 0 {
+        diagnostics.local_window_tokens = manifest.architecture.local_window_tokens;
+    }
+    diagnostics.imported_kv_blocks = imported_kv_blocks;
+    diagnostics.exported_kv_blocks = exported_kv_blocks;
+    diagnostics
 }
 
 fn asset_len(label: &str, path: &Path) -> Result<u64, RuntimeError> {
@@ -308,6 +464,7 @@ mod tests {
         assert!(runtime.runtime_device_contract().contains("device=cpu"));
         assert!(runtime.selected_adapter().is_some());
         assert!(runtime.summary_line().contains("kernel=not-connected"));
+        assert!(!runtime.kernel_connected());
 
         fs::remove_dir_all(asset_dir).unwrap();
     }
@@ -400,6 +557,42 @@ mod tests {
         fs::remove_dir_all(asset_dir).unwrap();
     }
 
+    #[test]
+    fn production_runtime_can_generate_through_attached_forward_kernel() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-attached-kernel");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let mut runtime =
+            ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+                .unwrap()
+                .with_kernel(MockForwardKernel);
+        let blocks = vec![RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2])];
+        runtime.import_kv(&blocks).unwrap();
+
+        let response = runtime.generate(sample_request()).unwrap();
+        let exported = runtime.export_kv().unwrap();
+
+        assert!(runtime.kernel_connected());
+        assert!(runtime.summary_line().contains("kernel=connected"));
+        assert!(response.answer.contains("kernel answer"));
+        assert_eq!(response.tokens.len(), 1);
+        assert_eq!(response.trace[0].label, "production_kernel");
+        assert_eq!(
+            response.diagnostics.model_id.as_deref(),
+            Some("noiron-production-transformer")
+        );
+        assert_eq!(
+            response.diagnostics.selected_adapter.as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+        assert_eq!(response.diagnostics.exported_kv_blocks, 1);
+        assert_eq!(exported.len(), 1);
+        assert_eq!(runtime.exported_kv_blocks().len(), 1);
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
     fn production_manifest(weights: &Path, tokenizer: &Path) -> RuntimeManifest {
         RuntimeManifest::self_developed(
             "noiron-production-transformer",
@@ -478,5 +671,37 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("{name}-{unique}"))
+    }
+
+    #[derive(Debug, Clone)]
+    struct MockForwardKernel;
+
+    impl ProductionForwardKernel for MockForwardKernel {
+        fn generate(
+            &self,
+            context: ProductionKernelContext<'_>,
+        ) -> Result<ProductionKernelOutput, RuntimeError> {
+            Ok(ProductionKernelOutput::new(format!(
+                "kernel answer for {} with {} imported KV blocks",
+                context.manifest.metadata.model_id,
+                context.imported_kv_blocks.len()
+            ))
+            .with_tokens(vec![RuntimeToken {
+                text: "kernel".to_owned(),
+                logprob: Some(-0.2),
+                entropy: Some(0.3),
+            }])
+            .with_trace(vec![ReasoningStep::new(
+                "production_kernel",
+                context.device_gate.runtime_device_contract.clone(),
+                0.88,
+            )])
+            .with_diagnostics(RuntimeDiagnostics {
+                forward_energy: Some(0.42),
+                kv_influence: Some(0.25),
+                ..RuntimeDiagnostics::default()
+            })
+            .with_exported_kv_blocks(vec![RuntimeKvBlock::new(1, 0, 0, 1, vec![0.3], vec![0.4])]))
+        }
     }
 }

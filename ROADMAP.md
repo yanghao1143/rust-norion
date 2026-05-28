@@ -438,10 +438,13 @@ These are algorithmic references, not product dependencies:
   adapter hints before exported runtime KV can be admitted; a
   `ProductionTransformerRuntime` boundary now binds production manifests to
   existing local assets, the current device contract, adapter intersection,
-  bootstrap tokenizer/embedding access, and bounded KV import while explicitly
-  failing generation until a real self-developed forward kernel is connected;
-  the CLI can now select that boundary with `--production-runtime` for normal
-  inference and benchmark runs)
+  bootstrap tokenizer/embedding access, bounded KV import, and bounded KV
+  export; generation fails explicitly until a kernel is attached, and
+  `ProductionForwardKernel` now provides the stable trait slot for a real
+  self-developed Transformer forward kernel to return answer text, token
+  uncertainty, trace, diagnostics, and exported KV blocks; the CLI can now
+  select that boundary with `--production-runtime` for normal inference and
+  benchmark runs)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -491,6 +494,10 @@ These are algorithmic references, not product dependencies:
   constructed after manifest and device gates pass, it exposes selected adapter
   and runtime device contract state, and it refuses generation until a real
   self-developed forward kernel is wired behind it.
+- Real production kernels have a stable Rust attachment point:
+  `ProductionForwardKernel` receives the manifest, device contract, asset
+  summary, imported KV blocks, and runtime request, and returns the same
+  response surfaces consumed by `RuntimeBackend`.
 - The CLI can execute the production runtime boundary through
   `--production-runtime`, so production manifest/device failures and the
   kernel-not-connected state are observable in the same control loop used by
