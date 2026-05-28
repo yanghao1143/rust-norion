@@ -574,6 +574,7 @@ impl NoironEngine {
             tier_counts: tier_plan.counts(),
             infini_counts: infini_memory_plan.counts(),
             recursive_schedule: recursive_schedule.clone(),
+            recursive_runtime_calls,
             stream_windows: stream_reports.len(),
             stored_memory: stored_memory_id.is_some(),
             stored_gist_memories: stored_gist_memory_ids.len(),

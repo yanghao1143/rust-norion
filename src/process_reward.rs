@@ -104,6 +104,7 @@ pub struct ProcessRewardInput {
     pub tier_counts: TierCounts,
     pub infini_counts: InfiniMemoryCounts,
     pub recursive_schedule: RecursiveSchedule,
+    pub recursive_runtime_calls: usize,
     pub stream_windows: usize,
     pub stored_memory: bool,
     pub stored_gist_memories: usize,
@@ -145,6 +146,7 @@ impl ProcessRewarder {
                 input.tier_counts,
                 input.infini_counts,
                 &input.recursive_schedule,
+                input.recursive_runtime_calls,
             ),
             admission: admission_reward(
                 quality,
@@ -231,6 +233,7 @@ fn latency_reward(
     tier_counts: TierCounts,
     infini_counts: InfiniMemoryCounts,
     recursive_schedule: &RecursiveSchedule,
+    recursive_runtime_calls: usize,
 ) -> f32 {
     let fast_fraction = 1.0 - route_budget.attention_fraction.clamp(0.0, 1.0);
     let stream_pressure = (stream_windows as f32 / 48.0).min(0.30);
@@ -239,7 +242,8 @@ fn latency_reward(
     let recursion_pressure = if recursive_schedule.requires_recursion {
         let wave_pressure = (recursive_schedule.execution_wave_count() as f32 / 32.0).min(0.14);
         let chunk_overhead = (recursive_schedule.chunk_count() as f32 / 128.0).min(0.04);
-        wave_pressure + chunk_overhead
+        let call_pressure = (recursive_runtime_calls.saturating_sub(1) as f32 / 160.0).min(0.18);
+        wave_pressure + chunk_overhead + call_pressure
     } else {
         0.0
     };
@@ -313,11 +317,18 @@ fn reward_notes(
 
     if input.recursive_schedule.requires_recursion {
         notes.push(format!(
-            "recursive:chunks={}:merge_rounds={}:waves={}:parallel={}",
+            "recursive:chunks={}:merge_rounds={}:waves={}:parallel={}:runtime_calls={}",
             input.recursive_schedule.chunk_count(),
             input.recursive_schedule.merge_round_count(),
             input.recursive_schedule.execution_wave_count(),
-            input.recursive_schedule.max_parallel_chunks
+            input.recursive_schedule.max_parallel_chunks,
+            input.recursive_runtime_calls
+        ));
+    }
+    if input.recursive_runtime_calls > input.recursive_schedule.chunk_count().max(1) * 2 {
+        notes.push(format!(
+            "latency:recursive_runtime_calls={}",
+            input.recursive_runtime_calls
         ));
     }
 
@@ -383,6 +394,25 @@ mod tests {
         assert!(report.notes.iter().any(|note| note.contains("recursive")));
     }
 
+    #[test]
+    fn recursive_runtime_calls_reduce_latency_reward() {
+        let mut cheap = input(0.82, 0, 0.20, true);
+        cheap.recursive_runtime_calls = cheap.recursive_schedule.chunk_count().max(1);
+        let mut expensive = cheap.clone();
+        expensive.recursive_runtime_calls = 96;
+
+        let cheap_report = ProcessRewarder::new().score(cheap);
+        let expensive_report = ProcessRewarder::new().score(expensive);
+
+        assert!(expensive_report.components.latency < cheap_report.components.latency);
+        assert!(
+            expensive_report
+                .notes
+                .iter()
+                .any(|note| note == "latency:recursive_runtime_calls=96")
+        );
+    }
+
     fn input(
         quality: f32,
         contradiction_count: usize,
@@ -421,6 +451,7 @@ mod tests {
             tier_counts: TierCounts::default(),
             infini_counts: InfiniMemoryCounts::default(),
             recursive_schedule,
+            recursive_runtime_calls: if requires_recursion { 6 } else { 1 },
             stream_windows: 4,
             stored_memory: quality > 0.45,
             stored_gist_memories: if quality > 0.45 { 1 } else { 0 },
