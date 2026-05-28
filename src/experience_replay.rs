@@ -30,14 +30,39 @@ impl ExperienceReplayPlanner {
             .filter_map(|record| self.item_for_record(record))
             .collect::<Vec<_>>();
 
-        items.sort_by(|left, right| {
-            right
-                .priority
-                .partial_cmp(&left.priority)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| right.experience_id.cmp(&left.experience_id))
-        });
-        items.truncate(limit);
+        sort_replay_items(&mut items);
+        if limit == 0 {
+            items.clear();
+        } else if items.len() > limit {
+            let recursive_candidate = items
+                .iter()
+                .skip(limit)
+                .find(|item| item.recursive_runtime_calls.is_some())
+                .cloned();
+            items.truncate(limit);
+
+            if !items
+                .iter()
+                .any(|item| item.recursive_runtime_calls.is_some())
+            {
+                if let Some(recursive_item) = recursive_candidate {
+                    if let Some((replace_index, _)) = items
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, item)| item.recursive_runtime_calls.is_none())
+                        .min_by(|(_, left), (_, right)| {
+                            left.priority
+                                .partial_cmp(&right.priority)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .then_with(|| left.experience_id.cmp(&right.experience_id))
+                        })
+                    {
+                        items[replace_index] = recursive_item;
+                        sort_replay_items(&mut items);
+                    }
+                }
+            }
+        }
 
         ExperienceReplayPlan { items }
     }
@@ -92,6 +117,16 @@ impl ExperienceReplayPlanner {
             lesson: record.lesson.clone(),
         })
     }
+}
+
+fn sort_replay_items(items: &mut [ExperienceReplayItem]) {
+    items.sort_by(|left, right| {
+        right
+            .priority
+            .partial_cmp(&left.priority)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| right.experience_id.cmp(&left.experience_id))
+    });
 }
 
 #[derive(Debug, Clone, Default)]
@@ -312,6 +347,35 @@ mod tests {
 
         assert_eq!(plan.items.len(), 1);
         assert_eq!(plan.items[0].experience_id, 3);
+    }
+
+    #[test]
+    fn planner_keeps_recursive_runtime_sample_when_limit_allows() {
+        let planner = ExperienceReplayPlanner::new();
+        let mut recursive = record(5, 0.80, RewardAction::Reinforce);
+        recursive.profile = TaskProfile::LongDocument;
+        recursive.process_reward.notes = vec![
+            "recursive:chunks=32:merge_rounds=2:waves=8:parallel=2:runtime_calls=96".to_owned(),
+        ];
+        let mut high_priority = record(1, 0.96, RewardAction::Reinforce);
+        high_priority.process_reward.notes.clear();
+        let mut second_priority = record(2, 0.95, RewardAction::Reinforce);
+        second_priority.process_reward.notes.clear();
+        let records = vec![high_priority, second_priority, recursive];
+
+        let plan = planner.plan(&records, 2);
+
+        assert_eq!(plan.items.len(), 2);
+        assert!(
+            plan.items
+                .iter()
+                .any(|item| item.recursive_runtime_calls == Some(96))
+        );
+        assert!(
+            plan.items
+                .iter()
+                .any(|item| item.experience_id == 1 || item.experience_id == 2)
+        );
     }
 
     fn record(id: u64, reward: f32, action: RewardAction) -> ExperienceRecord {

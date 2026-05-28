@@ -353,7 +353,9 @@ These are algorithmic references, not product dependencies:
   long-context paths are weaker control-plane exemplars than efficient ones,
   and replay summaries/traces expose recursive call pressure for regression
   checks; benchmark gates can now require auto-replay recursive coverage and
-  cap replay recursive call pressure;
+  cap replay recursive call pressure; replay planning now keeps at least one
+  recursive runtime sample when the limit allows so long-context cost learning
+  is not starved by short high-reward samples;
   reflection now performs one low-risk repair pass for non-critical weak drafts
   and blocks stale runtime-KV admission when the final answer came from a
   repaired draft;
