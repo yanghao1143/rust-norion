@@ -5,11 +5,12 @@ use std::time::Instant;
 use rust_norion::{
     BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
     CommandWireFormat, DeviceClass, DevicePlanGateReport, GistLevel, HardwareAllocator,
-    HardwareSnapshot, HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome,
-    InferenceRequest, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary,
-    LocalTransformerRuntime, MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime,
-    NoironEngine, PersistentRoundtripInput, PersistentRoundtripReport, RecursiveScheduler,
-    RuntimeAssetPaths, RuntimeBackend, RuntimeManifest, RuntimeManifestValidation, RuntimeMetadata,
+    HardwarePlan, HardwareSnapshot, HeuristicBackend, HierarchyWeights, InferenceBackend,
+    InferenceOutcome, InferenceRequest, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
+    KvQuantBenchmarkSummary, LocalTransformerRuntime, MemoryCompactionPolicy,
+    MemoryRetentionPolicy, ModelRuntime, NoironEngine, PersistentRoundtripInput,
+    PersistentRoundtripReport, RecursiveScheduler, RuntimeAssetPaths, RuntimeBackend,
+    RuntimeManifest, RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
     StateInspectionReport, TaskProfile, TierMigrationAction, TraceSchemaGateReport,
     TransformerRuntimeArchitecture, append_trace_jsonl, append_trace_jsonl_with_case,
     default_benchmark_cases, evaluate_trace_schema_jsonl,
@@ -40,8 +41,12 @@ fn main() -> std::io::Result<()> {
     if args.runtime_manifest_gate {
         let manifest = args.runtime_manifest();
         let validation = manifest.validate_for_production();
-        print_runtime_manifest_gate_report(&manifest, &validation);
-        if !validation.passed() {
+        let device_gate = RuntimeManifestDeviceGateReport::evaluate(
+            &manifest,
+            &args.runtime_manifest_device_plan(),
+        );
+        print_runtime_manifest_gate_report(&manifest, &validation, &device_gate);
+        if !validation.passed() || !device_gate.passed() {
             std::process::exit(2);
         }
         return Ok(());
@@ -865,14 +870,17 @@ fn print_kv_quant_gate_report(
 fn print_runtime_manifest_gate_report(
     manifest: &RuntimeManifest,
     validation: &RuntimeManifestValidation,
+    device_gate: &RuntimeManifestDeviceGateReport,
 ) {
     println!("Noiron runtime manifest gate");
     println!(
-        "runtime_manifest_gate: passed={} errors={} warnings={}",
-        validation.passed(),
-        validation.errors.len(),
-        validation.warnings.len()
+        "runtime_manifest_gate: passed={} errors={} warnings={} device_failures={}",
+        validation.passed() && device_gate.passed(),
+        validation.errors.len() + device_gate.failures.len(),
+        validation.warnings.len(),
+        device_gate.failures.len()
     );
+    println!("{}", device_gate.summary_line());
     println!(
         "runtime_metadata: {}",
         manifest.runtime_metadata().summary()
@@ -900,12 +908,40 @@ fn print_runtime_manifest_gate_report(
         manifest.quantization.hot_kv.width(),
         manifest.quantization.cold_kv.width()
     );
+    println!(
+        "runtime_device: device={} tier={} primary={} fallback={} memory={} adapters={} runtime_adapter={} parallel_chunks={} kv_prefetch={} kv_bits={}/{} disk_spill={} local_kv_tokens={} global_kv_tokens={} latency_budget_ms={}",
+        device_gate.device.as_str(),
+        device_gate.tier.as_str(),
+        device_gate.primary_lane.as_str(),
+        device_gate.fallback_lane.as_str(),
+        device_gate.memory_mode.as_str(),
+        device_gate.adapters_csv(),
+        device_gate.runtime_adapter_name(),
+        device_gate.max_parallel_chunks,
+        device_gate.kv_prefetch_blocks,
+        device_gate.hot_kv_precision_bits,
+        device_gate.cold_kv_precision_bits,
+        device_gate.allow_disk_spill,
+        device_gate.local_kv_token_budget,
+        device_gate.global_kv_token_budget,
+        device_gate
+            .latency_budget_ms
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_owned())
+    );
+    println!(
+        "runtime_device_contract: {}",
+        device_gate.runtime_device_contract
+    );
 
     for warning in &validation.warnings {
         println!("runtime_manifest_warning: {warning}");
     }
     for error in &validation.errors {
         println!("runtime_manifest_error: {error}");
+    }
+    for failure in &device_gate.failures {
+        println!("runtime_manifest_device_failure: {failure}");
     }
 }
 
@@ -1528,6 +1564,31 @@ impl Args {
         manifest.with_assets(assets).with_architecture(architecture)
     }
 
+    fn runtime_manifest_device_plan(&self) -> HardwarePlan {
+        let snapshot = HardwareSnapshot::new(
+            self.device,
+            self.cpu_load,
+            self.gpu_load,
+            self.ram_load,
+            self.disk_load,
+        );
+        let prompt_tokens = RecursiveScheduler::new(
+            self.native_window_tokens,
+            self.chunk_tokens,
+            self.chunk_overlap_tokens,
+            self.merge_fan_in,
+        )
+        .plan(&self.prompt)
+        .prompt_tokens;
+
+        HardwareAllocator::new().plan(
+            snapshot,
+            self.profile,
+            prompt_tokens,
+            HierarchyWeights::default(),
+        )
+    }
+
     fn kv_quant_gate(&self) -> KvQuantBenchmarkGate {
         let mut gate = KvQuantBenchmarkGate::default();
 
@@ -1864,10 +1925,16 @@ mod tests {
             tokenizer.display().to_string(),
             "--runtime-config".to_owned(),
             config.display().to_string(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
         ]);
 
         let manifest = args.runtime_manifest();
         let validation = manifest.validate_for_production();
+        let device_gate = RuntimeManifestDeviceGateReport::evaluate(
+            &manifest,
+            &args.runtime_manifest_device_plan(),
+        );
 
         assert!(args.runtime_manifest_gate);
         assert_eq!(manifest.metadata.model_id, "self-owned-transformer");
@@ -1882,6 +1949,10 @@ mod tests {
         assert!(manifest.metadata.supports_kv_import);
         assert!(manifest.metadata.supports_kv_export);
         assert!(validation.passed(), "{validation:?}");
+        assert!(device_gate.passed(), "{device_gate:?}");
+        assert_eq!(device_gate.device, DeviceClass::CpuOnly);
+        assert_eq!(device_gate.runtime_adapter_name(), "portable-rust");
+        assert!(device_gate.runtime_device_contract.contains("device=cpu"));
         fs::remove_dir_all(asset_dir).unwrap();
     }
 

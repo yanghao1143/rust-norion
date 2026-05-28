@@ -190,6 +190,13 @@ The north star is now explicitly scoped around five core requirements:
     and a CPU/portable Rust escape hatch. This makes device adaptation a
     regression gate rather than a documentation claim.
 
+13. Runtime manifest device gate / 运行时 Manifest 设备门禁
+    The CLI `--runtime-manifest-gate` should validate the production manifest
+    against the current target device plan, not just local assets and
+    Transformer shape. It must emit the stable `runtime_device_contract`, pick
+    only adapters supported by both manifest and device execution plan, and fail
+    when KV prefetch or hot/cold precision requirements exceed manifest bounds.
+
 ## Target Module Fusion / 目标模块融合
 
 The following algorithmic ideas are merged into the project goal as owned local
@@ -267,6 +274,10 @@ modules, not external product dependencies:
   alias coverage, execution lanes, KV budgets, adapter hints, disk-spill policy,
   memory governance policy, portable fallback coverage, or the stable
   `runtime_device_contract` ABI consumed by external self-developed runtimes.
+- Runtime manifest device gate:
+  production manifests should be checked against the current target device plan,
+  including the emitted `runtime_device_contract`, adapter intersection,
+  KV-import prefetch budget, and hot/cold KV precision bounds.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -410,7 +421,9 @@ These are algorithmic references, not product dependencies:
   while keeping prototype/demo validation non-blocking; the CLI now exposes a
   `--runtime-manifest-gate` with explicit layer/head/window architecture plus
   weights/tokenizer/config asset flags so this contract can fail before a
-  production runtime is used; the same explicit architecture flags configure
+  production runtime is used; the gate now also validates the current target
+  device execution contract, adapter intersection, KV prefetch budget, and
+  hot/cold KV precision bounds; the same explicit architecture flags configure
   the local Rust runtime prototype and command-runtime request ABI; command
   runtimes now receive `{runtime_device_contract}` so external self-developed
   backends can choose portable or accelerated adapters from the same hardware

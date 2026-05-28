@@ -156,7 +156,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward, runtime-diagnostic, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable recursive call pressure and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles
+- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles, and a runtime-manifest device gate for current-device execution contracts, adapter intersections, KV prefetch limits, and hot/cold KV precision bounds
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
@@ -306,13 +306,17 @@ cargo run -- --kv-quant-gate
 
 Run the production runtime manifest gate before connecting a self-developed
 Transformer runtime. This checks metadata, explicit architecture shape, KV
-policy, and that required local weights/tokenizer asset files exist:
+policy, required local weights/tokenizer asset files, and the current target
+device execution contract. The gate also fails when the manifest and device
+plan have no runtime-adapter intersection, when device KV prefetch exceeds the
+manifest limit, or when the device requires wider hot/cold KV precision than
+the manifest allows:
 
 ```powershell
 cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
 ```
 
-接入生产自研 Transformer runtime 前，先运行 runtime manifest 门禁。它会检查元数据、显式架构形状、KV policy，并确认本地 weights/tokenizer 资产文件真实存在：
+接入生产自研 Transformer runtime 前，先运行 runtime manifest 门禁。它会检查元数据、显式架构形状、KV policy、本地 weights/tokenizer 资产文件以及当前目标设备执行契约；如果 manifest 与设备计划没有 runtime adapter 交集、设备 KV 预取超过 manifest 限制，或设备需要的 hot/cold KV 精度高于 manifest 允许值，也会直接失败：
 
 ```powershell
 cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron

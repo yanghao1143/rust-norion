@@ -1361,6 +1361,94 @@ impl DevicePlanGateReport {
 }
 
 #[derive(Debug, Clone)]
+pub struct RuntimeManifestDeviceGateReport {
+    pub device: DeviceClass,
+    pub tier: DeviceTier,
+    pub primary_lane: ComputeLane,
+    pub fallback_lane: ComputeLane,
+    pub memory_mode: DeviceMemoryMode,
+    pub adapter_hints: Vec<RuntimeAdapterHint>,
+    pub runtime_adapter: Option<RuntimeAdapterHint>,
+    pub max_parallel_chunks: usize,
+    pub kv_prefetch_blocks: usize,
+    pub hot_kv_precision_bits: u8,
+    pub cold_kv_precision_bits: u8,
+    pub allow_disk_spill: bool,
+    pub local_kv_token_budget: usize,
+    pub global_kv_token_budget: usize,
+    pub latency_budget_ms: Option<u64>,
+    pub runtime_device_contract: String,
+    pub failures: Vec<String>,
+}
+
+impl RuntimeManifestDeviceGateReport {
+    pub fn evaluate(manifest: &RuntimeManifest, plan: &HardwarePlan) -> Self {
+        let runtime_device_contract = plan.runtime_contract_summary();
+        let runtime_adapter = manifest.preferred_adapter_for(&plan.execution);
+        let mut failures = validate_device_plan(plan);
+        failures.extend(validate_runtime_device_contract(
+            plan,
+            &runtime_device_contract,
+        ));
+        failures.extend(validate_runtime_manifest_for_device(
+            manifest,
+            plan.device,
+            &plan.execution,
+            runtime_adapter,
+        ));
+
+        Self {
+            device: plan.device,
+            tier: plan.tier,
+            primary_lane: plan.execution.primary_lane,
+            fallback_lane: plan.execution.fallback_lane,
+            memory_mode: plan.execution.memory_mode,
+            adapter_hints: plan.execution.adapter_hints.clone(),
+            runtime_adapter,
+            max_parallel_chunks: plan.execution.max_parallel_chunks,
+            kv_prefetch_blocks: plan.execution.kv_prefetch_blocks,
+            hot_kv_precision_bits: plan.execution.hot_kv_precision_bits,
+            cold_kv_precision_bits: plan.execution.cold_kv_precision_bits,
+            allow_disk_spill: plan.execution.allow_disk_spill,
+            local_kv_token_budget: plan.local_kv_token_budget,
+            global_kv_token_budget: plan.global_kv_token_budget,
+            latency_budget_ms: plan.latency_budget_ms,
+            runtime_device_contract,
+            failures,
+        }
+    }
+
+    pub fn passed(&self) -> bool {
+        self.failures.is_empty()
+    }
+
+    pub fn adapters_csv(&self) -> String {
+        self.adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join("+")
+    }
+
+    pub fn runtime_adapter_name(&self) -> &'static str {
+        self.runtime_adapter
+            .map(RuntimeAdapterHint::as_str)
+            .unwrap_or("none")
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "runtime_manifest_device_gate: passed={} device={} tier={} runtime_adapter={} failures={}",
+            self.passed(),
+            self.device.as_str(),
+            self.tier.as_str(),
+            self.runtime_adapter_name(),
+            self.failures.len()
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct HardwareAllocator {
     base_local_tokens: usize,
     base_global_tokens: usize,
@@ -2936,6 +3024,59 @@ mod tests {
 
         assert!(failures.iter().any(|failure| failure.contains("prefetch")));
         assert!(failures.iter().any(|failure| failure.contains("hot KV")));
+    }
+
+    #[test]
+    fn runtime_manifest_device_gate_reports_current_device_contract() {
+        let plan = HardwareAllocator::new().plan(
+            HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),
+            TaskProfile::General,
+            4096,
+            HierarchyWeights::default(),
+        );
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 4096, 128);
+
+        let report = RuntimeManifestDeviceGateReport::evaluate(&manifest, &plan);
+
+        assert!(report.passed(), "{:?}", report.failures);
+        assert_eq!(report.device, DeviceClass::CpuOnly);
+        assert_eq!(
+            report.runtime_adapter,
+            Some(RuntimeAdapterHint::PortableRust)
+        );
+        assert!(report.runtime_device_contract.contains("device=cpu"));
+        assert!(report.runtime_device_contract.contains("adapters="));
+        assert!(report.summary_line().contains("passed=true"));
+    }
+
+    #[test]
+    fn runtime_manifest_device_gate_rejects_device_and_adapter_mismatch() {
+        let plan = HardwareAllocator::new().plan(
+            HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),
+            TaskProfile::General,
+            4096,
+            HierarchyWeights::default(),
+        );
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 4096, 128)
+            .with_supported_devices(vec![DeviceClass::Server])
+            .with_adapter_hints(vec![RuntimeAdapterHint::Cuda]);
+
+        let report = RuntimeManifestDeviceGateReport::evaluate(&manifest, &plan);
+
+        assert!(!report.passed());
+        assert_eq!(report.runtime_adapter, None);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("does not support device cpu"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("no adapter intersection"))
+        );
     }
 
     #[test]
