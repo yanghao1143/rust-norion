@@ -70,6 +70,7 @@ pub struct ExperienceMatch {
     pub runtime_selected_adapter: Option<String>,
     pub runtime_forward_energy: Option<f32>,
     pub runtime_kv_influence: Option<f32>,
+    pub recursive_runtime_calls: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -175,11 +176,21 @@ impl ExperienceStore {
                     .collect::<Vec<_>>()
                     .join(" ");
                 let runtime_text = runtime_diagnostics_text(&record.runtime_diagnostics);
+                let recursive_runtime_calls =
+                    recursive_runtime_calls_from_notes(&record.process_reward.notes);
+                let recursive_text = recursive_runtime_calls
+                    .map(|calls| format!("recursive_runtime_calls {calls}"))
+                    .unwrap_or_default();
                 let overlap = lexical_overlap(
                     prompt,
                     &format!(
-                        "{} {} {} {} {}",
-                        record.prompt, record.lesson, gist_text, reflection_text, runtime_text
+                        "{} {} {} {} {} {}",
+                        record.prompt,
+                        record.lesson,
+                        gist_text,
+                        reflection_text,
+                        runtime_text,
+                        recursive_text
                     ),
                 );
                 let profile_bonus = if record.profile == profile { 0.16 } else { 0.0 };
@@ -229,6 +240,7 @@ impl ExperienceStore {
                     runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
                     runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                     runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                    recursive_runtime_calls,
                 })
             })
             .collect::<Vec<_>>();
@@ -691,6 +703,16 @@ fn deserialize_process_reward(value: &str) -> Option<ProcessRewardReport> {
     })
 }
 
+pub fn recursive_runtime_calls_from_notes(notes: &[String]) -> Option<usize> {
+    notes.iter().find_map(|note| {
+        note.split(':')
+            .find_map(|part| part.strip_prefix("runtime_calls="))
+            .or_else(|| note.strip_prefix("latency:recursive_runtime_calls="))
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|calls| *calls > 0)
+    })
+}
+
 fn sanitize_gist_part(value: &str) -> String {
     sanitize_control_part(value)
 }
@@ -970,6 +992,31 @@ mod tests {
         );
         assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
         assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
+    }
+
+    #[test]
+    fn retrieval_exposes_recursive_runtime_calls_from_reward_notes() {
+        let mut store = ExperienceStore::new();
+        store.record(ExperienceInput {
+            prompt: "long document recursive runtime".to_owned(),
+            lesson: "expensive recursive runtime calls should be reusable control feedback"
+                .to_owned(),
+            process_reward: ProcessRewardReport {
+                total: 0.77,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: vec![
+                    "recursive:chunks=8:merge_rounds=2:waves=4:parallel=2:runtime_calls=13"
+                        .to_owned(),
+                ],
+            },
+            ..input("recursive runtime", 0.9)
+        });
+
+        let matches = store.retrieve_lessons("runtime_calls", TaskProfile::LongDocument, 1);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].recursive_runtime_calls, Some(13));
     }
 
     fn input(lesson: &str, quality: f32) -> ExperienceInput {

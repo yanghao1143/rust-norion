@@ -1446,6 +1446,7 @@ mod tests {
             runtime_selected_adapter: Some("portable-rust".to_owned()),
             runtime_forward_energy: Some(0.2),
             runtime_kv_influence: Some(0.1),
+            recursive_runtime_calls: None,
         }];
         let tier_plan = TieredCachePlan::default();
         let infini_memory_plan = InfiniMemoryPlan::new(

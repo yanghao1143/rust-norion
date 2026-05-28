@@ -1,4 +1,4 @@
-use crate::experience::ExperienceRecord;
+use crate::experience::{ExperienceRecord, recursive_runtime_calls_from_notes};
 use crate::hierarchy::TaskProfile;
 use crate::process_reward::RewardAction;
 use crate::reflection::{ReflectionSeverity, RuntimeDiagnostics};
@@ -85,6 +85,9 @@ impl ExperienceReplayPlanner {
             route_budget: record.route_budget,
             memory_ids,
             runtime_diagnostics: record.runtime_diagnostics.clone(),
+            recursive_runtime_calls: recursive_runtime_calls_from_notes(
+                &record.process_reward.notes,
+            ),
             priority,
             lesson: record.lesson.clone(),
         })
@@ -117,6 +120,7 @@ pub struct ExperienceReplayItem {
     pub route_budget: RouteBudget,
     pub memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
+    pub recursive_runtime_calls: Option<usize>,
     pub priority: f32,
     pub lesson: String,
 }
@@ -304,7 +308,10 @@ mod tests {
                 total: reward,
                 action,
                 components: ProcessRewardComponents::default(),
-                notes: Vec::new(),
+                notes: vec![
+                    "recursive:chunks=4:merge_rounds=2:waves=2:parallel=2:runtime_calls=7"
+                        .to_owned(),
+                ],
             },
         };
 
@@ -329,5 +336,16 @@ mod tests {
             runtime_diagnostics: input.runtime_diagnostics,
             process_reward: input.process_reward,
         }
+    }
+
+    #[test]
+    fn planner_carries_recursive_runtime_calls() {
+        let planner = ExperienceReplayPlanner::new();
+        let records = vec![record(9, 0.88, RewardAction::Reinforce)];
+
+        let plan = planner.plan(&records, 1);
+
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].recursive_runtime_calls, Some(7));
     }
 }

@@ -636,7 +636,7 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
     } else {
         for experience in &report.top_experiences {
             println!(
-                "  id={} profile={:?} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} layers={} hidden={} local_window={} forward_energy={} kv_influence={} runtime_kv_imported={} runtime_kv_exported={} reflection_issues={} critical={} revision_actions={} lesson={}",
+                "  id={} profile={:?} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} layers={} hidden={} local_window={} forward_energy={} kv_influence={} runtime_kv_imported={} runtime_kv_exported={} recursive_runtime_calls={} reflection_issues={} critical={} revision_actions={} lesson={}",
                 experience.id,
                 experience.profile,
                 experience.quality,
@@ -651,6 +651,7 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
                 option_f32_text(experience.runtime_kv_influence),
                 experience.runtime_imported_kv_blocks,
                 experience.runtime_exported_kv_blocks,
+                option_usize_text(experience.recursive_runtime_calls),
                 experience.reflection_issues,
                 experience.critical_reflection_issues,
                 experience.revision_actions,
@@ -668,6 +669,12 @@ fn option_f32_text(value: Option<f32>) -> String {
     value
         .filter(|item| item.is_finite())
         .map(|item| format!("{item:.3}"))
+        .unwrap_or_else(|| "none".to_owned())
+}
+
+fn option_usize_text(value: Option<usize>) -> String {
+    value
+        .map(|item| item.to_string())
         .unwrap_or_else(|| "none".to_owned())
 }
 

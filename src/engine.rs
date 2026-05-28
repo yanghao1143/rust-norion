@@ -380,13 +380,16 @@ impl NoironEngine {
 
             report.applied += 1;
             report.notes.push(format!(
-                "experience:{}:{} reward={:.3} reflection_issues={} critical={} actions={} lesson={}",
+                "experience:{}:{} reward={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} lesson={}",
                 item.experience_id,
                 item.action.as_str(),
                 item.reward,
                 item.reflection_issue_count,
                 item.critical_reflection_issue_count,
                 item.revision_action_count,
+                item.recursive_runtime_calls
+                    .map(|calls| calls.to_string())
+                    .unwrap_or_else(|| "none".to_owned()),
                 compact(&item.lesson, 64)
             ));
         }

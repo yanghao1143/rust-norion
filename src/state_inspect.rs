@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::engine::NoironEngine;
+use crate::experience::recursive_runtime_calls_from_notes;
 use crate::hierarchy::{
     HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
 };
@@ -43,6 +44,7 @@ pub struct StateExperienceSummary {
     pub runtime_kv_influence: Option<f32>,
     pub runtime_imported_kv_blocks: usize,
     pub runtime_exported_kv_blocks: usize,
+    pub recursive_runtime_calls: Option<usize>,
     pub reflection_issues: usize,
     pub critical_reflection_issues: usize,
     pub revision_actions: usize,
@@ -138,6 +140,9 @@ impl StateInspectionReport {
                 runtime_kv_influence: record.runtime_diagnostics.kv_influence,
                 runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
                 runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
+                recursive_runtime_calls: recursive_runtime_calls_from_notes(
+                    &record.process_reward.notes,
+                ),
                 reflection_issues: record.reflection_issues.len(),
                 critical_reflection_issues: record
                     .reflection_issues
@@ -302,7 +307,10 @@ mod tests {
                 total: 0.88,
                 action: RewardAction::Reinforce,
                 components: ProcessRewardComponents::default(),
-                notes: Vec::new(),
+                notes: vec![
+                    "recursive:chunks=5:merge_rounds=2:waves=3:parallel=2:runtime_calls=9"
+                        .to_owned(),
+                ],
             },
         });
 
@@ -355,6 +363,7 @@ mod tests {
         assert_eq!(report.top_experiences[0].runtime_kv_influence, Some(0.56));
         assert_eq!(report.top_experiences[0].runtime_imported_kv_blocks, 2);
         assert_eq!(report.top_experiences[0].runtime_exported_kv_blocks, 3);
+        assert_eq!(report.top_experiences[0].recursive_runtime_calls, Some(9));
         assert_eq!(report.top_experiences[0].reflection_issues, 1);
         assert_eq!(report.top_experiences[0].revision_actions, 1);
         assert!(report.summary_line().contains("memories=2"));
