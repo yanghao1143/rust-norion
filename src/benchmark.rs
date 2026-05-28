@@ -77,6 +77,8 @@ pub struct BenchmarkCaseResult {
     pub compacted_memories: usize,
     pub runtime_kv_exported: usize,
     pub runtime_kv_stored: usize,
+    pub runtime_adapter_observations: usize,
+    pub runtime_adapter_best_score: Option<f32>,
     pub drift_severity: DriftSeverity,
 }
 
@@ -460,6 +462,11 @@ impl BenchmarkSummary {
             compacted_memories: outcome.memory_compaction_report.merged.len(),
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
             runtime_kv_stored: outcome.stored_runtime_kv_memory_ids.len(),
+            runtime_adapter_observations: outcome.runtime_adapter_observations.len(),
+            runtime_adapter_best_score: outcome
+                .runtime_adapter_observations
+                .first()
+                .map(|observation| observation.score),
             drift_severity: outcome.drift_report.severity,
         });
     }
@@ -497,6 +504,20 @@ impl BenchmarkSummary {
             .iter()
             .map(|result| result.runtime_kv_stored)
             .sum()
+    }
+
+    pub fn total_runtime_adapter_observations(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_adapter_observations)
+            .sum()
+    }
+
+    pub fn max_runtime_adapter_score(&self) -> Option<f32> {
+        self.results
+            .iter()
+            .filter_map(|result| result.runtime_adapter_best_score)
+            .reduce(f32::max)
     }
 
     pub fn total_stored_memories(&self) -> usize {
@@ -638,7 +659,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} stored_memories={} compacted_memories={} runtime_kv_stored={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} stored_memories={} compacted_memories={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -649,11 +670,20 @@ impl BenchmarkSummary {
             self.total_stored_memories(),
             self.total_compacted_memories(),
             self.total_runtime_kv_stored(),
+            self.total_runtime_adapter_observations(),
+            option_f32_display(self.max_runtime_adapter_score()),
             self.drift_watches(),
             self.drift_blocks(),
             self.drift_rollbacks()
         )
     }
+}
+
+fn option_f32_display(value: Option<f32>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "none".to_owned())
 }
 
 fn average(values: impl Iterator<Item = f32>) -> f32 {
@@ -780,6 +810,11 @@ mod tests {
         assert_eq!(summary.len(), 1);
         assert!(summary.average_quality() > 0.0);
         assert!(summary.summary_line().contains("cases=1"));
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_adapter_observations=")
+        );
     }
 
     #[test]
@@ -914,6 +949,8 @@ mod tests {
                 compacted_memories: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Rollback,
             }],
         };

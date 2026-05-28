@@ -63,6 +63,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"runtime_diagnostics\":{",
     },
     TraceRequiredField {
+        name: "runtime_adapter_observations",
+        marker: "\"runtime_adapter_observations\":{",
+    },
+    TraceRequiredField {
+        name: "runtime_adapter_observation_count",
+        marker: "\"observation_count\":",
+    },
+    TraceRequiredField {
+        name: "runtime_adapter_best_adapter",
+        marker: "\"best_adapter\":",
+    },
+    TraceRequiredField {
+        name: "runtime_adapter_best_score",
+        marker: "\"best_score\":",
+    },
+    TraceRequiredField {
         name: "forward_energy",
         marker: "\"forward_energy\":",
     },
@@ -247,6 +263,7 @@ pub fn trace_json_line_with_case(
         .collect::<Vec<_>>();
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = outcome.auto_replay_report.as_ref();
+    let best_adapter_observation = outcome.runtime_adapter_observations.first();
 
     format!(
         "{{\
@@ -263,6 +280,7 @@ pub fn trace_json_line_with_case(
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"layer_count\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{}}},\
+         \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
@@ -313,6 +331,18 @@ pub fn trace_json_line_with_case(
         outcome.runtime_diagnostics.imported_kv_blocks,
         outcome.runtime_diagnostics.exported_kv_blocks,
         outcome.runtime_diagnostics.has_forward_signal(),
+        outcome.runtime_adapter_observations.len(),
+        option_owned_string_json(
+            best_adapter_observation.map(|observation| observation.adapter.as_str())
+        ),
+        option_f32_json(best_adapter_observation.map(|observation| observation.score)),
+        option_f32_json(best_adapter_observation.map(|observation| observation.reward)),
+        option_f32_json(best_adapter_observation.map(|observation| observation.quality)),
+        option_f32_json(
+            best_adapter_observation.and_then(|observation| observation.forward_energy)
+        ),
+        option_f32_json(best_adapter_observation.and_then(|observation| observation.kv_influence)),
+        option_u64_json(best_adapter_observation.map(|observation| observation.experience_id)),
         outcome.hierarchy.global,
         outcome.hierarchy.local,
         outcome.hierarchy.convolution,
@@ -519,6 +549,10 @@ mod tests {
         assert!(line.contains("\"average_neg_logprob\":"));
         assert!(line.contains("\"uncertainty_perplexity\":"));
         assert!(line.contains("\"runtime_diagnostics\":"));
+        assert!(line.contains("\"runtime_adapter_observations\":"));
+        assert!(line.contains("\"observation_count\":"));
+        assert!(line.contains("\"best_adapter\":"));
+        assert!(line.contains("\"best_score\":"));
         assert!(line.contains("\"forward_energy\":"));
         assert!(line.contains("\"kv_influence\":"));
         assert!(line.contains("\"has_forward_signal\":"));

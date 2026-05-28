@@ -510,7 +510,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} used_memories={} stored_memories={} compacted_memories={} runtime_kv_exported={} runtime_kv_stored={} drift={}",
+            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} used_memories={} stored_memories={} compacted_memories={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.elapsed_ms,
@@ -525,6 +525,8 @@ fn print_benchmark_summary(
             result.compacted_memories,
             result.runtime_kv_exported,
             result.runtime_kv_stored,
+            result.runtime_adapter_observations,
+            option_f32_text(result.runtime_adapter_best_score),
             result.drift_severity.as_str()
         );
     }

@@ -24,6 +24,7 @@ use crate::reflection::{
     InferenceDraft, ReasoningStep, ReflectionReport, Reflector, RuntimeDiagnostics,
 };
 use crate::router::{GenerationMetrics, NoironRouter, RouteBudget, RoutingContext};
+use crate::runtime::RuntimeAdapterObservation;
 use crate::tiered_cache::{TierMigration, TieredCachePlan, TieredCacheScheduler};
 use crate::token_stream::{TokenStreamMonitor, TokenWindowReport};
 use crate::transformer::{TransformerPlanner, TransformerRefactorPlan};
@@ -78,6 +79,7 @@ pub struct InferenceOutcome {
     pub metrics: GenerationMetrics,
     pub runtime_token_metrics: RuntimeTokenMetrics,
     pub runtime_diagnostics: RuntimeDiagnostics,
+    pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
@@ -433,6 +435,10 @@ impl NoironEngine {
         let report = self.reflector.reflect(&request.prompt, &draft);
         let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
         let runtime_diagnostics = draft.runtime_diagnostics.clone();
+        let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences(
+            &used_experiences,
+            runtime_diagnostics.model_id.as_deref().unwrap_or_default(),
+        );
         let metrics = metrics_from_report(&draft, &report, route_budget, runtime_token_metrics);
         let gist_records =
             self.gist_generator
@@ -592,6 +598,7 @@ impl NoironEngine {
             metrics,
             runtime_token_metrics,
             runtime_diagnostics,
+            runtime_adapter_observations,
             route_budget,
             hierarchy,
             tier_plan,
@@ -966,7 +973,7 @@ fn char_weight(ch: char) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hardware::DeviceClass;
+    use crate::hardware::{DeviceClass, RuntimeAdapterHint};
     use crate::local_runtime::LocalTransformerRuntime;
     use crate::process_reward::ProcessRewardComponents;
     use crate::reflection::DraftToken;
@@ -1498,6 +1505,90 @@ mod tests {
         assert_eq!(metrics.average_entropy, Some(0.25));
         assert_eq!(metrics.average_neg_logprob, Some(0.5));
         assert_eq!(metrics.uncertainty_perplexity, Some(3.5));
+    }
+
+    #[test]
+    fn inference_outcome_exposes_runtime_adapter_observations() {
+        struct DiagnosedBackend;
+
+        impl InferenceBackend for DiagnosedBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "A stable adapter-aware runtime answer with useful control detail.",
+                    vec![ReasoningStep::new(
+                        "runtime",
+                        "selected a historically useful adapter",
+                        0.91,
+                    )],
+                )
+                .with_runtime_diagnostics(RuntimeDiagnostics {
+                    model_id: Some("self-transformer-test".to_owned()),
+                    selected_adapter: Some(RuntimeAdapterHint::CpuSimd.as_str().to_owned()),
+                    layer_count: 6,
+                    hidden_size: 128,
+                    local_window_tokens: 4096,
+                    forward_energy: Some(0.20),
+                    kv_influence: Some(0.46),
+                    imported_kv_blocks: 1,
+                    exported_kv_blocks: 1,
+                })
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.experience.record(ExperienceInput {
+            prompt: "adapter observation history".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "prefer cpu SIMD when prior self-developed runtime reward is strong".to_owned(),
+            quality: 0.92,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("self-transformer-test".to_owned()),
+                selected_adapter: Some(RuntimeAdapterHint::CpuSimd.as_str().to_owned()),
+                layer_count: 6,
+                hidden_size: 128,
+                local_window_tokens: 4096,
+                forward_energy: Some(0.18),
+                kv_influence: Some(0.50),
+                imported_kv_blocks: 1,
+                exported_kv_blocks: 2,
+            },
+            process_reward: ProcessRewardReport {
+                total: 0.90,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
+        let mut backend = DiagnosedBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("adapter observation history", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.runtime_adapter_observations.len(), 1);
+        assert_eq!(
+            outcome.runtime_adapter_observations[0].adapter,
+            RuntimeAdapterHint::CpuSimd
+        );
+        assert!(outcome.runtime_adapter_observations[0].score > 0.80);
     }
 
     #[test]
