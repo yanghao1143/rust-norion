@@ -1191,10 +1191,19 @@ mod tests {
     use crate::hardware::{DeviceClass, RuntimeAdapterHint};
     use crate::local_runtime::LocalTransformerRuntime;
     use crate::process_reward::ProcessRewardComponents;
+    use crate::production_runtime::{
+        ProductionForwardKernel, ProductionKernelContext, ProductionKernelOutput,
+        ProductionTransformerRuntime,
+    };
     use crate::reflection::DraftToken;
-    use crate::runtime::RuntimeBackend;
+    use crate::runtime::{RuntimeBackend, RuntimeError, RuntimeToken};
+    use crate::runtime_manifest::{
+        RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, TransformerRuntimeArchitecture,
+    };
     use crate::tiered_cache::TierMigrationAction;
-    use std::fs;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -1550,6 +1559,75 @@ mod tests {
                 .iter()
                 .any(|entry| entry.key.contains("runtime_kv:l2h1"))
         );
+    }
+
+    #[test]
+    fn production_runtime_kernel_flows_through_engine_feedback_and_runtime_kv() {
+        let (asset_dir, weights, tokenizer) = create_runtime_assets("engine-production-kernel");
+        let manifest = RuntimeManifest::self_developed(
+            "engine-production-transformer",
+            "engine-production-tokenizer",
+            4096,
+            64,
+        )
+        .with_architecture(TransformerRuntimeArchitecture::new(6, 64, 4, 2, 1024))
+        .with_supported_devices(vec![DeviceClass::CpuOnly])
+        .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust])
+        .with_kv_policy(RuntimeKvPolicy {
+            import_enabled: true,
+            export_enabled: true,
+            max_import_blocks: 2,
+            max_export_blocks: 2,
+        })
+        .with_assets(
+            RuntimeAssetPaths::new()
+                .with_weights(&weights)
+                .with_tokenizer(&tokenizer),
+        );
+        let plan = crate::hardware::HardwareAllocator::new().plan(
+            crate::hardware::HardwareSnapshot::new(DeviceClass::CpuOnly, 0.20, 0.10, 0.25, 0.10),
+            TaskProfile::Coding,
+            512,
+            HierarchyWeights::default(),
+        );
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &plan)
+            .unwrap()
+            .with_kernel(EngineForwardKernel);
+        let mut backend = RuntimeBackend::new(runtime);
+        let mut engine = NoironEngine::new();
+
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "Rust production forward kernel should export reusable KV memory",
+                TaskProfile::Coding,
+            ),
+            &mut backend,
+        );
+
+        assert!(outcome.answer.contains("production kernel answer"));
+        assert_eq!(outcome.runtime_token_metrics.token_count, 3);
+        assert_eq!(outcome.runtime_token_metrics.entropy_count, 3);
+        assert_eq!(
+            outcome.runtime_diagnostics.model_id.as_deref(),
+            Some("engine-production-transformer")
+        );
+        assert_eq!(
+            outcome.runtime_diagnostics.selected_adapter.as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(outcome.runtime_diagnostics.layer_count, 6);
+        assert_eq!(outcome.runtime_diagnostics.forward_energy, Some(0.31));
+        assert_eq!(outcome.runtime_diagnostics.kv_influence, Some(0.22));
+        assert_eq!(outcome.exported_runtime_kv_blocks, 1);
+        assert_eq!(outcome.stored_runtime_kv_memory_ids.len(), 1);
+        assert!(outcome.report.quality > 0.70);
+        assert!(outcome.process_reward.total > 0.50);
+        assert!(engine.cache.entries().iter().any(|entry| {
+            entry.key.contains("runtime_kv:l3h1") && entry.key.contains("production forward kernel")
+        }));
+        assert_eq!(backend.runtime().exported_kv_blocks().len(), 1);
+
+        fs::remove_dir_all(asset_dir).unwrap();
     }
 
     #[test]
@@ -2319,6 +2397,32 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    fn create_runtime_assets(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let dir = temp_asset_dir(label);
+        fs::create_dir_all(&dir).unwrap();
+        let weights = dir.join("weights.noiron");
+        let tokenizer = dir.join("tokenizer.noiron");
+        write_asset(&weights, b"weights");
+        write_asset(&tokenizer, b"tokenizer");
+        (dir, weights, tokenizer)
+    }
+
+    fn write_asset(path: &Path, bytes: &[u8]) {
+        let mut file = File::create(path).unwrap();
+        file.write_all(bytes).unwrap();
+    }
+
+    fn temp_asset_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-{label}-{}-{nanos}",
+            std::process::id()
+        ))
+    }
+
     fn replay_item_with_recursive_calls(
         recursive_runtime_calls: Option<usize>,
     ) -> ExperienceReplayItem {
@@ -2351,6 +2455,69 @@ mod tests {
             }),
             priority: 0.86,
             lesson: "long-context recursive replay path".to_owned(),
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct EngineForwardKernel;
+
+    impl ProductionForwardKernel for EngineForwardKernel {
+        fn generate(
+            &self,
+            context: ProductionKernelContext<'_>,
+        ) -> Result<ProductionKernelOutput, RuntimeError> {
+            Ok(ProductionKernelOutput::new(
+                "Rust production kernel answer keeps Noiron routing, reflection, diagnostics, and reusable runtime KV memory aligned for future local inference.",
+            )
+            .with_tokens(vec![
+                RuntimeToken {
+                    text: "production".to_owned(),
+                    logprob: Some(-0.20),
+                    entropy: Some(0.18),
+                },
+                RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.25),
+                    entropy: Some(0.22),
+                },
+                RuntimeToken {
+                    text: "memory".to_owned(),
+                    logprob: Some(-0.18),
+                    entropy: Some(0.20),
+                },
+            ])
+            .with_trace(vec![ReasoningStep::new(
+                "production_kernel",
+                format!(
+                    "adapter={} assets={} imported_kv={}",
+                    context.device_gate.runtime_adapter_name(),
+                    context.assets.summary_line(),
+                    context.imported_kv_blocks.len()
+                ),
+                0.92,
+            )])
+            .with_diagnostics(RuntimeDiagnostics {
+                model_id: Some(context.manifest.metadata.model_id.clone()),
+                selected_adapter: context
+                    .device_gate
+                    .runtime_adapter
+                    .map(|adapter| adapter.as_str().to_owned()),
+                layer_count: context.manifest.architecture.layer_count,
+                hidden_size: context.manifest.architecture.hidden_size,
+                local_window_tokens: context.manifest.architecture.local_window_tokens,
+                forward_energy: Some(0.31),
+                kv_influence: Some(0.22),
+                imported_kv_blocks: context.imported_kv_blocks.len(),
+                exported_kv_blocks: 1,
+            })
+            .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                3,
+                1,
+                0,
+                3,
+                vec![0.11, 0.22, 0.33],
+                vec![0.44, 0.55, 0.66],
+            )]))
         }
     }
 }
