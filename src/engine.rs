@@ -462,9 +462,10 @@ impl NoironEngine {
         let report = self.reflector.reflect(&request.prompt, &draft);
         let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
         let runtime_diagnostics = draft.runtime_diagnostics.clone();
-        let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences(
+        let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences_for_hardware(
             &used_experiences,
             runtime_diagnostics.model_id.as_deref().unwrap_or_default(),
+            &hardware_plan,
         );
         let metrics = metrics_from_report(&draft, &report, route_budget, runtime_token_metrics);
         let gist_records =
@@ -1871,6 +1872,142 @@ mod tests {
             RuntimeAdapterHint::CpuSimd
         );
         assert!(outcome.runtime_adapter_observations[0].score > 0.80);
+    }
+
+    #[test]
+    fn inference_outcome_filters_adapter_observations_to_device_plan() {
+        struct DiagnosedBackend;
+
+        impl InferenceBackend for DiagnosedBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "A stable CPU runtime answer that should ignore unavailable CUDA history.",
+                    vec![ReasoningStep::new(
+                        "runtime",
+                        "selected a device-valid adapter",
+                        0.91,
+                    )],
+                )
+                .with_runtime_diagnostics(RuntimeDiagnostics {
+                    model_id: Some("self-transformer-test".to_owned()),
+                    selected_adapter: Some(RuntimeAdapterHint::CpuSimd.as_str().to_owned()),
+                    layer_count: 6,
+                    hidden_size: 128,
+                    local_window_tokens: 4096,
+                    forward_energy: Some(0.20),
+                    kv_influence: Some(0.46),
+                    imported_kv_blocks: 1,
+                    exported_kv_blocks: 1,
+                })
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.35,
+            0.0,
+            0.45,
+            0.20,
+        ));
+        engine.experience.record(ExperienceInput {
+            prompt: "adapter observation history".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "prefer unavailable cuda when prior score is high".to_owned(),
+            quality: 0.99,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("self-transformer-test".to_owned()),
+                selected_adapter: Some(RuntimeAdapterHint::Cuda.as_str().to_owned()),
+                layer_count: 6,
+                hidden_size: 128,
+                local_window_tokens: 4096,
+                forward_energy: Some(0.05),
+                kv_influence: Some(0.90),
+                imported_kv_blocks: 2,
+                exported_kv_blocks: 2,
+            },
+            process_reward: ProcessRewardReport {
+                total: 0.99,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
+        engine.experience.record(ExperienceInput {
+            prompt: "adapter observation history".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "prefer cpu SIMD when current CPU plan allows it".to_owned(),
+            quality: 0.88,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("self-transformer-test".to_owned()),
+                selected_adapter: Some(RuntimeAdapterHint::CpuSimd.as_str().to_owned()),
+                layer_count: 6,
+                hidden_size: 128,
+                local_window_tokens: 4096,
+                forward_energy: Some(0.18),
+                kv_influence: Some(0.40),
+                imported_kv_blocks: 1,
+                exported_kv_blocks: 1,
+            },
+            process_reward: ProcessRewardReport {
+                total: 0.86,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
+        let mut backend = DiagnosedBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("adapter observation history", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.runtime_adapter_observations.len(), 1);
+        assert_eq!(
+            outcome.runtime_adapter_observations[0].adapter,
+            RuntimeAdapterHint::CpuSimd
+        );
+        assert!(
+            !outcome
+                .runtime_adapter_observations
+                .iter()
+                .any(|observation| observation.adapter == RuntimeAdapterHint::Cuda)
+        );
     }
 
     #[test]

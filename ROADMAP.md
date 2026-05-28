@@ -431,10 +431,11 @@ These are algorithmic references, not product dependencies:
   without reconstructing the contract from expanded fields; runtime responses can now carry structured
   forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
-  KV influence, and runtime KV import/export counts; runtime requests now
-  filter adapter observations against the current device execution plan, and
-  runtime responses are checked against the requested model id, architecture
-  envelope, and device adapter hints before exported runtime KV can be admitted)
+  KV influence, and runtime KV import/export counts; runtime requests,
+  inference outcomes, traces, and benchmark summaries now filter adapter
+  observations against the current device execution plan, and runtime responses
+  are checked against the requested model id, architecture envelope, and device
+  adapter hints before exported runtime KV can be admitted)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 

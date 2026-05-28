@@ -514,23 +514,21 @@ matches. A self-developed runtime manifest first respects the current device
 execution plan, then can prefer a historically stronger adapter only when that
 adapter is supported by both the device plan and the runtime manifest.
 Before sending a request, the backend filters historical adapter observations
-against the current device execution plan. After generation, response
-diagnostics are checked against the requested model id, architecture envelope,
-and device adapter hints; violations are traced as low-confidence contract
-issues and exported runtime KV is discarded so an invalid adapter path cannot
-pollute durable memory.
-The engine now also exposes the same adapter-observation set on each inference
-outcome, trace JSONL records its count and best-scoring adapter, and benchmark
-summaries surface the total observation coverage plus the strongest historical
-adapter score.
+against the current device execution plan. The same device-bounded observation
+set is exposed on each inference outcome, in trace JSONL, and in benchmark
+summaries, so a high-scoring but unavailable CUDA/Metal/NPU path cannot steer a
+CPU, mobile, browser, or edge run. After generation, response diagnostics are
+checked against the requested model id, architecture envelope, and device
+adapter hints; violations are traced as low-confidence contract issues and
+exported runtime KV is discarded so an invalid adapter path cannot pollute
+durable memory.
 
 当 runtime tokens 带有 `entropy` 或 `logprob` 时，引擎会把这些 token 级信号合入主生成 perplexity，并用于 drift 检查、router / hierarchy 自适应、process reward 评分和经验回放。
 同一组聚合后的 token 不确定性也会写入 trace JSONL 的 `runtime_tokens`，包括平均 entropy、平均负 logprob 与派生的 uncertainty perplexity。
 runtime response 也可以返回结构化 `diagnostics`，让本地或命令行 runtime 上报模型 ID、选中的 adapter、执行层数、hidden size、本地窗口、forward energy、KV influence 以及 KV 导入导出计数；engine 会把这些字段作为 `runtime_diagnostics` 写入 trace JSONL。
 同一组 diagnostics 也会持久化进 experience 记录，因此后续经验回放能知道是哪一个自研 runtime、adapter、forward energy 和 KV influence 产生了有效或较弱的控制路径。
 runtime request 还会从这些经验匹配中提炼有边界的 adapter observation。自研 runtime manifest 会先遵守当前设备执行计划，然后只在 adapter 同时被设备计划和 runtime manifest 支持时，才优先选择历史表现更强的 adapter。
-发送请求前，backend 会按当前设备执行计划过滤历史 adapter observation；生成后，response diagnostics 会按请求的 model id、架构边界和设备 adapter hints 做契约检查。违反契约会被记录为低置信 runtime contract issue，并丢弃导出的 runtime KV，避免无效 adapter 路径污染长期记忆。
-engine 也会把同一组 adapter observation 暴露在每次 inference outcome 中；trace JSONL 会记录观察数量和最高分 adapter，benchmark summary 会汇总观察覆盖量与最强历史 adapter 分数。
+发送请求前，backend 会按当前设备执行计划过滤历史 adapter observation；同一组受设备约束的 observation 也会暴露在每次 inference outcome、trace JSONL 和 benchmark summary 中，因此高分但当前不可用的 CUDA / Metal / NPU 历史路径不会影响 CPU、移动端、浏览器或边缘设备运行。生成后，response diagnostics 会按请求的 model id、架构边界和设备 adapter hints 做契约检查。违反契约会被记录为低置信 runtime contract issue，并丢弃导出的 runtime KV，避免无效 adapter 路径污染长期记忆。
 
 Run through the built-in Rust-native local runtime prototype:
 

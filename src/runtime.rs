@@ -190,19 +190,11 @@ impl RuntimeRequest {
         runtime_metadata: RuntimeMetadata,
         runtime_architecture: TransformerRuntimeArchitecture,
     ) -> Self {
-        let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences(
+        let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences_for_hardware(
             context.experiences,
             &runtime_metadata.model_id,
-        )
-        .into_iter()
-        .filter(|observation| {
-            context
-                .hardware_plan
-                .execution
-                .adapter_hints
-                .contains(&observation.adapter)
-        })
-        .collect();
+            context.hardware_plan,
+        );
 
         Self {
             prompt: context.prompt.to_owned(),
@@ -346,6 +338,22 @@ impl RuntimeAdapterObservation {
         });
         observations.truncate(6);
         observations
+    }
+
+    pub fn from_experiences_for_hardware(
+        experiences: &[ExperienceMatch],
+        runtime_model_id: &str,
+        hardware_plan: &HardwarePlan,
+    ) -> Vec<Self> {
+        Self::from_experiences(experiences, runtime_model_id)
+            .into_iter()
+            .filter(|observation| {
+                hardware_plan
+                    .execution
+                    .adapter_hints
+                    .contains(&observation.adapter)
+            })
+            .collect()
     }
 
     pub fn summary(&self) -> String {
