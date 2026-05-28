@@ -515,7 +515,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} used_memories={} stored_memories={} compacted_memories={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} used_memories={} stored_memories={} compacted_memories={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.elapsed_ms,
@@ -525,6 +525,7 @@ fn print_benchmark_summary(
             result.requires_recursion,
             result.recursive_chunks,
             result.recursive_waves,
+            result.recursive_runtime_calls,
             result.used_memories,
             result.stored_memories,
             result.compacted_memories,
@@ -833,6 +834,7 @@ struct Args {
     benchmark_max_total_ms: Option<u128>,
     benchmark_max_recursive_chunks: Option<usize>,
     benchmark_min_recursive_cases: Option<usize>,
+    benchmark_min_recursive_runtime_calls: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
     benchmark_max_drift_rollbacks: Option<usize>,
     benchmark_roundtrip: bool,
@@ -884,6 +886,7 @@ impl Args {
         let mut benchmark_max_total_ms = None;
         let mut benchmark_max_recursive_chunks = None;
         let mut benchmark_min_recursive_cases = None;
+        let mut benchmark_min_recursive_runtime_calls = None;
         let mut benchmark_max_drift_blocks = None;
         let mut benchmark_max_drift_rollbacks = None;
         let mut benchmark_roundtrip = false;
@@ -981,6 +984,11 @@ impl Args {
                 }
                 "--benchmark-min-recursive-cases" if index + 1 < raw.len() => {
                     benchmark_min_recursive_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-recursive-runtime-calls" if index + 1 < raw.len() => {
+                    benchmark_min_recursive_runtime_calls = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1212,6 +1220,7 @@ impl Args {
             benchmark_max_total_ms,
             benchmark_max_recursive_chunks,
             benchmark_min_recursive_cases,
+            benchmark_min_recursive_runtime_calls,
             benchmark_max_drift_blocks,
             benchmark_max_drift_rollbacks,
             benchmark_roundtrip,
@@ -1265,6 +1274,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_recursive_cases {
             gate.min_recursive_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_recursive_runtime_calls {
+            gate.min_recursive_runtime_calls = Some(value);
         }
         if let Some(value) = self.benchmark_max_drift_blocks {
             gate.max_drift_blocks = Some(value);
@@ -1331,7 +1343,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 
 fn print_help_and_exit() -> ! {
     println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
+        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
     );
     std::process::exit(0);
 }
@@ -1387,6 +1399,8 @@ mod tests {
             "8".to_owned(),
             "--benchmark-min-recursive-cases".to_owned(),
             "1".to_owned(),
+            "--benchmark-min-recursive-runtime-calls".to_owned(),
+            "4".to_owned(),
             "--benchmark-max-drift-blocks".to_owned(),
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
@@ -1449,6 +1463,7 @@ mod tests {
         assert_eq!(args.benchmark_max_total_ms, Some(10000));
         assert_eq!(args.benchmark_max_recursive_chunks, Some(8));
         assert_eq!(args.benchmark_min_recursive_cases, Some(1));
+        assert_eq!(args.benchmark_min_recursive_runtime_calls, Some(4));
         assert_eq!(args.benchmark_max_drift_blocks, Some(0));
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
         assert!(args.benchmark_roundtrip);

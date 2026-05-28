@@ -119,6 +119,10 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"execution_waves\":",
     },
     TraceRequiredField {
+        name: "recursive_runtime_calls",
+        marker: "\"runtime_calls\":",
+    },
+    TraceRequiredField {
         name: "tiers",
         marker: "\"tiers\":{",
     },
@@ -283,7 +287,7 @@ pub fn trace_json_line_with_case(
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
-         \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{}}},\
+         \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{},\"runtime_calls\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
@@ -370,6 +374,7 @@ pub fn trace_json_line_with_case(
         outcome.recursive_schedule.max_parallel_chunks,
         outcome.recursive_schedule.chunk_tokens,
         outcome.recursive_schedule.overlap_tokens,
+        outcome.recursive_runtime_calls,
         tier_counts.hot_gpu,
         tier_counts.warm_ram,
         tier_counts.cold_disk,
@@ -562,6 +567,7 @@ mod tests {
         assert!(line.contains("\"local_kv_token_budget\":"));
         assert!(line.contains("\"global_kv_token_budget\":"));
         assert!(line.contains("\"execution_waves\":"));
+        assert!(line.contains("\"runtime_calls\":"));
         assert!(line.contains("\"max_parallel_chunks\":"));
         assert!(line.contains("\"template\":\"coding_local\""));
         assert!(line.contains("\"drift\":"));

@@ -277,6 +277,20 @@ cargo run -- --benchmark target/noiron-recursive-benchmark.jsonl --benchmark-gat
 cargo run -- --benchmark target/noiron-recursive-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-min-recursive-cases 1 --native-window 64 --chunk-tokens 32 --chunk-overlap 8 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
+For local runtime benchmarks, use `--runtime-native-window` to constrain the
+runtime-reported model window and require actual recursive backend calls:
+
+```powershell
+cargo run -- --local-runtime --benchmark target/noiron-recursive-runtime.jsonl --benchmark-gate --benchmark-min-recursive-cases 1 --benchmark-min-recursive-runtime-calls 4 --runtime-native-window 64 --chunk-tokens 32 --chunk-overlap 8
+```
+
+本地 runtime benchmark 需要用 `--runtime-native-window` 压低 runtime 上报的模型窗口，并可用
+`--benchmark-min-recursive-runtime-calls` 要求真实发生多次递归 backend 调用：
+
+```powershell
+cargo run -- --local-runtime --benchmark target/noiron-recursive-runtime.jsonl --benchmark-gate --benchmark-min-recursive-cases 1 --benchmark-min-recursive-runtime-calls 4 --runtime-native-window 64 --chunk-tokens 32 --chunk-overlap 8
+```
+
 Run the KV quantization gate for reproducible 4/8-bit compression accuracy,
 payload ratio, and latency checks:
 

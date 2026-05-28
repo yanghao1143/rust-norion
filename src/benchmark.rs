@@ -72,6 +72,7 @@ pub struct BenchmarkCaseResult {
     pub requires_recursion: bool,
     pub recursive_chunks: usize,
     pub recursive_waves: usize,
+    pub recursive_runtime_calls: usize,
     pub used_memories: usize,
     pub stored_memories: usize,
     pub compacted_memories: usize,
@@ -89,6 +90,7 @@ pub struct BenchmarkGate {
     pub max_total_elapsed_ms: Option<u128>,
     pub max_case_recursive_chunks: Option<usize>,
     pub min_recursive_cases: Option<usize>,
+    pub min_recursive_runtime_calls: Option<usize>,
     pub max_drift_blocks: Option<usize>,
     pub max_drift_rollbacks: Option<usize>,
 }
@@ -101,6 +103,7 @@ impl Default for BenchmarkGate {
             max_total_elapsed_ms: None,
             max_case_recursive_chunks: None,
             min_recursive_cases: None,
+            min_recursive_runtime_calls: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         }
@@ -480,6 +483,7 @@ impl BenchmarkSummary {
             requires_recursion: outcome.recursive_schedule.requires_recursion,
             recursive_chunks: outcome.recursive_schedule.chunk_count(),
             recursive_waves: outcome.recursive_schedule.execution_wave_count(),
+            recursive_runtime_calls: outcome.recursive_runtime_calls,
             used_memories: outcome.used_memories.len(),
             stored_memories,
             compacted_memories: outcome.memory_compaction_report.merged.len(),
@@ -601,6 +605,13 @@ impl BenchmarkSummary {
             .unwrap_or(0)
     }
 
+    pub fn total_recursive_runtime_calls(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.recursive_runtime_calls)
+            .sum()
+    }
+
     pub fn evaluate(&self, gate: &BenchmarkGate) -> BenchmarkGateReport {
         let mut failures = Vec::new();
 
@@ -654,6 +665,16 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_recursive_runtime_calls) = gate.min_recursive_runtime_calls {
+            let recursive_runtime_calls = self.total_recursive_runtime_calls();
+            if recursive_runtime_calls < min_recursive_runtime_calls {
+                failures.push(format!(
+                    "recursive_runtime_calls {} below minimum {}",
+                    recursive_runtime_calls, min_recursive_runtime_calls
+                ));
+            }
+        }
+
         if let Some(max_drift_blocks) = gate.max_drift_blocks {
             let drift_blocks = self.drift_blocks();
             if drift_blocks > max_drift_blocks {
@@ -682,7 +703,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} stored_memories={} compacted_memories={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} stored_memories={} compacted_memories={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -690,6 +711,7 @@ impl BenchmarkSummary {
             self.average_attention_fraction(),
             self.recursive_cases(),
             self.max_recursive_waves(),
+            self.total_recursive_runtime_calls(),
             self.total_stored_memories(),
             self.total_compacted_memories(),
             self.total_runtime_kv_stored(),
@@ -860,7 +882,9 @@ mod tests {
 
         assert_eq!(summary.recursive_cases(), 1);
         assert!(summary.max_recursive_chunks() > 1);
+        assert!(summary.total_recursive_runtime_calls() > summary.max_recursive_chunks());
         assert!(summary.summary_line().contains("recursive_cases=1"));
+        assert!(summary.summary_line().contains("recursive_runtime_calls="));
     }
 
     #[test]
@@ -901,6 +925,7 @@ mod tests {
             max_total_elapsed_ms: Some(1),
             max_case_recursive_chunks: Some(0),
             min_recursive_cases: None,
+            min_recursive_runtime_calls: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         };
@@ -941,6 +966,7 @@ mod tests {
         let mut summary = BenchmarkSummary::new();
         let mut gate = BenchmarkGate::default();
         gate.min_recursive_cases = Some(1);
+        gate.min_recursive_runtime_calls = Some(2);
 
         summary.record(&case, 1, &outcome);
         let report = summary.evaluate(&gate);
@@ -951,6 +977,12 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("recursive_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("recursive_runtime_calls"))
         );
     }
 
@@ -967,6 +999,7 @@ mod tests {
                 requires_recursion: false,
                 recursive_chunks: 1,
                 recursive_waves: 1,
+                recursive_runtime_calls: 1,
                 used_memories: 0,
                 stored_memories: 0,
                 compacted_memories: 0,

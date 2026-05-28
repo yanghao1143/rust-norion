@@ -19,7 +19,7 @@ use crate::kv_exchange::RuntimeKvBlock;
 use crate::process_reward::{
     ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };
-use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
+use crate::recursive_scheduler::{RecursiveChunk, RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::{
     InferenceDraft, ReasoningStep, ReflectionReport, Reflector, RuntimeDiagnostics,
 };
@@ -59,6 +59,27 @@ pub struct GenerationContext<'a> {
     pub transformer_plan: &'a TransformerRefactorPlan,
 }
 
+impl<'a> GenerationContext<'a> {
+    fn with_prompt<'b>(&'b self, prompt: &'b str) -> GenerationContext<'b>
+    where
+        'a: 'b,
+    {
+        GenerationContext {
+            prompt,
+            profile: self.profile,
+            memories: self.memories,
+            route_budget: self.route_budget,
+            hierarchy: self.hierarchy,
+            tier_plan: self.tier_plan,
+            infini_memory_plan: self.infini_memory_plan,
+            recursive_schedule: self.recursive_schedule,
+            hardware_plan: self.hardware_plan,
+            experiences: self.experiences,
+            transformer_plan: self.transformer_plan,
+        }
+    }
+}
+
 pub trait InferenceBackend {
     fn runtime_native_context_window(&self) -> Option<usize> {
         None
@@ -80,6 +101,7 @@ pub struct InferenceOutcome {
     pub runtime_token_metrics: RuntimeTokenMetrics,
     pub runtime_diagnostics: RuntimeDiagnostics,
     pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
+    pub recursive_runtime_calls: usize,
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
@@ -419,7 +441,7 @@ impl NoironEngine {
             self.transformer_planner
                 .plan(request.profile, hierarchy, route_budget);
 
-        let draft = backend.generate(GenerationContext {
+        let generation_context = GenerationContext {
             prompt: &request.prompt,
             profile: request.profile,
             memories: &used_memories,
@@ -431,7 +453,9 @@ impl NoironEngine {
             hardware_plan: &hardware_plan,
             experiences: &used_experiences,
             transformer_plan: &transformer_plan,
-        });
+        };
+        let (draft, recursive_runtime_calls) =
+            generate_with_recursive_schedule(backend, generation_context);
         let report = self.reflector.reflect(&request.prompt, &draft);
         let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
         let runtime_diagnostics = draft.runtime_diagnostics.clone();
@@ -599,6 +623,7 @@ impl NoironEngine {
             runtime_token_metrics,
             runtime_diagnostics,
             runtime_adapter_observations,
+            recursive_runtime_calls,
             route_budget,
             hierarchy,
             tier_plan,
@@ -938,6 +963,180 @@ fn protected_memory_ids(
     ids
 }
 
+fn generate_with_recursive_schedule<B: InferenceBackend>(
+    backend: &mut B,
+    context: GenerationContext<'_>,
+) -> (InferenceDraft, usize) {
+    if !context.recursive_schedule.requires_recursion {
+        return (backend.generate(context), 1);
+    }
+
+    let mut chunk_drafts = Vec::new();
+    for chunk in &context.recursive_schedule.chunks {
+        let prompt = recursive_chunk_prompt(context.prompt, chunk);
+        chunk_drafts.push(backend.generate(context.with_prompt(&prompt)));
+    }
+
+    let mut runtime_calls = chunk_drafts.len();
+    let mut merge_inputs = chunk_drafts
+        .iter()
+        .enumerate()
+        .map(|(index, draft)| format!("chunk_{index}: {}", compact(&draft.answer, 600)))
+        .collect::<Vec<_>>();
+    let mut merge_drafts = Vec::new();
+
+    for round in &context.recursive_schedule.merge_rounds {
+        let groups = merge_inputs
+            .chunks(context.recursive_schedule.merge_fan_in.max(2))
+            .map(|items| items.join("\n"))
+            .collect::<Vec<_>>();
+        let mut next_inputs = Vec::new();
+
+        for (group_index, group) in groups.iter().enumerate() {
+            let prompt = recursive_merge_prompt(context.prompt, round.round, group_index, group);
+            let draft = backend.generate(context.with_prompt(&prompt));
+            next_inputs.push(format!(
+                "merge_r{}_g{}: {}",
+                round.round,
+                group_index,
+                compact(&draft.answer, 600)
+            ));
+            merge_drafts.push(draft);
+            runtime_calls += 1;
+        }
+
+        merge_inputs = next_inputs;
+    }
+
+    (
+        merge_recursive_drafts(context.prompt, chunk_drafts, merge_drafts),
+        runtime_calls,
+    )
+}
+
+fn recursive_chunk_prompt(prompt: &str, chunk: &RecursiveChunk) -> String {
+    let chunk_text = prompt_chunk_text(prompt, chunk);
+    format!(
+        "Noiron recursive chunk {} covering estimated tokens {}..{} with left overlap {} and right overlap {}.\nOriginal prompt anchor: {}\nChunk text:\n{}\nTask: produce a concise, reusable chunk summary with key facts, constraints, and unresolved dependencies for later merge.",
+        chunk.index,
+        chunk.start_token,
+        chunk.end_token,
+        chunk.overlap_left,
+        chunk.overlap_right,
+        compact(prompt, 1_200),
+        chunk_text
+    )
+}
+
+fn prompt_chunk_text(prompt: &str, chunk: &RecursiveChunk) -> String {
+    if prompt.chars().any(char::is_whitespace) {
+        let words = prompt.split_whitespace().collect::<Vec<_>>();
+        return words
+            .get(chunk.start_token..chunk.end_token.min(words.len()))
+            .unwrap_or(&[])
+            .join(" ");
+    }
+
+    let divisor = if prompt.is_ascii() { 4 } else { 2 };
+    let start = chunk.start_token.saturating_mul(divisor);
+    let end = chunk.end_token.saturating_mul(divisor);
+    let text = prompt
+        .chars()
+        .skip(start)
+        .take(end.saturating_sub(start))
+        .collect::<String>();
+    if text.is_empty() {
+        compact(prompt, 1_200)
+    } else {
+        text
+    }
+}
+
+fn recursive_merge_prompt(prompt: &str, round: usize, group_index: usize, group: &str) -> String {
+    format!(
+        "Noiron recursive merge round {round} group {group_index}.\nOriginal prompt anchor: {}\nChunk or prior-merge summaries:\n{group}\nTask: merge these summaries into one coherent answer fragment, preserve conflicts, and keep reusable long-context memory cues.",
+        compact(prompt, 1_200)
+    )
+}
+
+fn merge_recursive_drafts(
+    prompt: &str,
+    chunk_drafts: Vec<InferenceDraft>,
+    merge_drafts: Vec<InferenceDraft>,
+) -> InferenceDraft {
+    let final_answer = merge_drafts
+        .last()
+        .or_else(|| chunk_drafts.last())
+        .map(|draft| draft.answer.clone())
+        .unwrap_or_default();
+    let answer = format!(
+        "Recursive Noiron merged answer for '{}'. Final merge: {}",
+        compact(prompt, 160),
+        final_answer
+    );
+    let mut trace = vec![ReasoningStep::new(
+        "recursive_runtime",
+        format!(
+            "executed {} chunk drafts and {} merge drafts",
+            chunk_drafts.len(),
+            merge_drafts.len()
+        ),
+        0.82,
+    )];
+    let mut tokens = Vec::new();
+    let mut exported_kv_blocks = Vec::new();
+    let mut diagnostics = Vec::new();
+
+    for draft in chunk_drafts.iter().chain(merge_drafts.iter()) {
+        trace.extend(draft.trace.clone());
+        tokens.extend(draft.tokens.clone());
+        exported_kv_blocks.extend(draft.exported_kv_blocks.clone());
+        diagnostics.push(draft.runtime_diagnostics.clone());
+    }
+
+    InferenceDraft::new(answer, trace)
+        .with_tokens(tokens)
+        .with_exported_kv_blocks(exported_kv_blocks)
+        .with_runtime_diagnostics(merge_runtime_diagnostics(&diagnostics))
+}
+
+fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagnostics {
+    let mut merged = RuntimeDiagnostics::default();
+    let mut forward_energy_total = 0.0;
+    let mut forward_energy_count = 0;
+    let mut kv_influence_total = 0.0;
+    let mut kv_influence_count = 0;
+
+    for diagnostic in diagnostics {
+        if merged.model_id.is_none() {
+            merged.model_id = diagnostic.model_id.clone();
+        }
+        if merged.selected_adapter.is_none() {
+            merged.selected_adapter = diagnostic.selected_adapter.clone();
+        }
+        merged.layer_count += diagnostic.layer_count;
+        merged.hidden_size = merged.hidden_size.max(diagnostic.hidden_size);
+        merged.local_window_tokens = merged
+            .local_window_tokens
+            .max(diagnostic.local_window_tokens);
+        merged.imported_kv_blocks += diagnostic.imported_kv_blocks;
+        merged.exported_kv_blocks += diagnostic.exported_kv_blocks;
+
+        if let Some(value) = diagnostic.forward_energy.filter(|value| value.is_finite()) {
+            forward_energy_total += value;
+            forward_energy_count += 1;
+        }
+        if let Some(value) = diagnostic.kv_influence.filter(|value| value.is_finite()) {
+            kv_influence_total += value;
+            kv_influence_count += 1;
+        }
+    }
+
+    merged.forward_energy = average(forward_energy_total, forward_energy_count);
+    merged.kv_influence = average(kv_influence_total, kv_influence_count);
+    merged
+}
+
 fn compact(text: &str, max_chars: usize) -> String {
     let mut out = text.chars().take(max_chars).collect::<String>();
     if text.chars().count() > max_chars {
@@ -1136,7 +1335,62 @@ mod tests {
             outcome.hardware_plan.execution.max_parallel_chunks
         );
         assert_eq!(outcome.recursive_schedule.execution_wave_count(), 2);
+        assert_eq!(outcome.recursive_runtime_calls, 6);
+        assert!(outcome.answer.contains("Recursive Noiron merged answer"));
         assert!(outcome.answer.contains("Recursive schedule"));
+    }
+
+    #[test]
+    fn recursive_inference_calls_backend_for_chunks_and_merges() {
+        struct CountingBackend {
+            prompts: Vec<String>,
+        }
+
+        impl InferenceBackend for CountingBackend {
+            fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+                self.prompts.push(context.prompt.to_owned());
+                InferenceDraft::new(
+                    format!("draft {}", self.prompts.len()),
+                    vec![ReasoningStep::new("count", "counted recursive call", 0.9)],
+                )
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+        let prompt = (0..14)
+            .map(|index| format!("recursive_call_{index}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut backend = CountingBackend {
+            prompts: Vec::new(),
+        };
+
+        let outcome = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::LongDocument),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.recursive_schedule.chunk_count(), 3);
+        assert_eq!(outcome.recursive_schedule.merge_round_count(), 2);
+        assert_eq!(outcome.recursive_runtime_calls, 6);
+        assert_eq!(backend.prompts.len(), outcome.recursive_runtime_calls);
+        assert!(
+            backend
+                .prompts
+                .iter()
+                .filter(|prompt| prompt.contains("Noiron recursive chunk"))
+                .count()
+                >= 3
+        );
+        assert!(
+            backend
+                .prompts
+                .iter()
+                .filter(|prompt| prompt.contains("Noiron recursive merge round"))
+                .count()
+                >= 2
+        );
     }
 
     #[test]
