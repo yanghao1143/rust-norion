@@ -167,9 +167,9 @@ The north star is now explicitly scoped around five core requirements:
 10. Hardware-aware compute allocation / 硬件感知算力分配
     Use local CPU/GPU/RAM/disk pressure and explicit device profiles for
     CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded,
-    NPU/AI accelerator, multi-GPU, edge, and server targets to decide when to
-    lower compute, shrink windows, evict memory, or spend extra attention on
-    hard tasks.
+    browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and
+    server targets to decide when to lower compute, shrink windows, evict
+    memory, or spend extra attention on hard tasks.
 
 11. Universal execution planning / 全设备执行计划
     Map every supported device profile to a primary compute lane, fallback lane,
@@ -258,8 +258,9 @@ modules, not external product dependencies:
 - Universal execution plans:
   every hardware profile should produce portable runtime adapter hints and
   fallback policies so the same control plane can run on CPU-only machines,
-  GPUs, unified-memory systems, phones, embedded boards, NPUs, edge devices, and
-  multi-accelerator servers without assuming one vendor stack.
+  GPUs, unified-memory systems, phones, embedded boards, browser-WASM sandboxes,
+  microcontroller-class targets, NPUs, edge devices, and multi-accelerator
+  servers without assuming one vendor stack.
 - Device compatibility gate:
   the repository should fail fast when any supported device profile loses valid
   alias coverage, execution lanes, KV budgets, adapter hints, disk-spill policy,
@@ -316,9 +317,10 @@ These are algorithmic references, not product dependencies:
   memory state before inference, including a default low-pressure automatic
   replay pass over prior experience; device-agnostic hardware pressure planning now
   adapts latency budgets, KV token budgets, and hierarchy weights for CPU-only,
-  integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI
-  accelerator, multi-GPU, edge, and server devices, with capability tiers and
-  common device aliases covered by tests; best-effort auto probing now maps OS,
+  integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM,
+  microcontroller, NPU/AI accelerator, multi-GPU, edge, and server devices,
+  with capability tiers and common device aliases covered by tests;
+  best-effort auto probing now maps OS,
   architecture, CPU parallelism, common GPU/NPU environment hints, edge device
   hints, WASM/tiny targets, and discrete GPU adapter names into a conservative
   device profile; each profile now emits execution-lane, memory mode,

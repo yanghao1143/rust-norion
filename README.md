@@ -156,7 +156,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward and reflection-diagnostic signals
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator, multi-GPU, edge, and server profiles
+- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, and a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
@@ -363,7 +363,8 @@ GPU/NPU 环境变量做保守本地探测。`--device`、`--cpu-load`、`--gpu-l
 profile，而不是失败或绑定到未知厂商路径。
 
 Examples of accepted device profiles include `cpu`, `integrated`, `discrete`,
-`uma`, `mobile`, `embedded`, `npu`, `multi-gpu`, `edge`, and `server`.
+`uma`, `mobile`, `embedded`, `browser-wasm`, `microcontroller`, `npu`,
+`multi-gpu`, `edge`, and `server`.
 Common aliases such as `unknown`, `generic`, `x86_64`, `arm64`, `loongarch64`,
 `laptop`, `steamdeck`, `directml`, `rtx`, `macbook`, `iphone`, `harmonyos`,
 `wearable`, `snapdragon`, `hailo`, `ascend`, `rknn`, `microcontroller`, `wasm`,
@@ -374,7 +375,8 @@ the same control loop can scale down or up without binding to one vendor
 device.
 
 可用设备 profile 包括 `cpu`、`integrated`、`discrete`、`uma`、`mobile`、
-`embedded`、`npu`、`multi-gpu`、`edge` 和 `server`。常见别名如 `unknown`、
+`embedded`、`browser-wasm`、`microcontroller`、`npu`、`multi-gpu`、`edge`
+和 `server`。常见别名如 `unknown`、
 `generic`、`x86_64`、`arm64`、`loongarch64`、`laptop`、`steamdeck`、
 `directml`、`rtx`、`macbook`、`iphone`、`harmonyos`、`wearable`、
 `snapdragon`、`hailo`、`ascend`、`rknn`、`microcontroller`、`wasm`、`riscv`、
@@ -610,8 +612,9 @@ Expected integration loop:
 3. compute route budget and hierarchy weights
 4. plan single-pass or recursive chunk/merge scheduling for the native model window
 5. adapt latency, KV budgets, and hierarchy weights to CPU-only, integrated GPU,
-   discrete GPU, unified-memory, mobile, embedded, NPU/AI accelerator,
-   multi-GPU, edge, or server devices, then select a portable execution plan
+   discrete GPU, unified-memory, mobile, embedded, browser-WASM,
+   microcontroller, NPU/AI accelerator, multi-GPU, edge, or server devices,
+   then select a portable execution plan
 6. optionally replay high/low reward experience into router, hierarchy, and KV state
 7. retrieve relevant reflection lessons from the experience store
 8. import active KV memory into the runtime, call the real model backend, and

@@ -13,6 +13,8 @@ pub enum DeviceClass {
     UnifiedMemory,
     Mobile,
     Embedded,
+    BrowserWasm,
+    Microcontroller,
     NpuAccelerator,
     MultiGpu,
     Edge,
@@ -160,6 +162,8 @@ impl DeviceClass {
             Self::UnifiedMemory => "uma",
             Self::Mobile => "mobile",
             Self::Embedded => "embedded",
+            Self::BrowserWasm => "browser-wasm",
+            Self::Microcontroller => "microcontroller",
             Self::NpuAccelerator => "npu",
             Self::MultiGpu => "multi-gpu",
             Self::Edge => "edge",
@@ -168,7 +172,7 @@ impl DeviceClass {
     }
 
     pub fn supported_profiles() -> &'static [Self] {
-        const PROFILES: [DeviceClass; 11] = [
+        const PROFILES: [DeviceClass; 13] = [
             DeviceClass::Auto,
             DeviceClass::CpuOnly,
             DeviceClass::IntegratedGpu,
@@ -176,6 +180,8 @@ impl DeviceClass {
             DeviceClass::UnifiedMemory,
             DeviceClass::Mobile,
             DeviceClass::Embedded,
+            DeviceClass::BrowserWasm,
+            DeviceClass::Microcontroller,
             DeviceClass::NpuAccelerator,
             DeviceClass::MultiGpu,
             DeviceClass::Edge,
@@ -186,13 +192,15 @@ impl DeviceClass {
     }
 
     pub fn explicit_profiles() -> &'static [Self] {
-        const PROFILES: [DeviceClass; 10] = [
+        const PROFILES: [DeviceClass; 12] = [
             DeviceClass::CpuOnly,
             DeviceClass::IntegratedGpu,
             DeviceClass::DiscreteGpu,
             DeviceClass::UnifiedMemory,
             DeviceClass::Mobile,
             DeviceClass::Embedded,
+            DeviceClass::BrowserWasm,
+            DeviceClass::Microcontroller,
             DeviceClass::NpuAccelerator,
             DeviceClass::MultiGpu,
             DeviceClass::Edge,
@@ -341,35 +349,69 @@ impl DeviceClass {
             Self::Embedded => DeviceProfileDescriptor {
                 device: self,
                 tier: self.tier(),
-                scope: "embedded boards / SBCs / browser-WASM / very small local targets",
+                scope: "embedded boards / SBCs / IoT Linux and RTOS-capable local targets",
                 aliases: &[
                     "embedded",
                     "iot",
                     "rpi",
                     "raspberry-pi",
                     "raspberry_pi",
-                    "micro",
-                    "microcontroller",
-                    "mcu",
-                    "esp32",
-                    "stm32",
-                    "arduino",
-                    "cortex-m",
                     "sbc",
                     "arm-sbc",
+                    "linux-sbc",
+                    "single-board",
+                    "single-board-computer",
                     "riscv",
                     "riscv64",
                     "risc-v",
-                    "no-std",
-                    "wasi",
+                    "armv7",
+                    "armv8",
+                    "embedded-linux",
+                    "yocto",
+                ],
+            },
+            Self::BrowserWasm => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "browser / WASM / WASI sandbox targets with optional WebGPU",
+                aliases: &[
+                    "browser-wasm",
+                    "browser_wasm",
                     "wasm",
-                    "browser",
-                    "web",
-                    "webgpu",
-                    "wasip1",
                     "wasm32",
                     "wasm32-wasip1",
+                    "wasm32-unknown-unknown",
+                    "wasi",
+                    "wasip1",
+                    "browser",
+                    "web",
+                    "web-runtime",
+                    "webworker",
+                    "service-worker",
+                    "webgpu",
+                ],
+            },
+            Self::Microcontroller => DeviceProfileDescriptor {
+                device: self,
+                tier: self.tier(),
+                scope: "microcontroller / no-std / tiny local control targets",
+                aliases: &[
+                    "microcontroller",
+                    "micro",
+                    "mcu",
+                    "tiny",
+                    "tiny-device",
+                    "no-std",
+                    "cortex-m",
+                    "thumbv7",
+                    "thumbv8",
+                    "xtensa",
+                    "esp32",
                     "esp-idf",
+                    "stm32",
+                    "arduino",
+                    "rp2040",
+                    "riscv32",
                 ],
             },
             Self::NpuAccelerator => DeviceProfileDescriptor {
@@ -485,8 +527,10 @@ impl DeviceClass {
     pub fn tier(self) -> DeviceTier {
         match self {
             Self::Auto => DeviceTier::Auto,
-            Self::Embedded => DeviceTier::Tiny,
-            Self::CpuOnly | Self::Mobile | Self::Edge => DeviceTier::Constrained,
+            Self::Microcontroller => DeviceTier::Tiny,
+            Self::CpuOnly | Self::Mobile | Self::Embedded | Self::BrowserWasm | Self::Edge => {
+                DeviceTier::Constrained
+            }
             Self::IntegratedGpu | Self::UnifiedMemory | Self::NpuAccelerator => {
                 DeviceTier::Balanced
             }
@@ -534,12 +578,40 @@ impl FromStr for DeviceClass {
             | "harmonyos" | "ohos" | "visionos" | "smartphone" | "wearable" | "wear-os"
             | "wearos" | "watch" | "xr" | "vr" | "ar" | "quest" | "mobile-vr" | "smart-tv"
             | "tvos" | "android-tv" => Ok(Self::Mobile),
-            "embedded" | "iot" | "rpi" | "raspberry-pi" | "raspberry_pi" | "micro"
-            | "microcontroller" | "mcu" | "esp32" | "stm32" | "arduino" | "cortex-m" | "sbc"
-            | "arm-sbc" | "riscv" | "riscv64" | "risc-v" | "no-std" | "wasi" | "wasm"
-            | "browser" | "web" | "webgpu" | "wasip1" | "wasm32" | "wasm32-wasip1" | "esp-idf" => {
-                Ok(Self::Embedded)
-            }
+            "embedded"
+            | "iot"
+            | "rpi"
+            | "raspberry-pi"
+            | "raspberry_pi"
+            | "sbc"
+            | "arm-sbc"
+            | "linux-sbc"
+            | "single-board"
+            | "single-board-computer"
+            | "riscv"
+            | "riscv64"
+            | "risc-v"
+            | "armv7"
+            | "armv8"
+            | "embedded-linux"
+            | "yocto" => Ok(Self::Embedded),
+            "browser-wasm"
+            | "browser_wasm"
+            | "wasm"
+            | "wasm32"
+            | "wasm32-wasip1"
+            | "wasm32-unknown-unknown"
+            | "wasi"
+            | "wasip1"
+            | "browser"
+            | "web"
+            | "web-runtime"
+            | "webworker"
+            | "service-worker"
+            | "webgpu" => Ok(Self::BrowserWasm),
+            "microcontroller" | "micro" | "mcu" | "tiny" | "tiny-device" | "no-std"
+            | "cortex-m" | "thumbv7" | "thumbv8" | "xtensa" | "esp32" | "esp-idf" | "stm32"
+            | "arduino" | "rp2040" | "riscv32" => Ok(Self::Microcontroller),
             "npu"
             | "ane"
             | "tpu"
@@ -718,8 +790,16 @@ impl HardwareProbe {
         ) {
             return DeviceClass::Mobile;
         }
-        if arch.starts_with("wasm") || matches!(os.as_str(), "wasi" | "espidf" | "none") {
-            return DeviceClass::Embedded;
+        if arch.starts_with("wasm") || matches!(os.as_str(), "wasi") {
+            return DeviceClass::BrowserWasm;
+        }
+        if matches!(os.as_str(), "espidf" | "none")
+            || arch.contains("xtensa")
+            || arch.starts_with("thumb")
+            || arch.contains("cortex-m")
+            || arch == "riscv32"
+        {
+            return DeviceClass::Microcontroller;
         }
         if self.has_npu_hint() {
             return DeviceClass::NpuAccelerator;
@@ -1282,6 +1362,18 @@ fn device_pressure_weights(device: DeviceClass) -> PressureWeights {
             ram: 0.40,
             disk: 0.12,
         },
+        DeviceClass::BrowserWasm => PressureWeights {
+            cpu: 0.30,
+            gpu: 0.18,
+            ram: 0.44,
+            disk: 0.08,
+        },
+        DeviceClass::Microcontroller => PressureWeights {
+            cpu: 0.50,
+            gpu: 0.00,
+            ram: 0.42,
+            disk: 0.08,
+        },
         DeviceClass::NpuAccelerator => PressureWeights {
             cpu: 0.18,
             gpu: 0.34,
@@ -1338,8 +1430,16 @@ fn device_budget_scale(device: DeviceClass) -> BudgetScale {
             global: 0.42,
         },
         DeviceClass::Embedded => BudgetScale {
-            local: 0.36,
-            global: 0.28,
+            local: 0.42,
+            global: 0.32,
+        },
+        DeviceClass::BrowserWasm => BudgetScale {
+            local: 0.40,
+            global: 0.30,
+        },
+        DeviceClass::Microcontroller => BudgetScale {
+            local: 0.18,
+            global: 0.12,
         },
         DeviceClass::NpuAccelerator => BudgetScale {
             local: 0.95,
@@ -1370,7 +1470,9 @@ fn latency_budget(device: DeviceClass, pressure: f32) -> Option<u64> {
     }
 
     let base: u64 = match device {
-        DeviceClass::Embedded => 90,
+        DeviceClass::Microcontroller => 80,
+        DeviceClass::BrowserWasm => 90,
+        DeviceClass::Embedded => 105,
         DeviceClass::Mobile => 110,
         DeviceClass::Edge => 120,
         DeviceClass::CpuOnly => 160,
@@ -1415,7 +1517,11 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
             DeviceTier::Auto => 3,
         }
     };
-    let hot_kv_precision_bits = if matches!(device, DeviceClass::Embedded) || pressure >= 0.88 {
+    let hot_kv_precision_bits = if matches!(
+        device,
+        DeviceClass::Embedded | DeviceClass::BrowserWasm | DeviceClass::Microcontroller
+    ) || pressure >= 0.88
+    {
         4
     } else {
         8
@@ -1493,11 +1599,29 @@ fn device_execution_plan(device: DeviceClass, pressure: f32) -> DeviceExecutionP
             DeviceMemoryMode::MinimalDisk,
             vec![
                 RuntimeAdapterHint::PortableRust,
-                RuntimeAdapterHint::WebGpu,
+                RuntimeAdapterHint::Wgpu,
                 RuntimeAdapterHint::Nnapi,
                 RuntimeAdapterHint::Qnn,
                 RuntimeAdapterHint::Rknn,
             ],
+            true,
+        ),
+        DeviceClass::BrowserWasm => (
+            ComputeLane::IntegratedGpu,
+            ComputeLane::CpuPortable,
+            DeviceMemoryMode::TieredDisk,
+            vec![
+                RuntimeAdapterHint::WebGpu,
+                RuntimeAdapterHint::Wgpu,
+                RuntimeAdapterHint::PortableRust,
+            ],
+            true,
+        ),
+        DeviceClass::Microcontroller => (
+            ComputeLane::DiskBackedStreaming,
+            ComputeLane::CpuPortable,
+            DeviceMemoryMode::MinimalDisk,
+            vec![RuntimeAdapterHint::PortableRust],
             true,
         ),
         DeviceClass::NpuAccelerator => (
@@ -1602,10 +1726,15 @@ fn adapt_hierarchy(
             hierarchy.convolution += 0.10 + pressure * 0.12;
             hierarchy.global -= pressure * 0.10;
         }
-        DeviceClass::Embedded => {
+        DeviceClass::Embedded | DeviceClass::BrowserWasm => {
             hierarchy.local += 0.06;
             hierarchy.convolution += 0.18 + pressure * 0.16;
             hierarchy.global -= pressure * 0.14;
+        }
+        DeviceClass::Microcontroller => {
+            hierarchy.local += 0.04;
+            hierarchy.convolution += 0.24 + pressure * 0.18;
+            hierarchy.global -= pressure * 0.18;
         }
         DeviceClass::IntegratedGpu | DeviceClass::UnifiedMemory => {
             hierarchy.local += 0.04;
@@ -1668,6 +1797,10 @@ fn notes(
     match snapshot.device {
         DeviceClass::Mobile => notes.push("device_policy:mobile_thermal_and_ram_guard".to_owned()),
         DeviceClass::Embedded => notes.push("device_policy:embedded_minimal_kv".to_owned()),
+        DeviceClass::BrowserWasm => notes.push("device_policy:browser_wasm_sandbox_kv".to_owned()),
+        DeviceClass::Microcontroller => {
+            notes.push("device_policy:microcontroller_tiny_streaming".to_owned());
+        }
         DeviceClass::NpuAccelerator => {
             notes.push("device_policy:npu_gpu_load_as_accelerator_pressure".to_owned());
         }
@@ -1798,6 +1931,18 @@ fn default_probe_loads(device: DeviceClass) -> ProbeLoads {
             ram: 0.60,
             disk: 0.15,
         },
+        DeviceClass::BrowserWasm => ProbeLoads {
+            cpu: 0.30,
+            gpu: 0.18,
+            ram: 0.62,
+            disk: 0.08,
+        },
+        DeviceClass::Microcontroller => ProbeLoads {
+            cpu: 0.45,
+            gpu: 0.00,
+            ram: 0.72,
+            disk: 0.18,
+        },
         DeviceClass::Edge => ProbeLoads {
             cpu: 0.32,
             gpu: 0.15,
@@ -1912,12 +2057,28 @@ mod tests {
             2048,
             base,
         );
+        let browser = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::BrowserWasm, 0.30, 0.18, 0.70, 0.08),
+            TaskProfile::General,
+            2048,
+            base,
+        );
+        let microcontroller = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Microcontroller, 0.55, 0.0, 0.78, 0.20),
+            TaskProfile::LongDocument,
+            2048,
+            base,
+        );
 
         assert!(mobile.local_kv_token_budget < 512);
         assert!(mobile.global_kv_token_budget < 4096);
         assert!(mobile.hierarchy.convolution > base.convolution);
         assert!(embedded.local_kv_token_budget < mobile.local_kv_token_budget);
         assert!(embedded.global_kv_token_budget < mobile.global_kv_token_budget);
+        assert!(browser.local_kv_token_budget < mobile.local_kv_token_budget);
+        assert!(browser.global_kv_token_budget < mobile.global_kv_token_budget);
+        assert!(microcontroller.local_kv_token_budget < browser.local_kv_token_budget);
+        assert!(microcontroller.global_kv_token_budget < browser.global_kv_token_budget);
     }
 
     #[test]
@@ -2002,11 +2163,19 @@ mod tests {
         );
         assert_eq!(
             "wasm".parse::<DeviceClass>().unwrap(),
-            DeviceClass::Embedded
+            DeviceClass::BrowserWasm
+        );
+        assert_eq!(
+            "webgpu".parse::<DeviceClass>().unwrap(),
+            DeviceClass::BrowserWasm
         );
         assert_eq!(
             "microcontroller".parse::<DeviceClass>().unwrap(),
-            DeviceClass::Embedded
+            DeviceClass::Microcontroller
+        );
+        assert_eq!(
+            "no-std".parse::<DeviceClass>().unwrap(),
+            DeviceClass::Microcontroller
         );
         assert_eq!(
             "riscv".parse::<DeviceClass>().unwrap(),
@@ -2127,6 +2296,18 @@ mod tests {
             2048,
             base,
         );
+        let browser = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::BrowserWasm, 0.30, 0.20, 0.62, 0.08),
+            TaskProfile::General,
+            2048,
+            base,
+        );
+        let microcontroller = allocator.plan(
+            HardwareSnapshot::new(DeviceClass::Microcontroller, 0.45, 0.0, 0.72, 0.18),
+            TaskProfile::LongDocument,
+            2048,
+            base,
+        );
         let multi_gpu = allocator.plan(
             HardwareSnapshot::new(DeviceClass::MultiGpu, 0.12, 0.20, 0.20, 0.10),
             TaskProfile::Coding,
@@ -2151,6 +2332,32 @@ mod tests {
         );
         assert_eq!(embedded.execution.hot_kv_precision_bits, 4);
         assert!(embedded.execution.allow_disk_spill);
+
+        assert_eq!(browser.execution.primary_lane, ComputeLane::IntegratedGpu);
+        assert_eq!(browser.execution.fallback_lane, ComputeLane::CpuPortable);
+        assert!(
+            browser
+                .execution
+                .adapter_hints
+                .contains(&RuntimeAdapterHint::WebGpu)
+        );
+        assert_eq!(browser.execution.hot_kv_precision_bits, 4);
+
+        assert_eq!(
+            microcontroller.execution.primary_lane,
+            ComputeLane::DiskBackedStreaming
+        );
+        assert_eq!(
+            microcontroller.execution.fallback_lane,
+            ComputeLane::CpuPortable
+        );
+        assert_eq!(
+            microcontroller.execution.memory_mode,
+            DeviceMemoryMode::MinimalDisk
+        );
+        assert_eq!(microcontroller.execution.adapter_hints.len(), 1);
+        assert_eq!(microcontroller.execution.hot_kv_precision_bits, 4);
+        assert!(microcontroller.local_kv_token_budget < embedded.local_kv_token_budget);
 
         assert_eq!(mobile.execution.primary_lane, ComputeLane::IntegratedGpu);
         assert!(
@@ -2302,10 +2509,12 @@ mod tests {
             .with_env("JETSON_MODEL_NAME", "Jetson Orin")
             .with_env("CUDA_VISIBLE_DEVICES", "0")
             .detect_device();
+        let wasm = HardwareProbe::new("wasi", "wasm32", 1).detect_device();
         let tiny = HardwareProbe::new("espidf", "xtensa", 2).detect_device();
 
         assert_eq!(discrete, DeviceClass::DiscreteGpu);
         assert_eq!(jetson, DeviceClass::Edge);
-        assert_eq!(tiny, DeviceClass::Embedded);
+        assert_eq!(wasm, DeviceClass::BrowserWasm);
+        assert_eq!(tiny, DeviceClass::Microcontroller);
     }
 }
