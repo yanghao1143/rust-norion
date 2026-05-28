@@ -5,6 +5,7 @@ use crate::runtime::{
     ModelRuntime, RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
     RuntimeResponse, RuntimeToken, RuntimeTokenId,
 };
+use crate::transformer::{AttentionKind, TransformerLayerPlan};
 
 #[derive(Debug, Clone)]
 pub struct LocalTransformerRuntime {
@@ -100,7 +101,8 @@ impl ModelRuntime for LocalTransformerRuntime {
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         let tokens = self.tokenize(&request.prompt)?;
         let embedding = self.embed(&tokens)?.values;
-        self.exported_kv_blocks = export_prompt_kv(&embedding, &request);
+        let forward = run_transformer_forward(&embedding, &self.imported_kv_blocks, &request);
+        self.exported_kv_blocks = export_forward_kv(&forward, &request);
 
         let transformer_counts = request.transformer_plan.counts();
         let profile_hint = match request.profile {
@@ -110,12 +112,15 @@ impl ModelRuntime for LocalTransformerRuntime {
             TaskProfile::LongDocument => "convolutional compression plus global memory recall",
         };
         let answer = format!(
-            "Local Transformer runtime result for '{}'. The self-developed runtime used {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It followed a layer plan with {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
+            "Local Transformer runtime result for '{}'. The self-developed runtime used {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It executed {} deterministic Transformer layers with state energy {:.3} and KV influence {:.3}: {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
             compact(&request.prompt, 96),
             tokens.len(),
             self.imported_kv_blocks.len(),
             request.memory_hints.len(),
             request.experience_hints.len(),
+            forward.layer_summaries.len(),
+            forward.energy,
+            forward.kv_influence,
             transformer_counts.global,
             transformer_counts.local,
             transformer_counts.convolution,
@@ -139,9 +144,19 @@ impl ModelRuntime for LocalTransformerRuntime {
                 0.84,
             ),
             crate::reflection::ReasoningStep::new(
+                "local_transformer_forward",
+                format!(
+                    "executed {} layers with energy {:.3} and KV influence {:.3}",
+                    forward.layer_summaries.len(),
+                    forward.energy,
+                    forward.kv_influence
+                ),
+                0.83,
+            ),
+            crate::reflection::ReasoningStep::new(
                 "local_transformer_plan",
                 format!(
-                    "used {} global, {} local, {} convolution layers",
+                    "planned {} global, {} local, {} convolution layers",
                     transformer_counts.global,
                     transformer_counts.local,
                     transformer_counts.convolution
@@ -171,6 +186,23 @@ impl ModelRuntime for LocalTransformerRuntime {
 
         Ok(response)
     }
+}
+
+#[derive(Debug, Clone)]
+struct LocalForwardState {
+    vector: Vec<f32>,
+    layer_summaries: Vec<LocalLayerSummary>,
+    energy: f32,
+    kv_influence: f32,
+}
+
+#[derive(Debug, Clone)]
+struct LocalLayerSummary {
+    layer_index: usize,
+    attention: AttentionKind,
+    window_size: usize,
+    compute_fraction: f32,
+    activation: f32,
 }
 
 fn local_tokenize(text: &str) -> Vec<String> {
@@ -210,34 +242,193 @@ fn embed_tokens(tokens: &[RuntimeTokenId], dimensions: usize) -> Vec<f32> {
     vector
 }
 
-fn export_prompt_kv(embedding: &[f32], request: &RuntimeRequest) -> Vec<RuntimeKvBlock> {
-    if embedding.is_empty() {
+fn run_transformer_forward(
+    embedding: &[f32],
+    imported_kv_blocks: &[RuntimeKvBlock],
+    request: &RuntimeRequest,
+) -> LocalForwardState {
+    let mut vector = embedding.to_vec();
+    if vector.is_empty() {
+        vector.push(0.0);
+    }
+
+    let layers = if request.transformer_plan.layers.is_empty() {
+        Vec::new()
+    } else {
+        request.transformer_plan.layers.clone()
+    };
+    let mut layer_summaries = Vec::with_capacity(layers.len());
+    let mut kv_influence = 0.0;
+
+    for layer in &layers {
+        let influence = apply_imported_kv(&mut vector, imported_kv_blocks, layer);
+        kv_influence += influence;
+        apply_transformer_layer(&mut vector, layer, request.route_budget.attention_fraction);
+        layer_summaries.push(LocalLayerSummary {
+            layer_index: layer.layer_index,
+            attention: layer.attention,
+            window_size: layer.window_size,
+            compute_fraction: layer.compute_fraction,
+            activation: mean_abs(&vector),
+        });
+    }
+
+    if layer_summaries.is_empty() {
+        normalize(&mut vector);
+    }
+
+    LocalForwardState {
+        energy: mean_abs(&vector),
+        vector,
+        layer_summaries,
+        kv_influence,
+    }
+}
+
+fn apply_imported_kv(
+    vector: &mut [f32],
+    imported_kv_blocks: &[RuntimeKvBlock],
+    layer: &TransformerLayerPlan,
+) -> f32 {
+    if vector.is_empty() || imported_kv_blocks.is_empty() {
+        return 0.0;
+    }
+
+    let mut applied = 0.0;
+    let selected = imported_kv_blocks
+        .iter()
+        .filter(|block| {
+            block.layer == layer.layer_index || block.layer % 4 == layer.layer_index % 4
+        })
+        .take(4);
+
+    for block in selected {
+        let scale = match layer.attention {
+            AttentionKind::Global => 0.030,
+            AttentionKind::LocalWindow => 0.018,
+            AttentionKind::ConvolutionalFusion => 0.012,
+        } * layer.compute_fraction.clamp(0.1, 1.0);
+        for (offset, value) in block.vector().iter().enumerate() {
+            let index = offset % vector.len();
+            vector[index] += value * scale;
+            applied += value.abs() * scale;
+        }
+    }
+
+    applied
+}
+
+fn apply_transformer_layer(
+    vector: &mut [f32],
+    layer: &TransformerLayerPlan,
+    attention_fraction: f32,
+) {
+    if vector.is_empty() {
+        return;
+    }
+
+    match layer.attention {
+        AttentionKind::Global => apply_global_layer(vector, layer, attention_fraction),
+        AttentionKind::LocalWindow => apply_local_layer(vector, layer),
+        AttentionKind::ConvolutionalFusion => apply_convolution_layer(vector, layer),
+    }
+    normalize(vector);
+}
+
+fn apply_global_layer(vector: &mut [f32], layer: &TransformerLayerPlan, attention_fraction: f32) {
+    let mean = vector.iter().sum::<f32>() / vector.len() as f32;
+    let gain = 0.04 + layer.compute_fraction * 0.05 + attention_fraction.clamp(0.0, 1.0) * 0.02;
+    for (index, value) in vector.iter_mut().enumerate() {
+        let positional = ((index + layer.layer_index + 1) as f32).sin() * 0.003;
+        *value = *value * (1.0 - gain) + mean * gain + positional;
+    }
+}
+
+fn apply_local_layer(vector: &mut [f32], layer: &TransformerLayerPlan) {
+    let previous = vector.to_vec();
+    let radius = ((layer.window_size / 64).max(1)).min(previous.len().saturating_sub(1).max(1));
+    let gain = 0.10 + layer.compute_fraction * 0.08;
+    for index in 0..vector.len() {
+        let left = previous[index.saturating_sub(radius)];
+        let right = previous[(index + radius).min(previous.len() - 1)];
+        let local = (left + previous[index] + right) / 3.0;
+        vector[index] = previous[index] * (1.0 - gain) + local * gain;
+    }
+}
+
+fn apply_convolution_layer(vector: &mut [f32], layer: &TransformerLayerPlan) {
+    let previous = vector.to_vec();
+    let gain = 0.12 + layer.compute_fraction * 0.12;
+    for index in 0..vector.len() {
+        let prev = previous[index.saturating_sub(1)];
+        let center = previous[index];
+        let next = previous[(index + 1).min(previous.len() - 1)];
+        let fused = prev * 0.25 + center * 0.50 + next * 0.25;
+        let phase = ((layer.layer_index + index + 1) as f32).cos() * 0.002;
+        vector[index] = center * (1.0 - gain) + fused * gain + phase;
+    }
+}
+
+fn export_forward_kv(forward: &LocalForwardState, request: &RuntimeRequest) -> Vec<RuntimeKvBlock> {
+    if forward.vector.is_empty() {
         return Vec::new();
     }
 
-    let block_count = request
-        .transformer_plan
-        .layers
+    let block_count = forward
+        .layer_summaries
         .len()
-        .clamp(1, 3)
-        .min(request.recursive_schedule.chunk_count().max(1) + 1);
-    let midpoint = (embedding.len() / 2).max(1);
-    let key = embedding.iter().copied().take(midpoint).collect::<Vec<_>>();
-    let value = embedding.iter().copied().skip(midpoint).collect::<Vec<_>>();
+        .clamp(1, 4)
+        .min(request.recursive_schedule.chunk_count().max(1) + 2);
+    let midpoint = (forward.vector.len() / 2).max(1);
+    let key = forward
+        .vector
+        .iter()
+        .copied()
+        .take(midpoint)
+        .collect::<Vec<_>>();
+    let value = forward
+        .vector
+        .iter()
+        .copied()
+        .skip(midpoint)
+        .collect::<Vec<_>>();
     let value = if value.is_empty() { key.clone() } else { value };
 
     (0..block_count)
         .map(|index| {
+            let summary = forward.layer_summaries.get(index);
+            let layer = summary.map(|summary| summary.layer_index).unwrap_or(index);
+            let head = summary
+                .map(|summary| {
+                    let attention_offset = match summary.attention {
+                        AttentionKind::Global => 0,
+                        AttentionKind::LocalWindow => 2,
+                        AttentionKind::ConvolutionalFusion => 4,
+                    };
+                    (attention_offset + summary.window_size + index) % 8
+                })
+                .unwrap_or(index % 8);
+            let compute_scale = summary
+                .map(|summary| summary.compute_fraction + summary.activation)
+                .unwrap_or(1.0)
+                .clamp(0.25, 1.50);
             RuntimeKvBlock::new(
-                index,
-                index % 8,
+                layer,
+                head,
                 index,
                 index + 1,
-                scaled(&key, 1.0 + index as f32 * 0.03),
-                scaled(&value, 1.0 - index as f32 * 0.02),
+                scaled(&key, compute_scale + index as f32 * 0.02),
+                scaled(&value, compute_scale - index as f32 * 0.015),
             )
         })
         .collect()
+}
+
+fn mean_abs(values: &[f32]) -> f32 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.iter().map(|value| value.abs()).sum::<f32>() / values.len() as f32
 }
 
 fn estimated_entropy(token: &str) -> f32 {
@@ -336,8 +527,68 @@ mod tests {
         let exported = runtime.export_kv().unwrap();
 
         assert!(response.answer.contains("Local Transformer runtime"));
+        assert!(response.answer.contains("deterministic Transformer layers"));
         assert!(!response.tokens.is_empty());
         assert!(!exported.is_empty());
+        assert!(
+            response
+                .trace
+                .iter()
+                .any(|step| step.label == "local_transformer_forward")
+        );
+    }
+
+    #[test]
+    fn imported_kv_changes_local_forward_state() {
+        let request = RuntimeRequest {
+            prompt: "Build local Noiron runtime".to_owned(),
+            profile: TaskProfile::Coding,
+            runtime_metadata: RuntimeMetadata::default(),
+            memory_hints: Vec::new(),
+            infini_memory_hints: Vec::new(),
+            experience_hints: Vec::new(),
+            route_budget: crate::router::RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 2,
+                fast_tokens: 1,
+                attention_fraction: 0.66,
+            },
+            hierarchy: crate::hierarchy::HierarchyWeights::new(0.2, 0.6, 0.2),
+            transformer_plan: crate::transformer::TransformerPlanner::new(6, 128).plan(
+                TaskProfile::Coding,
+                crate::hierarchy::HierarchyWeights::new(0.2, 0.6, 0.2),
+                crate::router::RouteBudget {
+                    threshold: 0.5,
+                    attention_tokens: 2,
+                    fast_tokens: 1,
+                    attention_fraction: 0.66,
+                },
+            ),
+            recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
+            hardware_plan: crate::hardware::HardwarePlan::default(),
+            max_tokens: 64,
+        };
+        let tokens = local_tokenize(&request.prompt)
+            .into_iter()
+            .map(|text| RuntimeTokenId::new((stable_hash(&text) % 1_000_000) as u32, text))
+            .collect::<Vec<_>>();
+        let embedding = embed_tokens(&tokens, 16);
+        let no_kv = run_transformer_forward(&embedding, &[], &request);
+        let with_kv = run_transformer_forward(
+            &embedding,
+            &[RuntimeKvBlock::new(
+                0,
+                0,
+                0,
+                1,
+                vec![1.0, 0.5, 0.25, 0.125],
+                vec![0.75, 0.375, 0.1875, 0.09375],
+            )],
+            &request,
+        );
+
+        assert!(with_kv.kv_influence > no_kv.kv_influence);
+        assert_ne!(with_kv.vector, no_kv.vector);
     }
 
     #[test]

@@ -380,7 +380,8 @@ These are algorithmic references, not product dependencies:
   and maximum drift block/rollback counts; a persistent roundtrip gate now verifies memory, experience, and
   runtime KV reuse after full-state reload; a deterministic Rust-native local
   runtime prototype now implements
-  tokenizer, embedding, generation, token trace, and KV import/export through
+  tokenizer, embedding, deterministic global/local/convolution forward layers,
+  imported-KV influence, generation, token trace, and KV import/export through
   the same `ModelRuntime` ABI; command runtimes can now use a structured
   JSON wire format carrying Noiron route, hierarchy, recursive, hardware
   execution, memory, and experience context and returning answer/token/trace
@@ -414,8 +415,9 @@ These are algorithmic references, not product dependencies:
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves tokenizer, model-side embedding,
-  generation, KV exchange, and control-plane memory integration end to end
-  before production Transformer kernels are connected.
+  deterministic Transformer layer execution, imported-KV influence, generation,
+  KV exchange, and control-plane memory integration end to end before production
+  Transformer kernels are connected.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained
