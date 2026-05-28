@@ -152,7 +152,7 @@ Implemented modules:
 - `src/recursive_scheduler.rs`: native-window-aware recursive long-context scheduler with hardware-bounded execution waves
 - `src/tiered_cache.rs`: Hot/Warm/Cold memory tier scheduler with migration traces
 - `src/token_stream.rs`: generated-token window monitor for router feedback
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay recursive cost pressure, hardware execution and KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay recursive cost pressure, hardware execution, the stable runtime device contract, KV budgets, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward, runtime-diagnostic, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable recursive call pressure and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -246,14 +246,14 @@ cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchm
 ```
 
 Validate an existing trace JSONL file against the required local control-plane
-schema fields, including runtime token uncertainty and device-derived hardware
-KV budgets:
+schema fields, including runtime token uncertainty, the stable
+`runtime_device_contract`, and device-derived hardware KV budgets:
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
 ```
 
-检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性与设备推导出的硬件 KV budget：
+检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract` 与设备推导出的硬件 KV budget：
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl

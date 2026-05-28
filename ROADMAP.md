@@ -397,9 +397,9 @@ These are algorithmic references, not product dependencies:
   pass model id, tokenizer, native window, embedding dimensions, explicit
   architecture flags, device execution contracts, and KV exchange flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
-  records now capture route, hierarchy, KV, recursion, hardware execution,
-  hardware KV budgets, structured reflection diagnostics, drift, reward,
-  effective memory policies, and memory counters per inference, with a CLI trace schema gate for required
+  records now capture route, hierarchy, KV, recursion, hardware execution, the
+  stable runtime device contract, hardware KV budgets, structured reflection
+  diagnostics, drift, reward, effective memory policies, and memory counters per inference, with a CLI trace schema gate for required
   control-plane fields; a
   built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
