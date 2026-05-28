@@ -442,7 +442,10 @@ These are algorithmic references, not product dependencies:
   export; generation fails explicitly until a kernel is attached, and
   `ProductionForwardKernel` now provides the stable trait slot for a real
   self-developed Transformer forward kernel to return answer text, token
-  uncertainty, trace, diagnostics, and exported KV blocks; the CLI can now
+  uncertainty, trace, diagnostics, and exported KV blocks; exported KV from
+  production kernels is now ABI-validated for manifest layer/head bounds,
+  request/recursive token ranges, non-empty matching key/value dimensions, and
+  finite float values before it can reach `RuntimeBackend`; the CLI can now
   select that boundary with `--production-runtime` for normal inference and
   benchmark runs)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
@@ -498,6 +501,10 @@ These are algorithmic references, not product dependencies:
   `ProductionForwardKernel` receives the manifest, device contract, asset
   summary, imported KV blocks, and runtime request, and returns the same
   response surfaces consumed by `RuntimeBackend`.
+- Production kernel exported KV cannot bypass the runtime boundary: invalid
+  layer/head ids, token ranges, empty vectors, mismatched key/value dimensions,
+  oversized vectors, or non-finite values must fail before any long-term memory
+  admission path can see the blocks.
 - The CLI can execute the production runtime boundary through
   `--production-runtime`, so production manifest/device failures and the
   kernel-not-connected state are observable in the same control loop used by

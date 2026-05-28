@@ -164,7 +164,7 @@ Implemented modules:
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, KV import/export ABI hooks, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
-- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, and KV import limits, with a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel behind the boundary
+- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, and kernel-exported KV block shape/range/finite-value validity, with a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel behind the boundary
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob now feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
@@ -725,8 +725,13 @@ not connected" error. With `ProductionForwardKernel` attached, the kernel
 receives the manifest, asset summary, device gate, imported KV blocks, and
 Noiron runtime request, then returns answer text, token uncertainty, trace,
 diagnostics, and exported KV blocks through the same `RuntimeBackend` path.
+Kernel-exported KV is validated at this boundary before it can reach
+`RuntimeBackend`: layer/head ids must fit the manifest architecture, token
+ranges must be valid for the request or recursive schedule, key/value vectors
+must be non-empty and dimension-compatible, and all values must be finite.
 
 `ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。
+生产 kernel 导出的 KV 会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须适配当前请求或递归调度，key/value 不能为空且维度一致，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。
 
 `RuntimeBackend` reports the runtime's native context window back to the engine,
 so recursive long-context scheduling can use the actual self-developed model

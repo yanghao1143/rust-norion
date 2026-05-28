@@ -283,6 +283,7 @@ impl ModelRuntime for ProductionTransformerRuntime {
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         if let Some(kernel) = &self.kernel {
+            self.exported_kv_blocks.clear();
             let output = kernel.generate(ProductionKernelContext {
                 manifest: &self.manifest,
                 device_gate: &self.device_gate,
@@ -290,11 +291,8 @@ impl ModelRuntime for ProductionTransformerRuntime {
                 imported_kv_blocks: &self.imported_kv_blocks,
                 request: &request,
             })?;
-            self.exported_kv_blocks = output
-                .exported_kv_blocks
-                .into_iter()
-                .take(self.manifest.kv_policy.max_export_blocks)
-                .collect();
+            self.exported_kv_blocks =
+                validate_exported_kv_blocks(output.exported_kv_blocks, &self.manifest, &request)?;
 
             let mut response =
                 RuntimeResponse::new(output.answer).with_diagnostics(normalize_kernel_diagnostics(
@@ -318,6 +316,118 @@ impl ModelRuntime for ProductionTransformerRuntime {
             compact(&request.prompt, 96)
         )))
     }
+}
+
+fn validate_exported_kv_blocks(
+    blocks: Vec<RuntimeKvBlock>,
+    manifest: &RuntimeManifest,
+    request: &RuntimeRequest,
+) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+    if !manifest.kv_policy.export_enabled {
+        if blocks.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        return Err(RuntimeError::new(format!(
+            "production kernel exported {} KV blocks but runtime KV export is disabled for model_id={}",
+            blocks.len(),
+            manifest.metadata.model_id
+        )));
+    }
+
+    let mut accepted = Vec::new();
+    for (index, block) in blocks
+        .into_iter()
+        .take(manifest.kv_policy.max_export_blocks)
+        .enumerate()
+    {
+        validate_exported_kv_block(index, &block, manifest, request)?;
+        accepted.push(block);
+    }
+
+    Ok(accepted)
+}
+
+fn validate_exported_kv_block(
+    index: usize,
+    block: &RuntimeKvBlock,
+    manifest: &RuntimeManifest,
+    request: &RuntimeRequest,
+) -> Result<(), RuntimeError> {
+    let architecture = manifest.architecture;
+    let token_upper_bound = manifest
+        .metadata
+        .native_context_window
+        .max(request.runtime_metadata.native_context_window)
+        .max(request.recursive_schedule.prompt_tokens)
+        .saturating_add(request.max_tokens.max(1));
+
+    let token_span = block.token_end.saturating_sub(block.token_start).max(1);
+    let per_token_vector_bound = architecture
+        .hidden_size
+        .max(manifest.metadata.embedding_dimensions)
+        .max(request.runtime_metadata.embedding_dimensions)
+        .max(1);
+    let vector_bound = per_token_vector_bound.saturating_mul(token_span);
+
+    let error = |reason: String| {
+        RuntimeError::new(format!(
+            "production kernel returned invalid exported KV block {index} for model_id={}: {reason}",
+            manifest.metadata.model_id
+        ))
+    };
+
+    if block.layer >= architecture.layer_count {
+        return Err(error(format!(
+            "layer {} exceeds manifest layer_count {}",
+            block.layer, architecture.layer_count
+        )));
+    }
+    if block.head >= architecture.kv_heads {
+        return Err(error(format!(
+            "head {} exceeds manifest kv_heads {}",
+            block.head, architecture.kv_heads
+        )));
+    }
+    if block.token_start >= block.token_end {
+        return Err(error(format!(
+            "token range {}..{} is empty or reversed",
+            block.token_start, block.token_end
+        )));
+    }
+    if block.token_end > token_upper_bound {
+        return Err(error(format!(
+            "token_end {} exceeds request-local KV bound {}",
+            block.token_end, token_upper_bound
+        )));
+    }
+    if block.key.is_empty() || block.value.is_empty() {
+        return Err(error(
+            "key and value vectors must both be non-empty".to_owned(),
+        ));
+    }
+    if block.key.len() != block.value.len() {
+        return Err(error(format!(
+            "key/value dimensions differ: key={} value={}",
+            block.key.len(),
+            block.value.len()
+        )));
+    }
+    if block.key.len() > vector_bound {
+        return Err(error(format!(
+            "key/value dimensions {} exceed per-block bound {}",
+            block.key.len(),
+            vector_bound
+        )));
+    }
+    if !block.key.iter().all(|value| value.is_finite()) {
+        return Err(error("key contains non-finite value".to_owned()));
+    }
+    if !block.value.iter().all(|value| value.is_finite()) {
+        return Err(error("value contains non-finite value".to_owned()));
+    }
+
+    Ok(())
 }
 
 fn normalize_kernel_diagnostics(
@@ -593,6 +703,69 @@ mod tests {
         fs::remove_dir_all(asset_dir).unwrap();
     }
 
+    #[test]
+    fn production_runtime_rejects_invalid_kernel_exported_kv() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-invalid-kernel-kv");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+            .unwrap()
+            .with_kernel(MockForwardKernel);
+        let mut runtime = runtime;
+
+        runtime.generate(sample_request()).unwrap();
+        assert_eq!(runtime.exported_kv_blocks().len(), 1);
+
+        let cases = vec![
+            (
+                "layer",
+                RuntimeKvBlock::new(6, 0, 0, 1, vec![0.1], vec![0.2]),
+                "layer 6 exceeds manifest layer_count 6",
+            ),
+            (
+                "head",
+                RuntimeKvBlock::new(0, 2, 0, 1, vec![0.1], vec![0.2]),
+                "head 2 exceeds manifest kv_heads 2",
+            ),
+            (
+                "range",
+                RuntimeKvBlock::new(0, 0, 2, 2, vec![0.1], vec![0.2]),
+                "token range 2..2 is empty or reversed",
+            ),
+            (
+                "dimension",
+                RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2, 0.3]),
+                "key/value dimensions differ",
+            ),
+            (
+                "finite",
+                RuntimeKvBlock::new(0, 0, 0, 1, vec![f32::NAN], vec![0.2]),
+                "key contains non-finite value",
+            ),
+        ];
+
+        for (label, block, expected) in cases {
+            let mut invalid_runtime = runtime.clone().with_kernel(InvalidExportKernel { block });
+
+            let error = invalid_runtime.generate(sample_request()).unwrap_err();
+
+            assert!(
+                error.message().contains("invalid exported KV block 0"),
+                "{label}: {}",
+                error.message()
+            );
+            assert!(
+                error.message().contains(expected),
+                "{label}: {}",
+                error.message()
+            );
+            assert!(invalid_runtime.exported_kv_blocks().is_empty(), "{label}");
+            assert!(invalid_runtime.export_kv().unwrap().is_empty(), "{label}");
+        }
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
     fn production_manifest(weights: &Path, tokenizer: &Path) -> RuntimeManifest {
         RuntimeManifest::self_developed(
             "noiron-production-transformer",
@@ -702,6 +875,21 @@ mod tests {
                 ..RuntimeDiagnostics::default()
             })
             .with_exported_kv_blocks(vec![RuntimeKvBlock::new(1, 0, 0, 1, vec![0.3], vec![0.4])]))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct InvalidExportKernel {
+        block: RuntimeKvBlock,
+    }
+
+    impl ProductionForwardKernel for InvalidExportKernel {
+        fn generate(
+            &self,
+            _context: ProductionKernelContext<'_>,
+        ) -> Result<ProductionKernelOutput, RuntimeError> {
+            Ok(ProductionKernelOutput::new("invalid kernel export")
+                .with_exported_kv_blocks(vec![self.block.clone()]))
         }
     }
 }
