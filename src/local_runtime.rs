@@ -5,11 +5,12 @@ use crate::runtime::{
     ModelRuntime, RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
     RuntimeResponse, RuntimeToken, RuntimeTokenId,
 };
+use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
 use crate::transformer::{AttentionKind, TransformerLayerPlan};
 
 #[derive(Debug, Clone)]
 pub struct LocalTransformerRuntime {
-    metadata: RuntimeMetadata,
+    manifest: RuntimeManifest,
     imported_kv_blocks: Vec<RuntimeKvBlock>,
     exported_kv_blocks: Vec<RuntimeKvBlock>,
 }
@@ -22,7 +23,7 @@ impl Default for LocalTransformerRuntime {
 
 impl LocalTransformerRuntime {
     pub fn new(native_context_window: usize, embedding_dimensions: usize) -> Self {
-        Self::with_metadata(RuntimeMetadata::new(
+        Self::with_manifest(RuntimeManifest::self_developed(
             "noiron-local-transformer",
             "noiron-local-tokenizer",
             native_context_window,
@@ -43,14 +44,41 @@ impl LocalTransformerRuntime {
         if metadata.embedding_dimensions == 0 {
             metadata.embedding_dimensions = 64;
         }
-        metadata.supports_kv_import = true;
-        metadata.supports_kv_export = true;
+        Self::with_manifest(
+            RuntimeManifest::from_metadata(metadata)
+                .with_kv_policy(crate::runtime_manifest::RuntimeKvPolicy::import_export()),
+        )
+    }
 
+    pub fn with_manifest(mut manifest: RuntimeManifest) -> Self {
+        if manifest.metadata.model_id == RuntimeMetadata::default().model_id {
+            manifest.metadata.model_id = "noiron-local-transformer".to_owned();
+        }
+        if manifest.metadata.tokenizer == RuntimeMetadata::default().tokenizer {
+            manifest.metadata.tokenizer = "noiron-local-tokenizer".to_owned();
+        }
+        if manifest.metadata.native_context_window == 0 {
+            manifest.metadata.native_context_window = 8_192;
+        }
+        if manifest.metadata.embedding_dimensions == 0 {
+            manifest.metadata.embedding_dimensions = 64;
+        }
+        manifest.kv_policy.import_enabled = true;
+        manifest.kv_policy.export_enabled = true;
+        manifest.kv_policy.max_import_blocks = manifest.kv_policy.max_import_blocks.max(1);
+        manifest.kv_policy.max_export_blocks = manifest.kv_policy.max_export_blocks.max(1);
+        manifest.metadata.supports_kv_import = manifest.kv_policy.import_enabled;
+        manifest.metadata.supports_kv_export = manifest.kv_policy.export_enabled;
+        manifest.architecture = normalize_manifest_architecture(&manifest);
         Self {
-            metadata,
+            manifest,
             imported_kv_blocks: Vec::new(),
             exported_kv_blocks: Vec::new(),
         }
+    }
+
+    pub fn manifest(&self) -> &RuntimeManifest {
+        &self.manifest
     }
 
     pub fn imported_kv_blocks(&self) -> &[RuntimeKvBlock] {
@@ -69,7 +97,7 @@ impl LocalTransformerRuntime {
 
 impl ModelRuntime for LocalTransformerRuntime {
     fn metadata(&self) -> RuntimeMetadata {
-        self.metadata.clone()
+        self.manifest.runtime_metadata()
     }
 
     fn tokenize(&self, prompt: &str) -> Result<Vec<RuntimeTokenId>, RuntimeError> {
@@ -85,17 +113,26 @@ impl ModelRuntime for LocalTransformerRuntime {
     fn embed(&self, tokens: &[RuntimeTokenId]) -> Result<RuntimeEmbedding, RuntimeError> {
         Ok(RuntimeEmbedding::new(embed_tokens(
             tokens,
-            self.metadata.embedding_dimensions,
+            self.manifest.metadata.embedding_dimensions,
         )))
     }
 
     fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
-        self.imported_kv_blocks = blocks.to_vec();
+        self.imported_kv_blocks = blocks
+            .iter()
+            .take(self.manifest.kv_policy.max_import_blocks)
+            .cloned()
+            .collect();
         Ok(self.imported_kv_blocks.len())
     }
 
     fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
-        Ok(self.exported_kv_blocks.clone())
+        Ok(self
+            .exported_kv_blocks
+            .iter()
+            .take(self.manifest.kv_policy.max_export_blocks)
+            .cloned()
+            .collect())
     }
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
@@ -112,8 +149,9 @@ impl ModelRuntime for LocalTransformerRuntime {
             TaskProfile::LongDocument => "convolutional compression plus global memory recall",
         };
         let answer = format!(
-            "Local Transformer runtime result for '{}'. The self-developed runtime used {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It executed {} deterministic Transformer layers with state energy {:.3} and KV influence {:.3}: {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
+            "Local Transformer runtime result for '{}'. The self-developed runtime used manifest {}, {} prompt tokens, {} imported KV blocks, {} memory hints, and {} experience hints. It executed {} deterministic Transformer layers with state energy {:.3} and KV influence {:.3}: {} global, {} local-window, and {} convolutional-fusion layers. Hardware execution targeted {} with {} memory and {} fallback. Profile policy: {profile_hint}. Noiron keeps model weights fixed here while adapting routing thresholds, reinforced KV memory, hierarchy weights, reflection rewards, and reusable experience around the runtime.",
             compact(&request.prompt, 96),
+            self.manifest.metadata.model_id,
             tokens.len(),
             self.imported_kv_blocks.len(),
             request.memory_hints.len(),
@@ -146,8 +184,9 @@ impl ModelRuntime for LocalTransformerRuntime {
             crate::reflection::ReasoningStep::new(
                 "local_transformer_forward",
                 format!(
-                    "executed {} layers with energy {:.3} and KV influence {:.3}",
+                    "executed {} layers with hidden size {} and energy {:.3} and KV influence {:.3}",
                     forward.layer_summaries.len(),
+                    self.manifest.architecture.hidden_size,
                     forward.energy,
                     forward.kv_influence
                 ),
@@ -166,10 +205,12 @@ impl ModelRuntime for LocalTransformerRuntime {
             crate::reflection::ReasoningStep::new(
                 "local_device_execution",
                 format!(
-                    "primary {} fallback {} memory {}",
+                    "primary {} fallback {} memory {} adapter {:?}",
                     request.hardware_plan.execution.primary_lane.as_str(),
                     request.hardware_plan.execution.fallback_lane.as_str(),
-                    request.hardware_plan.execution.memory_mode.as_str()
+                    request.hardware_plan.execution.memory_mode.as_str(),
+                    self.manifest
+                        .preferred_adapter_for(&request.hardware_plan.execution)
                 ),
                 0.80,
             ),
@@ -186,6 +227,37 @@ impl ModelRuntime for LocalTransformerRuntime {
 
         Ok(response)
     }
+}
+
+fn normalize_manifest_architecture(manifest: &RuntimeManifest) -> TransformerRuntimeArchitecture {
+    let embedding_dimensions = manifest.metadata.embedding_dimensions.max(1);
+    let native_window = manifest.metadata.native_context_window.max(1);
+    let mut architecture = manifest.architecture;
+    if architecture.layer_count == 0 {
+        architecture.layer_count = 24;
+    }
+    if architecture.hidden_size == 0 {
+        architecture.hidden_size = embedding_dimensions;
+    }
+    if architecture.attention_heads == 0 {
+        architecture.attention_heads = choose_head_count(architecture.hidden_size);
+    }
+    if architecture.kv_heads == 0 {
+        architecture.kv_heads = architecture.attention_heads;
+    }
+    architecture.kv_heads = architecture.kv_heads.min(architecture.attention_heads);
+    if architecture.local_window_tokens == 0 {
+        architecture.local_window_tokens = native_window.min(4_096);
+    }
+    architecture.local_window_tokens = architecture.local_window_tokens.min(native_window);
+    architecture
+}
+
+fn choose_head_count(hidden_size: usize) -> usize {
+    [16, 12, 8, 6, 4, 2]
+        .into_iter()
+        .find(|heads| hidden_size % heads == 0)
+        .unwrap_or(1)
 }
 
 #[derive(Debug, Clone)]
@@ -478,6 +550,7 @@ mod tests {
         let runtime = LocalTransformerRuntime::new(16_384, 32);
 
         let metadata = runtime.metadata();
+        let manifest = runtime.manifest();
         let tokens = runtime.tokenize("Rust Noiron local runtime").unwrap();
         let embedding = runtime.embed(&tokens).unwrap();
 
@@ -486,9 +559,92 @@ mod tests {
         assert_eq!(metadata.embedding_dimensions, 32);
         assert!(metadata.supports_kv_import);
         assert!(metadata.supports_kv_export);
+        assert!(manifest.validate().passed());
+        assert!(manifest.supports_device(crate::hardware::DeviceClass::CpuOnly));
         assert_eq!(tokens.len(), 4);
         assert_eq!(embedding.dimensions, 32);
         assert!(embedding.values.iter().any(|value| *value > 0.0));
+    }
+
+    #[test]
+    fn local_runtime_can_be_configured_from_manifest() {
+        let manifest = RuntimeManifest::self_developed(
+            "noiron-v2-transformer",
+            "noiron-v2-tokenizer",
+            131_072,
+            48,
+        )
+        .with_architecture(TransformerRuntimeArchitecture::new(12, 48, 6, 3, 16_384))
+        .with_kv_policy(crate::runtime_manifest::RuntimeKvPolicy {
+            import_enabled: true,
+            export_enabled: true,
+            max_import_blocks: 1,
+            max_export_blocks: 2,
+        })
+        .with_supported_devices(vec![
+            crate::hardware::DeviceClass::CpuOnly,
+            crate::hardware::DeviceClass::UnifiedMemory,
+            crate::hardware::DeviceClass::Mobile,
+        ]);
+        let mut runtime = LocalTransformerRuntime::with_manifest(manifest);
+
+        let imported = runtime
+            .import_kv(&[
+                RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2]),
+                RuntimeKvBlock::new(1, 0, 1, 2, vec![0.3], vec![0.4]),
+            ])
+            .unwrap();
+        let metadata = runtime.metadata();
+
+        assert_eq!(imported, 1);
+        assert_eq!(metadata.model_id, "noiron-v2-transformer");
+        assert_eq!(metadata.native_context_window, 131_072);
+        assert_eq!(runtime.manifest().architecture.layer_count, 12);
+        assert_eq!(runtime.manifest().architecture.local_window_tokens, 16_384);
+        assert!(
+            runtime
+                .manifest()
+                .supports_device(crate::hardware::DeviceClass::Mobile)
+        );
+        assert!(
+            !runtime
+                .manifest()
+                .supports_device(crate::hardware::DeviceClass::Server)
+        );
+
+        let request = RuntimeRequest {
+            prompt: "manifest configured runtime".to_owned(),
+            profile: TaskProfile::Coding,
+            runtime_metadata: metadata,
+            memory_hints: Vec::new(),
+            infini_memory_hints: Vec::new(),
+            experience_hints: Vec::new(),
+            route_budget: crate::router::RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 2,
+                fast_tokens: 1,
+                attention_fraction: 0.66,
+            },
+            hierarchy: crate::hierarchy::HierarchyWeights::new(0.2, 0.6, 0.2),
+            transformer_plan: crate::transformer::TransformerPlanner::new(6, 128).plan(
+                TaskProfile::Coding,
+                crate::hierarchy::HierarchyWeights::new(0.2, 0.6, 0.2),
+                crate::router::RouteBudget {
+                    threshold: 0.5,
+                    attention_tokens: 2,
+                    fast_tokens: 1,
+                    attention_fraction: 0.66,
+                },
+            ),
+            recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
+            hardware_plan: crate::hardware::HardwarePlan::default(),
+            max_tokens: 64,
+        };
+        let response = runtime.generate(request).unwrap();
+        let exported = runtime.export_kv().unwrap();
+
+        assert!(response.answer.contains("manifest noiron-v2-transformer"));
+        assert!(exported.len() <= 2);
     }
 
     #[test]

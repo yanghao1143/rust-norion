@@ -388,7 +388,10 @@ These are algorithmic references, not product dependencies:
   the same `ModelRuntime` ABI; command runtimes can now use a structured
   JSON wire format carrying Noiron route, hierarchy, recursive, hardware
   execution, memory, and experience context and returning answer/token/trace
-  metadata)
+  metadata; `RuntimeManifest` now captures self-developed model metadata,
+  Transformer shape, local asset paths, KV import/export limits, quantization
+  policy, supported devices, and adapter hints so future runtime versions can
+  be validated before production kernels are loaded)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -424,8 +427,8 @@ These are algorithmic references, not product dependencies:
   versions through stable Rust traits.
 - A built-in local runtime prototype proves tokenizer, model-side embedding,
   deterministic Transformer layer execution, imported-KV influence, generation,
-  KV exchange, and control-plane memory integration end to end before production
-  Transformer kernels are connected.
+  KV exchange, manifest-based runtime configuration, and control-plane memory
+  integration end to end before production Transformer kernels are connected.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained

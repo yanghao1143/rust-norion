@@ -18,6 +18,7 @@ pub mod recursive_scheduler;
 pub mod reflection;
 pub mod router;
 pub mod runtime;
+pub mod runtime_manifest;
 pub mod state_inspect;
 pub mod tiered_cache;
 pub mod token_stream;
@@ -77,6 +78,10 @@ pub use runtime::{
     CommandPromptMode, CommandRuntime, CommandWireFormat, ModelRuntime, RuntimeBackend,
     RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
     RuntimeTokenId, parse_runtime_response_json, runtime_request_json,
+};
+pub use runtime_manifest::{
+    RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,
+    RuntimeQuantizationPolicy, TransformerRuntimeArchitecture,
 };
 pub use state_inspect::{
     StateExperienceSummary, StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
