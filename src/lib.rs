@@ -75,7 +75,7 @@ pub use process_reward::{
 };
 pub use production_runtime::{
     ProductionForwardKernel, ProductionKernelContext, ProductionKernelOutput,
-    ProductionTransformerRuntime, RuntimeAssetSummary,
+    ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,

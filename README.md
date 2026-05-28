@@ -131,10 +131,11 @@ The target algorithm stack is model-weight independent:
 
 This repository currently contains a working control-plane prototype, a
 deterministic local Transformer-style runtime prototype, and a
-manifest-backed production runtime boundary. It does not yet include
-production inference kernels.
+manifest-backed production runtime boundary. It also includes a deterministic
+Rust reference production kernel for exercising the boundary end to end, but it
+does not yet include a trained production inference kernel.
 
-当前仓库已经包含一个可运行的控制层原型、确定性的本地 Transformer 风格运行时原型，以及基于 manifest 的生产运行时边界；但还没有接入生产级推理内核。
+当前仓库已经包含一个可运行的控制层原型、确定性的本地 Transformer 风格运行时原型，以及基于 manifest 的生产运行时边界；同时提供了一个确定性的 Rust reference production kernel，用来端到端验证生产边界，但还没有接入训练好的生产级推理内核。
 
 Implemented modules:
 
@@ -166,7 +167,7 @@ Implemented modules:
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
-- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, and a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel behind the boundary
+- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, and a deterministic `ReferenceProductionForwardKernel` for end-to-end boundary validation
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob, Rust-only Toolsmith planning, and read-only Agent Team planning feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
@@ -560,7 +561,10 @@ This path uses the real production gate and `RuntimeBackend` integration. By
 default it fails generation with a clear kernel-not-connected runtime error;
 production code can attach a real self-developed Transformer forward kernel by
 implementing `ProductionForwardKernel` and calling
-`ProductionTransformerRuntime::with_kernel`.
+`ProductionTransformerRuntime::with_kernel`. For local CI and integration
+checks, `--production-reference-kernel` attaches the built-in deterministic
+Rust reference kernel behind the same manifest/device/KV boundary. That path is
+for exercising the production ABI, not for claiming trained-model quality.
 
 通过 manifest-backed 生产 runtime 边界运行：
 
@@ -569,6 +573,19 @@ cargo run -- --production-runtime --runtime-model-id noiron-dev-transformer --ru
 ```
 
 这条路径会使用真实生产门禁和 `RuntimeBackend` 集成；默认情况下生成阶段会明确返回 kernel-not-connected runtime error。生产代码可以实现 `ProductionForwardKernel`，并通过 `ProductionTransformerRuntime::with_kernel` 把真实自研 Transformer forward kernel 接到边界后面。
+如果要做本地 CI 或集成验证，可以使用 `--production-reference-kernel` 把内置确定性 Rust reference kernel 接到同一条 manifest / 设备 / KV 边界后面。这条路径用于验证生产 ABI，不代表已经具备训练后大模型的真实生成质量。
+
+Run the production boundary with the reference kernel:
+
+```powershell
+cargo run -- --production-reference-kernel --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu "Validate the Rust Noiron production reference kernel"
+```
+
+通过 reference kernel 运行生产边界：
+
+```powershell
+cargo run -- --production-reference-kernel --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu "Validate the Rust Noiron production reference kernel"
+```
 
 By default, the demo writes local memory to `noiron-memory.ndkv`, structured
 reflection experience to `noiron-experience.ndkv`, and adaptive router/hierarchy
@@ -775,7 +792,7 @@ path.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
-`--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界。
+`--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界。`--production-reference-kernel` 会同时启用这条边界并挂载内置 reference kernel，用于本地验证生产 ABI。
 同一组显式架构参数也会配置内置 local runtime prototype。
 runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。
 
@@ -856,6 +873,8 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
   and writes, with a portable Rust heuristic fallback
 - connect a real self-developed forward kernel behind the
   `ProductionTransformerRuntime` manifest/device boundary
+- keep the deterministic reference production kernel as an ABI/CI harness until
+  the trained production kernel is attached
 - expand mixed-precision 4/8-bit KV quantization benchmarks and policies
 - add Infini-style global/local KV separation and sparse context filtering
 - add recursive scheduling for inputs beyond the native model window
@@ -866,6 +885,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 - 记忆检索和写入优先使用自研 runtime 的模型侧 embedding，并保留可移植 Rust 启发式 fallback
 - 在 `ProductionTransformerRuntime` 的 manifest / 设备边界后面接入真实自研 forward kernel
+- 在训练好的生产 kernel 接入前，保留确定性 reference production kernel 作为 ABI / CI 验证 harness
 - 扩展 4/8-bit 混合精度 KV 量化 benchmark 和策略
 - 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
 - 增加超过模型原生窗口输入的递归调度

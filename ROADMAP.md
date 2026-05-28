@@ -260,7 +260,8 @@ modules, not external product dependencies:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
   KV exchange, and structured request/response wiring. A built-in local runtime
-  prototype should exercise that ABI before production kernels are available.
+  prototype and a manifest-backed reference production kernel should exercise
+  that ABI before trained production kernels are available.
 - Universal hardware profiles:
   hardware allocation should stay device-agnostic while supporting explicit
   policy profiles for PC, laptop, workstation, server, mobile, embedded,
@@ -467,9 +468,13 @@ These are algorithmic references, not product dependencies:
   layer/head ids instead of assuming unbounded heads; Rust-only Toolsmith
   planning and read-only Agent Team coordination now flow through engine
   outcomes, runtime requests, JSON traces, and process reward notes so local
-  capability growth remains traceable and gated; the CLI can now
+  capability growth remains traceable and gated; `ReferenceProductionForwardKernel`
+  now provides a deterministic Rust kernel that runs behind the same
+  manifest/device/KV boundary for CI and integration validation without
+  pretending to be a trained production model; the CLI can now
   select that boundary with `--production-runtime` for normal inference and
-  benchmark runs)
+  benchmark runs, or attach the reference kernel with
+  `--production-reference-kernel`)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -511,6 +516,11 @@ These are algorithmic references, not product dependencies:
   deterministic Transformer layer execution, imported-KV influence, generation,
   KV exchange, manifest-based runtime configuration, and control-plane memory
   integration end to end before production Transformer kernels are connected.
+- A manifest-backed reference production kernel proves the production boundary
+  can execute end to end through `RuntimeBackend`, including token uncertainty,
+  runtime diagnostics, imported-KV influence, exported KV validation, trace, and
+  process-reward feedback, while remaining explicitly replaceable by a trained
+  self-developed kernel.
 - Production runtime manifests have a hard local-file gate for required weights
   and tokenizer assets before a self-developed model runtime is accepted, and
   the CLI exposes that gate directly for local/CI checks with explicit
@@ -540,6 +550,9 @@ These are algorithmic references, not product dependencies:
   `--production-runtime`, so production manifest/device failures and the
   kernel-not-connected state are observable in the same control loop used by
   local prototypes and command runtimes.
+- The CLI can attach the deterministic reference production kernel through
+  `--production-reference-kernel` for local/CI validation of the same production
+  ABI without requiring external weights or cloud services.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained
