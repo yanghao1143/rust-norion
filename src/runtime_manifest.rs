@@ -40,12 +40,9 @@ impl RuntimeManifest {
         );
         Self {
             metadata,
-            architecture: TransformerRuntimeArchitecture::new(
-                24,
+            architecture: default_transformer_runtime_architecture(
+                native_context_window,
                 embedding_dimensions,
-                choose_head_count(embedding_dimensions),
-                choose_head_count(embedding_dimensions),
-                native_context_window.min(4_096),
             ),
             assets: RuntimeAssetPaths::default(),
             kv_policy,
@@ -271,6 +268,17 @@ impl TransformerRuntimeArchitecture {
         }
     }
 
+    pub fn summary(self) -> String {
+        format!(
+            "layers={} hidden={} attention_heads={} kv_heads={} local_window={}",
+            self.layer_count,
+            self.hidden_size,
+            self.attention_heads,
+            self.kv_heads,
+            self.local_window_tokens
+        )
+    }
+
     fn validation_errors(self) -> Vec<String> {
         let mut errors = Vec::new();
         if self.layer_count == 0 {
@@ -296,6 +304,22 @@ impl TransformerRuntimeArchitecture {
         }
         errors
     }
+}
+
+pub fn default_transformer_runtime_architecture(
+    native_context_window: usize,
+    embedding_dimensions: usize,
+) -> TransformerRuntimeArchitecture {
+    let native_context_window = native_context_window.max(1);
+    let embedding_dimensions = embedding_dimensions.max(1);
+    let heads = choose_head_count(embedding_dimensions);
+    TransformerRuntimeArchitecture::new(
+        24,
+        embedding_dimensions,
+        heads,
+        heads,
+        native_context_window.min(4_096),
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

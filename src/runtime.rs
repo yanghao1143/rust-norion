@@ -12,6 +12,9 @@ use crate::kv_exchange::RuntimeKvBlock;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 use crate::router::RouteBudget;
+use crate::runtime_manifest::{
+    TransformerRuntimeArchitecture, default_transformer_runtime_architecture,
+};
 use crate::tiered_cache::MemoryTier;
 use crate::transformer::{AttentionKind, TransformerRefactorPlan};
 
@@ -167,6 +170,7 @@ pub struct RuntimeRequest {
     pub prompt: String,
     pub profile: TaskProfile,
     pub runtime_metadata: RuntimeMetadata,
+    pub runtime_architecture: TransformerRuntimeArchitecture,
     pub memory_hints: Vec<String>,
     pub infini_memory_hints: Vec<String>,
     pub experience_hints: Vec<String>,
@@ -184,6 +188,7 @@ impl RuntimeRequest {
         context: &GenerationContext<'_>,
         max_tokens: usize,
         runtime_metadata: RuntimeMetadata,
+        runtime_architecture: TransformerRuntimeArchitecture,
     ) -> Self {
         let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences(
             context.experiences,
@@ -194,6 +199,7 @@ impl RuntimeRequest {
             prompt: context.prompt.to_owned(),
             profile: context.profile,
             runtime_metadata,
+            runtime_architecture,
             memory_hints: context
                 .memories
                 .iter()
@@ -418,6 +424,14 @@ pub trait ModelRuntime {
         RuntimeMetadata::default()
     }
 
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        let metadata = self.metadata();
+        default_transformer_runtime_architecture(
+            metadata.native_context_window,
+            metadata.embedding_dimensions,
+        )
+    }
+
     fn tokenize(&self, prompt: &str) -> Result<Vec<RuntimeTokenId>, RuntimeError> {
         Ok(prompt
             .split_whitespace()
@@ -474,6 +488,7 @@ pub struct CommandRuntime {
     prompt_mode: CommandPromptMode,
     wire_format: CommandWireFormat,
     metadata: RuntimeMetadata,
+    architecture: Option<TransformerRuntimeArchitecture>,
 }
 
 impl CommandRuntime {
@@ -484,6 +499,7 @@ impl CommandRuntime {
             prompt_mode: CommandPromptMode::Stdin,
             wire_format: CommandWireFormat::Text,
             metadata: RuntimeMetadata::default(),
+            architecture: None,
         }
     }
 
@@ -513,6 +529,11 @@ impl CommandRuntime {
 
     pub fn with_metadata(mut self, metadata: RuntimeMetadata) -> Self {
         self.metadata = metadata;
+        self
+    }
+
+    pub fn with_architecture(mut self, architecture: TransformerRuntimeArchitecture) -> Self {
+        self.architecture = Some(architecture);
         self
     }
 
@@ -552,6 +573,10 @@ impl CommandRuntime {
                         &request.recursive_schedule.summary(),
                     )
                     .replace("{runtime_metadata}", &request.runtime_metadata.summary())
+                    .replace(
+                        "{runtime_architecture}",
+                        &request.runtime_architecture.summary(),
+                    )
             })
             .collect()
     }
@@ -560,6 +585,15 @@ impl CommandRuntime {
 impl ModelRuntime for CommandRuntime {
     fn metadata(&self) -> RuntimeMetadata {
         self.metadata.clone()
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        self.architecture.unwrap_or_else(|| {
+            default_transformer_runtime_architecture(
+                self.metadata.native_context_window,
+                self.metadata.embedding_dimensions,
+            )
+        })
     }
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
@@ -625,6 +659,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
     format!(
         "Noiron runtime request\n\
          runtime: {}\n\
+         runtime_architecture: {}\n\
          profile: {:?}\n\
          max_tokens: {}\n\
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
@@ -638,6 +673,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          runtime_adapter_observations:\n{}\n\
          prompt:\n{}",
         request.runtime_metadata.summary(),
+        request.runtime_architecture.summary(),
         request.profile,
         request.max_tokens,
         request.route_budget.threshold,
@@ -751,6 +787,13 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"hot_kv_precision_bits\":{},\
          \"cold_kv_precision_bits\":{}\
          }},\
+         \"runtime_architecture\":{{\
+         \"layer_count\":{},\
+         \"hidden_size\":{},\
+         \"attention_heads\":{},\
+         \"kv_heads\":{},\
+         \"local_window_tokens\":{}\
+         }},\
          \"route\":{{\
          \"threshold\":{:.6},\
          \"attention_fraction\":{:.6},\
@@ -820,6 +863,11 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         request.runtime_metadata.max_kv_export_blocks,
         request.runtime_metadata.hot_kv_precision_bits,
         request.runtime_metadata.cold_kv_precision_bits,
+        request.runtime_architecture.layer_count,
+        request.runtime_architecture.hidden_size,
+        request.runtime_architecture.attention_heads,
+        request.runtime_architecture.kv_heads,
+        request.runtime_architecture.local_window_tokens,
         request.route_budget.threshold,
         request.route_budget.attention_fraction,
         request.route_budget.attention_tokens,
@@ -1283,6 +1331,7 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
 
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
         let runtime_metadata = self.runtime.metadata();
+        let runtime_architecture = self.runtime.architecture();
         let import_blocks = runtime_kv_blocks_from_context(&context, &runtime_metadata);
         let imported_kv_blocks = if runtime_metadata.supports_kv_import && !import_blocks.is_empty()
         {
@@ -1303,8 +1352,12 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
         } else {
             0
         };
-        let request =
-            RuntimeRequest::from_context(&context, self.max_tokens, runtime_metadata.clone());
+        let request = RuntimeRequest::from_context(
+            &context,
+            self.max_tokens,
+            runtime_metadata.clone(),
+            runtime_architecture,
+        );
 
         match self.runtime.generate(request) {
             Ok(response) => {
@@ -1478,6 +1531,10 @@ mod tests {
                 .with_kv_exchange(true, true)
         }
 
+        fn architecture(&self) -> TransformerRuntimeArchitecture {
+            TransformerRuntimeArchitecture::new(18, 128, 8, 4, 4096)
+        }
+
         fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
             self.seen = Some(request.clone());
             let mut response = RuntimeResponse::new(format!(
@@ -1563,6 +1620,11 @@ mod tests {
         assert_eq!(seen.max_tokens, 128);
         assert_eq!(seen.runtime_metadata.model_id, "mock-self-transformer");
         assert_eq!(seen.runtime_metadata.native_context_window, 32_768);
+        assert_eq!(seen.runtime_architecture.layer_count, 18);
+        assert_eq!(seen.runtime_architecture.hidden_size, 128);
+        assert_eq!(seen.runtime_architecture.attention_heads, 8);
+        assert_eq!(seen.runtime_architecture.kv_heads, 4);
+        assert_eq!(seen.runtime_architecture.local_window_tokens, 4096);
         assert!(seen.runtime_metadata.supports_kv_import);
         assert!(seen.runtime_metadata.supports_kv_export);
         assert_eq!(seen.memory_hints.len(), 1);
@@ -1588,6 +1650,10 @@ mod tests {
         fn metadata(&self) -> RuntimeMetadata {
             RuntimeMetadata::new("noiron-dev-transformer", "noiron-wordpiece", 65_536, 256)
                 .with_kv_exchange(true, true)
+        }
+
+        fn architecture(&self) -> TransformerRuntimeArchitecture {
+            TransformerRuntimeArchitecture::new(24, 256, 8, 4, 8192)
         }
 
         fn tokenize(&self, prompt: &str) -> Result<Vec<RuntimeTokenId>, RuntimeError> {
@@ -1662,6 +1728,7 @@ mod tests {
         let mut runtime = SelfDevelopedRuntime::default();
 
         let metadata = runtime.metadata();
+        let architecture = runtime.architecture();
         let tokens = runtime.tokenize("alpha beta").unwrap();
         let embedding = runtime.embed(&tokens).unwrap();
         let text_embedding = runtime.embed_text("alpha beta gamma").unwrap();
@@ -1679,6 +1746,11 @@ mod tests {
 
         assert_eq!(metadata.model_id, "noiron-dev-transformer");
         assert_eq!(metadata.tokenizer, "noiron-wordpiece");
+        assert_eq!(architecture.layer_count, 24);
+        assert_eq!(architecture.hidden_size, 256);
+        assert_eq!(architecture.attention_heads, 8);
+        assert_eq!(architecture.kv_heads, 4);
+        assert_eq!(architecture.local_window_tokens, 8192);
         assert_eq!(tokens[0], RuntimeTokenId::new(10_000, "alpha"));
         assert_eq!(embedding.dimensions, 3);
         assert_eq!(text_embedding.values, vec![3.0, 1.0, 0.5]);
@@ -1921,14 +1993,20 @@ mod tests {
             .arg("{max_tokens}")
             .arg("--runtime")
             .arg("{runtime_metadata}")
+            .arg("--architecture")
+            .arg("{runtime_architecture}")
             .prompt_mode(CommandPromptMode::Args);
         let request = sample_request();
         let prompt = format_runtime_prompt(&request);
         let args = runtime.expanded_args(&request, &prompt);
 
         assert!(prompt.contains("runtime:"));
+        assert!(prompt.contains("runtime_architecture:"));
         assert!(prompt.contains("model_id=sample-transformer"));
         assert!(prompt.contains("native_context_window=8192"));
+        assert!(prompt.contains("layers=16"));
+        assert!(prompt.contains("attention_heads=8"));
+        assert!(prompt.contains("local_window=2048"));
         assert!(prompt.contains("max_kv_import_blocks=8"));
         assert!(prompt.contains("kv_bits=8/4"));
         assert!(prompt.contains("memory_hints"));
@@ -1940,6 +2018,7 @@ mod tests {
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
         assert!(args[5].contains("model_id=sample-transformer"));
+        assert!(args[7].contains("layers=16"));
     }
 
     #[test]
@@ -1975,6 +2054,26 @@ mod tests {
         assert_eq!(
             extract_json_number_field(&payload, "cold_kv_precision_bits").unwrap(),
             4.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "layer_count").unwrap(),
+            16.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "hidden_size").unwrap(),
+            64.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "attention_heads").unwrap(),
+            8.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "kv_heads").unwrap(),
+            4.0
+        );
+        assert_eq!(
+            extract_json_number_field(&payload, "local_window_tokens").unwrap(),
+            2048.0
         );
         assert_eq!(
             extract_json_number_field(&payload, "attention_tokens").unwrap(),
@@ -2060,6 +2159,7 @@ mod tests {
         assert_eq!(args[1], "json");
         assert!(args[3].contains("\"schema\":\"rust-norion-runtime-request-v1\""));
         assert!(args[3].contains("\"hardware\""));
+        assert!(args[3].contains("\"runtime_architecture\""));
     }
 
     #[test]
@@ -2083,6 +2183,7 @@ mod tests {
                 64,
             )
             .with_kv_exchange(true, true),
+            runtime_architecture: TransformerRuntimeArchitecture::new(16, 64, 8, 4, 2048),
             memory_hints: vec!["memory hint".to_owned()],
             infini_memory_hints: vec!["LocalWindow:memory hint score=0.900".to_owned()],
             experience_hints: vec!["experience hint".to_owned()],

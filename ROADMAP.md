@@ -372,17 +372,18 @@ These are algorithmic references, not product dependencies:
   (explicit general, coding-local, creative-writing-global, and
   long-context-convolution Transformer templates are now exposed through the
   refactor plan, CLI output, traces, and runtime request ABI;
-  initial runtime metadata, tokenizer, embedding, and KV import/export trait
-  hooks are in place; `RuntimeBackend` now exposes model-side embeddings to the
+  initial runtime metadata, explicit Transformer architecture shape, tokenizer,
+  embedding, and KV import/export trait hooks are in place; `RuntimeBackend` now exposes model-side embeddings to the
   control plane for memory lookup and writes when a self-developed runtime
   provides them, while preserving the portable Rust fallback; KV-Fusion
   similarity now penalizes mismatched vector dimensions so memories from
   different runtime embedding spaces do not over-fuse; `RuntimeBackend` now
-  injects runtime metadata into each request, command runtime prompts expose
+  injects runtime metadata and architecture into each request, command runtime prompts expose
   the ABI boundary, and backend native context windows feed recursive scheduling; runtime metadata now carries
-  KV import/export limits plus hot/cold KV precision into both text and JSON
-  request surfaces; CLI command runtimes can pass model id, tokenizer, native
-  window, embedding dimensions, and KV exchange flags; active Noiron memory can now be imported into runtime KV and accepted
+  Transformer layer/head/window shape, KV import/export limits, and hot/cold KV
+  precision into both text and JSON request surfaces; CLI command runtimes can
+  pass model id, tokenizer, native window, embedding dimensions, explicit
+  architecture flags, and KV exchange flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
   records now capture route, hierarchy, KV, recursion, hardware execution,
   hardware KV budgets, structured reflection diagnostics, drift, reward,
@@ -409,7 +410,7 @@ These are algorithmic references, not product dependencies:
   `--runtime-manifest-gate` with explicit layer/head/window architecture plus
   weights/tokenizer/config asset flags so this contract can fail before a
   production runtime is used; the same explicit architecture flags configure
-  the local Rust runtime prototype; runtime responses can now carry structured
+  the local Rust runtime prototype and command-runtime request ABI; runtime responses can now carry structured
   forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
   KV influence, and runtime KV import/export counts)

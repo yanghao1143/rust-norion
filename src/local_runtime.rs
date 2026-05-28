@@ -7,7 +7,9 @@ use crate::runtime::{
     RuntimeResponse, RuntimeToken, RuntimeTokenId,
 };
 use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
-use crate::transformer::{AttentionKind, TransformerLayerPlan};
+use crate::transformer::{
+    AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
+};
 
 #[derive(Debug, Clone)]
 pub struct LocalTransformerRuntime {
@@ -101,6 +103,10 @@ impl ModelRuntime for LocalTransformerRuntime {
         self.manifest.runtime_metadata()
     }
 
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        self.manifest.architecture
+    }
+
     fn tokenize(&self, prompt: &str) -> Result<Vec<RuntimeTokenId>, RuntimeError> {
         Ok(local_tokenize(prompt)
             .into_iter()
@@ -139,10 +145,15 @@ impl ModelRuntime for LocalTransformerRuntime {
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         let tokens = self.tokenize(&request.prompt)?;
         let embedding = self.embed(&tokens)?.values;
-        let forward = run_transformer_forward(&embedding, &self.imported_kv_blocks, &request);
+        let forward = run_transformer_forward(
+            &embedding,
+            &self.imported_kv_blocks,
+            &request,
+            self.manifest.architecture,
+        );
         self.exported_kv_blocks = export_forward_kv(&forward, &request);
 
-        let transformer_counts = request.transformer_plan.counts();
+        let transformer_counts = count_forward_layers(&forward.layer_summaries);
         let profile_hint = match request.profile {
             TaskProfile::General => "balanced reasoning",
             TaskProfile::Coding => "local-window syntax and interface tracking",
@@ -336,17 +347,14 @@ fn run_transformer_forward(
     embedding: &[f32],
     imported_kv_blocks: &[RuntimeKvBlock],
     request: &RuntimeRequest,
+    architecture: TransformerRuntimeArchitecture,
 ) -> LocalForwardState {
     let mut vector = embedding.to_vec();
     if vector.is_empty() {
         vector.push(0.0);
     }
 
-    let layers = if request.transformer_plan.layers.is_empty() {
-        Vec::new()
-    } else {
-        request.transformer_plan.layers.clone()
-    };
+    let layers = runtime_layers_for_architecture(request, architecture);
     let mut layer_summaries = Vec::with_capacity(layers.len());
     let mut kv_influence = 0.0;
 
@@ -373,6 +381,53 @@ fn run_transformer_forward(
         layer_summaries,
         kv_influence,
     }
+}
+
+fn runtime_layers_for_architecture(
+    request: &RuntimeRequest,
+    architecture: TransformerRuntimeArchitecture,
+) -> Vec<TransformerLayerPlan> {
+    let layer_count = architecture.layer_count.max(1);
+    let local_window = architecture.local_window_tokens.max(16);
+    let native_window = request
+        .runtime_metadata
+        .native_context_window
+        .max(local_window)
+        .max(16);
+
+    let mut plan = if request.transformer_plan.layers.len() == layer_count {
+        request.transformer_plan.clone()
+    } else {
+        TransformerPlanner::new(layer_count, local_window).plan(
+            request.profile,
+            request.hierarchy,
+            request.route_budget,
+        )
+    };
+
+    for (index, layer) in plan.layers.iter_mut().enumerate() {
+        layer.layer_index = index;
+        layer.window_size = match layer.attention {
+            AttentionKind::Global => layer.window_size.clamp(local_window, native_window),
+            AttentionKind::LocalWindow | AttentionKind::ConvolutionalFusion => {
+                layer.window_size.clamp(16, local_window)
+            }
+        };
+    }
+
+    plan.layers
+}
+
+fn count_forward_layers(layers: &[LocalLayerSummary]) -> TransformerPlanCounts {
+    let mut counts = TransformerPlanCounts::default();
+    for layer in layers {
+        match layer.attention {
+            AttentionKind::Global => counts.global += 1,
+            AttentionKind::LocalWindow => counts.local += 1,
+            AttentionKind::ConvolutionalFusion => counts.convolution += 1,
+        }
+    }
+    counts
 }
 
 fn apply_imported_kv(
@@ -634,6 +689,7 @@ mod tests {
             prompt: "manifest configured runtime".to_owned(),
             profile: TaskProfile::Coding,
             runtime_metadata: metadata,
+            runtime_architecture: runtime.architecture(),
             memory_hints: Vec::new(),
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
@@ -667,7 +723,7 @@ mod tests {
             response.diagnostics.model_id.as_deref(),
             Some("noiron-v2-transformer")
         );
-        assert_eq!(response.diagnostics.layer_count, 6);
+        assert_eq!(response.diagnostics.layer_count, 12);
         assert_eq!(response.diagnostics.hidden_size, 48);
         assert_eq!(response.diagnostics.local_window_tokens, 16_384);
         assert!(response.diagnostics.forward_energy.unwrap() > 0.0);
@@ -682,6 +738,7 @@ mod tests {
             prompt: "Build local Noiron runtime".to_owned(),
             profile: TaskProfile::Coding,
             runtime_metadata: runtime.metadata(),
+            runtime_architecture: runtime.architecture(),
             memory_hints: vec!["hot memory".to_owned()],
             infini_memory_hints: Vec::new(),
             experience_hints: vec!["reuse prior route".to_owned()],
@@ -735,6 +792,7 @@ mod tests {
             prompt: "Select observed local adapter".to_owned(),
             profile: TaskProfile::Coding,
             runtime_metadata: runtime.metadata(),
+            runtime_architecture: runtime.architecture(),
             memory_hints: Vec::new(),
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
@@ -783,6 +841,7 @@ mod tests {
             prompt: "Build local Noiron runtime".to_owned(),
             profile: TaskProfile::Coding,
             runtime_metadata: RuntimeMetadata::default(),
+            runtime_architecture: TransformerRuntimeArchitecture::new(6, 16, 4, 2, 128),
             memory_hints: Vec::new(),
             infini_memory_hints: Vec::new(),
             experience_hints: Vec::new(),
@@ -813,7 +872,8 @@ mod tests {
             .map(|text| RuntimeTokenId::new((stable_hash(&text) % 1_000_000) as u32, text))
             .collect::<Vec<_>>();
         let embedding = embed_tokens(&tokens, 16);
-        let no_kv = run_transformer_forward(&embedding, &[], &request);
+        let no_kv =
+            run_transformer_forward(&embedding, &[], &request, request.runtime_architecture);
         let with_kv = run_transformer_forward(
             &embedding,
             &[RuntimeKvBlock::new(
@@ -825,6 +885,7 @@ mod tests {
                 vec![0.75, 0.375, 0.1875, 0.09375],
             )],
             &request,
+            request.runtime_architecture,
         );
 
         assert!(with_kv.kv_influence > no_kv.kv_influence);

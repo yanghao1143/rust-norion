@@ -161,7 +161,7 @@ Implemented modules:
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, tokenizer, optional model-side embedding, KV import/export ABI hooks, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, KV import/export ABI hooks, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob now feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
@@ -652,11 +652,11 @@ self-developed runtime surface.
 要接入真实模型，可以实现 `ModelRuntime` 并用 `RuntimeBackend` 包装，也可以为更定制的自研运行时控制面直接实现 `InferenceBackend`，替换当前 demo 使用的 `HeuristicBackend`。
 
 `ModelRuntime` now exposes the self-developed runtime boundary explicitly:
-metadata, tokenizer access, embedding access, optional KV import/export, and
-generation. Unsupported capabilities have safe defaults so a command-line
-runtime can still start with only `generate`.
+metadata, Transformer architecture shape, tokenizer access, embedding access,
+optional KV import/export, and generation. Unsupported capabilities have safe
+defaults so a command-line runtime can still start with only `generate`.
 
-`ModelRuntime` 现在显式暴露自研运行时边界：模型元数据、tokenizer、embedding、可选 KV 导入/导出以及生成接口。不支持的能力有安全默认值，因此命令行后端仍然可以只从 `generate` 起步。
+`ModelRuntime` 现在显式暴露自研运行时边界：模型元数据、Transformer 架构形状、tokenizer、embedding、可选 KV 导入/导出以及生成接口。不支持的能力有安全默认值，因此命令行后端仍然可以只从 `generate` 起步。
 
 `RuntimeManifest` records the self-developed runtime contract before any
 production weights are loaded: model id, tokenizer id, native context window,
@@ -687,14 +687,17 @@ The CLI exposes this metadata through `--runtime-model-id`,
 turn the same metadata into an executable production manifest check before the
 runtime is used. The same explicit architecture flags also configure the
 built-in local runtime prototype. Runtime metadata and the structured JSON
-request ABI carry the effective KV import/export block limits and hot/cold KV
-precision, so an external self-developed runtime can enforce the same manifest
-policy the control plane validated.
+request ABI carry the effective Transformer layer/head/window shape, KV
+import/export block limits, and hot/cold KV precision, so an external
+self-developed runtime can enforce the same manifest policy the control plane
+validated. Command runtimes receive that architecture in both the text payload
+and `runtime_architecture` JSON object, and `{runtime_architecture}` can be used
+inside `--runtime-arg` templates.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
 同一组显式架构参数也会配置内置 local runtime prototype。
-runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。
+runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
 vectors as runtime KV blocks before generation. After generation, exported KV

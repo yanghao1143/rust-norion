@@ -85,6 +85,7 @@ pub use runtime::{
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,
     RuntimeQuantizationPolicy, TransformerRuntimeArchitecture,
+    default_transformer_runtime_architecture,
 };
 pub use state_inspect::{
     StateExperienceSummary, StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,

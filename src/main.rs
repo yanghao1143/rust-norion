@@ -98,7 +98,8 @@ fn main() -> std::io::Result<()> {
                 .args(args.runtime_args.clone())
                 .prompt_mode(args.runtime_prompt_mode)
                 .wire_format(args.runtime_wire_format)
-                .with_metadata(args.runtime_metadata.clone());
+                .with_metadata(args.runtime_metadata.clone())
+                .with_architecture(args.runtime_manifest().architecture);
             let mut backend = RuntimeBackend::new(runtime);
             run_benchmark(&mut engine, &mut backend, &benchmark_path)?
         } else if args.local_runtime {
@@ -140,7 +141,8 @@ fn main() -> std::io::Result<()> {
             .args(args.runtime_args.clone())
             .prompt_mode(args.runtime_prompt_mode)
             .wire_format(args.runtime_wire_format)
-            .with_metadata(args.runtime_metadata.clone());
+            .with_metadata(args.runtime_metadata.clone())
+            .with_architecture(args.runtime_manifest().architecture);
         let mut backend = RuntimeBackend::new(runtime);
         run_timed_inference(
             &mut engine,
@@ -193,13 +195,21 @@ fn main() -> std::io::Result<()> {
         println!("runtime: local-transformer");
         println!(
             "runtime_metadata: {}",
-            LocalTransformerRuntime::with_metadata(args.runtime_metadata.clone())
+            LocalTransformerRuntime::with_manifest(args.runtime_manifest())
                 .metadata()
                 .summary()
+        );
+        println!(
+            "runtime_architecture: {}",
+            args.runtime_manifest().architecture.summary()
         );
     } else if let Some(runtime_command) = &args.runtime_command {
         println!("runtime_command: {}", runtime_command.display());
         println!("runtime_metadata: {}", args.runtime_metadata.summary());
+        println!(
+            "runtime_architecture: {}",
+            args.runtime_manifest().architecture.summary()
+        );
         println!("runtime_wire_format: {}", args.runtime_wire_format.as_str());
     }
     if let Some(replay_report) = &replay_report {
@@ -390,8 +400,8 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
     if args.replay_limit > 0 {
         first_engine.replay_experience(args.replay_limit);
     }
-    let mut first_backend = RuntimeBackend::new(LocalTransformerRuntime::with_metadata(
-        args.runtime_metadata.clone(),
+    let mut first_backend = RuntimeBackend::new(LocalTransformerRuntime::with_manifest(
+        args.runtime_manifest(),
     ));
     let first = first_engine.infer(
         InferenceRequest::new(args.prompt.clone(), args.profile),
@@ -409,8 +419,8 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
         &args.adaptive_path,
     )?;
     configure_engine(&mut second_engine, args);
-    let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::with_metadata(
-        args.runtime_metadata.clone(),
+    let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::with_manifest(
+        args.runtime_manifest(),
     ));
     let second = second_engine.infer(
         InferenceRequest::new(args.prompt.clone(), args.profile),
