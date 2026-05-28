@@ -1,7 +1,7 @@
 use crate::experience::ExperienceRecord;
 use crate::hierarchy::TaskProfile;
 use crate::process_reward::RewardAction;
-use crate::reflection::ReflectionSeverity;
+use crate::reflection::{ReflectionSeverity, RuntimeDiagnostics};
 use crate::router::RouteBudget;
 
 #[derive(Debug, Clone)]
@@ -84,6 +84,7 @@ impl ExperienceReplayPlanner {
             stream_windows: record.stream_windows,
             route_budget: record.route_budget,
             memory_ids,
+            runtime_diagnostics: record.runtime_diagnostics.clone(),
             priority,
             lesson: record.lesson.clone(),
         })
@@ -115,6 +116,7 @@ pub struct ExperienceReplayItem {
     pub stream_windows: usize,
     pub route_budget: RouteBudget,
     pub memory_ids: Vec<u64>,
+    pub runtime_diagnostics: RuntimeDiagnostics,
     pub priority: f32,
     pub lesson: String,
 }
@@ -213,6 +215,11 @@ mod tests {
         assert!(reinforced.memory_ids.contains(&11));
         assert!(reinforced.memory_ids.contains(&21));
         assert!(reinforced.memory_ids.contains(&31));
+        assert_eq!(
+            reinforced.runtime_diagnostics.model_id.as_deref(),
+            Some("replay-runtime")
+        );
+        assert_eq!(reinforced.runtime_diagnostics.forward_energy, Some(0.31));
         assert!(
             plan.items
                 .iter()
@@ -282,6 +289,17 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: vec![id + 10],
             stored_runtime_kv_memory_ids: vec![id + 30],
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("replay-runtime".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                layer_count: 12,
+                hidden_size: 128,
+                local_window_tokens: 4096,
+                forward_energy: Some(0.31),
+                kv_influence: Some(0.27),
+                imported_kv_blocks: 1,
+                exported_kv_blocks: 2,
+            },
             process_reward: ProcessRewardReport {
                 total: reward,
                 action,
@@ -308,6 +326,7 @@ mod tests {
             gist_records: input.gist_records,
             gist_memory_ids: input.gist_memory_ids,
             stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
+            runtime_diagnostics: input.runtime_diagnostics,
             process_reward: input.process_reward,
         }
     }

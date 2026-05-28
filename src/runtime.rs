@@ -1255,6 +1255,10 @@ mod tests {
             revision_actions: Vec::new(),
             process_reward: 0.81,
             reward_action: crate::process_reward::RewardAction::Reinforce,
+            runtime_model_id: Some("mock-self-transformer".to_owned()),
+            runtime_selected_adapter: Some("portable-rust".to_owned()),
+            runtime_forward_energy: Some(0.2),
+            runtime_kv_influence: Some(0.1),
         }];
         let tier_plan = TieredCachePlan::default();
         let infini_memory_plan = InfiniMemoryPlan::new(

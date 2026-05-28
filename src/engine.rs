@@ -567,6 +567,7 @@ impl NoironEngine {
             gist_records: gist_records.clone(),
             gist_memory_ids: stored_gist_memory_ids.clone(),
             stored_runtime_kv_memory_ids: stored_runtime_kv_memory_ids.clone(),
+            runtime_diagnostics: runtime_diagnostics.clone(),
             process_reward: process_reward.clone(),
         });
         let retention_report = self.cache.apply_retention(self.memory_retention_policy);
@@ -1527,6 +1528,7 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
             process_reward: ProcessRewardReport {
                 total: 0.91,
                 action: RewardAction::Reinforce,
@@ -1572,6 +1574,7 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
             process_reward: ProcessRewardReport {
                 total: 0.90,
                 action: RewardAction::Reinforce,
@@ -1648,6 +1651,7 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
             process_reward: ProcessRewardReport::default(),
         });
         let mut backend = HeuristicBackend;

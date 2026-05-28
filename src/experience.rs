@@ -6,7 +6,7 @@ use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
-use crate::reflection::{ReflectionIssue, ReflectionSeverity};
+use crate::reflection::{ReflectionIssue, ReflectionSeverity, RuntimeDiagnostics};
 use crate::router::RouteBudget;
 
 #[derive(Debug, Clone)]
@@ -27,6 +27,7 @@ pub struct ExperienceInput {
     pub gist_records: Vec<GistRecord>,
     pub gist_memory_ids: Vec<u64>,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
+    pub runtime_diagnostics: RuntimeDiagnostics,
     pub process_reward: ProcessRewardReport,
 }
 
@@ -49,6 +50,7 @@ pub struct ExperienceRecord {
     pub gist_records: Vec<GistRecord>,
     pub gist_memory_ids: Vec<u64>,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
+    pub runtime_diagnostics: RuntimeDiagnostics,
     pub process_reward: ProcessRewardReport,
 }
 
@@ -64,6 +66,10 @@ pub struct ExperienceMatch {
     pub revision_actions: Vec<String>,
     pub process_reward: f32,
     pub reward_action: RewardAction,
+    pub runtime_model_id: Option<String>,
+    pub runtime_selected_adapter: Option<String>,
+    pub runtime_forward_energy: Option<f32>,
+    pub runtime_kv_influence: Option<f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +125,7 @@ impl ExperienceStore {
             gist_records: input.gist_records,
             gist_memory_ids: input.gist_memory_ids,
             stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
+            runtime_diagnostics: input.runtime_diagnostics,
             process_reward: input.process_reward,
         });
         id
@@ -167,11 +174,12 @@ impl ExperienceStore {
                     .chain(record.revision_actions.iter().cloned())
                     .collect::<Vec<_>>()
                     .join(" ");
+                let runtime_text = runtime_diagnostics_text(&record.runtime_diagnostics);
                 let overlap = lexical_overlap(
                     prompt,
                     &format!(
-                        "{} {} {} {}",
-                        record.prompt, record.lesson, gist_text, reflection_text
+                        "{} {} {} {} {}",
+                        record.prompt, record.lesson, gist_text, reflection_text, runtime_text
                     ),
                 );
                 let profile_bonus = if record.profile == profile { 0.16 } else { 0.0 };
@@ -217,6 +225,10 @@ impl ExperienceStore {
                     revision_actions: record.revision_actions.clone(),
                     process_reward: record.process_reward.total,
                     reward_action: record.process_reward.action,
+                    runtime_model_id: record.runtime_diagnostics.model_id.clone(),
+                    runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
+                    runtime_forward_energy: record.runtime_diagnostics.forward_energy,
+                    runtime_kv_influence: record.runtime_diagnostics.kv_influence,
                 })
             })
             .collect::<Vec<_>>();
@@ -302,9 +314,10 @@ fn serialize_record(record: &ExperienceRecord) -> String {
     let route_budget = serialize_route_budget(record.route_budget);
     let reflection_issues = serialize_reflection_issues(&record.reflection_issues);
     let revision_actions = serialize_revision_actions(&record.revision_actions);
+    let runtime_diagnostics = serialize_runtime_diagnostics(&record.runtime_diagnostics);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -324,7 +337,8 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         escape_field(&used_memory_ids),
         escape_field(&stored_runtime_kv_memory_ids),
         escape_field(&reflection_issues),
-        escape_field(&revision_actions)
+        escape_field(&revision_actions),
+        escape_field(&runtime_diagnostics)
     )
 }
 
@@ -393,6 +407,10 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(19)
         .map(|value| deserialize_revision_actions(&unescape_field(value)))
         .unwrap_or_default();
+    let runtime_diagnostics = fields
+        .get(20)
+        .and_then(|value| deserialize_runtime_diagnostics(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -412,6 +430,7 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         gist_records,
         gist_memory_ids,
         stored_runtime_kv_memory_ids,
+        runtime_diagnostics,
         process_reward,
     })
 }
@@ -543,6 +562,81 @@ fn deserialize_revision_actions(value: &str) -> Vec<String> {
     } else {
         value.split('\u{1e}').map(ToOwned::to_owned).collect()
     }
+}
+
+fn serialize_runtime_diagnostics(diagnostics: &RuntimeDiagnostics) -> String {
+    [
+        diagnostics
+            .model_id
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics
+            .selected_adapter
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics.layer_count.to_string(),
+        diagnostics.hidden_size.to_string(),
+        diagnostics.local_window_tokens.to_string(),
+        option_f32_to_field(diagnostics.forward_energy),
+        option_f32_to_field(diagnostics.kv_influence),
+        diagnostics.imported_kv_blocks.to_string(),
+        diagnostics.exported_kv_blocks.to_string(),
+    ]
+    .join("\u{1f}")
+}
+
+fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
+    if value.is_empty() {
+        return Some(RuntimeDiagnostics::default());
+    }
+
+    let fields = value.split('\u{1f}').collect::<Vec<_>>();
+    if fields.len() != 9 {
+        return None;
+    }
+
+    Some(RuntimeDiagnostics {
+        model_id: non_empty_string(fields[0]),
+        selected_adapter: non_empty_string(fields[1]),
+        layer_count: fields[2].parse::<usize>().ok()?,
+        hidden_size: fields[3].parse::<usize>().ok()?,
+        local_window_tokens: fields[4].parse::<usize>().ok()?,
+        forward_energy: field_to_finite_f32(fields[5]),
+        kv_influence: field_to_finite_f32(fields[6]),
+        imported_kv_blocks: fields[7].parse::<usize>().ok()?,
+        exported_kv_blocks: fields[8].parse::<usize>().ok()?,
+    })
+}
+
+fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
+    [
+        diagnostics.model_id.as_deref().unwrap_or_default(),
+        diagnostics.selected_adapter.as_deref().unwrap_or_default(),
+    ]
+    .into_iter()
+    .filter(|item| !item.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+fn option_f32_to_field(value: Option<f32>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{value:.6}"))
+        .unwrap_or_default()
+}
+
+fn field_to_finite_f32(value: &str) -> Option<f32> {
+    if value.is_empty() {
+        return None;
+    }
+    value.parse::<f32>().ok().filter(|value| value.is_finite())
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 fn serialize_process_reward(report: &ProcessRewardReport) -> String {
@@ -757,6 +851,26 @@ mod tests {
         assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
         assert_eq!(loaded.records()[0].used_memory_ids, vec![3, 5]);
         assert_eq!(loaded.records()[0].stored_runtime_kv_memory_ids, vec![11]);
+        assert_eq!(
+            loaded.records()[0].runtime_diagnostics.model_id.as_deref(),
+            Some("noiron-test-runtime")
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .selected_adapter
+                .as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(loaded.records()[0].runtime_diagnostics.layer_count, 8);
+        assert_eq!(
+            loaded.records()[0].runtime_diagnostics.forward_energy,
+            Some(0.25)
+        );
+        assert_eq!(
+            loaded.records()[0].runtime_diagnostics.kv_influence,
+            Some(0.75)
+        );
         assert_eq!(loaded.records()[0].reflection_issues.len(), 1);
         assert_eq!(
             loaded.records()[0].reflection_issues[0].severity,
@@ -823,6 +937,41 @@ mod tests {
         );
     }
 
+    #[test]
+    fn retrieval_exposes_runtime_diagnostics() {
+        let mut store = ExperienceStore::new();
+        store.record(ExperienceInput {
+            prompt: "adapter selection for local runtime".to_owned(),
+            lesson: "reuse portable-rust runtime diagnostics".to_owned(),
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("noiron-runtime-v2".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                layer_count: 16,
+                hidden_size: 128,
+                local_window_tokens: 4096,
+                forward_energy: Some(0.33),
+                kv_influence: Some(0.44),
+                imported_kv_blocks: 2,
+                exported_kv_blocks: 3,
+            },
+            ..input("runtime", 0.9)
+        });
+
+        let matches = store.retrieve_lessons("portable-rust adapter", TaskProfile::Coding, 1);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(
+            matches[0].runtime_model_id.as_deref(),
+            Some("noiron-runtime-v2")
+        );
+        assert_eq!(
+            matches[0].runtime_selected_adapter.as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
+        assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
+    }
+
     fn input(lesson: &str, quality: f32) -> ExperienceInput {
         ExperienceInput {
             prompt: "build a Noiron loop".to_owned(),
@@ -850,6 +999,17 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: vec![11],
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("noiron-test-runtime".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                layer_count: 8,
+                hidden_size: 64,
+                local_window_tokens: 2048,
+                forward_energy: Some(0.25),
+                kv_influence: Some(0.75),
+                imported_kv_blocks: 1,
+                exported_kv_blocks: 2,
+            },
             process_reward: ProcessRewardReport::default(),
         }
     }

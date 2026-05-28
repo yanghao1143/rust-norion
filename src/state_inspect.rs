@@ -269,6 +269,7 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: crate::reflection::RuntimeDiagnostics::default(),
             process_reward: ProcessRewardReport {
                 total: 0.88,
                 action: RewardAction::Reinforce,
