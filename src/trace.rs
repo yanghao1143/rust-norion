@@ -163,6 +163,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"auto_replay\":{",
     },
     TraceRequiredField {
+        name: "auto_replay_recursive_runtime_calls",
+        marker: "\"recursive_runtime_calls\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_recursive_call_pressure",
+        marker: "\"max_recursive_call_pressure\":",
+    },
+    TraceRequiredField {
         name: "retention",
         marker: "\"retention\":{",
     },
@@ -295,7 +303,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{}}},\
+         \"auto_replay\":{{\"applied\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -416,6 +424,18 @@ pub fn trace_json_line_with_case(
         auto_replay
             .map(|report| report.touched_memories)
             .unwrap_or(0),
+        auto_replay
+            .map(|report| report.recursive_runtime_items)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.recursive_runtime_calls)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.average_recursive_call_pressure)
+            .unwrap_or(0.0),
+        auto_replay
+            .map(|report| report.max_recursive_call_pressure)
+            .unwrap_or(0.0),
         outcome.memory_retention_policy.stale_after,
         outcome.memory_retention_policy.decay_rate,
         outcome.memory_retention_policy.remove_below_strength,
@@ -573,6 +593,10 @@ mod tests {
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"auto_replay\":"));
+        assert!(line.contains("\"recursive_runtime_items\":"));
+        assert!(line.contains("\"recursive_runtime_calls\":"));
+        assert!(line.contains("\"avg_recursive_call_pressure\":"));
+        assert!(line.contains("\"max_recursive_call_pressure\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
         assert!(line.contains("\"stale_after\":"));
         assert!(line.contains("\"decay_rate\":"));

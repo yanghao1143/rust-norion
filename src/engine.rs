@@ -884,8 +884,8 @@ fn average(total: f32, count: usize) -> Option<f32> {
 }
 
 fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
-    let token_count = (item.route_budget.attention_tokens + item.route_budget.fast_tokens).max(1);
-    let recursive_call_pressure = replay_recursive_call_pressure(item, token_count);
+    let token_count = item.route_token_count();
+    let recursive_call_pressure = item.recursive_call_pressure();
     match item.action {
         RewardAction::Reinforce => GenerationMetrics {
             perplexity: (6.0
@@ -922,19 +922,6 @@ fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
             token_count,
         },
     }
-}
-
-fn replay_recursive_call_pressure(item: &ExperienceReplayItem, token_count: usize) -> f32 {
-    let Some(calls) = item.recursive_runtime_calls else {
-        return 0.0;
-    };
-    let expected_calls = token_count.max(1);
-    if calls <= expected_calls {
-        return 0.0;
-    }
-
-    (calls.saturating_sub(expected_calls) as f32 / (expected_calls.max(4) * 12) as f32)
-        .clamp(0.0, 0.35)
 }
 
 fn approximate_token_count(text: &str) -> usize {

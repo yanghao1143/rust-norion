@@ -125,6 +125,29 @@ pub struct ExperienceReplayItem {
     pub lesson: String,
 }
 
+impl ExperienceReplayItem {
+    pub fn route_token_count(&self) -> usize {
+        (self.route_budget.attention_tokens + self.route_budget.fast_tokens).max(1)
+    }
+
+    pub fn recursive_call_pressure(&self) -> f32 {
+        recursive_call_pressure(self.recursive_runtime_calls, self.route_token_count())
+    }
+}
+
+fn recursive_call_pressure(recursive_runtime_calls: Option<usize>, token_count: usize) -> f32 {
+    let Some(calls) = recursive_runtime_calls else {
+        return 0.0;
+    };
+    let expected_calls = token_count.max(1);
+    if calls <= expected_calls {
+        return 0.0;
+    }
+
+    (calls.saturating_sub(expected_calls) as f32 / (expected_calls.max(4) * 12) as f32)
+        .clamp(0.0, 0.35)
+}
+
 fn critical_reflection_issue_count(record: &ExperienceRecord) -> usize {
     record
         .reflection_issues
@@ -154,6 +177,10 @@ pub struct ExperienceReplayReport {
     pub penalized: usize,
     pub touched_memories: usize,
     pub average_reward: f32,
+    pub recursive_runtime_items: usize,
+    pub recursive_runtime_calls: usize,
+    pub average_recursive_call_pressure: f32,
+    pub max_recursive_call_pressure: f32,
     pub notes: Vec<String>,
 }
 
@@ -164,23 +191,56 @@ impl ExperienceReplayReport {
         } else {
             plan.items.iter().map(|item| item.reward).sum::<f32>() / plan.items.len() as f32
         };
+        let recursive_runtime_items = plan
+            .items
+            .iter()
+            .filter(|item| item.recursive_runtime_calls.is_some())
+            .count();
+        let recursive_runtime_calls = plan
+            .items
+            .iter()
+            .filter_map(|item| item.recursive_runtime_calls)
+            .sum();
+        let recursive_call_pressure_total = plan
+            .items
+            .iter()
+            .map(ExperienceReplayItem::recursive_call_pressure)
+            .sum::<f32>();
+        let average_recursive_call_pressure = if plan.items.is_empty() {
+            0.0
+        } else {
+            recursive_call_pressure_total / plan.items.len() as f32
+        };
+        let max_recursive_call_pressure = plan
+            .items
+            .iter()
+            .map(ExperienceReplayItem::recursive_call_pressure)
+            .fold(0.0_f32, f32::max);
 
         Self {
             planned: plan.items.len(),
             average_reward,
+            recursive_runtime_items,
+            recursive_runtime_calls,
+            average_recursive_call_pressure,
+            max_recursive_call_pressure,
             ..Self::default()
         }
     }
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} reinforced={} penalized={} touched_memories={} average_reward={:.3}",
+            "planned={} applied={} reinforced={} penalized={} touched_memories={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3}",
             self.planned,
             self.applied,
             self.reinforced,
             self.penalized,
             self.touched_memories,
-            self.average_reward
+            self.average_reward,
+            self.recursive_runtime_items,
+            self.recursive_runtime_calls,
+            self.average_recursive_call_pressure,
+            self.max_recursive_call_pressure
         )
     }
 }
@@ -347,5 +407,27 @@ mod tests {
 
         assert_eq!(plan.items.len(), 1);
         assert_eq!(plan.items[0].recursive_runtime_calls, Some(7));
+    }
+
+    #[test]
+    fn report_summarizes_recursive_call_pressure() {
+        let planner = ExperienceReplayPlanner::new();
+        let mut high_cost = record(9, 0.88, RewardAction::Reinforce);
+        high_cost.process_reward.notes = vec![
+            "recursive:chunks=32:merge_rounds=2:waves=8:parallel=2:runtime_calls=96".to_owned(),
+        ];
+        let plan = planner.plan(&[high_cost], 1);
+
+        let report = ExperienceReplayReport::from_plan(&plan);
+
+        assert_eq!(report.recursive_runtime_items, 1);
+        assert_eq!(report.recursive_runtime_calls, 96);
+        assert!(report.average_recursive_call_pressure > 0.0);
+        assert_eq!(
+            report.average_recursive_call_pressure,
+            report.max_recursive_call_pressure
+        );
+        assert!(report.summary().contains("recursive_runtime_calls=96"));
+        assert!(report.summary().contains("max_recursive_call_pressure="));
     }
 }
