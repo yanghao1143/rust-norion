@@ -378,12 +378,12 @@ These are algorithmic references, not product dependencies:
   provides them, while preserving the portable Rust fallback; KV-Fusion
   similarity now penalizes mismatched vector dimensions so memories from
   different runtime embedding spaces do not over-fuse; `RuntimeBackend` now
-  injects runtime metadata and architecture into each request, command runtime prompts expose
+  injects runtime metadata, architecture, and device execution contracts into each request, command runtime prompts expose
   the ABI boundary, and backend native context windows feed recursive scheduling; runtime metadata now carries
   Transformer layer/head/window shape, KV import/export limits, and hot/cold KV
   precision into both text and JSON request surfaces; CLI command runtimes can
   pass model id, tokenizer, native window, embedding dimensions, explicit
-  architecture flags, and KV exchange flags; active Noiron memory can now be imported into runtime KV and accepted
+  architecture flags, device execution contracts, and KV exchange flags; active Noiron memory can now be imported into runtime KV and accepted
   exported runtime KV can be written back into reinforced memory; JSONL trace
   records now capture route, hierarchy, KV, recursion, hardware execution,
   hardware KV budgets, structured reflection diagnostics, drift, reward,
@@ -410,7 +410,10 @@ These are algorithmic references, not product dependencies:
   `--runtime-manifest-gate` with explicit layer/head/window architecture plus
   weights/tokenizer/config asset flags so this contract can fail before a
   production runtime is used; the same explicit architecture flags configure
-  the local Rust runtime prototype and command-runtime request ABI; runtime responses can now carry structured
+  the local Rust runtime prototype and command-runtime request ABI; command
+  runtimes now receive `{runtime_device_contract}` so external self-developed
+  backends can choose portable or accelerated adapters from the same hardware
+  plan; runtime responses can now carry structured
   forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
   KV influence, and runtime KV import/export counts)

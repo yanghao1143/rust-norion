@@ -1118,6 +1118,37 @@ impl HardwarePlan {
         self.tier.compute_headroom()
     }
 
+    pub fn runtime_contract_summary(&self) -> String {
+        let adapters = self
+            .execution
+            .adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join("+");
+        format!(
+            "device={} tier={} pressure={:.3} compute_headroom={:.2} primary={} fallback={} memory={} adapters={} parallel_chunks={} kv_prefetch={} kv_bits={}/{} disk_spill={} local_kv_tokens={} global_kv_tokens={} latency_budget_ms={}",
+            self.device.as_str(),
+            self.tier.as_str(),
+            self.pressure,
+            self.compute_headroom(),
+            self.execution.primary_lane.as_str(),
+            self.execution.fallback_lane.as_str(),
+            self.execution.memory_mode.as_str(),
+            adapters,
+            self.execution.max_parallel_chunks,
+            self.execution.kv_prefetch_blocks,
+            self.execution.hot_kv_precision_bits,
+            self.execution.cold_kv_precision_bits,
+            self.execution.allow_disk_spill,
+            self.local_kv_token_budget,
+            self.global_kv_token_budget,
+            self.latency_budget_ms
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        )
+    }
+
     pub fn summary(&self) -> String {
         format!(
             "device={} tier={} pressure={:.3} compute_headroom={:.2} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2}) execution=({})",

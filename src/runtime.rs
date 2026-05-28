@@ -572,6 +572,10 @@ impl CommandRuntime {
                         "{recursive_schedule}",
                         &request.recursive_schedule.summary(),
                     )
+                    .replace(
+                        "{runtime_device_contract}",
+                        &request.hardware_plan.runtime_contract_summary(),
+                    )
                     .replace("{runtime_metadata}", &request.runtime_metadata.summary())
                     .replace(
                         "{runtime_architecture}",
@@ -667,6 +671,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          transformer: template={} global_layers={} local_layers={} convolution_layers={}\n\
          recursive: {}\n\
          hardware: {}\n\
+         runtime_device_contract: {}\n\
          memory_hints:\n{}\n\
          infini_memory_hints:\n{}\n\
          experience_hints:\n{}\n\
@@ -689,6 +694,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         transformer_counts.convolution,
         request.recursive_schedule.summary(),
         request.hardware_plan.summary(),
+        request.hardware_plan.runtime_contract_summary(),
         bullet_list(&request.memory_hints),
         bullet_list(&request.infini_memory_hints),
         bullet_list(&request.experience_hints),
@@ -1995,6 +2001,8 @@ mod tests {
             .arg("{runtime_metadata}")
             .arg("--architecture")
             .arg("{runtime_architecture}")
+            .arg("--device-contract")
+            .arg("{runtime_device_contract}")
             .prompt_mode(CommandPromptMode::Args);
         let request = sample_request();
         let prompt = format_runtime_prompt(&request);
@@ -2014,11 +2022,18 @@ mod tests {
         assert!(prompt.contains("experience_hints"));
         assert!(prompt.contains("recursive:"));
         assert!(prompt.contains("hardware:"));
+        assert!(prompt.contains("runtime_device_contract:"));
+        assert!(prompt.contains("primary=cpu-vector"));
+        assert!(prompt.contains("fallback=cpu-portable"));
+        assert!(prompt.contains("kv_prefetch="));
         assert!(prompt.contains("transformer: template=none"));
         assert!(args[1].contains("Noiron runtime request"));
         assert_eq!(args[3], "64");
         assert!(args[5].contains("model_id=sample-transformer"));
         assert!(args[7].contains("layers=16"));
+        assert!(args[9].contains("primary=cpu-vector"));
+        assert!(args[9].contains("adapters="));
+        assert!(args[9].contains("portable-rust"));
     }
 
     #[test]
@@ -2160,6 +2175,7 @@ mod tests {
         assert!(args[3].contains("\"schema\":\"rust-norion-runtime-request-v1\""));
         assert!(args[3].contains("\"hardware\""));
         assert!(args[3].contains("\"runtime_architecture\""));
+        assert!(args[3].contains("\"primary_lane\":\"cpu-vector\""));
     }
 
     #[test]
