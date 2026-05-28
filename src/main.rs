@@ -649,16 +649,17 @@ fn print_device_matrix_and_exit() -> ! {
 
     println!("Noiron device matrix");
     println!(
-        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges"
     );
 
     for device in DeviceClass::explicit_profiles() {
         let descriptor = device.descriptor();
-        let plan = allocator.plan(
-            HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20),
-            TaskProfile::General,
-            4096,
-            base_hierarchy,
+        let snapshot = HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20);
+        let plan = allocator.plan(snapshot, TaskProfile::General, 4096, base_hierarchy);
+        let governance = allocator.memory_governance_plan(
+            snapshot,
+            MemoryRetentionPolicy::default(),
+            MemoryCompactionPolicy::default(),
         );
         let adapters = plan
             .execution
@@ -668,7 +669,7 @@ fn print_device_matrix_and_exit() -> ! {
             .collect::<Vec<_>>()
             .join("+");
         println!(
-            "{},{},{},{},{},{},{},{},{},{},{}/{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{:.3},{:.3},{},{:.3},{},{}",
             device.as_str(),
             plan.tier.as_str(),
             descriptor.scope,
@@ -681,7 +682,14 @@ fn print_device_matrix_and_exit() -> ! {
             plan.execution.kv_prefetch_blocks,
             plan.execution.hot_kv_precision_bits,
             plan.execution.cold_kv_precision_bits,
-            plan.execution.allow_disk_spill
+            plan.execution.allow_disk_spill,
+            governance.retention_policy.stale_after,
+            governance.retention_policy.decay_rate,
+            governance.retention_policy.remove_below_strength,
+            governance.retention_policy.remove_after_failures,
+            governance.compaction_policy.similarity_threshold,
+            governance.compaction_policy.max_candidates,
+            governance.compaction_policy.max_merges
         );
     }
 
@@ -692,12 +700,12 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
     println!("Noiron device compatibility gate");
     println!("{}", report.summary_line());
     println!(
-        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,passed"
+        "profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,parallel_chunks,kv_prefetch,kv_bits,disk_spill,local_kv_tokens,global_kv_tokens,latency_budget_ms,retention_stale_after,retention_decay_rate,retention_remove_below,retention_remove_after_failures,compaction_threshold,compaction_max_candidates,compaction_max_merges,passed"
     );
 
     for row in &report.rows {
         println!(
-            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{}/{},{},{},{},{},{},{:.3},{:.3},{},{:.3},{},{},{}",
             row.device.as_str(),
             row.tier.as_str(),
             row.scope,
@@ -716,6 +724,13 @@ fn print_device_gate_report(report: &DevicePlanGateReport) {
             row.latency_budget_ms
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "none".to_owned()),
+            row.memory_governance.retention_policy.stale_after,
+            row.memory_governance.retention_policy.decay_rate,
+            row.memory_governance.retention_policy.remove_below_strength,
+            row.memory_governance.retention_policy.remove_after_failures,
+            row.memory_governance.compaction_policy.similarity_threshold,
+            row.memory_governance.compaction_policy.max_candidates,
+            row.memory_governance.compaction_policy.max_merges,
             row.passed()
         );
 

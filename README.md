@@ -335,14 +335,14 @@ runtime adapter hint、KV 精度、预取数量、磁盘溢出策略和递归并
 
 Run the device compatibility gate. It fails with exit code `2` if any supported
 device profile loses its alias coverage, execution plan, KV budget, adapter
-hints, or portable fallback path:
+hints, portable fallback path, or bounded memory governance policy:
 
 ```powershell
 cargo run -- --device-gate
 ```
 
 运行全设备兼容门禁。如果任一设备 profile 缺失别名覆盖、执行计划、KV budget、
-adapter hint 或可移植降级路径，命令会以退出码 `2` 失败：
+adapter hint、可移植降级路径或有界 memory governance 策略，命令会以退出码 `2` 失败：
 
 ```powershell
 cargo run -- --device-gate
@@ -398,8 +398,11 @@ constrained, and overloaded devices decay memory sooner, scan fewer compaction
 candidates, and merge only near-identical entries; accelerated and distributed
 profiles keep longer-lived memories and can scan wider KV-Fusion candidate
 sets. CLI retention/compaction flags still override these device defaults.
+Both `--list-devices` and `--device-gate` print the derived retention and
+compaction defaults for each explicit profile.
 
 硬件分配器也会生成 `MemoryGovernancePlan`。tiny、constrained 和高压力设备会更快衰减记忆、减少 compaction 候选扫描，并只合并高度相似的条目；accelerated 和 distributed profile 可以保留更长生命周期的记忆，并扩大 KV-Fusion 候选扫描范围。CLI 的 retention / compaction 参数仍然优先覆盖这些设备默认值。
+`--list-devices` 和 `--device-gate` 都会打印每个显式 profile 推导出的 retention / compaction 默认策略。
 
 Probe override environment variables include `NOIRON_DEVICE_PROFILE`,
 `NOIRON_CPU_LOAD`, `NOIRON_GPU_LOAD`, `NOIRON_RAM_LOAD`, `NOIRON_DISK_LOAD`,

@@ -1178,13 +1178,15 @@ pub struct DevicePlanGateRow {
     pub local_kv_token_budget: usize,
     pub global_kv_token_budget: usize,
     pub latency_budget_ms: Option<u64>,
+    pub memory_governance: MemoryGovernancePlan,
     pub failures: Vec<String>,
 }
 
 impl DevicePlanGateRow {
-    pub fn from_plan(plan: &HardwarePlan) -> Self {
+    pub fn from_plan(plan: &HardwarePlan, governance: MemoryGovernancePlan) -> Self {
         let descriptor = plan.device.descriptor();
         let mut failures = validate_device_plan(plan);
+        failures.extend(validate_memory_governance_plan(&governance));
         failures.extend(validate_device_descriptor(descriptor));
 
         Self {
@@ -1204,6 +1206,7 @@ impl DevicePlanGateRow {
             local_kv_token_budget: plan.local_kv_token_budget,
             global_kv_token_budget: plan.global_kv_token_budget,
             latency_budget_ms: plan.latency_budget_ms,
+            memory_governance: governance,
             failures,
         }
     }
@@ -1246,7 +1249,12 @@ impl DevicePlanGateReport {
                     4096,
                     base_hierarchy,
                 );
-                DevicePlanGateRow::from_plan(&plan)
+                let governance = allocator.memory_governance_plan(
+                    HardwareSnapshot::new(*device, 0.35, 0.30, 0.45, 0.20),
+                    MemoryRetentionPolicy::default(),
+                    MemoryCompactionPolicy::default(),
+                );
+                DevicePlanGateRow::from_plan(&plan, governance)
             })
             .collect();
 
@@ -2066,6 +2074,56 @@ fn validate_device_plan(plan: &HardwarePlan) -> Vec<String> {
     failures
 }
 
+fn validate_memory_governance_plan(plan: &MemoryGovernancePlan) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if plan.retention_policy.stale_after == 0 {
+        failures.push("retention stale_after must be at least 1".to_owned());
+    }
+    if !(0.0..=0.95).contains(&plan.retention_policy.decay_rate) {
+        failures.push(format!(
+            "retention decay_rate {:.3} outside 0.0..=0.95",
+            plan.retention_policy.decay_rate
+        ));
+    }
+    if !(0.0..=3.0).contains(&plan.retention_policy.remove_below_strength) {
+        failures.push(format!(
+            "retention remove_below_strength {:.3} outside 0.0..=3.0",
+            plan.retention_policy.remove_below_strength
+        ));
+    }
+    if plan.retention_policy.remove_after_failures == 0 {
+        failures.push("retention remove_after_failures must be at least 1".to_owned());
+    }
+    if !(0.10..=0.999).contains(&plan.compaction_policy.similarity_threshold) {
+        failures.push(format!(
+            "compaction similarity_threshold {:.3} outside 0.10..=0.999",
+            plan.compaction_policy.similarity_threshold
+        ));
+    }
+    if plan.compaction_policy.max_candidates < 2 {
+        failures.push(format!(
+            "compaction max_candidates {} below minimum 2",
+            plan.compaction_policy.max_candidates
+        ));
+    }
+    if !plan.notes.iter().any(|note| note.starts_with("device:")) {
+        failures.push("memory governance notes missing device marker".to_owned());
+    }
+    if !plan.notes.iter().any(|note| note.starts_with("tier:")) {
+        failures.push("memory governance notes missing tier marker".to_owned());
+    }
+    if !plan
+        .notes
+        .iter()
+        .any(|note| note.starts_with("memory_policy:"))
+    {
+        failures.push("memory governance notes missing memory_policy marker".to_owned());
+    }
+
+    failures
+}
+
 fn validate_device_descriptor(descriptor: DeviceProfileDescriptor) -> Vec<String> {
     let mut failures = Vec::new();
 
@@ -2559,6 +2617,21 @@ mod tests {
         assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
         assert!(report.alias_count() >= 175);
         assert!(report.summary_line().contains("passed=true"));
+        let tiny = report
+            .rows
+            .iter()
+            .find(|row| row.device == DeviceClass::Microcontroller)
+            .unwrap();
+        let server = report
+            .rows
+            .iter()
+            .find(|row| row.device == DeviceClass::Server)
+            .unwrap();
+
+        assert!(tiny.memory_governance.retention_policy.stale_after < 64);
+        assert!(tiny.memory_governance.compaction_policy.max_candidates < 512);
+        assert!(server.memory_governance.retention_policy.stale_after > 64);
+        assert!(server.memory_governance.compaction_policy.max_candidates > 512);
     }
 
     #[test]

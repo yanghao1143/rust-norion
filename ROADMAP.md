@@ -186,9 +186,9 @@ The north star is now explicitly scoped around five core requirements:
 12. Device compatibility gate / 全设备兼容门禁
     The CLI should provide a `--device-gate` check that validates every explicit
     hardware profile keeps nonzero KV budgets, bounded prefetch, valid precision
-    policy, adapter hints, alias roundtrips, and a CPU/portable Rust escape
-    hatch. This makes device adaptation a regression gate rather than a
-    documentation claim.
+    policy, adapter hints, bounded memory governance policy, alias roundtrips,
+    and a CPU/portable Rust escape hatch. This makes device adaptation a
+    regression gate rather than a documentation claim.
 
 ## Target Module Fusion / 目标模块融合
 
@@ -265,7 +265,7 @@ modules, not external product dependencies:
 - Device compatibility gate:
   the repository should fail fast when any supported device profile loses valid
   alias coverage, execution lanes, KV budgets, adapter hints, disk-spill policy,
-  or portable fallback coverage.
+  memory governance policy, or portable fallback coverage.
 
 ## Research-Inspired Algorithms / 公开算法启发
 
@@ -422,8 +422,8 @@ These are algorithmic references, not product dependencies:
   produces bounded retention/compaction policy defaults, and explicit CLI flags
   remain authoritative overrides.
 - The device compatibility gate passes across all explicit profiles and fails
-  if a profile loses valid alias mappings, budgets, adapter hints, or a portable
-  fallback.
+  if a profile loses valid alias mappings, budgets, adapter hints, memory
+  governance bounds, or a portable fallback.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
