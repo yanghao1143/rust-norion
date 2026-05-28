@@ -403,8 +403,10 @@ These are algorithmic references, not product dependencies:
   metadata; `RuntimeManifest` now captures self-developed model metadata,
   Transformer shape, local asset paths, KV import/export limits, quantization
   policy, supported devices, and adapter hints so future runtime versions can
-  be validated before production kernels are loaded; runtime responses can now
-  carry structured forward diagnostics, and trace JSONL records model id,
+  be validated before production kernels are loaded; production manifest
+  validation now requires weights and tokenizer assets to exist as local files
+  while keeping prototype/demo validation non-blocking; runtime responses can
+  now carry structured forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
   KV influence, and runtime KV import/export counts)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
@@ -448,6 +450,8 @@ These are algorithmic references, not product dependencies:
   deterministic Transformer layer execution, imported-KV influence, generation,
   KV exchange, manifest-based runtime configuration, and control-plane memory
   integration end to end before production Transformer kernels are connected.
+- Production runtime manifests have a hard local-file gate for required weights
+  and tokenizer assets before a self-developed model runtime is accepted.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained

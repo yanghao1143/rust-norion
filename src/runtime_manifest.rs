@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::hardware::{DeviceClass, DeviceExecutionPlan, RuntimeAdapterHint};
 use crate::kv_quant::QuantizationBits;
@@ -195,6 +195,26 @@ impl RuntimeManifest {
 
         RuntimeManifestValidation { errors, warnings }
     }
+
+    pub fn validate_for_production(&self) -> RuntimeManifestValidation {
+        let mut validation = self.validate();
+
+        validate_required_asset_file(
+            "weights",
+            self.assets.weights.as_deref(),
+            &mut validation.errors,
+        );
+        validate_required_asset_file(
+            "tokenizer",
+            self.assets.tokenizer.as_deref(),
+            &mut validation.errors,
+        );
+        if let Some(config_path) = self.assets.config.as_deref() {
+            validate_optional_asset_file("config", config_path, &mut validation.errors);
+        }
+
+        validation
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -344,6 +364,39 @@ impl RuntimeManifestValidation {
     }
 }
 
+fn validate_required_asset_file(label: &str, path: Option<&Path>, errors: &mut Vec<String>) {
+    let Some(path) = path else {
+        errors.push(format!(
+            "{label} asset path is required for production runtimes"
+        ));
+        return;
+    };
+
+    validate_optional_asset_file(label, path, errors);
+}
+
+fn validate_optional_asset_file(label: &str, path: &Path, errors: &mut Vec<String>) {
+    if path.as_os_str().is_empty() {
+        errors.push(format!("{label} asset path must not be empty"));
+        return;
+    }
+    if !path.exists() {
+        errors.push(format!(
+            "{} asset path does not exist: {}",
+            label,
+            path.display()
+        ));
+        return;
+    }
+    if !path.is_file() {
+        errors.push(format!(
+            "{} asset path is not a file: {}",
+            label,
+            path.display()
+        ));
+    }
+}
+
 fn choose_head_count(hidden_size: usize) -> usize {
     [16, 12, 8, 6, 4, 2]
         .into_iter()
@@ -379,6 +432,8 @@ fn default_adapter_hints() -> Vec<RuntimeAdapterHint> {
 mod tests {
     use super::*;
     use crate::hardware::{ComputeLane, DeviceMemoryMode};
+    use std::fs::{self, File};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn self_developed_manifest_validates_and_covers_all_devices() {
@@ -527,6 +582,77 @@ mod tests {
     }
 
     #[test]
+    fn production_manifest_requires_existing_model_assets() {
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128);
+
+        let validation = manifest.validate_for_production();
+
+        assert!(!validation.passed());
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("weights asset path is required"))
+        );
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("tokenizer asset path is required"))
+        );
+    }
+
+    #[test]
+    fn production_manifest_accepts_existing_asset_files() {
+        let asset_dir = temp_asset_dir("runtime-manifest-assets");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        let config = asset_dir.join("config.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        File::create(&config).unwrap();
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+            .with_assets(
+                RuntimeAssetPaths::new()
+                    .with_weights(weights)
+                    .with_tokenizer(tokenizer)
+                    .with_config(config),
+            );
+
+        let validation = manifest.validate_for_production();
+
+        assert!(validation.passed(), "{validation:?}");
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_manifest_rejects_directories_as_assets() {
+        let asset_dir = temp_asset_dir("runtime-manifest-directory-assets");
+        let weights = asset_dir.join("weights-dir");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        fs::create_dir_all(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+            .with_assets(
+                RuntimeAssetPaths::new()
+                    .with_weights(&weights)
+                    .with_tokenizer(&tokenizer),
+            );
+
+        let validation = manifest.validate_for_production();
+
+        assert!(!validation.passed());
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| error.contains("weights asset path is not a file"))
+        );
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
     fn invalid_manifest_reports_blocking_errors() {
         let manifest = RuntimeManifest {
             metadata: RuntimeMetadata::new("", "", 0, 0),
@@ -565,5 +691,13 @@ mod tests {
                 .iter()
                 .any(|error| error.contains("supported_devices"))
         );
+    }
+
+    fn temp_asset_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{name}-{unique}"))
     }
 }
