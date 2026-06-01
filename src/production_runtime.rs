@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::agent_team::AgentTeamPlan;
 use crate::hardware::{
@@ -290,6 +290,58 @@ impl ProductionForwardKernel for ReferenceProductionForwardKernel {
         Ok(ProductionKernelOutput::new(answer)
             .with_tokens(tokens)
             .with_trace(trace)
+            .with_diagnostics(diagnostics)
+            .with_exported_kv_blocks(exported_kv_blocks))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelRuntimeForwardKernel<R> {
+    runtime: Arc<Mutex<R>>,
+}
+
+impl<R> ModelRuntimeForwardKernel<R> {
+    pub fn new(runtime: R) -> Self {
+        Self {
+            runtime: Arc::new(Mutex::new(runtime)),
+        }
+    }
+
+    pub fn with_shared_runtime(runtime: Arc<Mutex<R>>) -> Self {
+        Self { runtime }
+    }
+
+    pub fn runtime(&self) -> Arc<Mutex<R>> {
+        Arc::clone(&self.runtime)
+    }
+}
+
+impl<R> ProductionForwardKernel for ModelRuntimeForwardKernel<R>
+where
+    R: ModelRuntime + std::fmt::Debug + Send + 'static,
+{
+    fn generate(
+        &self,
+        context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| RuntimeError::new("model runtime forward kernel lock is poisoned"))?;
+        let imported = runtime.import_kv(context.imported_kv_blocks)?;
+        let mut request = context.request.clone();
+        request.runtime_metadata = context.manifest.runtime_metadata();
+        request.runtime_architecture = context.manifest.architecture;
+
+        let response = runtime.generate(request)?;
+        let exported_kv_blocks = runtime.export_kv()?;
+        let mut diagnostics = response.diagnostics;
+        diagnostics.imported_kv_blocks = imported;
+        diagnostics.exported_kv_blocks = exported_kv_blocks.len();
+
+        Ok(ProductionKernelOutput::new(response.answer)
+            .with_tokens(response.tokens)
+            .with_trace(response.trace)
             .with_diagnostics(diagnostics)
             .with_exported_kv_blocks(exported_kv_blocks))
     }
@@ -1308,6 +1360,7 @@ mod tests {
     use super::*;
     use crate::hardware::{DeviceClass, HardwareAllocator, HardwareSnapshot, RuntimeAdapterHint};
     use crate::hierarchy::HierarchyWeights;
+    use crate::local_runtime::LocalTransformerRuntime;
     use crate::runtime::ModelRuntime;
     use crate::runtime_manifest::{
         RuntimeAssetPaths, RuntimeKvPolicy, TransformerRuntimeArchitecture,
@@ -1602,6 +1655,66 @@ mod tests {
         assert!(report.forward_energy.unwrap() > 0.0);
         assert!(report.kv_influence.unwrap() >= 0.0);
         assert!(report.summary_line().contains("passed=true"));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn model_runtime_forward_kernel_wraps_local_runtime_for_production_boundary() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-local-kernel");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let local_runtime = LocalTransformerRuntime::with_manifest(manifest.clone());
+        let mut runtime =
+            ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+                .unwrap()
+                .with_kernel(ModelRuntimeForwardKernel::new(local_runtime));
+        runtime
+            .import_kv(&[RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2])])
+            .unwrap();
+
+        let response = runtime.generate(sample_request()).unwrap();
+        let exported = runtime.export_kv().unwrap();
+
+        assert!(response.answer.contains("Local Transformer runtime result"));
+        assert_eq!(
+            response.diagnostics.model_id.as_deref(),
+            Some("noiron-production-transformer")
+        );
+        assert_eq!(
+            response.diagnostics.selected_adapter.as_deref(),
+            Some("portable-rust")
+        );
+        assert_eq!(response.diagnostics.layer_count, 6);
+        assert_eq!(response.diagnostics.hidden_size, 64);
+        assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+        assert!(!response.tokens.is_empty());
+        assert!(!response.trace.is_empty());
+        assert!(!exported.is_empty());
+        assert!(exported.iter().all(|block| block.layer < 6));
+        assert!(exported.iter().all(|block| block.head < 2));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn local_model_runtime_kernel_passes_conformance_gate() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-local-kernel-conformance");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let local_runtime = LocalTransformerRuntime::with_manifest(manifest.clone());
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+            .unwrap()
+            .with_kernel(ModelRuntimeForwardKernel::new(local_runtime));
+
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(report.passed, "{report:?}");
+        assert_eq!(report.model_id, "noiron-production-transformer");
+        assert_eq!(report.selected_adapter, "portable-rust");
+        assert!(report.imported_kv_blocks > 0);
+        assert!(report.exported_kv_blocks > 0);
+        assert!(report.forward_energy.unwrap() > 0.0);
 
         fs::remove_dir_all(asset_dir).unwrap();
     }

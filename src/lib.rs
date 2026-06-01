@@ -74,9 +74,9 @@ pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };
 pub use production_runtime::{
-    ProductionForwardKernel, ProductionKernelConformanceGate, ProductionKernelConformanceReport,
-    ProductionKernelContext, ProductionKernelOutput, ProductionTransformerRuntime,
-    ReferenceProductionForwardKernel, RuntimeAssetSummary,
+    ModelRuntimeForwardKernel, ProductionForwardKernel, ProductionKernelConformanceGate,
+    ProductionKernelConformanceReport, ProductionKernelContext, ProductionKernelOutput,
+    ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,

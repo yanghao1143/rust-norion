@@ -519,6 +519,8 @@ fn export_forward_kv(forward: &LocalForwardState, request: &RuntimeRequest) -> V
         return Vec::new();
     }
 
+    let layer_count = request.runtime_architecture.layer_count.max(1);
+    let kv_heads = request.runtime_architecture.kv_heads.max(1);
     let block_count = forward
         .layer_summaries
         .len()
@@ -538,11 +540,14 @@ fn export_forward_kv(forward: &LocalForwardState, request: &RuntimeRequest) -> V
         .skip(midpoint)
         .collect::<Vec<_>>();
     let value = if value.is_empty() { key.clone() } else { value };
+    let paired_len = key.len().min(value.len()).max(1);
+    let key = key.into_iter().take(paired_len).collect::<Vec<_>>();
+    let value = value.into_iter().take(paired_len).collect::<Vec<_>>();
 
     (0..block_count)
         .map(|index| {
             let summary = forward.layer_summaries.get(index);
-            let layer = summary.map(|summary| summary.layer_index).unwrap_or(index);
+            let layer = summary.map(|summary| summary.layer_index).unwrap_or(index) % layer_count;
             let head = summary
                 .map(|summary| {
                     let attention_offset = match summary.attention {
@@ -550,9 +555,9 @@ fn export_forward_kv(forward: &LocalForwardState, request: &RuntimeRequest) -> V
                         AttentionKind::LocalWindow => 2,
                         AttentionKind::ConvolutionalFusion => 4,
                     };
-                    (attention_offset + summary.window_size + index) % 8
+                    (attention_offset + summary.window_size + index) % kv_heads
                 })
-                .unwrap_or(index % 8);
+                .unwrap_or(index % kv_heads);
             let compute_scale = summary
                 .map(|summary| summary.compute_fraction + summary.activation)
                 .unwrap_or(1.0)

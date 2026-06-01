@@ -474,10 +474,13 @@ These are algorithmic references, not product dependencies:
   pretending to be a trained production model; the CLI can now
   select that boundary with `--production-runtime` for normal inference and
   benchmark runs, or attach the reference kernel with
-  `--production-reference-kernel`; `--production-kernel-conformance-gate`
-  now runs a short manifest-backed forward pass with deterministic KV import
-  and fails unless the attached kernel returns token uncertainty, reasoning
-  trace, forward energy, KV influence, and exported KV when enabled)
+  `--production-reference-kernel`; `ModelRuntimeForwardKernel` can now wrap a
+  Rust `ModelRuntime`, and `--production-local-kernel` uses it to run the
+  local Transformer runtime through the production manifest/device/KV boundary;
+  `--production-kernel-conformance-gate` now runs a short manifest-backed
+  forward pass with deterministic KV import and fails unless the attached
+  kernel returns token uncertainty, reasoning trace, forward energy, KV
+  influence, and exported KV when enabled)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -538,6 +541,10 @@ These are algorithmic references, not product dependencies:
   `ProductionForwardKernel` receives the manifest, device contract, asset
   summary, imported KV blocks, and runtime request, and returns the same
   response surfaces consumed by `RuntimeBackend`.
+- Rust-native model runtimes can be lifted into that production attachment
+  point with `ModelRuntimeForwardKernel`, which forwards manifest metadata,
+  architecture, imported KV, token uncertainty, trace, diagnostics, and
+  exported KV through the same ABI used by real kernels.
 - Real production kernels must pass a dedicated conformance gate before being
   treated as integrated: `--production-kernel-conformance-gate` requires a
   connected kernel, non-empty answer, token uncertainty, reasoning trace,
@@ -563,6 +570,10 @@ These are algorithmic references, not product dependencies:
 - The CLI can attach the deterministic reference production kernel through
   `--production-reference-kernel` for local/CI validation of the same production
   ABI without requiring external weights or cloud services.
+- The CLI can attach the local Rust-native Transformer runtime through
+  `--production-local-kernel`, so the self-developed runtime prototype exercises
+  the same production boundary and conformance gate before a trained kernel is
+  available.
 - The CLI can run `--production-kernel-conformance-gate` so a reference or real
   self-developed kernel must prove the full response/KV diagnostic surface
   before benchmark or integration claims rely on it.

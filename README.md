@@ -598,6 +598,10 @@ implementing `ProductionForwardKernel` and calling
 checks, `--production-reference-kernel` attaches the built-in deterministic
 Rust reference kernel behind the same manifest/device/KV boundary. That path is
 for exercising the production ABI, not for claiming trained-model quality.
+`--production-local-kernel` wraps the Rust-native `LocalTransformerRuntime`
+with `ModelRuntimeForwardKernel`, so the same production boundary can exercise
+the self-developed runtime prototype's tokenizer, embedding, deterministic
+layer plan, KV import/export, trace, and diagnostics path.
 
 通过 manifest-backed 生产 runtime 边界运行：
 
@@ -607,6 +611,7 @@ cargo run -- --production-runtime --runtime-model-id noiron-dev-transformer --ru
 
 这条路径会使用真实生产门禁和 `RuntimeBackend` 集成；默认情况下生成阶段会明确返回 kernel-not-connected runtime error。生产代码可以实现 `ProductionForwardKernel`，并通过 `ProductionTransformerRuntime::with_kernel` 把真实自研 Transformer forward kernel 接到边界后面。
 如果要做本地 CI 或集成验证，可以使用 `--production-reference-kernel` 把内置确定性 Rust reference kernel 接到同一条 manifest / 设备 / KV 边界后面。这条路径用于验证生产 ABI，不代表已经具备训练后大模型的真实生成质量。
+`--production-local-kernel` 会通过 `ModelRuntimeForwardKernel` 把 Rust-native `LocalTransformerRuntime` 包装成生产 kernel，让同一条生产边界直接跑自研 runtime prototype 的 tokenizer、embedding、确定性分层执行、KV 导入/导出、trace 和 diagnostics 路径。
 
 Run the production boundary with the reference kernel:
 
@@ -614,10 +619,22 @@ Run the production boundary with the reference kernel:
 cargo run -- --production-reference-kernel --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu "Validate the Rust Noiron production reference kernel"
 ```
 
+Run the production boundary with the local Rust-native runtime kernel adapter:
+
+```powershell
+cargo run -- --production-local-kernel --production-kernel-conformance-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
+```
+
 通过 reference kernel 运行生产边界：
 
 ```powershell
 cargo run -- --production-reference-kernel --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu "Validate the Rust Noiron production reference kernel"
+```
+
+通过 local Rust-native runtime kernel adapter 运行生产边界：
+
+```powershell
+cargo run -- --production-local-kernel --production-kernel-conformance-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
 ```
 
 By default, the demo writes local memory to `noiron-memory.ndkv`, structured
@@ -912,8 +929,9 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
   and writes, with a portable Rust heuristic fallback
 - connect a real self-developed forward kernel behind the
   `ProductionTransformerRuntime` manifest/device boundary
-- keep the deterministic reference production kernel as an ABI/CI harness until
-  the trained production kernel is attached
+- keep the deterministic reference production kernel and the local
+  `ModelRuntimeForwardKernel<LocalTransformerRuntime>` adapter as ABI/CI
+  harnesses until the trained production kernel is attached
 - expand mixed-precision 4/8-bit KV quantization benchmarks and policies
 - add Infini-style global/local KV separation and sparse context filtering
 - add recursive scheduling for inputs beyond the native model window
@@ -924,7 +942,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 
 - 记忆检索和写入优先使用自研 runtime 的模型侧 embedding，并保留可移植 Rust 启发式 fallback
 - 在 `ProductionTransformerRuntime` 的 manifest / 设备边界后面接入真实自研 forward kernel
-- 在训练好的生产 kernel 接入前，保留确定性 reference production kernel 作为 ABI / CI 验证 harness
+- 在训练好的生产 kernel 接入前，保留确定性 reference production kernel 和 local `ModelRuntimeForwardKernel<LocalTransformerRuntime>` adapter 作为 ABI / CI 验证 harness
 - 扩展 4/8-bit 混合精度 KV 量化 benchmark 和策略
 - 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
 - 增加超过模型原生窗口输入的递归调度
