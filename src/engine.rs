@@ -369,13 +369,16 @@ impl NoironEngine {
         for item in plan.items {
             let metrics = replay_metrics(&item);
             self.router.observe_with_profile(item.profile, metrics);
+            report.router_updates += 1;
             self.hierarchy.observe(item.profile, metrics);
+            report.hierarchy_updates += 1;
 
             match item.action {
                 RewardAction::Reinforce => {
                     for memory_id in &item.memory_ids {
                         self.cache.reinforce(*memory_id, item.reward);
                         report.touched_memories += 1;
+                        report.memory_reinforcements += 1;
                     }
                     report.reinforced += 1;
                 }
@@ -384,6 +387,7 @@ impl NoironEngine {
                     for memory_id in &item.memory_ids {
                         self.cache.penalize(*memory_id, penalty);
                         report.touched_memories += 1;
+                        report.memory_penalties += 1;
                     }
                     report.penalized += 1;
                 }
@@ -1356,7 +1360,10 @@ mod tests {
         assert!(first.auto_replay_report.is_none());
         let report = second.auto_replay_report.as_ref().unwrap();
         assert!(report.applied >= 1);
+        assert_eq!(report.router_updates, report.applied);
+        assert_eq!(report.hierarchy_updates, report.applied);
         assert!(report.reinforced >= 1 || report.penalized >= 1);
+        assert!(report.memory_reinforcements + report.memory_penalties >= 1);
     }
 
     #[test]
@@ -2195,7 +2202,10 @@ mod tests {
         let report = engine.replay_experience(4);
 
         assert_eq!(report.applied, 1);
+        assert_eq!(report.router_updates, 1);
+        assert_eq!(report.hierarchy_updates, 1);
         assert_eq!(report.reinforced, 1);
+        assert_eq!(report.memory_reinforcements, 1);
         assert!(engine.cache.entries()[0].hits > before_hits);
         assert!(engine.router.observations() > 0);
     }
@@ -2241,6 +2251,7 @@ mod tests {
         let report = engine.replay_experience(4);
 
         assert_eq!(report.touched_memories, 1);
+        assert_eq!(report.memory_reinforcements, 1);
         assert!(engine.cache.entries()[0].hits > before_hits);
     }
 

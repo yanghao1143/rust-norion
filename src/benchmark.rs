@@ -74,6 +74,10 @@ pub struct BenchmarkCaseResult {
     pub recursive_waves: usize,
     pub recursive_runtime_calls: usize,
     pub auto_replay_applied: usize,
+    pub auto_replay_router_updates: usize,
+    pub auto_replay_hierarchy_updates: usize,
+    pub auto_replay_memory_reinforcements: usize,
+    pub auto_replay_memory_penalties: usize,
     pub auto_replay_recursive_runtime_items: usize,
     pub auto_replay_recursive_runtime_calls: usize,
     pub auto_replay_avg_recursive_call_pressure: f32,
@@ -101,6 +105,9 @@ pub struct BenchmarkGate {
     pub max_case_recursive_chunks: Option<usize>,
     pub min_recursive_cases: Option<usize>,
     pub min_recursive_runtime_calls: Option<usize>,
+    pub min_auto_replay_router_updates: Option<usize>,
+    pub min_auto_replay_hierarchy_updates: Option<usize>,
+    pub min_auto_replay_memory_updates: Option<usize>,
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
@@ -121,6 +128,9 @@ impl Default for BenchmarkGate {
             max_case_recursive_chunks: None,
             min_recursive_cases: None,
             min_recursive_runtime_calls: None,
+            min_auto_replay_router_updates: None,
+            min_auto_replay_hierarchy_updates: None,
+            min_auto_replay_memory_updates: None,
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
@@ -511,6 +521,18 @@ impl BenchmarkSummary {
             recursive_waves: outcome.recursive_schedule.execution_wave_count(),
             recursive_runtime_calls: outcome.recursive_runtime_calls,
             auto_replay_applied: auto_replay.map(|report| report.applied).unwrap_or(0),
+            auto_replay_router_updates: auto_replay
+                .map(|report| report.router_updates)
+                .unwrap_or(0),
+            auto_replay_hierarchy_updates: auto_replay
+                .map(|report| report.hierarchy_updates)
+                .unwrap_or(0),
+            auto_replay_memory_reinforcements: auto_replay
+                .map(|report| report.memory_reinforcements)
+                .unwrap_or(0),
+            auto_replay_memory_penalties: auto_replay
+                .map(|report| report.memory_penalties)
+                .unwrap_or(0),
             auto_replay_recursive_runtime_items: auto_replay
                 .map(|report| report.recursive_runtime_items)
                 .unwrap_or(0),
@@ -698,6 +720,38 @@ impl BenchmarkSummary {
             .sum()
     }
 
+    pub fn total_auto_replay_router_updates(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_router_updates)
+            .sum()
+    }
+
+    pub fn total_auto_replay_hierarchy_updates(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_hierarchy_updates)
+            .sum()
+    }
+
+    pub fn total_auto_replay_memory_reinforcements(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_memory_reinforcements)
+            .sum()
+    }
+
+    pub fn total_auto_replay_memory_penalties(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_memory_penalties)
+            .sum()
+    }
+
+    pub fn total_auto_replay_memory_updates(&self) -> usize {
+        self.total_auto_replay_memory_reinforcements() + self.total_auto_replay_memory_penalties()
+    }
+
     pub fn total_auto_replay_recursive_items(&self) -> usize {
         self.results
             .iter()
@@ -778,6 +832,36 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "recursive_runtime_calls {} below minimum {}",
                     recursive_runtime_calls, min_recursive_runtime_calls
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_router_updates) = gate.min_auto_replay_router_updates {
+            let auto_replay_router_updates = self.total_auto_replay_router_updates();
+            if auto_replay_router_updates < min_auto_replay_router_updates {
+                failures.push(format!(
+                    "auto_replay_router_updates {} below minimum {}",
+                    auto_replay_router_updates, min_auto_replay_router_updates
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_hierarchy_updates) = gate.min_auto_replay_hierarchy_updates {
+            let auto_replay_hierarchy_updates = self.total_auto_replay_hierarchy_updates();
+            if auto_replay_hierarchy_updates < min_auto_replay_hierarchy_updates {
+                failures.push(format!(
+                    "auto_replay_hierarchy_updates {} below minimum {}",
+                    auto_replay_hierarchy_updates, min_auto_replay_hierarchy_updates
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_memory_updates) = gate.min_auto_replay_memory_updates {
+            let auto_replay_memory_updates = self.total_auto_replay_memory_updates();
+            if auto_replay_memory_updates < min_auto_replay_memory_updates {
+                failures.push(format!(
+                    "auto_replay_memory_updates {} below minimum {}",
+                    auto_replay_memory_updates, min_auto_replay_memory_updates
                 ));
             }
         }
@@ -886,7 +970,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -896,6 +980,11 @@ impl BenchmarkSummary {
             self.max_recursive_waves(),
             self.total_recursive_runtime_calls(),
             self.total_auto_replay_applied(),
+            self.total_auto_replay_router_updates(),
+            self.total_auto_replay_hierarchy_updates(),
+            self.total_auto_replay_memory_updates(),
+            self.total_auto_replay_memory_reinforcements(),
+            self.total_auto_replay_memory_penalties(),
             self.total_auto_replay_recursive_items(),
             self.total_auto_replay_recursive_runtime_calls(),
             self.max_auto_replay_recursive_call_pressure(),
@@ -1082,6 +1171,11 @@ mod tests {
                 .summary_line()
                 .contains("auto_replay_recursive_items=")
         );
+        assert!(
+            summary
+                .summary_line()
+                .contains("auto_replay_router_updates=")
+        );
     }
 
     #[test]
@@ -1123,6 +1217,9 @@ mod tests {
             max_case_recursive_chunks: Some(0),
             min_recursive_cases: None,
             min_recursive_runtime_calls: None,
+            min_auto_replay_router_updates: None,
+            min_auto_replay_hierarchy_updates: None,
+            min_auto_replay_memory_updates: None,
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
@@ -1205,6 +1302,10 @@ mod tests {
                 recursive_waves: 2,
                 recursive_runtime_calls: 7,
                 auto_replay_applied: 1,
+                auto_replay_router_updates: 1,
+                auto_replay_hierarchy_updates: 1,
+                auto_replay_memory_reinforcements: 1,
+                auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 1,
                 auto_replay_recursive_runtime_calls: 96,
                 auto_replay_avg_recursive_call_pressure: 0.35,
@@ -1260,6 +1361,10 @@ mod tests {
                 recursive_waves: 2,
                 recursive_runtime_calls: 7,
                 auto_replay_applied: 1,
+                auto_replay_router_updates: 1,
+                auto_replay_hierarchy_updates: 1,
+                auto_replay_memory_reinforcements: 1,
+                auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 1,
                 auto_replay_recursive_runtime_calls: 7,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -1300,6 +1405,92 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_auto_replay_control_plane_coverage() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "auto_replay_control_plane".to_owned(),
+                profile: TaskProfile::Coding,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 1,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: false,
+                runtime_kv_exported: 0,
+                runtime_kv_stored: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_auto_replay_router_updates = Some(1);
+        gate.min_auto_replay_hierarchy_updates = Some(1);
+        gate.min_auto_replay_memory_updates = Some(1);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_router_updates"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_hierarchy_updates"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_memory_updates"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                auto_replay_router_updates: 1,
+                auto_replay_hierarchy_updates: 1,
+                auto_replay_memory_reinforcements: 1,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.total_auto_replay_router_updates(), 1);
+        assert_eq!(passing.total_auto_replay_hierarchy_updates(), 1);
+        assert_eq!(passing.total_auto_replay_memory_updates(), 1);
+        assert!(
+            passing
+                .summary_line()
+                .contains("auto_replay_memory_updates=1")
+        );
+    }
+
+    #[test]
     fn gate_reports_missing_runtime_forward_and_kv_export() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
@@ -1314,6 +1505,10 @@ mod tests {
                 recursive_waves: 1,
                 recursive_runtime_calls: 1,
                 auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -1384,6 +1579,10 @@ mod tests {
                 recursive_waves: 1,
                 recursive_runtime_calls: 1,
                 auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -1454,6 +1653,10 @@ mod tests {
                 recursive_waves: 1,
                 recursive_runtime_calls: 1,
                 auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,

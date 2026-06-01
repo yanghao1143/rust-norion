@@ -274,9 +274,13 @@ fn reflection_issue_priority(record: &ExperienceRecord) -> f32 {
 pub struct ExperienceReplayReport {
     pub planned: usize,
     pub applied: usize,
+    pub router_updates: usize,
+    pub hierarchy_updates: usize,
     pub reinforced: usize,
     pub penalized: usize,
     pub touched_memories: usize,
+    pub memory_reinforcements: usize,
+    pub memory_penalties: usize,
     pub average_reward: f32,
     pub recursive_runtime_items: usize,
     pub recursive_runtime_calls: usize,
@@ -331,12 +335,16 @@ impl ExperienceReplayReport {
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} reinforced={} penalized={} touched_memories={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3}",
             self.planned,
             self.applied,
+            self.router_updates,
+            self.hierarchy_updates,
             self.reinforced,
             self.penalized,
             self.touched_memories,
+            self.memory_reinforcements,
+            self.memory_penalties,
             self.average_reward,
             self.recursive_runtime_items,
             self.recursive_runtime_calls,
@@ -595,6 +603,10 @@ mod tests {
             report.average_recursive_call_pressure,
             report.max_recursive_call_pressure
         );
+        assert!(report.summary().contains("router_updates=0"));
+        assert!(report.summary().contains("hierarchy_updates=0"));
+        assert!(report.summary().contains("memory_reinforcements=0"));
+        assert!(report.summary().contains("memory_penalties=0"));
         assert!(report.summary().contains("recursive_runtime_calls=96"));
         assert!(report.summary().contains("max_recursive_call_pressure="));
     }

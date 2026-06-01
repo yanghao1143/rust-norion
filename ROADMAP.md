@@ -386,8 +386,11 @@ These are algorithmic references, not product dependencies:
   long-context paths are weaker control-plane exemplars than efficient ones,
   and replay summaries/traces expose recursive call pressure for regression
   checks; benchmark gates can now require auto-replay recursive coverage and
-  enforce replay recursive call pressure floors and ceilings; replay planning
-  now keeps at least one recursive runtime sample when the limit allows so
+  enforce replay recursive call pressure floors and ceilings; replay reports,
+  traces, CLI output, and benchmark gates now expose router updates, hierarchy
+  updates, memory reinforcements, and memory penalties so automatic replay must
+  prove real control-plane mutation, not just execution; replay planning now
+  keeps at least one recursive runtime sample when the limit allows so
   long-context cost learning is not starved by short high-reward samples;
   replay pressure now parses
   recursive chunks, waves, parallelism, and runtime calls from reward notes so
@@ -611,6 +614,7 @@ These are algorithmic references, not product dependencies:
   device/load flags remain authoritative.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
-  forward diagnostics, runtime KV export, auto-replay recursive pressure
-  coverage/bounds, Infini/SpeContext sparse filtering coverage, drift
-  block/rollback counts, or persistent state reuse regress.
+  forward diagnostics, runtime KV export, auto-replay router/hierarchy/memory
+  update coverage, auto-replay recursive pressure coverage/bounds,
+  Infini/SpeContext sparse filtering coverage, drift block/rollback counts, or
+  persistent state reuse regress.

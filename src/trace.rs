@@ -219,6 +219,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"auto_replay\":{",
     },
     TraceRequiredField {
+        name: "auto_replay_router_updates",
+        marker: "\"router_updates\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_hierarchy_updates",
+        marker: "\"hierarchy_updates\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_memory_reinforcements",
+        marker: "\"memory_reinforcements\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_memory_penalties",
+        marker: "\"memory_penalties\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_recursive_runtime_calls",
         marker: "\"recursive_runtime_calls\":",
     },
@@ -370,7 +386,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -515,10 +531,20 @@ pub fn trace_json_line_with_case(
         outcome.process_reward.components.admission,
         string_array_json(&outcome.process_reward.notes),
         auto_replay.map(|report| report.applied).unwrap_or(0),
+        auto_replay.map(|report| report.router_updates).unwrap_or(0),
+        auto_replay
+            .map(|report| report.hierarchy_updates)
+            .unwrap_or(0),
         auto_replay.map(|report| report.reinforced).unwrap_or(0),
         auto_replay.map(|report| report.penalized).unwrap_or(0),
         auto_replay
             .map(|report| report.touched_memories)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.memory_reinforcements)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.memory_penalties)
             .unwrap_or(0),
         auto_replay
             .map(|report| report.recursive_runtime_items)
@@ -700,6 +726,10 @@ mod tests {
         assert!(line.contains("\"drift\":"));
         assert!(line.contains("\"process_reward\":"));
         assert!(line.contains("\"auto_replay\":"));
+        assert!(line.contains("\"router_updates\":"));
+        assert!(line.contains("\"hierarchy_updates\":"));
+        assert!(line.contains("\"memory_reinforcements\":"));
+        assert!(line.contains("\"memory_penalties\":"));
         assert!(line.contains("\"recursive_runtime_items\":"));
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));
