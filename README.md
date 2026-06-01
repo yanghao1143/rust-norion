@@ -371,6 +371,30 @@ cargo run -- --production-reference-kernel --benchmark target/noiron-production-
 cargo run -- --production-reference-kernel --benchmark target/noiron-production-reference.jsonl --trace-schema-gate target/noiron-production-reference.jsonl --benchmark-gate --benchmark-min-runtime-forward-cases 4 --benchmark-min-runtime-kv-exported 4 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
 ```
 
+When production runtime benchmarking is combined with `--benchmark-all-devices`,
+the CLI rebuilds the manifest-backed runtime for each explicit device profile.
+This makes the selected adapter, runtime device contract, KV prefetch/precision
+limits, recursive parallelism budget, and trace hardware block match the current
+device instead of reusing a single CPU runtime across the sweep. A full
+reference-kernel gate can require all 48 default case/device pairs to produce
+runtime forward diagnostics and exported KV while all 12 device profiles also
+trigger recursive long-context scheduling:
+
+```powershell
+cargo run -- --production-reference-kernel --benchmark target/noiron-production-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-production-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-quality 0.45 --benchmark-min-reward 0.30 --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --benchmark-min-runtime-forward-cases 48 --benchmark-min-runtime-kv-exported 48 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 64 --runtime-embedding-dims 64 --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --chunk-tokens 32 --chunk-overlap 8
+```
+
+当 production runtime benchmark 和 `--benchmark-all-devices` 同时启用时，CLI
+会为每一个显式设备 profile 重新构造 manifest-backed runtime。这样选中的
+adapter、runtime device contract、KV 预取/精度限制、递归并行预算和 trace
+里的 hardware block 都会跟随当前设备，而不是整轮复用一个 CPU runtime。可以用
+reference kernel 先跑完整门禁，要求 48 个默认 case/device 组合都有 runtime
+forward diagnostics 和导出 KV，同时 12 个设备 profile 都真实触发递归长上下文调度：
+
+```powershell
+cargo run -- --production-reference-kernel --benchmark target/noiron-production-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-production-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-quality 0.45 --benchmark-min-reward 0.30 --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --benchmark-min-runtime-forward-cases 48 --benchmark-min-runtime-kv-exported 48 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 64 --runtime-embedding-dims 64 --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --chunk-tokens 32 --chunk-overlap 8
+```
+
 Run the KV quantization gate for reproducible 4/8-bit compression accuracy,
 payload ratio, and latency checks:
 

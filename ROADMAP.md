@@ -502,7 +502,12 @@ These are algorithmic references, not product dependencies:
   execution coverage is incomplete; `--benchmark-min-recursive-device-profiles`
   can additionally require each explicit device profile to trigger real
   recursive long-context scheduling, so all-device support covers ultra-long
-  context paths instead of only short control-loop cases)
+  context paths instead of only short control-loop cases; production runtime
+  all-device benchmark sweeps now rebuild the manifest-backed runtime per
+  explicit device profile, so the reference/local production kernel path is
+  checked with the matching runtime device contract, adapter hint, KV
+  prefetch/precision boundary, and recursive parallelism budget for each
+  target instead of reusing one runtime contract across the matrix)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -627,6 +632,10 @@ These are algorithmic references, not product dependencies:
 - Benchmark execution can require every explicit device profile to exercise
   recursive long-context scheduling through
   `--benchmark-min-recursive-device-profiles`.
+- Production runtime benchmark execution rebuilds the manifest-backed runtime
+  per explicit device profile during `--benchmark-all-devices`, so reference and
+  local production kernels can be gated against each device's own runtime
+  device contract and long-context recursion path.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime KV export, auto-replay router/hierarchy/memory

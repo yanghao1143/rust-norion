@@ -127,9 +127,13 @@ fn main() -> std::io::Result<()> {
 
     if let Some(benchmark_path) = args.benchmark_path.clone() {
         let summary = if args.production_runtime {
-            let runtime = args.production_runtime()?;
-            let mut backend = RuntimeBackend::new(runtime);
-            run_benchmark_for_args(&mut engine, &mut backend, &args, &benchmark_path)?
+            if args.benchmark_all_devices {
+                run_production_benchmark_all_devices(&mut engine, &args, &benchmark_path)?
+            } else {
+                let runtime = args.production_runtime()?;
+                let mut backend = RuntimeBackend::new(runtime);
+                run_benchmark(&mut engine, &mut backend, &benchmark_path)?
+            }
         } else if let Some(runtime_command) = args.runtime_command.clone() {
             let runtime = CommandRuntime::new(runtime_command)
                 .args(args.runtime_args.clone())
@@ -496,6 +500,46 @@ fn run_benchmark_all_devices<B: InferenceBackend>(
             let timed = run_timed_inference(
                 engine,
                 backend,
+                case.prompt.clone(),
+                case.profile,
+                Some(trace_path),
+                Some(&case_name),
+            )?;
+            let recorded_case = BenchmarkCase::new(case_name, case.profile, case.prompt);
+            summary.record(&recorded_case, timed.elapsed_ms, &timed.outcome);
+        }
+    }
+
+    configure_engine(engine, args);
+
+    Ok(summary)
+}
+
+fn run_production_benchmark_all_devices(
+    engine: &mut NoironEngine,
+    args: &Args,
+    trace_path: &PathBuf,
+) -> std::io::Result<BenchmarkSummary> {
+    let mut summary = BenchmarkSummary::new();
+    seed_sparse_benchmark_memories(engine);
+    seed_auto_replay_benchmark_experience(engine);
+
+    for device in DeviceClass::explicit_profiles() {
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            *device,
+            args.cpu_load,
+            args.gpu_load,
+            args.ram_load,
+            args.disk_load,
+        ));
+
+        for case in default_benchmark_cases() {
+            let case_name = format!("{}_{}", device.as_str(), case.name);
+            let runtime = args.production_runtime_for_case(*device, case.profile, &case.prompt)?;
+            let mut backend = RuntimeBackend::new(runtime);
+            let timed = run_timed_inference(
+                engine,
+                &mut backend,
                 case.prompt.clone(),
                 case.profile,
                 Some(trace_path),
@@ -1996,8 +2040,17 @@ impl Args {
     }
 
     fn runtime_manifest_device_plan(&self) -> HardwarePlan {
+        self.runtime_manifest_device_plan_for(self.device, self.profile, &self.prompt)
+    }
+
+    fn runtime_manifest_device_plan_for(
+        &self,
+        device: DeviceClass,
+        profile: TaskProfile,
+        prompt: &str,
+    ) -> HardwarePlan {
         let snapshot = HardwareSnapshot::new(
-            self.device,
+            device,
             self.cpu_load,
             self.gpu_load,
             self.ram_load,
@@ -2009,21 +2062,30 @@ impl Args {
             self.chunk_overlap_tokens,
             self.merge_fan_in,
         )
-        .plan(&self.prompt)
+        .plan(prompt)
         .prompt_tokens;
 
         HardwareAllocator::new().plan(
             snapshot,
-            self.profile,
+            profile,
             prompt_tokens,
             HierarchyWeights::default(),
         )
     }
 
     fn production_runtime(&self) -> std::io::Result<rust_norion::ProductionTransformerRuntime> {
+        self.production_runtime_for_case(self.device, self.profile, &self.prompt)
+    }
+
+    fn production_runtime_for_case(
+        &self,
+        device: DeviceClass,
+        profile: TaskProfile,
+        prompt: &str,
+    ) -> std::io::Result<rust_norion::ProductionTransformerRuntime> {
         let runtime = rust_norion::ProductionTransformerRuntime::from_manifest_for_plan(
             self.runtime_manifest(),
-            &self.runtime_manifest_device_plan(),
+            &self.runtime_manifest_device_plan_for(device, profile, prompt),
         )
         .map_err(runtime_error_to_io)?;
 
@@ -3005,6 +3067,128 @@ mod tests {
             summary.recursive_cases(),
             DeviceClass::explicit_profiles().len()
         );
+        assert!(
+            summary
+                .summary_line()
+                .contains("recursive_device_profiles=12")
+        );
+        assert!(gate_report.passed, "{:?}", gate_report.failures);
+        assert!(trace_report.passed, "{:?}", trace_report.failures);
+        assert_eq!(trace_report.checked_lines, summary.len());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_reference_kernel_all_devices_gates_recursive_runtime_coverage() {
+        let asset_dir = temp_asset_dir("production-reference-all-device-recursive");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let trace_path = asset_dir.join("benchmark.jsonl");
+        let device_count = DeviceClass::explicit_profiles().len();
+        let case_count = default_benchmark_cases().len();
+        let args = Args::parse(vec![
+            "--production-reference-kernel".to_owned(),
+            "--benchmark".to_owned(),
+            trace_path.display().to_string(),
+            "--benchmark-all-devices".to_owned(),
+            "--benchmark-gate".to_owned(),
+            "--benchmark-min-quality".to_owned(),
+            "0.45".to_owned(),
+            "--benchmark-min-reward".to_owned(),
+            "0.30".to_owned(),
+            "--benchmark-min-device-profiles".to_owned(),
+            device_count.to_string(),
+            "--benchmark-min-recursive-device-profiles".to_owned(),
+            device_count.to_string(),
+            "--benchmark-min-recursive-cases".to_owned(),
+            device_count.to_string(),
+            "--benchmark-min-runtime-forward-cases".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-kv-exported".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-max-drift-blocks".to_owned(),
+            "0".to_owned(),
+            "--benchmark-max-drift-rollbacks".to_owned(),
+            "0".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "64".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "64".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "32".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--chunk-tokens".to_owned(),
+            "32".to_owned(),
+            "--chunk-overlap".to_owned(),
+            "8".to_owned(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]);
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &args);
+
+        let summary =
+            run_production_benchmark_all_devices(&mut engine, &args, &trace_path).unwrap();
+        let gate_report = summary.evaluate(&args.benchmark_gate());
+        let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+        assert_eq!(summary.len(), device_count * case_count);
+        assert_eq!(summary.explicit_device_profiles_covered(), device_count);
+        assert_eq!(summary.recursive_device_profiles_covered(), device_count);
+        assert_eq!(summary.recursive_cases(), device_count);
+        assert_eq!(summary.runtime_forward_cases(), device_count * case_count);
+        assert!(summary.total_runtime_kv_exported() >= device_count * case_count);
+        assert!(summary.results().iter().any(|result| {
+            result.device == DeviceClass::Microcontroller
+                && result.name.starts_with("microcontroller_")
+                && result.runtime_forward_signal
+        }));
+        let trace = fs::read_to_string(&trace_path).unwrap();
+        let microcontroller_line = trace
+            .lines()
+            .find(|line| line.contains("\"case\":\"microcontroller_long_context_scheduler\""))
+            .unwrap();
+        assert!(
+            microcontroller_line.contains("\"runtime_device_contract\":\"device=microcontroller")
+        );
+        assert!(microcontroller_line.contains("\"selected_adapter\":\"portable-rust\""));
+        assert!(microcontroller_line.contains("\"max_parallel_chunks\":1"));
+
+        let discrete_line = trace
+            .lines()
+            .find(|line| line.contains("\"case\":\"discrete_long_context_scheduler\""))
+            .unwrap();
+        assert!(discrete_line.contains("\"runtime_device_contract\":\"device=discrete"));
+        assert!(discrete_line.contains("\"selected_adapter\":\"cuda\""));
+        assert!(discrete_line.contains("\"execution_waves\":23"));
+
+        let multi_gpu_line = trace
+            .lines()
+            .find(|line| line.contains("\"case\":\"multi-gpu_long_context_scheduler\""))
+            .unwrap();
+        assert!(multi_gpu_line.contains("\"runtime_device_contract\":\"device=multi-gpu"));
+        assert!(multi_gpu_line.contains("\"selected_adapter\":\"multi-device\""));
+        assert!(multi_gpu_line.contains("\"execution_waves\":12"));
         assert!(
             summary
                 .summary_line()
