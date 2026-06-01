@@ -352,6 +352,14 @@ the manifest allows:
 cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
 ```
 
+Add `--runtime-manifest-all-devices-gate` when the same self-developed runtime
+manifest must prove it can intersect every built-in device execution profile,
+not just the current target device:
+
+```powershell
+cargo run -- --runtime-manifest-all-devices-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
+```
+
 Run the production kernel conformance gate after attaching a real
 `ProductionForwardKernel`, or with the deterministic reference kernel in local
 CI. This performs a short manifest-backed forward pass with deterministic KV
@@ -367,6 +375,13 @@ cargo run -- --production-reference-kernel --production-kernel-conformance-gate 
 
 ```powershell
 cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
+```
+
+如果同一份自研 runtime manifest 必须证明它能覆盖所有内置设备执行 profile，而不只是当前目标设备，可以加
+`--runtime-manifest-all-devices-gate`：
+
+```powershell
+cargo run -- --runtime-manifest-all-devices-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
 ```
 
 真实 `ProductionForwardKernel` 接好后，还要运行 production kernel conformance 门禁；本地 CI 可以先用确定性的 reference kernel。它会执行一次短的 manifest-backed forward，并注入确定性 KV import；如果 kernel 未连接，或没有返回 answer、token uncertainty、reasoning trace、positive forward energy、finite KV influence，以及启用 KV export 时的有界导出 KV，就会失败：

@@ -47,8 +47,24 @@ fn main() -> std::io::Result<()> {
             &manifest,
             &args.runtime_manifest_device_plan(),
         );
-        print_runtime_manifest_gate_report(&manifest, &validation, &device_gate);
-        if !validation.passed() || !device_gate.passed() {
+        let all_devices_gate = if args.runtime_manifest_all_devices_gate {
+            Some(DevicePlanGateReport::evaluate_runtime_manifest(&manifest))
+        } else {
+            None
+        };
+        print_runtime_manifest_gate_report(
+            &manifest,
+            &validation,
+            &device_gate,
+            all_devices_gate.as_ref(),
+        );
+        if !validation.passed()
+            || !device_gate.passed()
+            || all_devices_gate
+                .as_ref()
+                .map(|report| !report.passed())
+                .unwrap_or(false)
+        {
             std::process::exit(2);
         }
         return Ok(());
@@ -950,14 +966,23 @@ fn print_runtime_manifest_gate_report(
     manifest: &RuntimeManifest,
     validation: &RuntimeManifestValidation,
     device_gate: &RuntimeManifestDeviceGateReport,
+    all_devices_gate: Option<&DevicePlanGateReport>,
 ) {
+    let all_device_failures = all_devices_gate
+        .map(DevicePlanGateReport::failure_count)
+        .unwrap_or(0);
     println!("Noiron runtime manifest gate");
     println!(
-        "runtime_manifest_gate: passed={} errors={} warnings={} device_failures={}",
-        validation.passed() && device_gate.passed(),
-        validation.errors.len() + device_gate.failures.len(),
+        "runtime_manifest_gate: passed={} errors={} warnings={} device_failures={} all_device_failures={}",
+        validation.passed()
+            && device_gate.passed()
+            && all_devices_gate
+                .map(DevicePlanGateReport::passed)
+                .unwrap_or(true),
+        validation.errors.len() + device_gate.failures.len() + all_device_failures,
         validation.warnings.len(),
-        device_gate.failures.len()
+        device_gate.failures.len(),
+        all_device_failures
     );
     println!("{}", device_gate.summary_line());
     println!(
@@ -1021,6 +1046,62 @@ fn print_runtime_manifest_gate_report(
     }
     for failure in &device_gate.failures {
         println!("runtime_manifest_device_failure: {failure}");
+    }
+    if let Some(report) = all_devices_gate {
+        print_runtime_manifest_all_devices_gate_report(report);
+    }
+}
+
+fn print_runtime_manifest_all_devices_gate_report(report: &DevicePlanGateReport) {
+    println!("{}", report.summary_line());
+    println!(
+        "runtime_manifest_all_devices,profile,tier,scope,aliases,primary_lane,fallback_lane,memory_mode,adapters,runtime_adapter,parallel_chunks,kv_prefetch,kv_bits,disk_spill,runtime_kv_import,runtime_kv_export,runtime_max_import,runtime_max_export,runtime_kv_bits,local_kv_tokens,global_kv_tokens,latency_budget_ms,runtime_device_contract,passed"
+    );
+
+    for row in &report.rows {
+        let fields = vec![
+            "runtime_manifest_all_devices".to_owned(),
+            row.device.as_str().to_owned(),
+            row.tier.as_str().to_owned(),
+            row.scope.to_owned(),
+            row.aliases_csv(),
+            row.primary_lane.as_str().to_owned(),
+            row.fallback_lane.as_str().to_owned(),
+            row.memory_mode.as_str().to_owned(),
+            row.adapters_csv(),
+            row.runtime_adapter_name().to_owned(),
+            row.max_parallel_chunks.to_string(),
+            row.kv_prefetch_blocks.to_string(),
+            format!(
+                "{}/{}",
+                row.hot_kv_precision_bits, row.cold_kv_precision_bits
+            ),
+            row.allow_disk_spill.to_string(),
+            row.runtime_kv_import_enabled.to_string(),
+            row.runtime_kv_export_enabled.to_string(),
+            row.runtime_max_import_blocks.to_string(),
+            row.runtime_max_export_blocks.to_string(),
+            format!(
+                "{}/{}",
+                row.runtime_hot_kv_precision_bits, row.runtime_cold_kv_precision_bits
+            ),
+            row.local_kv_token_budget.to_string(),
+            row.global_kv_token_budget.to_string(),
+            row.latency_budget_ms
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned()),
+            row.runtime_device_contract.clone(),
+            row.passed().to_string(),
+        ];
+        println!("{}", fields.join(","));
+
+        for failure in &row.failures {
+            println!(
+                "runtime_manifest_all_devices_failure: {}: {}",
+                row.device.as_str(),
+                failure
+            );
+        }
     }
 }
 
@@ -1086,6 +1167,7 @@ struct Args {
     kv_quant_gate: bool,
     kv_quant_max_total_us: Option<u128>,
     runtime_manifest_gate: bool,
+    runtime_manifest_all_devices_gate: bool,
     runtime_weights_path: Option<PathBuf>,
     runtime_tokenizer_path: Option<PathBuf>,
     runtime_config_path: Option<PathBuf>,
@@ -1158,6 +1240,7 @@ impl Args {
         let mut kv_quant_gate = false;
         let mut kv_quant_max_total_us = None;
         let mut runtime_manifest_gate = false;
+        let mut runtime_manifest_all_devices_gate = false;
         let mut runtime_weights_path = None;
         let mut runtime_tokenizer_path = None;
         let mut runtime_config_path = None;
@@ -1339,6 +1422,11 @@ impl Args {
                 }
                 "--runtime-manifest-gate" => {
                     runtime_manifest_gate = true;
+                    index += 1;
+                }
+                "--runtime-manifest-all-devices-gate" => {
+                    runtime_manifest_gate = true;
+                    runtime_manifest_all_devices_gate = true;
                     index += 1;
                 }
                 "--runtime-weights" if index + 1 < raw.len() => {
@@ -1614,6 +1702,7 @@ impl Args {
             kv_quant_gate,
             kv_quant_max_total_us,
             runtime_manifest_gate,
+            runtime_manifest_all_devices_gate,
             runtime_weights_path,
             runtime_tokenizer_path,
             runtime_config_path,
@@ -1853,7 +1942,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -1937,6 +2026,7 @@ mod tests {
             "--kv-quant-max-total-us".to_owned(),
             "100000".to_owned(),
             "--runtime-manifest-gate".to_owned(),
+            "--runtime-manifest-all-devices-gate".to_owned(),
             "--runtime-weights".to_owned(),
             "weights.noiron".to_owned(),
             "--runtime-tokenizer-path".to_owned(),
@@ -2053,6 +2143,7 @@ mod tests {
         assert!(args.kv_quant_gate);
         assert_eq!(args.kv_quant_max_total_us, Some(100000));
         assert!(args.runtime_manifest_gate);
+        assert!(args.runtime_manifest_all_devices_gate);
         assert_eq!(
             args.runtime_weights_path.as_ref().unwrap(),
             &PathBuf::from("weights.noiron")
@@ -2149,8 +2240,10 @@ mod tests {
             &manifest,
             &args.runtime_manifest_device_plan(),
         );
+        let all_devices_gate = DevicePlanGateReport::evaluate_runtime_manifest(&manifest);
 
         assert!(args.runtime_manifest_gate);
+        assert!(!args.runtime_manifest_all_devices_gate);
         assert_eq!(manifest.metadata.model_id, "self-owned-transformer");
         assert_eq!(manifest.metadata.tokenizer, "self-bpe");
         assert_eq!(manifest.metadata.native_context_window, 65_536);
@@ -2164,10 +2257,36 @@ mod tests {
         assert!(manifest.metadata.supports_kv_export);
         assert!(validation.passed(), "{validation:?}");
         assert!(device_gate.passed(), "{device_gate:?}");
+        assert!(all_devices_gate.passed(), "{all_devices_gate:?}");
+        assert_eq!(
+            all_devices_gate.rows.len(),
+            DeviceClass::explicit_profiles().len()
+        );
         assert_eq!(device_gate.device, DeviceClass::CpuOnly);
         assert_eq!(device_gate.runtime_adapter_name(), "portable-rust");
         assert!(device_gate.runtime_device_contract.contains("device=cpu"));
         fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn runtime_manifest_all_devices_gate_cli_flag_enables_manifest_gate() {
+        let args = Args::parse(vec![
+            "--runtime-manifest-all-devices-gate".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "all-device-transformer".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "65536".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "256".to_owned(),
+        ]);
+
+        let report = DevicePlanGateReport::evaluate_runtime_manifest(&args.runtime_manifest());
+
+        assert!(args.runtime_manifest_gate);
+        assert!(args.runtime_manifest_all_devices_gate);
+        assert!(report.passed(), "{report:?}");
+        assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
     }
 
     #[test]

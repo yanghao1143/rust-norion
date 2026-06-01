@@ -487,7 +487,11 @@ These are algorithmic references, not product dependencies:
   influence, and exported KV when enabled; benchmark runs now seed
   deterministic sparse-memory fixtures and can gate Infini/SpeContext coverage
   with minimum sparse-skipped case/token counts, so sparse filtering regressions
-  are caught from a clean state)
+  are caught from a clean state; `--runtime-manifest-all-devices-gate` can now
+  validate a self-developed runtime manifest against every built-in device
+  execution profile, so CPU, mobile, embedded, browser-WASM, microcontroller,
+  NPU, multi-GPU, edge, and server support cannot silently diverge from the
+  production manifest)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -540,6 +544,10 @@ These are algorithmic references, not product dependencies:
   and tokenizer assets before a self-developed model runtime is accepted, and
   the CLI exposes that gate directly for local/CI checks with explicit
   Transformer layer/head/window shape validation.
+- The same production runtime manifest can be checked against every built-in
+  device profile with `--runtime-manifest-all-devices-gate`, including adapter
+  intersections, KV prefetch bounds, KV precision bounds, and portable fallback
+  coverage.
 - The production runtime adapter boundary is explicit: it can only be
   constructed after manifest and device gates pass, it exposes selected adapter
   and runtime device contract state, and it refuses generation until a real

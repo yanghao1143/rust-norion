@@ -1309,13 +1309,24 @@ impl DevicePlanGateReport {
     }
 
     pub fn evaluate_with_allocator(allocator: &HardwareAllocator) -> Self {
-        let base_hierarchy = HierarchyWeights::default();
         let runtime_manifest = RuntimeManifest::self_developed(
             "noiron-gate-transformer",
             "noiron-gate-tokenizer",
             65_536,
             256,
         );
+        Self::evaluate_runtime_manifest_with_allocator(allocator, &runtime_manifest)
+    }
+
+    pub fn evaluate_runtime_manifest(runtime_manifest: &RuntimeManifest) -> Self {
+        Self::evaluate_runtime_manifest_with_allocator(&HardwareAllocator::new(), runtime_manifest)
+    }
+
+    pub fn evaluate_runtime_manifest_with_allocator(
+        allocator: &HardwareAllocator,
+        runtime_manifest: &RuntimeManifest,
+    ) -> Self {
+        let base_hierarchy = HierarchyWeights::default();
         let rows = DeviceClass::explicit_profiles()
             .iter()
             .map(|device| {
@@ -1330,7 +1341,7 @@ impl DevicePlanGateReport {
                     MemoryRetentionPolicy::default(),
                     MemoryCompactionPolicy::default(),
                 );
-                DevicePlanGateRow::from_plan(&plan, governance, &runtime_manifest)
+                DevicePlanGateRow::from_plan(&plan, governance, runtime_manifest)
             })
             .collect();
 
@@ -2963,6 +2974,48 @@ mod tests {
                 .contains("primary=discrete-gpu")
         );
         assert!(server.runtime_device_contract.contains("adapters="));
+    }
+
+    #[test]
+    fn runtime_manifest_gate_can_cover_every_device_profile() {
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 65_536, 256);
+
+        let report = DevicePlanGateReport::evaluate_runtime_manifest(&manifest);
+
+        assert!(report.passed(), "{:?}", report.rows);
+        assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
+        assert!(report.rows.iter().all(|row| row.runtime_adapter.is_some()));
+    }
+
+    #[test]
+    fn runtime_manifest_all_device_gate_reports_unsupported_profiles() {
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 65_536, 256)
+            .with_supported_devices(vec![DeviceClass::CpuOnly])
+            .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust]);
+
+        let report = DevicePlanGateReport::evaluate_runtime_manifest(&manifest);
+
+        assert!(!report.passed());
+        assert!(report.failure_count() > 0);
+        let cpu = report
+            .rows
+            .iter()
+            .find(|row| row.device == DeviceClass::CpuOnly)
+            .unwrap();
+        let mobile = report
+            .rows
+            .iter()
+            .find(|row| row.device == DeviceClass::Mobile)
+            .unwrap();
+        assert!(cpu.passed(), "{:?}", cpu.failures);
+        assert!(
+            mobile
+                .failures
+                .iter()
+                .any(|failure| failure.contains("does not support device mobile")),
+            "{:?}",
+            mobile.failures
+        );
     }
 
     #[test]
