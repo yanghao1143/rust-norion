@@ -3621,6 +3621,26 @@ mod tests {
             "0.001".to_owned(),
             "--benchmark-min-auto-replay-hierarchy-weight-delta".to_owned(),
             "0.001".to_owned(),
+            "--benchmark-min-auto-replay-memory-updates".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-replay-runs".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-replay-items".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-router-threshold-mutations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-hierarchy-weight-mutations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-router-threshold-delta".to_owned(),
+            "0.001".to_owned(),
+            "--benchmark-min-evolution-hierarchy-weight-delta".to_owned(),
+            "0.001".to_owned(),
+            "--benchmark-min-evolution-memory-updates".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-recursive-replay-items".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-recursive-runtime-calls".to_owned(),
+            "1".to_owned(),
             "--benchmark-max-drift-blocks".to_owned(),
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
@@ -3699,6 +3719,16 @@ mod tests {
         assert!(summary.total_auto_replay_hierarchy_weight_mutations() >= 1);
         assert!(summary.total_auto_replay_router_threshold_delta() >= 0.001);
         assert!(summary.total_auto_replay_hierarchy_weight_delta() >= 0.001);
+        assert!(summary.total_auto_replay_memory_updates() >= 1);
+        assert!(summary.evolution_ledger().replay_runs >= 1);
+        assert!(summary.evolution_ledger().replay_items >= 1);
+        assert!(summary.evolution_ledger().router_threshold_mutations >= 1);
+        assert!(summary.evolution_ledger().hierarchy_weight_mutations >= 1);
+        assert!(summary.evolution_ledger().router_threshold_delta >= 0.001);
+        assert!(summary.evolution_ledger().hierarchy_weight_delta >= 0.001);
+        assert!(summary.evolution_ledger().memory_updates() >= 1);
+        assert!(summary.evolution_ledger().recursive_replay_items >= 1);
+        assert!(summary.evolution_ledger().recursive_runtime_calls >= 1);
         assert!(summary.results().iter().any(|result| {
             result.device == DeviceClass::Microcontroller
                 && result.name.starts_with("microcontroller_")

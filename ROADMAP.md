@@ -397,7 +397,9 @@ These are algorithmic references, not product dependencies:
   cumulative ledger fields in every generated JSONL record; benchmark summaries
   now expose the same cumulative ledger snapshot, and benchmark gates can enforce
   minimum replay runs, applied items, mutation counts/deltas, memory updates, and
-  recursive replay cost evidence; replay planning now
+  recursive replay cost evidence; production all-device benchmark gates now apply
+  those ledger thresholds across the manifest-backed runtime boundary as well as
+  the heuristic control-plane suite; replay planning now
   keeps at least one recursive runtime sample when the limit allows so
   long-context cost learning is not starved by short high-reward samples;
   replay pressure now parses
