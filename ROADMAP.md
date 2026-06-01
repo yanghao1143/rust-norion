@@ -514,7 +514,10 @@ These are algorithmic references, not product dependencies:
   behavior is gated through the production ABI rather than only through local
   unit tests; benchmark summaries and gates now count runtime adapter contract
   cases and violations, so production all-device sweeps must prove every
-  selected adapter is inside that device's allowed adapter hints)
+  selected adapter is inside that device's allowed adapter hints; benchmark
+  summaries and gates also count runtime KV import cases and imported block
+  totals, so production sweeps must prove persisted Noiron memory is actually
+  fed back into the runtime rather than only exported after generation)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -562,8 +565,9 @@ These are algorithmic references, not product dependencies:
   runtime diagnostics, imported-KV influence, exported KV validation, trace, and
   process-reward feedback, while remaining explicitly replaceable by a trained
   self-developed kernel. Benchmark gates can require a minimum number of runtime
-  forward-signal cases and exported runtime KV blocks so the reference
-  production ABI remains a regression target, not just a demo path.
+  forward-signal cases, imported runtime KV cases, imported runtime KV blocks,
+  and exported runtime KV blocks so the reference production ABI remains a
+  regression target, not just a demo path.
 - Production runtime manifests have a hard local-file gate for required weights
   and tokenizer assets before a self-developed model runtime is accepted, and
   the CLI exposes that gate directly for local/CI checks with explicit
@@ -602,6 +606,10 @@ These are algorithmic references, not product dependencies:
 - Runtime KV import now honors the Infini/SpeContext sparse plan before model
   execution: local-window memory is imported first, global memory is second,
   and skipped memory never enters the expensive backend attention path.
+- Benchmark summaries and gates expose runtime KV import coverage through
+  `--benchmark-min-runtime-kv-import-cases` and
+  `--benchmark-min-runtime-kv-imported`, so local/CI production sweeps can fail
+  when persisted control-plane memory stops reaching the runtime.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -651,7 +659,7 @@ These are algorithmic references, not product dependencies:
   reference kernel before it is treated as a valid self-owned runtime boundary.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
-  forward diagnostics, runtime KV export, runtime adapter contract coverage,
+  forward diagnostics, runtime KV import/export, runtime adapter contract coverage,
   auto-replay router/hierarchy/memory update coverage, auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
   drift block/rollback counts, or persistent state reuse regress.

@@ -92,6 +92,7 @@ pub struct BenchmarkCaseResult {
     pub stored_memories: usize,
     pub compacted_memories: usize,
     pub runtime_forward_signal: bool,
+    pub runtime_kv_imported: usize,
     pub runtime_kv_exported: usize,
     pub runtime_kv_stored: usize,
     pub runtime_selected_adapter: Option<String>,
@@ -119,6 +120,8 @@ pub struct BenchmarkGate {
     pub min_sparse_skipped_cases: Option<usize>,
     pub min_sparse_skipped_tokens: Option<usize>,
     pub min_runtime_forward_cases: Option<usize>,
+    pub min_runtime_kv_import_cases: Option<usize>,
+    pub min_runtime_kv_imported: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
     pub min_runtime_adapter_contract_cases: Option<usize>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
@@ -146,6 +149,8 @@ impl Default for BenchmarkGate {
             min_sparse_skipped_cases: None,
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
+            min_runtime_kv_import_cases: None,
+            min_runtime_kv_imported: None,
             min_runtime_kv_exported: None,
             min_runtime_adapter_contract_cases: None,
             max_runtime_adapter_contract_violations: Some(0),
@@ -583,6 +588,7 @@ impl BenchmarkSummary {
             stored_memories,
             compacted_memories: outcome.memory_compaction_report.merged.len(),
             runtime_forward_signal: runtime_has_forward_signal,
+            runtime_kv_imported: outcome.runtime_diagnostics.imported_kv_blocks,
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
             runtime_kv_stored: outcome.stored_runtime_kv_memory_ids.len(),
             runtime_selected_adapter: selected_adapter.map(str::to_owned),
@@ -720,6 +726,20 @@ impl BenchmarkSummary {
         self.results
             .iter()
             .map(|result| result.runtime_kv_stored)
+            .sum()
+    }
+
+    pub fn runtime_kv_import_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_kv_imported > 0)
+            .count()
+    }
+
+    pub fn total_runtime_kv_imported(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_kv_imported)
             .sum()
     }
 
@@ -1070,6 +1090,26 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_kv_import_cases) = gate.min_runtime_kv_import_cases {
+            let runtime_kv_import_cases = self.runtime_kv_import_cases();
+            if runtime_kv_import_cases < min_runtime_kv_import_cases {
+                failures.push(format!(
+                    "runtime_kv_import_cases {} below minimum {}",
+                    runtime_kv_import_cases, min_runtime_kv_import_cases
+                ));
+            }
+        }
+
+        if let Some(min_runtime_kv_imported) = gate.min_runtime_kv_imported {
+            let runtime_kv_imported = self.total_runtime_kv_imported();
+            if runtime_kv_imported < min_runtime_kv_imported {
+                failures.push(format!(
+                    "runtime_kv_imported {} below minimum {}",
+                    runtime_kv_imported, min_runtime_kv_imported
+                ));
+            }
+        }
+
         if let Some(min_runtime_kv_exported) = gate.min_runtime_kv_exported {
             let runtime_kv_exported = self.total_runtime_kv_exported();
             if runtime_kv_exported < min_runtime_kv_exported {
@@ -1163,7 +1203,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1191,6 +1231,8 @@ impl BenchmarkSummary {
             self.total_stored_memories(),
             self.total_compacted_memories(),
             self.runtime_forward_cases(),
+            self.runtime_kv_import_cases(),
+            self.total_runtime_kv_imported(),
             self.total_runtime_kv_exported(),
             self.total_runtime_kv_stored(),
             self.runtime_adapter_contract_cases(),
@@ -1425,6 +1467,8 @@ mod tests {
             min_sparse_skipped_cases: None,
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
+            min_runtime_kv_import_cases: None,
+            min_runtime_kv_imported: None,
             min_runtime_kv_exported: None,
             min_runtime_adapter_contract_cases: None,
             max_runtime_adapter_contract_violations: Some(0),
@@ -1522,6 +1566,7 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -1585,6 +1630,7 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -1647,6 +1693,7 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -1737,6 +1784,7 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -1770,6 +1818,7 @@ mod tests {
         let passing = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
                 runtime_forward_signal: true,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 2,
                 ..summary.results[0].clone()
             }],
@@ -1781,6 +1830,86 @@ mod tests {
         assert_eq!(passing.total_runtime_kv_exported(), 2);
         assert!(passing.summary_line().contains("runtime_forward_cases=1"));
         assert!(passing.summary_line().contains("runtime_kv_exported=2"));
+    }
+
+    #[test]
+    fn gate_reports_missing_runtime_kv_import() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_import".to_owned(),
+                profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: true,
+                runtime_kv_imported: 0,
+                runtime_kv_exported: 1,
+                runtime_kv_stored: 1,
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_contract_ok: true,
+                runtime_adapter_contract_violations: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_kv_import_cases = Some(1);
+        gate.min_runtime_kv_imported = Some(2);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_kv_import_cases(), 0);
+        assert_eq!(summary.total_runtime_kv_imported(), 0);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_import_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_imported"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                runtime_kv_imported: 3,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.runtime_kv_import_cases(), 1);
+        assert_eq!(passing.total_runtime_kv_imported(), 3);
+        assert!(passing.summary_line().contains("runtime_kv_import_cases=1"));
+        assert!(passing.summary_line().contains("runtime_kv_imported=3"));
     }
 
     #[test]
@@ -1816,6 +1945,7 @@ mod tests {
                     stored_memories: 0,
                     compacted_memories: 0,
                     runtime_forward_signal: true,
+                    runtime_kv_imported: 1,
                     runtime_kv_exported: 1,
                     runtime_kv_stored: 1,
                     runtime_selected_adapter: Some("portable-rust".to_owned()),
@@ -1854,6 +1984,7 @@ mod tests {
                     stored_memories: 0,
                     compacted_memories: 0,
                     runtime_forward_signal: true,
+                    runtime_kv_imported: 0,
                     runtime_kv_exported: 1,
                     runtime_kv_stored: 1,
                     runtime_selected_adapter: Some("cuda".to_owned()),
@@ -1930,6 +2061,7 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
@@ -2007,6 +2139,7 @@ mod tests {
             stored_memories: 0,
             compacted_memories: 0,
             runtime_forward_signal: false,
+            runtime_kv_imported: 0,
             runtime_kv_exported: 0,
             runtime_kv_stored: 0,
             runtime_adapter_observations: 0,
@@ -2088,6 +2221,7 @@ mod tests {
             stored_memories: 0,
             compacted_memories: 0,
             runtime_forward_signal: false,
+            runtime_kv_imported: 0,
             runtime_kv_exported: 0,
             runtime_kv_stored: 0,
             runtime_adapter_observations: 0,
@@ -2182,6 +2316,7 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_kv_imported: 0,
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
