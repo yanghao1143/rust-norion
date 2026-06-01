@@ -532,9 +532,11 @@ These are algorithmic references, not product dependencies:
   selected adapter is inside that device's allowed adapter hints, historical
   runtime/adapter experience is being surfaced back into later runtime requests,
   and every target is not silently collapsing to the same fallback; benchmark
-  summaries and gates also count runtime KV import cases and imported block
-  totals, so production sweeps must prove persisted Noiron memory is actually
-  fed back into the runtime rather than only exported after generation;
+  summaries and gates also count runtime KV import cases, imported block totals,
+  and stored runtime KV memory writes, so production sweeps must prove persisted
+  Noiron memory is actually fed back into the runtime and useful exported
+  runtime KV is admitted back into long-term memory rather than only exported
+  after generation;
   benchmark summaries and gates now also count runtime token cases and
   uncertainty-bearing token totals, so production sweeps can prove token-level
   entropy/logprob feedback remains present across every device)
@@ -639,6 +641,9 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-import-cases` and
   `--benchmark-min-runtime-kv-imported`, so local/CI production sweeps can fail
   when persisted control-plane memory stops reaching the runtime.
+- Benchmark summaries and gates expose runtime KV long-term admission through
+  `--benchmark-min-runtime-kv-stored`, so local/CI production sweeps can fail
+  when exported runtime KV is never written back into reinforced memory.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps
@@ -706,7 +711,7 @@ These are algorithmic references, not product dependencies:
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
-  runtime adapter contract coverage, runtime adapter observation reuse,
+  runtime KV storage, runtime adapter contract coverage, runtime adapter observation reuse,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,

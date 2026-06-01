@@ -153,6 +153,7 @@ pub struct BenchmarkGate {
     pub min_runtime_kv_import_cases: Option<usize>,
     pub min_runtime_kv_imported: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
+    pub min_runtime_kv_stored: Option<usize>,
     pub min_runtime_adapter_contract_cases: Option<usize>,
     pub min_runtime_adapter_kinds: Option<usize>,
     pub min_runtime_adapter_observations: Option<usize>,
@@ -205,6 +206,7 @@ impl Default for BenchmarkGate {
             min_runtime_kv_import_cases: None,
             min_runtime_kv_imported: None,
             min_runtime_kv_exported: None,
+            min_runtime_kv_stored: None,
             min_runtime_adapter_contract_cases: None,
             min_runtime_adapter_kinds: None,
             min_runtime_adapter_observations: None,
@@ -1520,6 +1522,16 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_kv_stored) = gate.min_runtime_kv_stored {
+            let runtime_kv_stored = self.total_runtime_kv_stored();
+            if runtime_kv_stored < min_runtime_kv_stored {
+                failures.push(format!(
+                    "runtime_kv_stored {} below minimum {}",
+                    runtime_kv_stored, min_runtime_kv_stored
+                ));
+            }
+        }
+
         if let Some(min_runtime_adapter_contract_cases) = gate.min_runtime_adapter_contract_cases {
             let runtime_adapter_contract_cases = self.runtime_adapter_contract_cases();
             if runtime_adapter_contract_cases < min_runtime_adapter_contract_cases {
@@ -1977,6 +1989,7 @@ mod tests {
             min_runtime_kv_import_cases: None,
             min_runtime_kv_imported: None,
             min_runtime_kv_exported: None,
+            min_runtime_kv_stored: None,
             min_runtime_adapter_contract_cases: None,
             min_runtime_adapter_kinds: None,
             min_runtime_adapter_observations: None,
@@ -2939,6 +2952,87 @@ mod tests {
         assert_eq!(passing.total_runtime_kv_imported(), 3);
         assert!(passing.summary_line().contains("runtime_kv_import_cases=1"));
         assert!(passing.summary_line().contains("runtime_kv_imported=3"));
+    }
+
+    #[test]
+    fn gate_reports_missing_runtime_kv_storage() {
+        let summary = BenchmarkSummary {
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_storage".to_owned(),
+                profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: true,
+                runtime_forward_energy_signal: true,
+                runtime_kv_influence_signal: true,
+                runtime_token_count: 1,
+                runtime_uncertainty_token_count: 1,
+                runtime_uncertainty_signal: true,
+                runtime_kv_imported: 1,
+                runtime_kv_exported: 2,
+                runtime_kv_stored: 0,
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_contract_ok: true,
+                runtime_adapter_contract_violations: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_kv_stored = Some(1);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.total_runtime_kv_stored(), 0);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_stored"))
+        );
+
+        let passing = BenchmarkSummary {
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                runtime_kv_stored: 2,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.total_runtime_kv_stored(), 2);
+        assert!(passing.summary_line().contains("runtime_kv_stored=2"));
     }
 
     #[test]
