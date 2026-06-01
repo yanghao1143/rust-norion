@@ -527,9 +527,11 @@ These are algorithmic references, not product dependencies:
   reference kernel, so tokenizer/embedding/Transformer-plan/KV exchange
   behavior is gated through the production ABI rather than only through local
   unit tests; benchmark summaries and gates now count runtime adapter contract
-  cases, violations, and adapter-kind diversity, so production all-device sweeps
-  must prove every selected adapter is inside that device's allowed adapter
-  hints without silently collapsing every target to the same fallback; benchmark
+  cases, violations, adapter-kind diversity, runtime adapter observation counts,
+  and best observation scores, so production all-device sweeps must prove every
+  selected adapter is inside that device's allowed adapter hints, historical
+  runtime/adapter experience is being surfaced back into later runtime requests,
+  and every target is not silently collapsing to the same fallback; benchmark
   summaries and gates also count runtime KV import cases and imported block
   totals, so production sweeps must prove persisted Noiron memory is actually
   fed back into the runtime rather than only exported after generation;
@@ -688,13 +690,18 @@ These are algorithmic references, not product dependencies:
 - Benchmark execution can require runtime adapter contract coverage through
   `--benchmark-min-runtime-adapter-contract-cases` and fail on selected-adapter
   contract drift through `--benchmark-max-runtime-adapter-contract-violations`.
+- Benchmark execution can require runtime adapter observations from persisted
+  experience through `--benchmark-min-runtime-adapter-observations` and a
+  positive scored best observation through
+  `--benchmark-min-runtime-adapter-best-score`, so production sweeps fail when
+  runtime/adapter history is not entering the next control-plane request.
 - The Rust-native local Transformer runtime prototype must pass the same
   production-local all-device recursive benchmark gate as the deterministic
   reference kernel before it is treated as a valid self-owned runtime boundary.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
-  runtime adapter contract coverage,
+  runtime adapter contract coverage, runtime adapter observation reuse,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,

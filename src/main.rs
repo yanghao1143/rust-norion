@@ -576,7 +576,7 @@ fn seed_sparse_benchmark_memories(engine: &mut NoironEngine) {
 }
 
 fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
-    const SEED_PREFIX: &str = "benchmark_auto_replay_seed:v2:control_plane:";
+    const SEED_PREFIX: &str = "benchmark_auto_replay_seed:v3:control_plane:";
 
     if engine
         .experience
@@ -602,7 +602,7 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
         prompt: "benchmark auto replay control plane".to_owned(),
         profile: TaskProfile::Coding,
         lesson:
-            "benchmark_auto_replay_seed:v2:control_plane: reinforce router threshold and hierarchy"
+            "benchmark_auto_replay_seed:v3:control_plane: reinforce router threshold and hierarchy"
                 .to_owned(),
         quality: 1.0,
         contradictions: Vec::new(),
@@ -634,7 +634,7 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
         prompt: "benchmark auto replay control plane drift".to_owned(),
         profile: TaskProfile::Coding,
         lesson:
-            "benchmark_auto_replay_seed:v2:control_plane: penalize weak router hierarchy memory"
+            "benchmark_auto_replay_seed:v3:control_plane: penalize weak router hierarchy memory"
                 .to_owned(),
         quality: 0.0,
         contradictions: vec!["benchmark contradiction".to_owned()],
@@ -659,6 +659,48 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
             total: 0.0,
             components: ProcessRewardComponents::default(),
             action: RewardAction::Penalize,
+            notes: Vec::new(),
+        },
+    });
+    engine.experience.record(ExperienceInput {
+        prompt: "runtime adapter self-developed Transformer KV import export".to_owned(),
+        profile: TaskProfile::Coding,
+        lesson:
+            "benchmark_auto_replay_seed:v3:control_plane: prefer portable runtime adapter from prior KV experience"
+                .to_owned(),
+        quality: 0.94,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: Some(reinforce_memory_id),
+        router_threshold_after: 0.52,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.52,
+            attention_tokens: 2,
+            fast_tokens: 1,
+            attention_fraction: 0.67,
+        },
+        hierarchy: HierarchyWeights::new(0.22, 0.58, 0.20),
+        used_memory_ids: vec![reinforce_memory_id],
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: None,
+            selected_adapter: Some("portable-rust".to_owned()),
+            layer_count: 6,
+            hidden_size: 64,
+            local_window_tokens: 32,
+            forward_energy: Some(0.18),
+            kv_influence: Some(0.72),
+            imported_kv_blocks: 2,
+            exported_kv_blocks: 1,
+        },
+        process_reward: ProcessRewardReport {
+            total: 0.90,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Reinforce,
             notes: Vec::new(),
         },
     });
@@ -1393,6 +1435,8 @@ struct Args {
     benchmark_min_runtime_kv_exported: Option<usize>,
     benchmark_min_runtime_adapter_contract_cases: Option<usize>,
     benchmark_min_runtime_adapter_kinds: Option<usize>,
+    benchmark_min_runtime_adapter_observations: Option<usize>,
+    benchmark_min_runtime_adapter_best_score: Option<f32>,
     benchmark_max_runtime_adapter_contract_violations: Option<usize>,
     benchmark_min_device_profiles: Option<usize>,
     benchmark_min_recursive_device_profiles: Option<usize>,
@@ -1497,6 +1541,8 @@ impl Args {
         let mut benchmark_min_runtime_kv_exported = None;
         let mut benchmark_min_runtime_adapter_contract_cases = None;
         let mut benchmark_min_runtime_adapter_kinds = None;
+        let mut benchmark_min_runtime_adapter_observations = None;
+        let mut benchmark_min_runtime_adapter_best_score = None;
         let mut benchmark_max_runtime_adapter_contract_violations = None;
         let mut benchmark_min_device_profiles = None;
         let mut benchmark_min_recursive_device_profiles = None;
@@ -1821,6 +1867,18 @@ impl Args {
                 }
                 "--benchmark-min-runtime-adapter-kinds" if index + 1 < raw.len() => {
                     benchmark_min_runtime_adapter_kinds = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-adapter-observations" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_adapter_observations =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-adapter-best-score" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_adapter_best_score =
+                        Some(parse_f32(&raw[index + 1], 0.0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -2173,6 +2231,8 @@ impl Args {
             benchmark_min_runtime_kv_exported,
             benchmark_min_runtime_adapter_contract_cases,
             benchmark_min_runtime_adapter_kinds,
+            benchmark_min_runtime_adapter_observations,
+            benchmark_min_runtime_adapter_best_score,
             benchmark_max_runtime_adapter_contract_violations,
             benchmark_min_device_profiles,
             benchmark_min_recursive_device_profiles,
@@ -2348,6 +2408,12 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_adapter_kinds {
             gate.min_runtime_adapter_kinds = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_observations {
+            gate.min_runtime_adapter_observations = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_best_score {
+            gate.min_runtime_adapter_best_score = Some(value.clamp(0.0, 1.0));
         }
         if let Some(value) = self.benchmark_max_runtime_adapter_contract_violations {
             gate.max_runtime_adapter_contract_violations = Some(value);
@@ -2532,7 +2598,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-evolution-replay-runs n] [--benchmark-min-evolution-replay-items n] [--benchmark-min-evolution-router-threshold-mutations n] [--benchmark-min-evolution-hierarchy-weight-mutations n] [--benchmark-min-evolution-router-threshold-delta f] [--benchmark-min-evolution-hierarchy-weight-delta f] [--benchmark-min-evolution-memory-updates n] [--benchmark-min-evolution-recursive-replay-items n] [--benchmark-min-evolution-recursive-runtime-calls n] [--benchmark-max-evolution-drift-rollbacks n] [--benchmark-max-evolution-rollback-router-threshold-delta f] [--benchmark-max-evolution-rollback-hierarchy-weight-delta f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-min-runtime-adapter-kinds n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-evolution-replay-runs n] [--benchmark-min-evolution-replay-items n] [--benchmark-min-evolution-router-threshold-mutations n] [--benchmark-min-evolution-hierarchy-weight-mutations n] [--benchmark-min-evolution-router-threshold-delta f] [--benchmark-min-evolution-hierarchy-weight-delta f] [--benchmark-min-evolution-memory-updates n] [--benchmark-min-evolution-recursive-replay-items n] [--benchmark-min-evolution-recursive-runtime-calls n] [--benchmark-max-evolution-drift-rollbacks n] [--benchmark-max-evolution-rollback-router-threshold-delta f] [--benchmark-max-evolution-rollback-hierarchy-weight-delta f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-min-runtime-adapter-kinds n] [--benchmark-min-runtime-adapter-observations n] [--benchmark-min-runtime-adapter-best-score f] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2661,6 +2727,10 @@ mod tests {
             "4".to_owned(),
             "--benchmark-min-runtime-adapter-kinds".to_owned(),
             "3".to_owned(),
+            "--benchmark-min-runtime-adapter-observations".to_owned(),
+            "2".to_owned(),
+            "--benchmark-min-runtime-adapter-best-score".to_owned(),
+            "0.25".to_owned(),
             "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
             "0".to_owned(),
             "--benchmark-min-device-profiles".to_owned(),
@@ -2915,6 +2985,8 @@ mod tests {
         assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_min_runtime_adapter_contract_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_adapter_kinds, Some(3));
+        assert_eq!(args.benchmark_min_runtime_adapter_observations, Some(2));
+        assert_eq!(args.benchmark_min_runtime_adapter_best_score, Some(0.25));
         assert_eq!(
             args.benchmark_max_runtime_adapter_contract_violations,
             Some(0)
@@ -2943,6 +3015,14 @@ mod tests {
             Some(4)
         );
         assert_eq!(args.benchmark_gate().min_runtime_adapter_kinds, Some(3));
+        assert_eq!(
+            args.benchmark_gate().min_runtime_adapter_observations,
+            Some(2)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_runtime_adapter_best_score,
+            Some(0.25)
+        );
         assert_eq!(
             args.benchmark_gate()
                 .max_runtime_adapter_contract_violations,
@@ -3699,6 +3779,10 @@ mod tests {
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-adapter-kinds".to_owned(),
             min_adapter_kinds.to_string(),
+            "--benchmark-min-runtime-adapter-observations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-runtime-adapter-best-score".to_owned(),
+            "0.05".to_owned(),
             "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
             "0".to_owned(),
             "--benchmark-min-auto-replay-router-threshold-mutations".to_owned(),
@@ -3802,6 +3886,8 @@ mod tests {
             device_count * case_count
         );
         assert!(summary.runtime_adapter_kinds() >= min_adapter_kinds);
+        assert!(summary.total_runtime_adapter_observations() >= 1);
+        assert!(summary.max_runtime_adapter_score().unwrap_or(0.0) >= 0.05);
         assert_eq!(summary.total_runtime_adapter_contract_violations(), 0);
         assert!(summary.total_runtime_kv_exported() >= device_count * case_count);
         assert!(summary.total_auto_replay_router_threshold_mutations() >= 1);
@@ -3903,6 +3989,16 @@ mod tests {
                 .contains("runtime_adapter_contract_cases=48")
         );
         assert!(summary.summary_line().contains("runtime_adapter_kinds="));
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_adapter_observations=")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_adapter_best_score=")
+        );
         assert!(
             summary
                 .summary_line()

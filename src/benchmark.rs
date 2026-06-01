@@ -155,6 +155,8 @@ pub struct BenchmarkGate {
     pub min_runtime_kv_exported: Option<usize>,
     pub min_runtime_adapter_contract_cases: Option<usize>,
     pub min_runtime_adapter_kinds: Option<usize>,
+    pub min_runtime_adapter_observations: Option<usize>,
+    pub min_runtime_adapter_best_score: Option<f32>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
     pub min_device_profiles: Option<usize>,
     pub min_recursive_device_profiles: Option<usize>,
@@ -205,6 +207,8 @@ impl Default for BenchmarkGate {
             min_runtime_kv_exported: None,
             min_runtime_adapter_contract_cases: None,
             min_runtime_adapter_kinds: None,
+            min_runtime_adapter_observations: None,
+            min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
             min_device_profiles: None,
             min_recursive_device_profiles: None,
@@ -1536,6 +1540,26 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_adapter_observations) = gate.min_runtime_adapter_observations {
+            let runtime_adapter_observations = self.total_runtime_adapter_observations();
+            if runtime_adapter_observations < min_runtime_adapter_observations {
+                failures.push(format!(
+                    "runtime_adapter_observations {} below minimum {}",
+                    runtime_adapter_observations, min_runtime_adapter_observations
+                ));
+            }
+        }
+
+        if let Some(min_runtime_adapter_best_score) = gate.min_runtime_adapter_best_score {
+            let runtime_adapter_best_score = self.max_runtime_adapter_score().unwrap_or(0.0);
+            if runtime_adapter_best_score < min_runtime_adapter_best_score {
+                failures.push(format!(
+                    "runtime_adapter_best_score {:.3} below minimum {:.3}",
+                    runtime_adapter_best_score, min_runtime_adapter_best_score
+                ));
+            }
+        }
+
         if let Some(max_runtime_adapter_contract_violations) =
             gate.max_runtime_adapter_contract_violations
         {
@@ -1955,6 +1979,8 @@ mod tests {
             min_runtime_kv_exported: None,
             min_runtime_adapter_contract_cases: None,
             min_runtime_adapter_kinds: None,
+            min_runtime_adapter_observations: None,
+            min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
             min_device_profiles: None,
             min_recursive_device_profiles: None,
@@ -3194,6 +3220,106 @@ mod tests {
 
         assert_eq!(passing.runtime_adapter_kinds(), 2);
         assert!(passing.evaluate(&gate).passed);
+    }
+
+    #[test]
+    fn gate_reports_missing_runtime_adapter_observations() {
+        let summary = BenchmarkSummary {
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_adapter_observation".to_owned(),
+                profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: true,
+                runtime_forward_energy_signal: true,
+                runtime_kv_influence_signal: true,
+                runtime_token_count: 1,
+                runtime_uncertainty_token_count: 1,
+                runtime_uncertainty_signal: true,
+                runtime_kv_imported: 1,
+                runtime_kv_exported: 1,
+                runtime_kv_stored: 1,
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_contract_ok: true,
+                runtime_adapter_contract_violations: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_adapter_observations = Some(1);
+        gate.min_runtime_adapter_best_score = Some(0.25);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.total_runtime_adapter_observations(), 0);
+        assert_eq!(summary.max_runtime_adapter_score(), None);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_observations"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_best_score"))
+        );
+
+        let passing = BenchmarkSummary {
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                runtime_adapter_observations: 2,
+                runtime_adapter_best_score: Some(0.51),
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.total_runtime_adapter_observations(), 2);
+        assert_eq!(passing.max_runtime_adapter_score(), Some(0.51));
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_adapter_observations=2")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_adapter_best_score=0.510")
+        );
     }
 
     #[test]
