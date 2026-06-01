@@ -135,6 +135,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"infini_memory\":{",
     },
     TraceRequiredField {
+        name: "infini_local_window",
+        marker: "\"local_window\":",
+    },
+    TraceRequiredField {
+        name: "infini_global_memory",
+        marker: "\"global_memory\":",
+    },
+    TraceRequiredField {
+        name: "infini_sparse_skipped",
+        marker: "\"sparse_skipped\":",
+    },
+    TraceRequiredField {
+        name: "infini_skipped_tokens",
+        marker: "\"skipped_tokens\":",
+    },
+    TraceRequiredField {
         name: "transformer",
         marker: "\"transformer\":{",
     },
@@ -670,6 +686,11 @@ mod tests {
         assert!(line.contains("\"execution_waves\":"));
         assert!(line.contains("\"runtime_calls\":"));
         assert!(line.contains("\"max_parallel_chunks\":"));
+        assert!(line.contains("\"infini_memory\":"));
+        assert!(line.contains("\"local_window\":"));
+        assert!(line.contains("\"global_memory\":"));
+        assert!(line.contains("\"sparse_skipped\":"));
+        assert!(line.contains("\"skipped_tokens\":"));
         assert!(line.contains("\"template\":\"coding_local\""));
         assert!(line.contains("\"toolsmith\":"));
         assert!(line.contains("\"blueprint_summaries\":"));
