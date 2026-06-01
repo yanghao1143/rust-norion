@@ -397,8 +397,9 @@ These are algorithmic references, not product dependencies:
   router/hierarchy deltas, and trace schema gates now require those
   cumulative ledger fields in every generated JSONL record; benchmark summaries
   now expose the same cumulative ledger snapshot, and benchmark gates can enforce
-  minimum replay runs, applied items, mutation counts/deltas, memory updates, and
-  recursive replay cost evidence; production all-device benchmark gates now apply
+  minimum replay runs, applied items, mutation counts/deltas, memory updates,
+  recursive replay cost evidence, and zero-tolerance production caps for
+  cumulative drift rollback counts/deltas; production all-device benchmark gates now apply
   those ledger thresholds across the manifest-backed runtime boundary as well as
   the heuristic control-plane suite; replay planning now
   keeps at least one recursive runtime sample when the limit allows so

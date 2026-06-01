@@ -512,6 +512,19 @@ acceptable.
 
 Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
+The default benchmark gate also caps cumulative evolution-ledger drift
+rollbacks and rollback deltas at zero. Use
+`--benchmark-max-evolution-drift-rollbacks`,
+`--benchmark-max-evolution-rollback-router-threshold-delta`, and
+`--benchmark-max-evolution-rollback-hierarchy-weight-delta` only when a
+non-production audit run intentionally allows controlled rollback evidence.
+
+默认 benchmark gate 还会把累计 evolution ledger 里的 drift rollback 次数和
+rollback delta 上限设为 0。只有在非生产审计运行需要有意放宽回滚证据时，才使用
+`--benchmark-max-evolution-drift-rollbacks`、
+`--benchmark-max-evolution-rollback-router-threshold-delta` 和
+`--benchmark-max-evolution-rollback-hierarchy-weight-delta`。
+
 Apply universal device-profile hardware pressure hints:
 
 ```powershell
