@@ -156,7 +156,7 @@ Implemented modules:
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/toolsmith.rs`: Rust-only local tool blueprint planner that can propose gated helper CLIs, reject non-Rust tool surfaces, and carry build/validation outlines into runtime requests and reward notes
 - `src/agent_team.rs`: read-only sub-agent/team blackboard planner with single-writer isolation, conflict summaries, collision-free checks, and bounded evolution hints for the main control loop
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay router/hierarchy update counters plus threshold/weight mutation deltas, cumulative self-evolution ledger counters, drift rollback safety counters, memory updates, recursive cost pressure, hardware execution, the stable runtime device contract, KV budgets, Toolsmith, Agent Team, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay router/hierarchy update counters plus threshold/weight mutation deltas, cumulative self-evolution ledger counters, drift rollback safety counters, memory updates, recursive cost pressure, hardware execution, the stable runtime device contract, runtime device-contract semantic alignment, KV budgets, Toolsmith, Agent Team, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward, runtime-diagnostic, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable router-threshold mutation, hierarchy-weight mutation, memory-update, recursive call-pressure, and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -316,13 +316,15 @@ cargo run -- --benchmark target/noiron-all-devices-recursive.jsonl --benchmark-a
 Validate an existing trace JSONL file against the required local control-plane
 schema fields, including runtime token uncertainty, the stable
 `runtime_device_contract`, cumulative `evolution_ledger` counters, and
-device-derived hardware KV budgets:
+device-derived hardware KV budgets. The gate also checks that the emitted
+hardware device, execution lanes, KV budgets, adapter hints, and selected
+runtime adapter agree with the single-line runtime device contract:
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
 ```
 
-检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract`、累计 `evolution_ledger` 计数与设备推导出的硬件 KV budget：
+检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract`、累计 `evolution_ledger` 计数与设备推导出的硬件 KV budget。门禁还会检查 trace 里的设备、执行通道、KV budget、adapter hints 和实际 selected runtime adapter 是否与单行 runtime device contract 一致：
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl

@@ -368,7 +368,274 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
         }
     }
 
+    failures.extend(evaluate_trace_device_contract(line));
+
     failures
+}
+
+fn evaluate_trace_device_contract(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(contract) = extract_json_string_field(line, "runtime_device_contract") else {
+        return failures;
+    };
+
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "device",
+        extract_json_string_field(line, "device"),
+    );
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "tier",
+        extract_json_string_field(line, "tier"),
+    );
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "primary",
+        extract_json_string_field(line, "primary_lane"),
+    );
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "fallback",
+        extract_json_string_field(line, "fallback_lane"),
+    );
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "memory",
+        extract_json_string_field(line, "memory_mode"),
+    );
+    require_contract_usize(
+        &mut failures,
+        &contract,
+        "parallel_chunks",
+        extract_json_usize_field(line, "max_parallel_chunks"),
+    );
+    require_contract_usize(
+        &mut failures,
+        &contract,
+        "kv_prefetch",
+        extract_json_usize_field(line, "kv_prefetch_blocks"),
+    );
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "kv_bits",
+        match (
+            extract_json_usize_field(line, "hot_kv_bits"),
+            extract_json_usize_field(line, "cold_kv_bits"),
+        ) {
+            (Some(hot), Some(cold)) => Some(format!("{hot}/{cold}")),
+            _ => None,
+        },
+    );
+    require_contract_string(
+        &mut failures,
+        &contract,
+        "disk_spill",
+        extract_json_bool_field(line, "disk_spill").map(|value| value.to_string()),
+    );
+    require_contract_usize(
+        &mut failures,
+        &contract,
+        "local_kv_tokens",
+        extract_json_usize_field(line, "local_kv_token_budget"),
+    );
+    require_contract_usize(
+        &mut failures,
+        &contract,
+        "global_kv_tokens",
+        extract_json_usize_field(line, "global_kv_token_budget"),
+    );
+
+    let adapter_hints = extract_json_string_array_field(line, "adapter_hints").unwrap_or_default();
+    if adapter_hints.is_empty() {
+        failures.push("adapter_hints must not be empty".to_owned());
+    }
+    let contract_adapters = contract_value(&contract, "adapters")
+        .map(split_contract_adapters)
+        .unwrap_or_default();
+    if contract_adapters.is_empty() {
+        failures.push("runtime_device_contract missing adapters list".to_owned());
+    }
+    for adapter in &adapter_hints {
+        if !contract_adapters
+            .iter()
+            .any(|contract_adapter| contract_adapter == adapter)
+        {
+            failures.push(format!(
+                "runtime_device_contract adapters missing trace adapter_hint {adapter}"
+            ));
+        }
+    }
+
+    if let Some(selected_adapter) = extract_json_string_field(line, "selected_adapter") {
+        if !adapter_hints
+            .iter()
+            .any(|adapter| adapter == &selected_adapter)
+        {
+            failures.push(format!(
+                "selected_adapter {selected_adapter} is outside trace adapter_hints"
+            ));
+        }
+        if !contract_adapters
+            .iter()
+            .any(|adapter| adapter == &selected_adapter)
+        {
+            failures.push(format!(
+                "selected_adapter {selected_adapter} is outside runtime_device_contract adapters"
+            ));
+        }
+    }
+
+    failures
+}
+
+fn require_contract_string(
+    failures: &mut Vec<String>,
+    contract: &str,
+    key: &str,
+    expected: Option<String>,
+) {
+    let Some(expected) = expected else {
+        return;
+    };
+    match contract_value(contract, key) {
+        Some(actual) if actual == expected => {}
+        Some(actual) => failures.push(format!(
+            "runtime_device_contract {key}={actual} does not match trace value {expected}"
+        )),
+        None => failures.push(format!("runtime_device_contract missing {key}")),
+    }
+}
+
+fn require_contract_usize(
+    failures: &mut Vec<String>,
+    contract: &str,
+    key: &str,
+    expected: Option<usize>,
+) {
+    require_contract_string(
+        failures,
+        contract,
+        key,
+        expected.map(|value| value.to_string()),
+    );
+}
+
+fn contract_value<'a>(contract: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key}=");
+    contract
+        .split_whitespace()
+        .find_map(|part| part.strip_prefix(&prefix))
+}
+
+fn split_contract_adapters(value: &str) -> Vec<String> {
+    value
+        .split('+')
+        .filter(|item| !item.trim().is_empty())
+        .map(|item| item.trim().to_owned())
+        .collect()
+}
+
+fn extract_json_string_field(line: &str, field: &str) -> Option<String> {
+    let value = value_after_json_field(line, field)?;
+    parse_json_string(value).map(|(parsed, _)| parsed)
+}
+
+fn extract_json_usize_field(line: &str, field: &str) -> Option<usize> {
+    let value = value_after_json_field(line, field)?;
+    let digits = value
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+fn extract_json_bool_field(line: &str, field: &str) -> Option<bool> {
+    let value = value_after_json_field(line, field)?;
+    if value.starts_with("true") {
+        Some(true)
+    } else if value.starts_with("false") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn extract_json_string_array_field(line: &str, field: &str) -> Option<Vec<String>> {
+    let mut value = value_after_json_field(line, field)?;
+    value = value.strip_prefix('[')?.trim_start();
+    let mut out = Vec::new();
+
+    loop {
+        if let Some(rest) = value.strip_prefix(']') {
+            let _ = rest;
+            return Some(out);
+        }
+
+        let (item, consumed) = parse_json_string(value)?;
+        out.push(item);
+        value = value[consumed..].trim_start();
+
+        if let Some(rest) = value.strip_prefix(',') {
+            value = rest.trim_start();
+        } else if value.starts_with(']') {
+            continue;
+        } else {
+            return None;
+        }
+    }
+}
+
+fn value_after_json_field<'a>(line: &'a str, field: &str) -> Option<&'a str> {
+    let marker = format!("\"{field}\":");
+    let start = line.find(&marker)? + marker.len();
+    Some(line[start..].trim_start())
+}
+
+fn parse_json_string(value: &str) -> Option<(String, usize)> {
+    let mut chars = value.char_indices();
+    let (_, first) = chars.next()?;
+    if first != '"' {
+        return None;
+    }
+
+    let mut out = String::new();
+    let mut escaped = false;
+    for (index, ch) in chars {
+        if escaped {
+            match ch {
+                '"' => out.push('"'),
+                '\\' => out.push('\\'),
+                '/' => out.push('/'),
+                'n' => out.push('\n'),
+                'r' => out.push('\r'),
+                't' => out.push('\t'),
+                'b' => out.push('\u{0008}'),
+                'f' => out.push('\u{000c}'),
+                'u' => out.push_str("\\u"),
+                other => out.push(other),
+            }
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escaped = true,
+            '"' => return Some((out, index + ch.len_utf8())),
+            other => out.push(other),
+        }
+    }
+
+    None
 }
 
 pub fn trace_json_line(
@@ -881,6 +1148,72 @@ mod tests {
         assert!(failures.iter().any(|failure| failure.contains("schema")));
         assert!(failures.iter().any(|failure| failure.contains("route")));
         assert!(failures.iter().any(|failure| failure.contains("retention")));
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_device_contract_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace device contract mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace device contract mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let actual_device = extract_json_string_field(&line, "device").unwrap();
+        let wrong_device = if actual_device == "server" {
+            "cpu"
+        } else {
+            "server"
+        };
+        let mismatched = line.replacen(
+            &format!("\"device\":\"{actual_device}\""),
+            &format!("\"device\":\"{wrong_device}\""),
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&mismatched);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("runtime_device_contract device=")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_selected_adapter_outside_device_contract() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace adapter contract mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace adapter contract mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let mismatched = line.replacen(
+            "\"selected_adapter\":null",
+            "\"selected_adapter\":\"cuda\"",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&mismatched);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("selected_adapter cuda")),
+            "{failures:?}"
+        );
     }
 
     #[test]

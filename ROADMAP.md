@@ -250,7 +250,9 @@ modules, not external product dependencies:
   benchmark and inference JSONL traces should have an executable field-presence
   gate for the control-plane schema so route, memory, drift, reward, hardware,
   hardware KV budgets, recursion, runtime-KV, retention, and compaction
-  diagnostics cannot silently disappear.
+  diagnostics cannot silently disappear. The gate should also validate that the
+  hardware block, runtime adapter hints, selected runtime adapter, KV budgets,
+  and stable `runtime_device_contract` describe the same device execution plan.
 - State inspection:
   persisted memory, experience, global/profile router thresholds, hierarchy
   weights, tier counts, effective memory policies, and persisted memory vector
@@ -436,7 +438,7 @@ These are algorithmic references, not product dependencies:
   records now capture route, hierarchy, KV, recursion, hardware execution, the
   stable runtime device contract, hardware KV budgets, structured reflection
   diagnostics, drift, reward, effective memory policies, and memory counters per inference, with a CLI trace schema gate for required
-  control-plane fields; a
+  control-plane fields and runtime device-contract semantic alignment; a
   built-in benchmark suite now writes one
   trace record per coding, long-context, general-reflection, and writing case;
   benchmark regression gates can enforce minimum quality, minimum reward, total
@@ -557,7 +559,9 @@ These are algorithmic references, not product dependencies:
   also require explicit forward-energy and KV-influence case coverage so a
   runtime cannot pass by returning only generic layer metadata.
 - Trace JSONL files have a CLI schema gate that fails when required
-  control-plane fields disappear.
+  control-plane fields disappear or when the hardware execution block,
+  selected adapter, adapter hints, KV budgets, and `runtime_device_contract`
+  disagree.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
   before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, including gates that
