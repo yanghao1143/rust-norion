@@ -776,7 +776,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.device.as_str(),
@@ -805,6 +805,9 @@ fn print_benchmark_summary(
             result.stored_memories,
             result.compacted_memories,
             result.runtime_forward_signal,
+            result.runtime_token_count,
+            result.runtime_uncertainty_token_count,
+            result.runtime_uncertainty_signal,
             result.runtime_kv_imported,
             result.runtime_kv_exported,
             result.runtime_kv_stored,
@@ -1317,6 +1320,8 @@ struct Args {
     benchmark_min_sparse_skipped_cases: Option<usize>,
     benchmark_min_sparse_skipped_tokens: Option<usize>,
     benchmark_min_runtime_forward_cases: Option<usize>,
+    benchmark_min_runtime_uncertainty_cases: Option<usize>,
+    benchmark_min_runtime_uncertainty_tokens: Option<usize>,
     benchmark_min_runtime_kv_import_cases: Option<usize>,
     benchmark_min_runtime_kv_imported: Option<usize>,
     benchmark_min_runtime_kv_exported: Option<usize>,
@@ -1400,6 +1405,8 @@ impl Args {
         let mut benchmark_min_sparse_skipped_cases = None;
         let mut benchmark_min_sparse_skipped_tokens = None;
         let mut benchmark_min_runtime_forward_cases = None;
+        let mut benchmark_min_runtime_uncertainty_cases = None;
+        let mut benchmark_min_runtime_uncertainty_tokens = None;
         let mut benchmark_min_runtime_kv_import_cases = None;
         let mut benchmark_min_runtime_kv_imported = None;
         let mut benchmark_min_runtime_kv_exported = None;
@@ -1578,6 +1585,17 @@ impl Args {
                 }
                 "--benchmark-min-runtime-forward-cases" if index + 1 < raw.len() => {
                     benchmark_min_runtime_forward_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-uncertainty-cases" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_uncertainty_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-uncertainty-tokens" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_uncertainty_tokens =
+                        Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1926,6 +1944,8 @@ impl Args {
             benchmark_min_sparse_skipped_cases,
             benchmark_min_sparse_skipped_tokens,
             benchmark_min_runtime_forward_cases,
+            benchmark_min_runtime_uncertainty_cases,
+            benchmark_min_runtime_uncertainty_tokens,
             benchmark_min_runtime_kv_import_cases,
             benchmark_min_runtime_kv_imported,
             benchmark_min_runtime_kv_exported,
@@ -2030,6 +2050,12 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_forward_cases {
             gate.min_runtime_forward_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_uncertainty_cases {
+            gate.min_runtime_uncertainty_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_uncertainty_tokens {
+            gate.min_runtime_uncertainty_tokens = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_kv_import_cases {
             gate.min_runtime_kv_import_cases = Some(value);
@@ -2226,7 +2252,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2304,6 +2330,10 @@ mod tests {
             "--benchmark-min-sparse-skipped-tokens".to_owned(),
             "3".to_owned(),
             "--benchmark-min-runtime-forward-cases".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-runtime-uncertainty-cases".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-runtime-uncertainty-tokens".to_owned(),
             "4".to_owned(),
             "--benchmark-min-runtime-kv-import-cases".to_owned(),
             "4".to_owned(),
@@ -2451,6 +2481,8 @@ mod tests {
         assert_eq!(args.benchmark_gate().min_sparse_skipped_cases, Some(1));
         assert_eq!(args.benchmark_gate().min_sparse_skipped_tokens, Some(3));
         assert_eq!(args.benchmark_min_runtime_forward_cases, Some(4));
+        assert_eq!(args.benchmark_min_runtime_uncertainty_cases, Some(4));
+        assert_eq!(args.benchmark_min_runtime_uncertainty_tokens, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_import_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_imported, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
@@ -2462,6 +2494,11 @@ mod tests {
         assert_eq!(args.benchmark_min_device_profiles, Some(12));
         assert_eq!(args.benchmark_min_recursive_device_profiles, Some(12));
         assert_eq!(args.benchmark_gate().min_runtime_forward_cases, Some(4));
+        assert_eq!(args.benchmark_gate().min_runtime_uncertainty_cases, Some(4));
+        assert_eq!(
+            args.benchmark_gate().min_runtime_uncertainty_tokens,
+            Some(4)
+        );
         assert_eq!(args.benchmark_gate().min_runtime_kv_import_cases, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_kv_imported, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_kv_exported, Some(4));
@@ -3202,6 +3239,10 @@ mod tests {
             device_count.to_string(),
             "--benchmark-min-runtime-forward-cases".to_owned(),
             (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-uncertainty-cases".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-uncertainty-tokens".to_owned(),
+            (device_count * case_count).to_string(),
             "--benchmark-min-runtime-kv-import-cases".to_owned(),
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-kv-imported".to_owned(),
@@ -3265,6 +3306,11 @@ mod tests {
         assert_eq!(summary.recursive_device_profiles_covered(), device_count);
         assert_eq!(summary.recursive_cases(), device_count);
         assert_eq!(summary.runtime_forward_cases(), device_count * case_count);
+        assert_eq!(
+            summary.runtime_uncertainty_cases(),
+            device_count * case_count
+        );
+        assert!(summary.total_runtime_uncertainty_tokens() >= device_count * case_count);
         assert_eq!(summary.runtime_kv_import_cases(), device_count * case_count);
         assert!(summary.total_runtime_kv_imported() >= device_count * case_count);
         assert_eq!(
@@ -3346,6 +3392,11 @@ mod tests {
             summary
                 .summary_line()
                 .contains("runtime_adapter_contract_cases=48")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_uncertainty_cases=48")
         );
         assert!(
             summary

@@ -455,11 +455,11 @@ These are algorithmic references, not product dependencies:
   without reconstructing the contract from expanded fields; runtime responses can now carry structured
   forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
-  KV influence, and runtime KV import/export counts; runtime requests,
-  inference outcomes, traces, and benchmark summaries now filter adapter
-  observations against the current device execution plan, and runtime responses
-  are checked against the requested model id, architecture envelope, and device
-  adapter hints before exported runtime KV can be admitted; a
+  KV influence, runtime token uncertainty, and runtime KV import/export counts;
+  runtime requests, inference outcomes, traces, and benchmark summaries now
+  filter adapter observations against the current device execution plan, and
+  runtime responses are checked against the requested model id, architecture
+  envelope, and device adapter hints before exported runtime KV can be admitted; a
   `ProductionTransformerRuntime` boundary now binds production manifests to
   existing local assets, the current device contract, adapter intersection,
   bootstrap tokenizer/embedding access, bounded KV import, and bounded KV
@@ -517,7 +517,10 @@ These are algorithmic references, not product dependencies:
   selected adapter is inside that device's allowed adapter hints; benchmark
   summaries and gates also count runtime KV import cases and imported block
   totals, so production sweeps must prove persisted Noiron memory is actually
-  fed back into the runtime rather than only exported after generation)
+  fed back into the runtime rather than only exported after generation;
+  benchmark summaries and gates now also count runtime token cases and
+  uncertainty-bearing token totals, so production sweeps can prove token-level
+  entropy/logprob feedback remains present across every device)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -532,6 +535,8 @@ These are algorithmic references, not product dependencies:
   routing, hierarchy, and experience updates; trace JSONL now emits the
   aggregate runtime token counts, average entropy, average negative logprob, and
   derived uncertainty perplexity, and the schema gate requires that block.
+  Benchmark gates can also require runtime uncertainty case coverage and
+  uncertainty-bearing token totals before production runtime sweeps pass.
 - Runtime forward diagnostics are observable: local and command runtimes can
   report model id, selected adapter, executed layer count, hidden size, local
   window, forward energy, KV influence, and runtime KV exchange counters, and
@@ -610,6 +615,10 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-import-cases` and
   `--benchmark-min-runtime-kv-imported`, so local/CI production sweeps can fail
   when persisted control-plane memory stops reaching the runtime.
+- Benchmark summaries and gates expose runtime token uncertainty coverage
+  through `--benchmark-min-runtime-uncertainty-cases` and
+  `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps
+  can fail when a runtime stops returning token entropy/logprob signals.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -659,7 +668,8 @@ These are algorithmic references, not product dependencies:
   reference kernel before it is treated as a valid self-owned runtime boundary.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
-  forward diagnostics, runtime KV import/export, runtime adapter contract coverage,
+  forward diagnostics, runtime token uncertainty, runtime KV import/export,
+  runtime adapter contract coverage,
   auto-replay router/hierarchy/memory update coverage, auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
   drift block/rollback counts, or persistent state reuse regress.
