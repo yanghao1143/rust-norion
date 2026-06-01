@@ -335,10 +335,27 @@ the manifest allows:
 cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
 ```
 
+Run the production kernel conformance gate after attaching a real
+`ProductionForwardKernel`, or with the deterministic reference kernel in local
+CI. This performs a short manifest-backed forward pass with deterministic KV
+import and fails unless the kernel is connected and returns answer text, token
+uncertainty, reasoning trace, positive forward energy, finite KV influence, and
+bounded exported KV when KV export is enabled:
+
+```powershell
+cargo run -- --production-reference-kernel --production-kernel-conformance-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
+```
+
 接入生产自研 Transformer runtime 前，先运行 runtime manifest 门禁。它会检查元数据、显式架构形状、KV policy、本地 weights/tokenizer 资产文件以及当前目标设备执行契约；如果 manifest 与设备计划没有 runtime adapter 交集、设备 KV 预取超过 manifest 限制，或设备需要的 hot/cold KV 精度高于 manifest 允许值，也会直接失败：
 
 ```powershell
 cargo run -- --runtime-manifest-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --runtime-config ./models/noiron/config.noiron
+```
+
+真实 `ProductionForwardKernel` 接好后，还要运行 production kernel conformance 门禁；本地 CI 可以先用确定性的 reference kernel。它会执行一次短的 manifest-backed forward，并注入确定性 KV import；如果 kernel 未连接，或没有返回 answer、token uncertainty、reasoning trace、positive forward energy、finite KV influence，以及启用 KV export 时的有界导出 KV，就会失败：
+
+```powershell
+cargo run -- --production-reference-kernel --production-kernel-conformance-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
 ```
 
 Run a persistence roundtrip gate that writes state, reloads it, and verifies the
@@ -767,6 +784,11 @@ not connected" error. With `ProductionForwardKernel` attached, the kernel
 receives the manifest, asset summary, device gate, imported KV blocks, and
 Noiron runtime request, then returns answer text, token uncertainty, trace,
 diagnostics, and exported KV blocks through the same `RuntimeBackend` path.
+`ProductionTransformerRuntime::conformance_report` and the CLI
+`--production-kernel-conformance-gate` turn this contract into a local/CI gate:
+they require a connected kernel, runtime token uncertainty, reasoning trace,
+positive finite forward energy, finite KV influence, and exported KV when the
+manifest enables KV export.
 Imported KV from the Noiron control plane is validated before it is accepted,
 and kernel-exported KV is validated before it can reach `RuntimeBackend`:
 layer/head ids must fit the manifest architecture, token ranges must be valid,
@@ -776,6 +798,7 @@ imports generated from active memories are also assigned layer/head ids within
 the runtime architecture instead of assuming one unbounded head per memory.
 
 `ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。
+`ProductionTransformerRuntime::conformance_report` 和 CLI `--production-kernel-conformance-gate` 会把这份契约变成本地/CI 门禁：要求 kernel 已连接，并返回 runtime token uncertainty、reasoning trace、positive finite forward energy、finite KV influence，以及 manifest 启用 KV export 时的导出 KV。
 Noiron 控制层导入的 KV 会先经过校验再被生产 runtime 接受，生产 kernel 导出的 KV 也会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须合法，key/value 不能为空且维度一致，向量长度必须符合 manifest 与 token span 上界，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。由活跃记忆生成的 runtime KV import 也会按 runtime 架构分配有界的 layer/head，而不是假设每条记忆都能占用一个无限 head。
 
 `RuntimeBackend` reports the runtime's native context window back to the engine,

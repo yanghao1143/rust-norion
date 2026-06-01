@@ -474,7 +474,10 @@ These are algorithmic references, not product dependencies:
   pretending to be a trained production model; the CLI can now
   select that boundary with `--production-runtime` for normal inference and
   benchmark runs, or attach the reference kernel with
-  `--production-reference-kernel`)
+  `--production-reference-kernel`; `--production-kernel-conformance-gate`
+  now runs a short manifest-backed forward pass with deterministic KV import
+  and fails unless the attached kernel returns token uncertainty, reasoning
+  trace, forward energy, KV influence, and exported KV when enabled)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -535,6 +538,11 @@ These are algorithmic references, not product dependencies:
   `ProductionForwardKernel` receives the manifest, device contract, asset
   summary, imported KV blocks, and runtime request, and returns the same
   response surfaces consumed by `RuntimeBackend`.
+- Real production kernels must pass a dedicated conformance gate before being
+  treated as integrated: `--production-kernel-conformance-gate` requires a
+  connected kernel, non-empty answer, token uncertainty, reasoning trace,
+  positive forward energy, finite KV influence, and exported KV when KV export
+  is enabled.
 - Production kernel exported KV cannot bypass the runtime boundary: invalid
   layer/head ids, token ranges, empty vectors, mismatched key/value dimensions,
   oversized vectors, or non-finite values must fail before any long-term memory
@@ -555,6 +563,9 @@ These are algorithmic references, not product dependencies:
 - The CLI can attach the deterministic reference production kernel through
   `--production-reference-kernel` for local/CI validation of the same production
   ABI without requiring external weights or cloud services.
+- The CLI can run `--production-kernel-conformance-gate` so a reference or real
+  self-developed kernel must prove the full response/KV diagnostic surface
+  before benchmark or integration claims rely on it.
 - Mixed runtime versions or fallback/runtime embedding spaces do not silently
   over-fuse incompatible KV memories.
 - Hardware adaptation is profile-driven and test-covered across constrained

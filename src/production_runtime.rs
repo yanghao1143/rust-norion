@@ -2,16 +2,24 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::hardware::{HardwarePlan, RuntimeAdapterHint, RuntimeManifestDeviceGateReport};
+use crate::agent_team::AgentTeamPlan;
+use crate::hardware::{
+    HardwareAllocator, HardwarePlan, HardwareSnapshot, RuntimeAdapterHint,
+    RuntimeManifestDeviceGateReport,
+};
+use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
+use crate::router::RouteBudget;
 use crate::runtime::{
     ModelRuntime, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse,
     RuntimeToken, RuntimeTokenId,
 };
 use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
+use crate::toolsmith::ToolsmithPlan;
 use crate::transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,
+    TransformerRefactorPlan,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +88,77 @@ pub trait ProductionForwardKernel: std::fmt::Debug + Send + Sync {
         &self,
         context: ProductionKernelContext<'_>,
     ) -> Result<ProductionKernelOutput, RuntimeError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProductionKernelConformanceGate {
+    pub require_tokens: bool,
+    pub require_trace: bool,
+    pub require_forward_energy: bool,
+    pub require_kv_influence: bool,
+    pub require_kv_export_when_enabled: bool,
+}
+
+impl Default for ProductionKernelConformanceGate {
+    fn default() -> Self {
+        Self {
+            require_tokens: true,
+            require_trace: true,
+            require_forward_energy: true,
+            require_kv_influence: true,
+            require_kv_export_when_enabled: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProductionKernelConformanceReport {
+    pub passed: bool,
+    pub model_id: String,
+    pub selected_adapter: String,
+    pub kernel_connected: bool,
+    pub token_count: usize,
+    pub trace_steps: usize,
+    pub imported_kv_blocks: usize,
+    pub exported_kv_blocks: usize,
+    pub forward_energy: Option<f32>,
+    pub kv_influence: Option<f32>,
+    pub failures: Vec<String>,
+}
+
+impl ProductionKernelConformanceReport {
+    fn new(model_id: &str, selected_adapter: &str, kernel_connected: bool) -> Self {
+        Self {
+            passed: false,
+            model_id: model_id.to_owned(),
+            selected_adapter: selected_adapter.to_owned(),
+            kernel_connected,
+            token_count: 0,
+            trace_steps: 0,
+            imported_kv_blocks: 0,
+            exported_kv_blocks: 0,
+            forward_energy: None,
+            kv_influence: None,
+            failures: Vec::new(),
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} failures={}",
+            self.passed,
+            self.model_id,
+            self.selected_adapter,
+            self.kernel_connected,
+            self.token_count,
+            self.trace_steps,
+            self.imported_kv_blocks,
+            self.exported_kv_blocks,
+            option_f32_display(self.forward_energy),
+            option_f32_display(self.kv_influence),
+            self.failures.len()
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -312,6 +391,85 @@ impl ProductionTransformerRuntime {
                 "not-connected"
             }
         )
+    }
+
+    pub fn conformance_report(
+        &self,
+        gate: ProductionKernelConformanceGate,
+    ) -> ProductionKernelConformanceReport {
+        let mut report = ProductionKernelConformanceReport::new(
+            &self.manifest.metadata.model_id,
+            self.device_gate.runtime_adapter_name(),
+            self.kernel_connected(),
+        );
+
+        if !self.kernel_connected() {
+            report
+                .failures
+                .push("production forward kernel is not connected".to_owned());
+            return report;
+        }
+
+        let mut runtime = self.clone();
+        let import_blocks = conformance_import_blocks(&self.manifest);
+        match runtime.import_kv(&import_blocks) {
+            Ok(imported) => {
+                report.imported_kv_blocks = imported;
+                if self.manifest.kv_policy.import_enabled && imported == 0 {
+                    report.failures.push(
+                        "runtime KV import is enabled but conformance import admitted no blocks"
+                            .to_owned(),
+                    );
+                }
+            }
+            Err(error) => {
+                report
+                    .failures
+                    .push(format!("conformance KV import failed: {}", error.message()));
+                return report;
+            }
+        }
+
+        let request = conformance_request(&self.manifest, &self.device_gate);
+        let response = match runtime.generate(request) {
+            Ok(response) => response,
+            Err(error) => {
+                report.failures.push(format!(
+                    "conformance generation failed: {}",
+                    error.message()
+                ));
+                return report;
+            }
+        };
+
+        report.token_count = response.tokens.len();
+        report.trace_steps = response.trace.len();
+        report.forward_energy = response.diagnostics.forward_energy;
+        report.kv_influence = response.diagnostics.kv_influence;
+        report.exported_kv_blocks = runtime.exported_kv_blocks().len();
+        report.imported_kv_blocks = response.diagnostics.imported_kv_blocks;
+
+        evaluate_conformance_response(&self.manifest, gate, &response, &mut report);
+
+        match runtime.export_kv() {
+            Ok(exported) => {
+                if exported.len() != report.exported_kv_blocks {
+                    report.failures.push(format!(
+                        "export_kv returned {} blocks but diagnostics/runtime recorded {}",
+                        exported.len(),
+                        report.exported_kv_blocks
+                    ));
+                }
+            }
+            Err(error) => {
+                report
+                    .failures
+                    .push(format!("conformance KV export failed: {}", error.message()));
+            }
+        }
+
+        report.passed = report.failures.is_empty();
+        report
     }
 }
 
@@ -575,6 +733,197 @@ fn normalize_kernel_diagnostics(
     diagnostics.imported_kv_blocks = imported_kv_blocks;
     diagnostics.exported_kv_blocks = exported_kv_blocks;
     diagnostics
+}
+
+fn conformance_import_blocks(manifest: &RuntimeManifest) -> Vec<RuntimeKvBlock> {
+    if !manifest.kv_policy.import_enabled || manifest.kv_policy.max_import_blocks == 0 {
+        return Vec::new();
+    }
+
+    let dims = manifest
+        .architecture
+        .hidden_size
+        .max(manifest.metadata.embedding_dimensions)
+        .clamp(1, 16);
+    vec![RuntimeKvBlock::new(
+        0,
+        0,
+        0,
+        1,
+        deterministic_vector("conformance-key", dims),
+        deterministic_vector("conformance-value", dims),
+    )]
+}
+
+fn conformance_request(
+    manifest: &RuntimeManifest,
+    device_gate: &RuntimeManifestDeviceGateReport,
+) -> RuntimeRequest {
+    let prompt = format!(
+        "Run production kernel conformance for {} with KV import and export diagnostics.",
+        manifest.metadata.model_id
+    );
+    let prompt_tokens = prompt.split_whitespace().count().max(1);
+    let hardware_plan = HardwareAllocator::new().plan(
+        HardwareSnapshot::new(device_gate.device, 0.35, 0.30, 0.45, 0.20),
+        TaskProfile::Coding,
+        prompt_tokens,
+        HierarchyWeights::default(),
+    );
+
+    RuntimeRequest {
+        prompt,
+        profile: TaskProfile::Coding,
+        runtime_metadata: manifest.runtime_metadata(),
+        runtime_architecture: manifest.architecture,
+        memory_hints: Vec::new(),
+        infini_memory_hints: Vec::new(),
+        experience_hints: Vec::new(),
+        runtime_adapter_observations: Vec::new(),
+        toolsmith_plan: ToolsmithPlan::default(),
+        agent_team_plan: AgentTeamPlan::default(),
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 2,
+            fast_tokens: 1,
+            attention_fraction: 2.0 / 3.0,
+        },
+        hierarchy: HierarchyWeights::default(),
+        transformer_plan: TransformerRefactorPlan::default(),
+        recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
+        hardware_plan,
+        max_tokens: 32,
+    }
+}
+
+fn evaluate_conformance_response(
+    manifest: &RuntimeManifest,
+    gate: ProductionKernelConformanceGate,
+    response: &RuntimeResponse,
+    report: &mut ProductionKernelConformanceReport,
+) {
+    if response.answer.trim().is_empty() {
+        report
+            .failures
+            .push("kernel returned an empty answer".to_owned());
+    }
+
+    if gate.require_tokens && response.tokens.is_empty() {
+        report
+            .failures
+            .push("kernel did not return runtime token uncertainty records".to_owned());
+    }
+    if response
+        .tokens
+        .iter()
+        .any(|token| token.text.trim().is_empty())
+    {
+        report
+            .failures
+            .push("kernel returned a runtime token with empty text".to_owned());
+    }
+    if response.tokens.iter().any(|token| {
+        token.entropy.is_some_and(|value| !value.is_finite())
+            || token.logprob.is_some_and(|value| !value.is_finite())
+    }) {
+        report
+            .failures
+            .push("kernel returned non-finite runtime token uncertainty".to_owned());
+    }
+
+    if gate.require_trace && response.trace.is_empty() {
+        report
+            .failures
+            .push("kernel did not return reasoning trace steps".to_owned());
+    }
+    if response
+        .trace
+        .iter()
+        .any(|step| step.label.trim().is_empty() || step.confidence.is_nan())
+    {
+        report
+            .failures
+            .push("kernel returned malformed reasoning trace steps".to_owned());
+    }
+
+    let diagnostics = &response.diagnostics;
+    if diagnostics.model_id.as_deref() != Some(manifest.metadata.model_id.as_str()) {
+        report.failures.push(format!(
+            "diagnostics model_id {:?} does not match manifest model_id {}",
+            diagnostics.model_id, manifest.metadata.model_id
+        ));
+    }
+    if diagnostics.layer_count != manifest.architecture.layer_count {
+        report.failures.push(format!(
+            "diagnostics layer_count {} does not match manifest layer_count {}",
+            diagnostics.layer_count, manifest.architecture.layer_count
+        ));
+    }
+    if diagnostics.hidden_size != manifest.architecture.hidden_size {
+        report.failures.push(format!(
+            "diagnostics hidden_size {} does not match manifest hidden_size {}",
+            diagnostics.hidden_size, manifest.architecture.hidden_size
+        ));
+    }
+    if diagnostics.local_window_tokens != manifest.architecture.local_window_tokens {
+        report.failures.push(format!(
+            "diagnostics local_window_tokens {} does not match manifest local_window_tokens {}",
+            diagnostics.local_window_tokens, manifest.architecture.local_window_tokens
+        ));
+    }
+    if gate.require_forward_energy
+        && diagnostics
+            .forward_energy
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .is_none()
+    {
+        report
+            .failures
+            .push("kernel did not report positive finite forward_energy".to_owned());
+    }
+    if gate.require_kv_influence
+        && diagnostics
+            .kv_influence
+            .filter(|value| value.is_finite() && *value >= 0.0)
+            .is_none()
+    {
+        report
+            .failures
+            .push("kernel did not report finite non-negative kv_influence".to_owned());
+    }
+    if gate.require_kv_export_when_enabled
+        && manifest.kv_policy.export_enabled
+        && diagnostics.exported_kv_blocks == 0
+    {
+        report
+            .failures
+            .push("runtime KV export is enabled but kernel exported no KV blocks".to_owned());
+    }
+    if diagnostics.exported_kv_blocks != report.exported_kv_blocks {
+        report.failures.push(format!(
+            "diagnostics exported_kv_blocks {} does not match runtime exported KV {}",
+            diagnostics.exported_kv_blocks, report.exported_kv_blocks
+        ));
+    }
+}
+
+fn deterministic_vector(seed: &str, dims: usize) -> Vec<f32> {
+    let dims = dims.max(1);
+    let mut vector = (0..dims)
+        .map(|index| {
+            let hash = stable_hash(&format!("{seed}:{index}"));
+            ((hash % 997) as f32 / 997.0) - 0.5
+        })
+        .collect::<Vec<_>>();
+    normalize(&mut vector);
+    vector
+}
+
+fn option_f32_display(value: Option<f32>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "none".to_owned())
 }
 
 #[derive(Debug, Clone)]
@@ -1234,6 +1583,91 @@ mod tests {
     }
 
     #[test]
+    fn reference_production_kernel_passes_conformance_gate() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-reference");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+            .unwrap()
+            .with_kernel(ReferenceProductionForwardKernel::new());
+
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(report.passed, "{report:?}");
+        assert!(report.kernel_connected);
+        assert!(report.token_count > 0);
+        assert!(report.trace_steps > 0);
+        assert!(report.imported_kv_blocks > 0);
+        assert!(report.exported_kv_blocks > 0);
+        assert!(report.forward_energy.unwrap() > 0.0);
+        assert!(report.kv_influence.unwrap() >= 0.0);
+        assert!(report.summary_line().contains("passed=true"));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_kernel_conformance_gate_fails_when_kernel_is_missing() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-missing");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let runtime =
+            ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan()).unwrap();
+
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(!report.passed);
+        assert!(!report.kernel_connected);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("production forward kernel is not connected"))
+        );
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_kernel_conformance_gate_fails_malformed_kernel_output() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-malformed");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+            .unwrap()
+            .with_kernel(MalformedForwardKernel);
+
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(!report.passed);
+        assert_eq!(report.token_count, 0);
+        assert_eq!(report.trace_steps, 0);
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("kernel did not return runtime token uncertainty records")
+        }));
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("kernel did not return reasoning trace steps"))
+        );
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("kernel did not report positive finite forward_energy")
+        }));
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("kernel did not report finite non-negative kv_influence")
+        }));
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("kernel exported no KV blocks"))
+        );
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
     fn production_runtime_rejects_invalid_kernel_exported_kv() {
         let (asset_dir, weights, tokenizer, _config) =
             create_assets("production-runtime-invalid-kernel-kv");
@@ -1422,6 +1856,18 @@ mod tests {
         ) -> Result<ProductionKernelOutput, RuntimeError> {
             Ok(ProductionKernelOutput::new("invalid kernel export")
                 .with_exported_kv_blocks(vec![self.block.clone()]))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct MalformedForwardKernel;
+
+    impl ProductionForwardKernel for MalformedForwardKernel {
+        fn generate(
+            &self,
+            _context: ProductionKernelContext<'_>,
+        ) -> Result<ProductionKernelOutput, RuntimeError> {
+            Ok(ProductionKernelOutput::new("malformed kernel output"))
         }
     }
 }

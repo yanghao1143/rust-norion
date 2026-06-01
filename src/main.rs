@@ -9,12 +9,12 @@ use rust_norion::{
     InferenceOutcome, InferenceRequest, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
     KvQuantBenchmarkSummary, LocalTransformerRuntime, MemoryCompactionPolicy,
     MemoryRetentionPolicy, ModelRuntime, NoironEngine, PersistentRoundtripInput,
-    PersistentRoundtripReport, RecursiveScheduler, ReferenceProductionForwardKernel,
-    RuntimeAssetPaths, RuntimeBackend, RuntimeError, RuntimeManifest,
-    RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
-    StateInspectionReport, TaskProfile, TierMigrationAction, TraceSchemaGateReport,
-    TransformerRuntimeArchitecture, append_trace_jsonl, append_trace_jsonl_with_case,
-    default_benchmark_cases, evaluate_trace_schema_jsonl,
+    PersistentRoundtripReport, ProductionKernelConformanceGate, ProductionKernelConformanceReport,
+    RecursiveScheduler, ReferenceProductionForwardKernel, RuntimeAssetPaths, RuntimeBackend,
+    RuntimeError, RuntimeManifest, RuntimeManifestDeviceGateReport, RuntimeManifestValidation,
+    RuntimeMetadata, StateInspectionReport, TaskProfile, TierMigrationAction,
+    TraceSchemaGateReport, TransformerRuntimeArchitecture, append_trace_jsonl,
+    append_trace_jsonl_with_case, default_benchmark_cases, evaluate_trace_schema_jsonl,
 };
 
 fn main() -> std::io::Result<()> {
@@ -48,6 +48,15 @@ fn main() -> std::io::Result<()> {
         );
         print_runtime_manifest_gate_report(&manifest, &validation, &device_gate);
         if !validation.passed() || !device_gate.passed() {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+    if args.production_kernel_conformance_gate {
+        let runtime = args.production_runtime()?;
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+        print_production_kernel_conformance_report(&report);
+        if !report.passed {
             std::process::exit(2);
         }
         return Ok(());
@@ -981,6 +990,14 @@ fn print_runtime_manifest_gate_report(
     }
 }
 
+fn print_production_kernel_conformance_report(report: &ProductionKernelConformanceReport) {
+    println!("Noiron production kernel conformance gate");
+    println!("{}", report.summary_line());
+    for failure in &report.failures {
+        println!("production_kernel_conformance_failure: {failure}");
+    }
+}
+
 fn option_path_display(path: Option<&PathBuf>) -> String {
     path.map(|path| path.display().to_string())
         .unwrap_or_else(|| "none".to_owned())
@@ -1046,6 +1063,7 @@ struct Args {
     local_runtime: bool,
     production_runtime: bool,
     production_reference_kernel: bool,
+    production_kernel_conformance_gate: bool,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
@@ -1114,6 +1132,7 @@ impl Args {
         let mut local_runtime = false;
         let mut production_runtime = false;
         let mut production_reference_kernel = false;
+        let mut production_kernel_conformance_gate = false;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
@@ -1332,6 +1351,13 @@ impl Args {
                     runtime_metadata.supports_kv_export = true;
                     index += 1;
                 }
+                "--production-kernel-conformance-gate" => {
+                    production_runtime = true;
+                    production_kernel_conformance_gate = true;
+                    runtime_metadata.supports_kv_import = true;
+                    runtime_metadata.supports_kv_export = true;
+                    index += 1;
+                }
                 "--runtime-command" if index + 1 < raw.len() => {
                     runtime_command = Some(PathBuf::from(&raw[index + 1]));
                     index += 2;
@@ -1542,6 +1568,7 @@ impl Args {
             local_runtime,
             production_runtime,
             production_reference_kernel,
+            production_kernel_conformance_gate,
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
@@ -1757,9 +1784,8 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    println!(
-        "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>"
-    );
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    println!("{usage}");
     std::process::exit(0);
 }
 
@@ -1860,6 +1886,7 @@ mod tests {
             "--local-runtime".to_owned(),
             "--production-runtime".to_owned(),
             "--production-reference-kernel".to_owned(),
+            "--production-kernel-conformance-gate".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
@@ -1970,6 +1997,7 @@ mod tests {
         assert!(args.local_runtime);
         assert!(args.production_runtime);
         assert!(args.production_reference_kernel);
+        assert!(args.production_kernel_conformance_gate);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
         assert_eq!(args.runtime_wire_format, CommandWireFormat::Json);
@@ -2112,6 +2140,113 @@ mod tests {
             "portable-rust"
         );
         assert!(runtime.assets().summary_line().contains("weights_bytes=0"));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_kernel_conformance_gate_cli_passes_reference_kernel() {
+        let asset_dir = temp_asset_dir("production-runtime-cli-conformance-reference");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let args = Args::parse(vec![
+            "--production-reference-kernel".to_owned(),
+            "--production-kernel-conformance-gate".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "64".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "1024".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]);
+
+        let runtime = args.production_runtime().unwrap();
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(args.production_runtime);
+        assert!(args.production_reference_kernel);
+        assert!(args.production_kernel_conformance_gate);
+        assert!(report.passed, "{report:?}");
+        assert_eq!(report.model_id, "self-owned-transformer");
+        assert_eq!(report.selected_adapter, "portable-rust");
+        assert!(report.exported_kv_blocks > 0);
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_kernel_conformance_gate_cli_fails_without_kernel() {
+        let asset_dir = temp_asset_dir("production-runtime-cli-conformance-missing");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let args = Args::parse(vec![
+            "--production-kernel-conformance-gate".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "64".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "1024".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]);
+
+        let runtime = args.production_runtime().unwrap();
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(args.production_runtime);
+        assert!(!args.production_reference_kernel);
+        assert!(args.production_kernel_conformance_gate);
+        assert!(!report.passed);
+        assert!(!report.kernel_connected);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("production forward kernel is not connected"))
+        );
 
         fs::remove_dir_all(asset_dir).unwrap();
     }
