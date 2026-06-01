@@ -94,6 +94,9 @@ pub struct BenchmarkCaseResult {
     pub runtime_forward_signal: bool,
     pub runtime_kv_exported: usize,
     pub runtime_kv_stored: usize,
+    pub runtime_selected_adapter: Option<String>,
+    pub runtime_adapter_contract_ok: bool,
+    pub runtime_adapter_contract_violations: usize,
     pub runtime_adapter_observations: usize,
     pub runtime_adapter_best_score: Option<f32>,
     pub drift_severity: DriftSeverity,
@@ -117,6 +120,8 @@ pub struct BenchmarkGate {
     pub min_sparse_skipped_tokens: Option<usize>,
     pub min_runtime_forward_cases: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
+    pub min_runtime_adapter_contract_cases: Option<usize>,
+    pub max_runtime_adapter_contract_violations: Option<usize>,
     pub min_device_profiles: Option<usize>,
     pub min_recursive_device_profiles: Option<usize>,
     pub max_drift_blocks: Option<usize>,
@@ -142,6 +147,8 @@ impl Default for BenchmarkGate {
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
             min_runtime_kv_exported: None,
+            min_runtime_adapter_contract_cases: None,
+            max_runtime_adapter_contract_violations: Some(0),
             min_device_profiles: None,
             min_recursive_device_profiles: None,
             max_drift_blocks: Some(0),
@@ -514,6 +521,22 @@ impl BenchmarkSummary {
             + outcome.stored_runtime_kv_memory_ids.len();
         let auto_replay = outcome.auto_replay_report.as_ref();
         let infini_counts = outcome.infini_memory_plan.counts();
+        let selected_adapter = outcome
+            .runtime_diagnostics
+            .selected_adapter
+            .as_deref()
+            .filter(|adapter| !adapter.is_empty());
+        let runtime_adapter_contract_ok = selected_adapter
+            .map(|adapter| {
+                outcome
+                    .hardware_plan
+                    .execution
+                    .adapter_hints
+                    .iter()
+                    .any(|hint| hint.as_str() == adapter)
+            })
+            .unwrap_or(false);
+        let runtime_has_forward_signal = outcome.runtime_diagnostics.has_forward_signal();
 
         self.results.push(BenchmarkCaseResult {
             name: case.name.clone(),
@@ -559,9 +582,15 @@ impl BenchmarkSummary {
             sparse_skipped_tokens: infini_counts.skipped_tokens,
             stored_memories,
             compacted_memories: outcome.memory_compaction_report.merged.len(),
-            runtime_forward_signal: outcome.runtime_diagnostics.has_forward_signal(),
+            runtime_forward_signal: runtime_has_forward_signal,
             runtime_kv_exported: outcome.exported_runtime_kv_blocks,
             runtime_kv_stored: outcome.stored_runtime_kv_memory_ids.len(),
+            runtime_selected_adapter: selected_adapter.map(str::to_owned),
+            runtime_adapter_contract_ok,
+            runtime_adapter_contract_violations: usize::from(
+                !runtime_adapter_contract_ok
+                    && (runtime_has_forward_signal || selected_adapter.is_some()),
+            ),
             runtime_adapter_observations: outcome.runtime_adapter_observations.len(),
             runtime_adapter_best_score: outcome
                 .runtime_adapter_observations
@@ -698,6 +727,20 @@ impl BenchmarkSummary {
         self.results
             .iter()
             .map(|result| result.runtime_kv_exported)
+            .sum()
+    }
+
+    pub fn runtime_adapter_contract_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_forward_signal && result.runtime_adapter_contract_ok)
+            .count()
+    }
+
+    pub fn total_runtime_adapter_contract_violations(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_adapter_contract_violations)
             .sum()
     }
 
@@ -1037,6 +1080,29 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_adapter_contract_cases) = gate.min_runtime_adapter_contract_cases {
+            let runtime_adapter_contract_cases = self.runtime_adapter_contract_cases();
+            if runtime_adapter_contract_cases < min_runtime_adapter_contract_cases {
+                failures.push(format!(
+                    "runtime_adapter_contract_cases {} below minimum {}",
+                    runtime_adapter_contract_cases, min_runtime_adapter_contract_cases
+                ));
+            }
+        }
+
+        if let Some(max_runtime_adapter_contract_violations) =
+            gate.max_runtime_adapter_contract_violations
+        {
+            let runtime_adapter_contract_violations =
+                self.total_runtime_adapter_contract_violations();
+            if runtime_adapter_contract_violations > max_runtime_adapter_contract_violations {
+                failures.push(format!(
+                    "runtime_adapter_contract_violations {} above maximum {}",
+                    runtime_adapter_contract_violations, max_runtime_adapter_contract_violations
+                ));
+            }
+        }
+
         if let Some(min_device_profiles) = gate.min_device_profiles {
             let device_profiles = self.explicit_device_profiles_covered();
             if device_profiles < min_device_profiles {
@@ -1097,7 +1163,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1127,6 +1193,8 @@ impl BenchmarkSummary {
             self.runtime_forward_cases(),
             self.total_runtime_kv_exported(),
             self.total_runtime_kv_stored(),
+            self.runtime_adapter_contract_cases(),
+            self.total_runtime_adapter_contract_violations(),
             self.total_runtime_adapter_observations(),
             option_f32_display(self.max_runtime_adapter_score()),
             self.drift_watches(),
@@ -1358,6 +1426,8 @@ mod tests {
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
             min_runtime_kv_exported: None,
+            min_runtime_adapter_contract_cases: None,
+            max_runtime_adapter_contract_violations: Some(0),
             min_device_profiles: None,
             min_recursive_device_profiles: None,
             max_drift_blocks: Some(0),
@@ -1455,6 +1525,9 @@ mod tests {
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
+                runtime_selected_adapter: None,
+                runtime_adapter_contract_ok: false,
+                runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Stable,
             }],
@@ -1515,6 +1588,9 @@ mod tests {
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
+                runtime_selected_adapter: None,
+                runtime_adapter_contract_ok: false,
+                runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Stable,
             }],
@@ -1574,6 +1650,9 @@ mod tests {
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
+                runtime_selected_adapter: None,
+                runtime_adapter_contract_ok: false,
+                runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Stable,
             }],
@@ -1661,6 +1740,9 @@ mod tests {
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
+                runtime_selected_adapter: None,
+                runtime_adapter_contract_ok: false,
+                runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Stable,
             }],
@@ -1702,6 +1784,121 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_runtime_adapter_contract_failures() {
+        let summary = BenchmarkSummary {
+            results: vec![
+                BenchmarkCaseResult {
+                    name: "contract_ok".to_owned(),
+                    profile: TaskProfile::Coding,
+                    device: DeviceClass::CpuOnly,
+                    elapsed_ms: 1,
+                    quality: 0.9,
+                    process_reward: 0.9,
+                    attention_fraction: 0.5,
+                    requires_recursion: false,
+                    recursive_chunks: 1,
+                    recursive_waves: 1,
+                    recursive_runtime_calls: 1,
+                    auto_replay_applied: 0,
+                    auto_replay_router_updates: 0,
+                    auto_replay_hierarchy_updates: 0,
+                    auto_replay_memory_reinforcements: 0,
+                    auto_replay_memory_penalties: 0,
+                    auto_replay_recursive_runtime_items: 0,
+                    auto_replay_recursive_runtime_calls: 0,
+                    auto_replay_avg_recursive_call_pressure: 0.0,
+                    auto_replay_max_recursive_call_pressure: 0.0,
+                    used_memories: 0,
+                    infini_local_window: 0,
+                    infini_global_memory: 0,
+                    sparse_skipped: 0,
+                    sparse_skipped_tokens: 0,
+                    stored_memories: 0,
+                    compacted_memories: 0,
+                    runtime_forward_signal: true,
+                    runtime_kv_exported: 1,
+                    runtime_kv_stored: 1,
+                    runtime_selected_adapter: Some("portable-rust".to_owned()),
+                    runtime_adapter_contract_ok: true,
+                    runtime_adapter_contract_violations: 0,
+                    runtime_adapter_observations: 0,
+                    runtime_adapter_best_score: None,
+                    drift_severity: DriftSeverity::Stable,
+                },
+                BenchmarkCaseResult {
+                    name: "contract_bad".to_owned(),
+                    profile: TaskProfile::Coding,
+                    device: DeviceClass::CpuOnly,
+                    elapsed_ms: 1,
+                    quality: 0.9,
+                    process_reward: 0.9,
+                    attention_fraction: 0.5,
+                    requires_recursion: false,
+                    recursive_chunks: 1,
+                    recursive_waves: 1,
+                    recursive_runtime_calls: 1,
+                    auto_replay_applied: 0,
+                    auto_replay_router_updates: 0,
+                    auto_replay_hierarchy_updates: 0,
+                    auto_replay_memory_reinforcements: 0,
+                    auto_replay_memory_penalties: 0,
+                    auto_replay_recursive_runtime_items: 0,
+                    auto_replay_recursive_runtime_calls: 0,
+                    auto_replay_avg_recursive_call_pressure: 0.0,
+                    auto_replay_max_recursive_call_pressure: 0.0,
+                    used_memories: 0,
+                    infini_local_window: 0,
+                    infini_global_memory: 0,
+                    sparse_skipped: 0,
+                    sparse_skipped_tokens: 0,
+                    stored_memories: 0,
+                    compacted_memories: 0,
+                    runtime_forward_signal: true,
+                    runtime_kv_exported: 1,
+                    runtime_kv_stored: 1,
+                    runtime_selected_adapter: Some("cuda".to_owned()),
+                    runtime_adapter_contract_ok: false,
+                    runtime_adapter_contract_violations: 1,
+                    runtime_adapter_observations: 0,
+                    runtime_adapter_best_score: None,
+                    drift_severity: DriftSeverity::Stable,
+                },
+            ],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_adapter_contract_cases = Some(2);
+        gate.max_runtime_adapter_contract_violations = Some(0);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_adapter_contract_cases(), 1);
+        assert_eq!(summary.total_runtime_adapter_contract_violations(), 1);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_contract_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_contract_violations"))
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_adapter_contract_cases=1")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_adapter_contract_violations=1")
+        );
+    }
+
+    #[test]
     fn gate_reports_missing_sparse_filtering_coverage() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
@@ -1736,6 +1933,9 @@ mod tests {
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
+                runtime_selected_adapter: None,
+                runtime_adapter_contract_ok: false,
+                runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Stable,
             }],
@@ -1810,6 +2010,9 @@ mod tests {
             runtime_kv_exported: 0,
             runtime_kv_stored: 0,
             runtime_adapter_observations: 0,
+            runtime_selected_adapter: None,
+            runtime_adapter_contract_ok: false,
+            runtime_adapter_contract_violations: 0,
             runtime_adapter_best_score: None,
             drift_severity: DriftSeverity::Stable,
         };
@@ -1888,6 +2091,9 @@ mod tests {
             runtime_kv_exported: 0,
             runtime_kv_stored: 0,
             runtime_adapter_observations: 0,
+            runtime_selected_adapter: None,
+            runtime_adapter_contract_ok: false,
+            runtime_adapter_contract_violations: 0,
             runtime_adapter_best_score: None,
             drift_severity: DriftSeverity::Stable,
         };
@@ -1979,6 +2185,9 @@ mod tests {
                 runtime_kv_exported: 0,
                 runtime_kv_stored: 0,
                 runtime_adapter_observations: 0,
+                runtime_selected_adapter: None,
+                runtime_adapter_contract_ok: false,
+                runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
                 drift_severity: DriftSeverity::Rollback,
             }],

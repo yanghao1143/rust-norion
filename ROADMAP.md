@@ -512,7 +512,9 @@ These are algorithmic references, not product dependencies:
   production-local all-device recursive benchmark coverage as the deterministic
   reference kernel, so tokenizer/embedding/Transformer-plan/KV exchange
   behavior is gated through the production ABI rather than only through local
-  unit tests)
+  unit tests; benchmark summaries and gates now count runtime adapter contract
+  cases and violations, so production all-device sweeps must prove every
+  selected adapter is inside that device's allowed adapter hints)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -641,12 +643,15 @@ These are algorithmic references, not product dependencies:
   per explicit device profile during `--benchmark-all-devices`, so reference and
   local production kernels can be gated against each device's own runtime
   device contract and long-context recursion path.
+- Benchmark execution can require runtime adapter contract coverage through
+  `--benchmark-min-runtime-adapter-contract-cases` and fail on selected-adapter
+  contract drift through `--benchmark-max-runtime-adapter-contract-violations`.
 - The Rust-native local Transformer runtime prototype must pass the same
   production-local all-device recursive benchmark gate as the deterministic
   reference kernel before it is treated as a valid self-owned runtime boundary.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
-  forward diagnostics, runtime KV export, auto-replay router/hierarchy/memory
-  update coverage, auto-replay recursive pressure coverage/bounds,
+  forward diagnostics, runtime KV export, runtime adapter contract coverage,
+  auto-replay router/hierarchy/memory update coverage, auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
   drift block/rollback counts, or persistent state reuse regress.
