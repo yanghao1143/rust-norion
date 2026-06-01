@@ -143,7 +143,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, auto-replay router/hierarchy/memory update coverage gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal and KV-export gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router/hierarchy/memory update coverage gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal and KV-export gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering and vector-carrying import decisions
@@ -296,6 +296,21 @@ cargo run -- --benchmark target/noiron-all-devices.jsonl --benchmark-all-devices
 cargo run -- --benchmark target/noiron-all-devices.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-all-devices.jsonl --benchmark-gate --benchmark-min-device-profiles 12 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
+Require every explicit device profile to exercise a real recursive
+long-context schedule by combining the all-device sweep with a constrained demo
+native window:
+
+```powershell
+cargo run -- --benchmark target/noiron-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --native-window 64 --chunk-tokens 32 --chunk-overlap 8 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
+如果要证明“所有设备都不只是跑过短路径，也都真实触发过超长上下文递归调度”，
+可以把全设备 benchmark 与递归设备覆盖门禁放在同一次检查里：
+
+```powershell
+cargo run -- --benchmark target/noiron-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --native-window 64 --chunk-tokens 32 --chunk-overlap 8 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
 Validate an existing trace JSONL file against the required local control-plane
 schema fields, including runtime token uncertainty, the stable
 `runtime_device_contract`, and device-derived hardware KV budgets:
@@ -436,17 +451,18 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
-Benchmark summaries include recursive case counts, compacted memory counts,
-runtime forward-signal case counts, runtime KV export counts, auto-replay
-router/hierarchy/memory update counts, recursive pressure, covered device
-profiles, and drift watch/block/rollback counts, so long-context coverage,
-missing runtime diagnostics, missing KV exchange, missing replay control-plane
-coverage, missing all-device execution coverage, missing pressure signals,
-excessive recursive replay cost, memory-growth, or safety regressions in the
+Benchmark summaries include recursive case counts, recursive device-profile
+coverage, compacted memory counts, runtime forward-signal case counts, runtime
+KV export counts, auto-replay router/hierarchy/memory update counts, recursive
+pressure, covered device profiles, and drift watch/block/rollback counts, so
+long-context coverage, missing per-device recursion, missing runtime
+diagnostics, missing KV exchange, missing replay control-plane coverage,
+missing all-device execution coverage, missing pressure signals, excessive
+recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、memory compaction 计数、runtime forward-signal case 数、runtime KV export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile 以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、runtime KV export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile 以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

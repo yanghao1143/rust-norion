@@ -499,7 +499,10 @@ These are algorithmic references, not product dependencies:
   across every explicit hardware profile, and `--benchmark-min-device-profiles`
   can fail CI when CPU, integrated GPU, discrete GPU, UMA, mobile, embedded,
   browser-WASM, microcontroller, NPU, multi-GPU, edge, and server control-loop
-  execution coverage is incomplete)
+  execution coverage is incomplete; `--benchmark-min-recursive-device-profiles`
+  can additionally require each explicit device profile to trigger real
+  recursive long-context scheduling, so all-device support covers ultra-long
+  context paths instead of only short control-loop cases)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -523,7 +526,8 @@ These are algorithmic references, not product dependencies:
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
   before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, including gates that
-  require at least one truly recursive scheduling case instead of marketing
+  require at least one truly recursive scheduling case and gates that require
+  recursive coverage across every explicit device profile instead of marketing
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
   rollback, configurable retention, protected-id memory compaction, and
@@ -620,6 +624,9 @@ These are algorithmic references, not product dependencies:
 - Benchmark execution can sweep every explicit device profile with
   `--benchmark-all-devices`, and the benchmark gate can require all-device
   control-loop coverage through `--benchmark-min-device-profiles`.
+- Benchmark execution can require every explicit device profile to exercise
+  recursive long-context scheduling through
+  `--benchmark-min-recursive-device-profiles`.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime KV export, auto-replay router/hierarchy/memory

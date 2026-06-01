@@ -1271,6 +1271,7 @@ struct Args {
     benchmark_min_runtime_forward_cases: Option<usize>,
     benchmark_min_runtime_kv_exported: Option<usize>,
     benchmark_min_device_profiles: Option<usize>,
+    benchmark_min_recursive_device_profiles: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
     benchmark_max_drift_rollbacks: Option<usize>,
     benchmark_roundtrip: bool,
@@ -1349,6 +1350,7 @@ impl Args {
         let mut benchmark_min_runtime_forward_cases = None;
         let mut benchmark_min_runtime_kv_exported = None;
         let mut benchmark_min_device_profiles = None;
+        let mut benchmark_min_recursive_device_profiles = None;
         let mut benchmark_max_drift_blocks = None;
         let mut benchmark_max_drift_rollbacks = None;
         let mut benchmark_roundtrip = false;
@@ -1530,6 +1532,11 @@ impl Args {
                 }
                 "--benchmark-min-device-profiles" if index + 1 < raw.len() => {
                     benchmark_min_device_profiles = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-recursive-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_recursive_device_profiles = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1843,6 +1850,7 @@ impl Args {
             benchmark_min_runtime_forward_cases,
             benchmark_min_runtime_kv_exported,
             benchmark_min_device_profiles,
+            benchmark_min_recursive_device_profiles,
             benchmark_max_drift_blocks,
             benchmark_max_drift_rollbacks,
             benchmark_roundtrip,
@@ -1946,6 +1954,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_device_profiles {
             gate.min_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_recursive_device_profiles {
+            gate.min_recursive_device_profiles = Some(value);
         }
         if let Some(value) = self.benchmark_max_drift_blocks {
             gate.max_drift_blocks = Some(value);
@@ -2103,7 +2114,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2185,6 +2196,8 @@ mod tests {
             "--benchmark-min-runtime-kv-exported".to_owned(),
             "4".to_owned(),
             "--benchmark-min-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--benchmark-min-recursive-device-profiles".to_owned(),
             "12".to_owned(),
             "--benchmark-max-drift-blocks".to_owned(),
             "0".to_owned(),
@@ -2320,9 +2333,14 @@ mod tests {
         assert_eq!(args.benchmark_min_runtime_forward_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_min_device_profiles, Some(12));
+        assert_eq!(args.benchmark_min_recursive_device_profiles, Some(12));
         assert_eq!(args.benchmark_gate().min_runtime_forward_cases, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_gate().min_device_profiles, Some(12));
+        assert_eq!(
+            args.benchmark_gate().min_recursive_device_profiles,
+            Some(12)
+        );
         assert_eq!(args.benchmark_max_drift_blocks, Some(0));
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
         assert!(args.benchmark_roundtrip);
@@ -2930,6 +2948,68 @@ mod tests {
                 && result.name.starts_with("microcontroller_")
         }));
         assert!(summary.summary_line().contains("device_profiles=12"));
+        assert!(gate_report.passed, "{:?}", gate_report.failures);
+        assert!(trace_report.passed, "{:?}", trace_report.failures);
+        assert_eq!(trace_report.checked_lines, summary.len());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn benchmark_all_devices_can_gate_recursive_coverage_per_profile() {
+        let asset_dir = temp_asset_dir("all-device-recursive-benchmark");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let trace_path = asset_dir.join("benchmark.jsonl");
+        let args = Args::parse(vec![
+            "--benchmark".to_owned(),
+            trace_path.display().to_string(),
+            "--benchmark-all-devices".to_owned(),
+            "--benchmark-gate".to_owned(),
+            "--benchmark-min-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--benchmark-min-recursive-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--benchmark-min-recursive-cases".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--benchmark-max-drift-blocks".to_owned(),
+            "0".to_owned(),
+            "--benchmark-max-drift-rollbacks".to_owned(),
+            "0".to_owned(),
+            "--native-window".to_owned(),
+            "64".to_owned(),
+            "--chunk-tokens".to_owned(),
+            "32".to_owned(),
+            "--chunk-overlap".to_owned(),
+            "8".to_owned(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]);
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &args);
+        let mut backend = HeuristicBackend;
+
+        let summary =
+            run_benchmark_for_args(&mut engine, &mut backend, &args, &trace_path).unwrap();
+        let gate_report = summary.evaluate(&args.benchmark_gate());
+        let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+        assert_eq!(
+            summary.explicit_device_profiles_covered(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            summary.recursive_device_profiles_covered(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            summary.recursive_cases(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("recursive_device_profiles=12")
+        );
         assert!(gate_report.passed, "{:?}", gate_report.failures);
         assert!(trace_report.passed, "{:?}", trace_report.failures);
         assert_eq!(trace_report.checked_lines, summary.len());
