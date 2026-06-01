@@ -540,7 +540,9 @@ These are algorithmic references, not product dependencies:
 - Runtime forward diagnostics are observable: local and command runtimes can
   report model id, selected adapter, executed layer count, hidden size, local
   window, forward energy, KV influence, and runtime KV exchange counters, and
-  the trace schema gate requires the diagnostics block.
+  the trace schema gate requires the diagnostics block. Benchmark gates can
+  also require explicit forward-energy and KV-influence case coverage so a
+  runtime cannot pass by returning only generic layer metadata.
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
@@ -619,6 +621,11 @@ These are algorithmic references, not product dependencies:
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps
   can fail when a runtime stops returning token entropy/logprob signals.
+- Benchmark summaries and gates expose stricter runtime forward diagnostic
+  coverage through `--benchmark-min-runtime-forward-energy-cases` and
+  `--benchmark-min-runtime-kv-influence-cases`, so local/CI production sweeps
+  can fail when a runtime stops returning model-side forward-energy or
+  imported-KV influence signals.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.

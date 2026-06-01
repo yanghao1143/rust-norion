@@ -92,6 +92,8 @@ pub struct BenchmarkCaseResult {
     pub stored_memories: usize,
     pub compacted_memories: usize,
     pub runtime_forward_signal: bool,
+    pub runtime_forward_energy_signal: bool,
+    pub runtime_kv_influence_signal: bool,
     pub runtime_token_count: usize,
     pub runtime_uncertainty_token_count: usize,
     pub runtime_uncertainty_signal: bool,
@@ -123,6 +125,8 @@ pub struct BenchmarkGate {
     pub min_sparse_skipped_cases: Option<usize>,
     pub min_sparse_skipped_tokens: Option<usize>,
     pub min_runtime_forward_cases: Option<usize>,
+    pub min_runtime_forward_energy_cases: Option<usize>,
+    pub min_runtime_kv_influence_cases: Option<usize>,
     pub min_runtime_uncertainty_cases: Option<usize>,
     pub min_runtime_uncertainty_tokens: Option<usize>,
     pub min_runtime_kv_import_cases: Option<usize>,
@@ -154,6 +158,8 @@ impl Default for BenchmarkGate {
             min_sparse_skipped_cases: None,
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
+            min_runtime_forward_energy_cases: None,
+            min_runtime_kv_influence_cases: None,
             min_runtime_uncertainty_cases: None,
             min_runtime_uncertainty_tokens: None,
             min_runtime_kv_import_cases: None,
@@ -599,6 +605,8 @@ impl BenchmarkSummary {
             stored_memories,
             compacted_memories: outcome.memory_compaction_report.merged.len(),
             runtime_forward_signal: runtime_has_forward_signal,
+            runtime_forward_energy_signal: outcome.runtime_diagnostics.forward_energy.is_some(),
+            runtime_kv_influence_signal: outcome.runtime_diagnostics.kv_influence.is_some(),
             runtime_token_count: outcome.runtime_token_metrics.token_count,
             runtime_uncertainty_token_count,
             runtime_uncertainty_signal: outcome.runtime_token_metrics.has_uncertainty_signal(),
@@ -810,6 +818,20 @@ impl BenchmarkSummary {
         self.results
             .iter()
             .filter(|result| result.runtime_forward_signal)
+            .count()
+    }
+
+    pub fn runtime_forward_energy_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_forward_energy_signal)
+            .count()
+    }
+
+    pub fn runtime_kv_influence_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_kv_influence_signal)
             .count()
     }
 
@@ -1132,6 +1154,26 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_forward_energy_cases) = gate.min_runtime_forward_energy_cases {
+            let runtime_forward_energy_cases = self.runtime_forward_energy_cases();
+            if runtime_forward_energy_cases < min_runtime_forward_energy_cases {
+                failures.push(format!(
+                    "runtime_forward_energy_cases {} below minimum {}",
+                    runtime_forward_energy_cases, min_runtime_forward_energy_cases
+                ));
+            }
+        }
+
+        if let Some(min_runtime_kv_influence_cases) = gate.min_runtime_kv_influence_cases {
+            let runtime_kv_influence_cases = self.runtime_kv_influence_cases();
+            if runtime_kv_influence_cases < min_runtime_kv_influence_cases {
+                failures.push(format!(
+                    "runtime_kv_influence_cases {} below minimum {}",
+                    runtime_kv_influence_cases, min_runtime_kv_influence_cases
+                ));
+            }
+        }
+
         if let Some(min_runtime_uncertainty_cases) = gate.min_runtime_uncertainty_cases {
             let runtime_uncertainty_cases = self.runtime_uncertainty_cases();
             if runtime_uncertainty_cases < min_runtime_uncertainty_cases {
@@ -1265,7 +1307,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1293,6 +1335,8 @@ impl BenchmarkSummary {
             self.total_stored_memories(),
             self.total_compacted_memories(),
             self.runtime_forward_cases(),
+            self.runtime_forward_energy_cases(),
+            self.runtime_kv_influence_cases(),
             self.runtime_token_cases(),
             self.total_runtime_tokens(),
             self.runtime_uncertainty_cases(),
@@ -1533,6 +1577,8 @@ mod tests {
             min_sparse_skipped_cases: None,
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
+            min_runtime_forward_energy_cases: None,
+            min_runtime_kv_influence_cases: None,
             min_runtime_uncertainty_cases: None,
             min_runtime_uncertainty_tokens: None,
             min_runtime_kv_import_cases: None,
@@ -1634,6 +1680,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -1701,6 +1749,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -1767,6 +1817,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -1861,6 +1913,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -1916,6 +1970,100 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_runtime_forward_diagnostics() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_diagnostics".to_owned(),
+                profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: true,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
+                runtime_token_count: 0,
+                runtime_uncertainty_token_count: 0,
+                runtime_uncertainty_signal: false,
+                runtime_kv_imported: 1,
+                runtime_kv_exported: 1,
+                runtime_kv_stored: 1,
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_contract_ok: true,
+                runtime_adapter_contract_violations: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_forward_energy_cases = Some(1);
+        gate.min_runtime_kv_influence_cases = Some(1);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_forward_energy_cases(), 0);
+        assert_eq!(summary.runtime_kv_influence_cases(), 0);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_forward_energy_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_influence_cases"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                runtime_forward_energy_signal: true,
+                runtime_kv_influence_signal: true,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.runtime_forward_energy_cases(), 1);
+        assert_eq!(passing.runtime_kv_influence_cases(), 1);
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_forward_energy_cases=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_kv_influence_cases=1")
+        );
+    }
+
+    #[test]
     fn gate_reports_missing_runtime_uncertainty_signal() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
@@ -1947,6 +2095,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: true,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 3,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -2041,6 +2191,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: true,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -2125,6 +2277,8 @@ mod tests {
                     stored_memories: 0,
                     compacted_memories: 0,
                     runtime_forward_signal: true,
+                    runtime_forward_energy_signal: false,
+                    runtime_kv_influence_signal: false,
                     runtime_token_count: 0,
                     runtime_uncertainty_token_count: 0,
                     runtime_uncertainty_signal: false,
@@ -2167,6 +2321,8 @@ mod tests {
                     stored_memories: 0,
                     compacted_memories: 0,
                     runtime_forward_signal: true,
+                    runtime_forward_energy_signal: false,
+                    runtime_kv_influence_signal: false,
                     runtime_token_count: 0,
                     runtime_uncertainty_token_count: 0,
                     runtime_uncertainty_signal: false,
@@ -2247,6 +2403,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -2328,6 +2486,8 @@ mod tests {
             stored_memories: 0,
             compacted_memories: 0,
             runtime_forward_signal: false,
+            runtime_forward_energy_signal: false,
+            runtime_kv_influence_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -2413,6 +2573,8 @@ mod tests {
             stored_memories: 0,
             compacted_memories: 0,
             runtime_forward_signal: false,
+            runtime_forward_energy_signal: false,
+            runtime_kv_influence_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -2511,6 +2673,8 @@ mod tests {
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
+                runtime_forward_energy_signal: false,
+                runtime_kv_influence_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
