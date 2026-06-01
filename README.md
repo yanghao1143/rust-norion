@@ -142,7 +142,7 @@ Implemented modules:
 已实现模块：
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
-- `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, and recursive-cost mutations
+- `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, recursive-cost mutations, and drift rollback safety audits
 - `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, cumulative evolution-ledger gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, and device-adapter-contract gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
@@ -156,7 +156,7 @@ Implemented modules:
 - `src/token_stream.rs`: generated-token window monitor for router feedback
 - `src/toolsmith.rs`: Rust-only local tool blueprint planner that can propose gated helper CLIs, reject non-Rust tool surfaces, and carry build/validation outlines into runtime requests and reward notes
 - `src/agent_team.rs`: read-only sub-agent/team blackboard planner with single-writer isolation, conflict summaries, collision-free checks, and bounded evolution hints for the main control loop
-- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay router/hierarchy update counters plus threshold/weight mutation deltas, cumulative self-evolution ledger counters, memory updates, recursive cost pressure, hardware execution, the stable runtime device contract, KV budgets, Toolsmith, Agent Team, reflection diagnostics, drift, reward, memory policy, and memory counters
+- `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay router/hierarchy update counters plus threshold/weight mutation deltas, cumulative self-evolution ledger counters, drift rollback safety counters, memory updates, recursive cost pressure, hardware execution, the stable runtime device contract, KV budgets, Toolsmith, Agent Team, reflection diagnostics, drift, reward, memory policy, and memory counters
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories using reward, runtime-diagnostic, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable router-threshold mutation, hierarchy-weight mutation, memory-update, recursive call-pressure, and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
@@ -502,7 +502,7 @@ coverage, compacted memory counts, runtime forward-signal case counts, runtime
 forward-energy and KV-influence coverage, runtime KV import/export counts,
 auto-replay router/hierarchy/memory update counts, recursive pressure, covered
 device profiles, cumulative evolution-ledger replay/mutation/memory/recursive
-cost counters, and drift watch/block/rollback counts, so long-context
+cost counters, drift rollback safety counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
 diagnostics, missing KV exchange, missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
@@ -510,7 +510,7 @@ recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

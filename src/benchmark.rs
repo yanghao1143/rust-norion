@@ -1541,7 +1541,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1576,6 +1576,9 @@ impl BenchmarkSummary {
             self.evolution_ledger.memory_updates(),
             self.evolution_ledger.recursive_replay_items,
             self.evolution_ledger.recursive_runtime_calls,
+            self.evolution_ledger.drift_rollbacks,
+            self.evolution_ledger.rollback_router_threshold_delta,
+            self.evolution_ledger.rollback_hierarchy_weight_delta,
             self.sparse_skipped_cases(),
             self.total_sparse_skipped(),
             self.total_sparse_skipped_tokens(),
@@ -1634,6 +1637,13 @@ fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> Evolut
         recursive_runtime_calls: left
             .recursive_runtime_calls
             .max(right.recursive_runtime_calls),
+        drift_rollbacks: left.drift_rollbacks.max(right.drift_rollbacks),
+        rollback_router_threshold_delta: left
+            .rollback_router_threshold_delta
+            .max(right.rollback_router_threshold_delta),
+        rollback_hierarchy_weight_delta: left
+            .rollback_hierarchy_weight_delta
+            .max(right.rollback_hierarchy_weight_delta),
     }
 }
 
@@ -2340,6 +2350,9 @@ mod tests {
                 memory_penalties: 0,
                 recursive_replay_items: 6,
                 recursive_runtime_calls: 7,
+                drift_rollbacks: 0,
+                rollback_router_threshold_delta: 0.0,
+                rollback_hierarchy_weight_delta: 0.0,
             },
             results: summary.results.clone(),
         };

@@ -393,7 +393,8 @@ These are algorithmic references, not product dependencies:
   must prove measurable control-plane mutation, not just execution; adaptive
   state now persists a cumulative self-evolution ledger across restarts for
   replay runs, applied items, router/hierarchy mutation deltas, memory updates,
-  and recursive replay cost evidence, and trace schema gates now require those
+  recursive replay cost evidence, and drift rollback safety audits for reverted
+  router/hierarchy deltas, and trace schema gates now require those
   cumulative ledger fields in every generated JSONL record; benchmark summaries
   now expose the same cumulative ledger snapshot, and benchmark gates can enforce
   minimum replay runs, applied items, mutation counts/deltas, memory updates, and

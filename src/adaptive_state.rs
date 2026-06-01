@@ -32,6 +32,9 @@ pub struct EvolutionLedger {
     pub memory_penalties: u64,
     pub recursive_replay_items: u64,
     pub recursive_runtime_calls: u64,
+    pub drift_rollbacks: u64,
+    pub rollback_router_threshold_delta: f32,
+    pub rollback_hierarchy_weight_delta: f32,
 }
 
 impl EvolutionLedger {
@@ -69,9 +72,19 @@ impl EvolutionLedger {
             .saturating_add(self.memory_penalties)
     }
 
+    pub fn record_drift_rollback(
+        &mut self,
+        router_threshold_delta: f32,
+        hierarchy_weight_delta: f32,
+    ) {
+        self.drift_rollbacks = self.drift_rollbacks.saturating_add(1);
+        self.rollback_router_threshold_delta += router_threshold_delta.max(0.0);
+        self.rollback_hierarchy_weight_delta += hierarchy_weight_delta.max(0.0);
+    }
+
     pub fn summary_line(self) -> String {
         format!(
-            "evolution: replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} recursive_replay_items={} recursive_runtime_calls={}",
+            "evolution: replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
             self.replay_runs,
             self.replay_items,
             self.router_threshold_mutations,
@@ -80,7 +93,10 @@ impl EvolutionLedger {
             self.hierarchy_weight_delta,
             self.memory_updates(),
             self.recursive_replay_items,
-            self.recursive_runtime_calls
+            self.recursive_runtime_calls,
+            self.drift_rollbacks,
+            self.rollback_router_threshold_delta,
+            self.rollback_hierarchy_weight_delta
         )
     }
 }
@@ -367,7 +383,7 @@ fn parse_memory_compaction_policy(value: &str) -> Option<MemoryCompactionPolicy>
 
 fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
     format!(
-        "{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}",
         ledger.replay_runs,
         ledger.replay_items,
         ledger.router_threshold_mutations,
@@ -377,13 +393,16 @@ fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
         ledger.memory_reinforcements,
         ledger.memory_penalties,
         ledger.recursive_replay_items,
-        ledger.recursive_runtime_calls
+        ledger.recursive_runtime_calls,
+        ledger.drift_rollbacks,
+        ledger.rollback_router_threshold_delta,
+        ledger.rollback_hierarchy_weight_delta
     )
 }
 
 fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
     let fields = value.split('\t').collect::<Vec<_>>();
-    if fields.len() != 10 {
+    if fields.len() != 10 && fields.len() != 13 {
         return None;
     }
 
@@ -398,6 +417,20 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
         memory_penalties: fields[7].parse::<u64>().ok()?,
         recursive_replay_items: fields[8].parse::<u64>().ok()?,
         recursive_runtime_calls: fields[9].parse::<u64>().ok()?,
+        drift_rollbacks: fields
+            .get(10)
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(0),
+        rollback_router_threshold_delta: fields
+            .get(11)
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(0.0)
+            .max(0.0),
+        rollback_hierarchy_weight_delta: fields
+            .get(12)
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or(0.0)
+            .max(0.0),
     })
 }
 
@@ -518,6 +551,9 @@ mod tests {
                 memory_penalties: 2,
                 recursive_replay_items: 1,
                 recursive_runtime_calls: 8,
+                drift_rollbacks: 2,
+                rollback_router_threshold_delta: 0.11,
+                rollback_hierarchy_weight_delta: 0.09,
             },
         };
 
@@ -550,7 +586,23 @@ mod tests {
         assert_eq!(loaded.evolution_ledger.memory_updates(), 6);
         assert_eq!(loaded.evolution_ledger.recursive_replay_items, 1);
         assert_eq!(loaded.evolution_ledger.recursive_runtime_calls, 8);
+        assert_eq!(loaded.evolution_ledger.drift_rollbacks, 2);
+        assert!((loaded.evolution_ledger.rollback_router_threshold_delta - 0.11).abs() < 0.0001);
+        assert!((loaded.evolution_ledger.rollback_hierarchy_weight_delta - 0.09).abs() < 0.0001);
         cleanup(path);
+    }
+
+    #[test]
+    fn evolution_ledger_loads_legacy_without_rollback_fields() {
+        let legacy = "3\t9\t5\t7\t0.420000\t0.210000\t4\t2\t1\t8";
+        let ledger = parse_evolution_ledger(legacy).unwrap();
+
+        assert_eq!(ledger.replay_runs, 3);
+        assert_eq!(ledger.memory_updates(), 6);
+        assert_eq!(ledger.recursive_runtime_calls, 8);
+        assert_eq!(ledger.drift_rollbacks, 0);
+        assert_eq!(ledger.rollback_router_threshold_delta, 0.0);
+        assert_eq!(ledger.rollback_hierarchy_weight_delta, 0.0);
     }
 
     #[test]

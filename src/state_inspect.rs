@@ -180,7 +180,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} memory_vector_dimensions={}",
+            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={}",
             self.memory_count,
             self.experience_count,
             self.router_threshold,
@@ -205,6 +205,9 @@ impl StateInspectionReport {
             self.evolution_ledger.hierarchy_weight_mutations,
             self.evolution_ledger.memory_updates(),
             self.evolution_ledger.recursive_runtime_calls,
+            self.evolution_ledger.drift_rollbacks,
+            self.evolution_ledger.rollback_router_threshold_delta,
+            self.evolution_ledger.rollback_hierarchy_weight_delta,
             format_memory_vector_dimensions(&self.memory_vector_dimensions)
         )
     }
@@ -275,6 +278,9 @@ mod tests {
             memory_penalties: 1,
             recursive_replay_items: 1,
             recursive_runtime_calls: 9,
+            drift_rollbacks: 2,
+            rollback_router_threshold_delta: 0.03,
+            rollback_hierarchy_weight_delta: 0.04,
         };
         engine.set_memory_retention_policy(MemoryRetentionPolicy {
             stale_after: 12,
@@ -366,6 +372,7 @@ mod tests {
         assert_eq!(report.evolution_ledger.replay_runs, 2);
         assert_eq!(report.evolution_ledger.memory_updates(), 7);
         assert_eq!(report.evolution_ledger.recursive_runtime_calls, 9);
+        assert_eq!(report.evolution_ledger.drift_rollbacks, 2);
         assert_eq!(
             report.top_experiences[0].reward_action,
             RewardAction::Reinforce
@@ -402,5 +409,10 @@ mod tests {
                 .contains("evolution_router_threshold_mutations=3")
         );
         assert!(report.summary_line().contains("evolution_memory_updates=7"));
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_drift_rollbacks=2")
+        );
     }
 }

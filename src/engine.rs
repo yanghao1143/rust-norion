@@ -614,7 +614,24 @@ impl NoironEngine {
         self.router.observe_with_profile(request.profile, metrics);
         let mut hierarchy = self.hierarchy.observe(request.profile, metrics);
         if drift_report.rollback_adaptive {
+            let rollback_router_threshold_delta = (self.router.threshold_for(request.profile)
+                - adaptive_before_inference
+                    .router
+                    .profile_thresholds
+                    .get(request.profile))
+            .abs();
+            let rollback_hierarchy_weight_delta = hierarchy_weight_delta(
+                adaptive_before_inference
+                    .hierarchy
+                    .profile_weights
+                    .get(request.profile),
+                self.hierarchy.state().profile_weights.get(request.profile),
+            );
             self.restore_adaptive_state(adaptive_before_inference);
+            self.evolution_ledger.record_drift_rollback(
+                rollback_router_threshold_delta,
+                rollback_hierarchy_weight_delta,
+            );
             hierarchy = self.hierarchy.current();
         }
         let router_threshold_after = self.router.threshold();
@@ -1819,6 +1836,10 @@ mod tests {
         assert!((outcome.router_threshold_after - threshold_before).abs() < 0.0001);
         assert!((engine.router.threshold() - threshold_before).abs() < 0.0001);
         assert!((engine.hierarchy.current().local - hierarchy_before.local).abs() < 0.0001);
+        assert_eq!(engine.evolution_ledger.drift_rollbacks, 1);
+        assert_eq!(outcome.evolution_ledger.drift_rollbacks, 1);
+        assert!(outcome.evolution_ledger.rollback_router_threshold_delta > 0.0);
+        assert!(outcome.evolution_ledger.rollback_hierarchy_weight_delta > 0.0);
         assert!(outcome.stored_memory_id.is_none());
     }
 
