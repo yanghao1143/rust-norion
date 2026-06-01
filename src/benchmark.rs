@@ -1,5 +1,6 @@
 use crate::drift::DriftSeverity;
 use crate::engine::InferenceOutcome;
+use crate::hardware::DeviceClass;
 use crate::hierarchy::TaskProfile;
 use crate::kv_quant::{QuantizationBits, QuantizedVector};
 use std::time::Instant;
@@ -65,6 +66,7 @@ fn long_context_benchmark_prompt() -> String {
 pub struct BenchmarkCaseResult {
     pub name: String,
     pub profile: TaskProfile,
+    pub device: DeviceClass,
     pub elapsed_ms: u128,
     pub quality: f32,
     pub process_reward: f32,
@@ -115,6 +117,7 @@ pub struct BenchmarkGate {
     pub min_sparse_skipped_tokens: Option<usize>,
     pub min_runtime_forward_cases: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
+    pub min_device_profiles: Option<usize>,
     pub max_drift_blocks: Option<usize>,
     pub max_drift_rollbacks: Option<usize>,
 }
@@ -138,6 +141,7 @@ impl Default for BenchmarkGate {
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
             min_runtime_kv_exported: None,
+            min_device_profiles: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         }
@@ -512,6 +516,7 @@ impl BenchmarkSummary {
         self.results.push(BenchmarkCaseResult {
             name: case.name.clone(),
             profile: case.profile,
+            device: outcome.hardware_plan.device,
             elapsed_ms,
             quality: outcome.report.quality,
             process_reward: outcome.process_reward.total,
@@ -578,6 +583,47 @@ impl BenchmarkSummary {
 
     pub fn total_elapsed_ms(&self) -> u128 {
         self.results.iter().map(|result| result.elapsed_ms).sum()
+    }
+
+    pub fn covered_device_profiles(&self) -> Vec<DeviceClass> {
+        let mut devices = Vec::new();
+
+        for result in &self.results {
+            if result.device != DeviceClass::Auto && !devices.contains(&result.device) {
+                devices.push(result.device);
+            }
+        }
+
+        devices
+    }
+
+    pub fn explicit_device_profiles_covered(&self) -> usize {
+        DeviceClass::explicit_profiles()
+            .iter()
+            .filter(|device| self.results.iter().any(|result| result.device == **device))
+            .count()
+    }
+
+    pub fn missing_explicit_device_profiles(&self) -> Vec<DeviceClass> {
+        DeviceClass::explicit_profiles()
+            .iter()
+            .copied()
+            .filter(|device| !self.results.iter().any(|result| result.device == *device))
+            .collect()
+    }
+
+    pub fn devices_csv(&self) -> String {
+        let devices = self
+            .covered_device_profiles()
+            .into_iter()
+            .map(DeviceClass::as_str)
+            .collect::<Vec<_>>();
+
+        if devices.is_empty() {
+            "none".to_owned()
+        } else {
+            devices.join("+")
+        }
     }
 
     pub fn average_quality(&self) -> f32 {
@@ -942,6 +988,22 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_device_profiles) = gate.min_device_profiles {
+            let device_profiles = self.explicit_device_profiles_covered();
+            if device_profiles < min_device_profiles {
+                let missing = self
+                    .missing_explicit_device_profiles()
+                    .into_iter()
+                    .map(DeviceClass::as_str)
+                    .collect::<Vec<_>>()
+                    .join("+");
+                failures.push(format!(
+                    "device_profiles {} below minimum {} missing={}",
+                    device_profiles, min_device_profiles, missing
+                ));
+            }
+        }
+
         if let Some(max_drift_blocks) = gate.max_drift_blocks {
             let drift_blocks = self.drift_blocks();
             if drift_blocks > max_drift_blocks {
@@ -970,12 +1032,14 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
             self.average_reward(),
             self.average_attention_fraction(),
+            self.explicit_device_profiles_covered(),
+            self.devices_csv(),
             self.recursive_cases(),
             self.max_recursive_waves(),
             self.total_recursive_runtime_calls(),
@@ -1227,6 +1291,7 @@ mod tests {
             min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
             min_runtime_kv_exported: None,
+            min_device_profiles: None,
             max_drift_blocks: Some(0),
             max_drift_rollbacks: Some(0),
         };
@@ -1293,6 +1358,7 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 name: "replay_pressure".to_owned(),
                 profile: TaskProfile::LongDocument,
+                device: DeviceClass::CpuOnly,
                 elapsed_ms: 1,
                 quality: 0.9,
                 process_reward: 0.9,
@@ -1352,6 +1418,7 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 name: "missing_replay_pressure".to_owned(),
                 profile: TaskProfile::LongDocument,
+                device: DeviceClass::CpuOnly,
                 elapsed_ms: 1,
                 quality: 0.9,
                 process_reward: 0.9,
@@ -1410,6 +1477,7 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 name: "auto_replay_control_plane".to_owned(),
                 profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
                 elapsed_ms: 1,
                 quality: 0.9,
                 process_reward: 0.9,
@@ -1496,6 +1564,7 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 name: "runtime_boundary".to_owned(),
                 profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
                 elapsed_ms: 1,
                 quality: 0.9,
                 process_reward: 0.9,
@@ -1570,6 +1639,7 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 name: "sparse_filter".to_owned(),
                 profile: TaskProfile::LongDocument,
+                device: DeviceClass::CpuOnly,
                 elapsed_ms: 1,
                 quality: 0.9,
                 process_reward: 0.9,
@@ -1639,11 +1709,90 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_device_profile_coverage() {
+        let base = BenchmarkCaseResult {
+            name: "device_coverage".to_owned(),
+            profile: TaskProfile::General,
+            device: DeviceClass::CpuOnly,
+            elapsed_ms: 1,
+            quality: 0.9,
+            process_reward: 0.9,
+            attention_fraction: 0.5,
+            requires_recursion: false,
+            recursive_chunks: 1,
+            recursive_waves: 1,
+            recursive_runtime_calls: 1,
+            auto_replay_applied: 0,
+            auto_replay_router_updates: 0,
+            auto_replay_hierarchy_updates: 0,
+            auto_replay_memory_reinforcements: 0,
+            auto_replay_memory_penalties: 0,
+            auto_replay_recursive_runtime_items: 0,
+            auto_replay_recursive_runtime_calls: 0,
+            auto_replay_avg_recursive_call_pressure: 0.0,
+            auto_replay_max_recursive_call_pressure: 0.0,
+            used_memories: 0,
+            infini_local_window: 0,
+            infini_global_memory: 0,
+            sparse_skipped: 0,
+            sparse_skipped_tokens: 0,
+            stored_memories: 0,
+            compacted_memories: 0,
+            runtime_forward_signal: false,
+            runtime_kv_exported: 0,
+            runtime_kv_stored: 0,
+            runtime_adapter_observations: 0,
+            runtime_adapter_best_score: None,
+            drift_severity: DriftSeverity::Stable,
+        };
+        let summary = BenchmarkSummary {
+            results: vec![base.clone()],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_device_profiles = Some(DeviceClass::explicit_profiles().len());
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.explicit_device_profiles_covered(), 1);
+        assert_eq!(
+            summary.missing_explicit_device_profiles().len(),
+            DeviceClass::explicit_profiles().len() - 1
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("device_profiles"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: DeviceClass::explicit_profiles()
+                .iter()
+                .map(|device| BenchmarkCaseResult {
+                    device: *device,
+                    ..base.clone()
+                })
+                .collect(),
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(
+            passing.explicit_device_profiles_covered(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(passing.summary_line().contains("device_profiles=12"));
+        assert!(passing.summary_line().contains("devices=cpu+integrated"));
+    }
+
+    #[test]
     fn gate_reports_drift_failures() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
                 name: "drift".to_owned(),
                 profile: TaskProfile::General,
+                device: DeviceClass::CpuOnly,
                 elapsed_ms: 1,
                 quality: 0.9,
                 process_reward: 0.9,

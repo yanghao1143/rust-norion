@@ -494,7 +494,12 @@ These are algorithmic references, not product dependencies:
   validate a self-developed runtime manifest against every built-in device
   execution profile, so CPU, mobile, embedded, browser-WASM, microcontroller,
   NPU, multi-GPU, edge, and server support cannot silently diverge from the
-  production manifest)
+  production manifest; benchmark summaries now record the effective device
+  profile for each case, `--benchmark-all-devices` runs the default suite
+  across every explicit hardware profile, and `--benchmark-min-device-profiles`
+  can fail CI when CPU, integrated GPU, discrete GPU, UMA, mobile, embedded,
+  browser-WASM, microcontroller, NPU, multi-GPU, edge, and server control-loop
+  execution coverage is incomplete)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -612,9 +617,12 @@ These are algorithmic references, not product dependencies:
   fields.
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative.
+- Benchmark execution can sweep every explicit device profile with
+  `--benchmark-all-devices`, and the benchmark gate can require all-device
+  control-loop coverage through `--benchmark-min-device-profiles`.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime KV export, auto-replay router/hierarchy/memory
   update coverage, auto-replay recursive pressure coverage/bounds,
-  Infini/SpeContext sparse filtering coverage, drift block/rollback counts, or
-  persistent state reuse regress.
+  Infini/SpeContext sparse filtering coverage, all-device execution coverage,
+  drift block/rollback counts, or persistent state reuse regress.

@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use rust_norion::{
-    BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode, CommandRuntime,
-    CommandWireFormat, DeviceClass, DevicePlanGateReport, ExperienceInput, GistLevel,
-    HardwareAllocator, HardwarePlan, HardwareSnapshot, HeuristicBackend, HierarchyWeights,
-    InferenceBackend, InferenceOutcome, InferenceRequest, KvQuantBenchmarkGate,
+    BenchmarkCase, BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode,
+    CommandRuntime, CommandWireFormat, DeviceClass, DevicePlanGateReport, ExperienceInput,
+    GistLevel, HardwareAllocator, HardwarePlan, HardwareSnapshot, HeuristicBackend,
+    HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest, KvQuantBenchmarkGate,
     KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary, LocalTransformerRuntime,
     MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime, ModelRuntimeForwardKernel,
     NoironEngine, PersistentRoundtripInput, PersistentRoundtripReport, ProcessRewardComponents,
@@ -129,7 +129,7 @@ fn main() -> std::io::Result<()> {
         let summary = if args.production_runtime {
             let runtime = args.production_runtime()?;
             let mut backend = RuntimeBackend::new(runtime);
-            run_benchmark(&mut engine, &mut backend, &benchmark_path)?
+            run_benchmark_for_args(&mut engine, &mut backend, &args, &benchmark_path)?
         } else if let Some(runtime_command) = args.runtime_command.clone() {
             let runtime = CommandRuntime::new(runtime_command)
                 .args(args.runtime_args.clone())
@@ -138,14 +138,14 @@ fn main() -> std::io::Result<()> {
                 .with_metadata(args.runtime_metadata.clone())
                 .with_architecture(args.runtime_manifest().architecture);
             let mut backend = RuntimeBackend::new(runtime);
-            run_benchmark(&mut engine, &mut backend, &benchmark_path)?
+            run_benchmark_for_args(&mut engine, &mut backend, &args, &benchmark_path)?
         } else if args.local_runtime {
             let runtime = LocalTransformerRuntime::with_manifest(args.runtime_manifest());
             let mut backend = RuntimeBackend::new(runtime);
-            run_benchmark(&mut engine, &mut backend, &benchmark_path)?
+            run_benchmark_for_args(&mut engine, &mut backend, &args, &benchmark_path)?
         } else {
             let mut backend = HeuristicBackend;
-            run_benchmark(&mut engine, &mut backend, &benchmark_path)?
+            run_benchmark_for_args(&mut engine, &mut backend, &args, &benchmark_path)?
         };
         engine.save_full_state(
             &args.memory_path,
@@ -459,6 +459,58 @@ fn run_benchmark<B: InferenceBackend>(
     Ok(summary)
 }
 
+fn run_benchmark_for_args<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    args: &Args,
+    trace_path: &PathBuf,
+) -> std::io::Result<BenchmarkSummary> {
+    if args.benchmark_all_devices {
+        run_benchmark_all_devices(engine, backend, args, trace_path)
+    } else {
+        run_benchmark(engine, backend, trace_path)
+    }
+}
+
+fn run_benchmark_all_devices<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    args: &Args,
+    trace_path: &PathBuf,
+) -> std::io::Result<BenchmarkSummary> {
+    let mut summary = BenchmarkSummary::new();
+    seed_sparse_benchmark_memories(engine);
+    seed_auto_replay_benchmark_experience(engine);
+
+    for device in DeviceClass::explicit_profiles() {
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            *device,
+            args.cpu_load,
+            args.gpu_load,
+            args.ram_load,
+            args.disk_load,
+        ));
+
+        for case in default_benchmark_cases() {
+            let case_name = format!("{}_{}", device.as_str(), case.name);
+            let timed = run_timed_inference(
+                engine,
+                backend,
+                case.prompt.clone(),
+                case.profile,
+                Some(trace_path),
+                Some(&case_name),
+            )?;
+            let recorded_case = BenchmarkCase::new(case_name, case.profile, case.prompt);
+            summary.record(&recorded_case, timed.elapsed_ms, &timed.outcome);
+        }
+    }
+
+    configure_engine(engine, args);
+
+    Ok(summary)
+}
+
 fn seed_sparse_benchmark_memories(engine: &mut NoironEngine) {
     if engine
         .cache
@@ -675,13 +727,15 @@ fn print_benchmark_summary(
     println!("memory_file: {}", args.memory_path.display());
     println!("experience_file: {}", args.experience_path.display());
     println!("adaptive_file: {}", args.adaptive_path.display());
+    println!("benchmark_all_devices: {}", args.benchmark_all_devices);
     println!("{}", summary.summary_line());
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
+            result.device.as_str(),
             result.elapsed_ms,
             result.quality,
             result.process_reward,
@@ -1198,6 +1252,7 @@ struct Args {
     trace_path: Option<PathBuf>,
     trace_schema_gate_path: Option<PathBuf>,
     benchmark_path: Option<PathBuf>,
+    benchmark_all_devices: bool,
     benchmark_gate_enabled: bool,
     benchmark_min_quality: Option<f32>,
     benchmark_min_reward: Option<f32>,
@@ -1215,6 +1270,7 @@ struct Args {
     benchmark_min_sparse_skipped_tokens: Option<usize>,
     benchmark_min_runtime_forward_cases: Option<usize>,
     benchmark_min_runtime_kv_exported: Option<usize>,
+    benchmark_min_device_profiles: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
     benchmark_max_drift_rollbacks: Option<usize>,
     benchmark_roundtrip: bool,
@@ -1274,6 +1330,7 @@ impl Args {
         let mut trace_path = None;
         let mut trace_schema_gate_path = None;
         let mut benchmark_path = None;
+        let mut benchmark_all_devices = false;
         let mut benchmark_gate_enabled = false;
         let mut benchmark_min_quality = None;
         let mut benchmark_min_reward = None;
@@ -1291,6 +1348,7 @@ impl Args {
         let mut benchmark_min_sparse_skipped_tokens = None;
         let mut benchmark_min_runtime_forward_cases = None;
         let mut benchmark_min_runtime_kv_exported = None;
+        let mut benchmark_min_device_profiles = None;
         let mut benchmark_max_drift_blocks = None;
         let mut benchmark_max_drift_rollbacks = None;
         let mut benchmark_roundtrip = false;
@@ -1380,6 +1438,10 @@ impl Args {
                     benchmark_gate_enabled = true;
                     index += 1;
                 }
+                "--benchmark-all-devices" => {
+                    benchmark_all_devices = true;
+                    index += 1;
+                }
                 "--benchmark-min-quality" if index + 1 < raw.len() => {
                     benchmark_min_quality = Some(parse_f32(&raw[index + 1], 0.0));
                     benchmark_gate_enabled = true;
@@ -1463,6 +1525,11 @@ impl Args {
                 }
                 "--benchmark-min-runtime-kv-exported" if index + 1 < raw.len() => {
                     benchmark_min_runtime_kv_exported = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_device_profiles = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1757,6 +1824,7 @@ impl Args {
             trace_path,
             trace_schema_gate_path,
             benchmark_path,
+            benchmark_all_devices,
             benchmark_gate_enabled,
             benchmark_min_quality,
             benchmark_min_reward,
@@ -1774,6 +1842,7 @@ impl Args {
             benchmark_min_sparse_skipped_tokens,
             benchmark_min_runtime_forward_cases,
             benchmark_min_runtime_kv_exported,
+            benchmark_min_device_profiles,
             benchmark_max_drift_blocks,
             benchmark_max_drift_rollbacks,
             benchmark_roundtrip,
@@ -1874,6 +1943,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_kv_exported {
             gate.min_runtime_kv_exported = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_device_profiles {
+            gate.min_device_profiles = Some(value);
         }
         if let Some(value) = self.benchmark_max_drift_blocks {
             gate.max_drift_blocks = Some(value);
@@ -2031,7 +2103,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2079,6 +2151,7 @@ mod tests {
             "trace-schema.jsonl".to_owned(),
             "--benchmark".to_owned(),
             "benchmark.jsonl".to_owned(),
+            "--benchmark-all-devices".to_owned(),
             "--benchmark-min-quality".to_owned(),
             "0.6".to_owned(),
             "--benchmark-min-reward".to_owned(),
@@ -2111,6 +2184,8 @@ mod tests {
             "4".to_owned(),
             "--benchmark-min-runtime-kv-exported".to_owned(),
             "4".to_owned(),
+            "--benchmark-min-device-profiles".to_owned(),
+            "12".to_owned(),
             "--benchmark-max-drift-blocks".to_owned(),
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
@@ -2192,6 +2267,7 @@ mod tests {
             args.benchmark_path.as_ref().unwrap(),
             &PathBuf::from("benchmark.jsonl")
         );
+        assert!(args.benchmark_all_devices);
         assert!(args.benchmark_gate_enabled);
         assert_eq!(args.benchmark_min_quality, Some(0.6));
         assert_eq!(args.benchmark_min_reward, Some(0.5));
@@ -2243,8 +2319,10 @@ mod tests {
         assert_eq!(args.benchmark_gate().min_sparse_skipped_tokens, Some(3));
         assert_eq!(args.benchmark_min_runtime_forward_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
+        assert_eq!(args.benchmark_min_device_profiles, Some(12));
         assert_eq!(args.benchmark_gate().min_runtime_forward_cases, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_kv_exported, Some(4));
+        assert_eq!(args.benchmark_gate().min_device_profiles, Some(12));
         assert_eq!(args.benchmark_max_drift_blocks, Some(0));
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
         assert!(args.benchmark_roundtrip);
@@ -2805,6 +2883,56 @@ mod tests {
         assert!(trace_report.passed, "{:?}", trace_report.failures);
         assert_eq!(trace_report.checked_lines, 4);
         assert!(backend.last_error().is_none());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn benchmark_all_devices_runs_every_explicit_profile() {
+        let asset_dir = temp_asset_dir("all-device-benchmark");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let trace_path = asset_dir.join("benchmark.jsonl");
+        let args = Args::parse(vec![
+            "--benchmark".to_owned(),
+            trace_path.display().to_string(),
+            "--benchmark-all-devices".to_owned(),
+            "--benchmark-gate".to_owned(),
+            "--benchmark-min-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--benchmark-max-drift-blocks".to_owned(),
+            "0".to_owned(),
+            "--benchmark-max-drift-rollbacks".to_owned(),
+            "0".to_owned(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]);
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &args);
+        let mut backend = HeuristicBackend;
+
+        let summary =
+            run_benchmark_for_args(&mut engine, &mut backend, &args, &trace_path).unwrap();
+        let gate_report = summary.evaluate(&args.benchmark_gate());
+        let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+        assert!(args.benchmark_all_devices);
+        assert_eq!(
+            summary.len(),
+            DeviceClass::explicit_profiles().len() * default_benchmark_cases().len()
+        );
+        assert_eq!(
+            summary.explicit_device_profiles_covered(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(summary.missing_explicit_device_profiles().is_empty());
+        assert!(summary.results().iter().any(|result| {
+            result.device == DeviceClass::Microcontroller
+                && result.name.starts_with("microcontroller_")
+        }));
+        assert!(summary.summary_line().contains("device_profiles=12"));
+        assert!(gate_report.passed, "{:?}", gate_report.failures);
+        assert!(trace_report.passed, "{:?}", trace_report.failures);
+        assert_eq!(trace_report.checked_lines, summary.len());
 
         fs::remove_dir_all(asset_dir).unwrap();
     }

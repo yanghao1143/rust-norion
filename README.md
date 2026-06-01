@@ -281,6 +281,21 @@ benchmark 也会注入确定性的 replay experience，因此可以要求 auto-r
 cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-memory-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
+Run the same benchmark cases across every built-in explicit device profile
+when device adaptation must be proven by actual control-loop execution, not
+only by the device matrix or manifest compatibility gate:
+
+```powershell
+cargo run -- --benchmark target/noiron-all-devices.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-all-devices.jsonl --benchmark-gate --benchmark-min-device-profiles 12 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
+如果要证明“所有设备都能实际跑过控制闭环”，而不只是设备矩阵或 manifest
+契约检查通过，可以让默认 benchmark cases 扫过每一个内置显式设备 profile：
+
+```powershell
+cargo run -- --benchmark target/noiron-all-devices.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-all-devices.jsonl --benchmark-gate --benchmark-min-device-profiles 12 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
 Validate an existing trace JSONL file against the required local control-plane
 schema fields, including runtime token uncertainty, the stable
 `runtime_device_contract`, and device-derived hardware KV budgets:
@@ -423,14 +438,15 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 
 Benchmark summaries include recursive case counts, compacted memory counts,
 runtime forward-signal case counts, runtime KV export counts, auto-replay
-router/hierarchy/memory update counts, recursive pressure, and drift
-watch/block/rollback counts, so long-context coverage, missing runtime
-diagnostics, missing KV exchange, missing replay control-plane coverage,
-missing pressure signals, excessive recursive replay cost, memory-growth, or
-safety regressions in the self-evolution loop can fail the gate even when
-average quality still looks acceptable.
+router/hierarchy/memory update counts, recursive pressure, covered device
+profiles, and drift watch/block/rollback counts, so long-context coverage,
+missing runtime diagnostics, missing KV exchange, missing replay control-plane
+coverage, missing all-device execution coverage, missing pressure signals,
+excessive recursive replay cost, memory-growth, or safety regressions in the
+self-evolution loop can fail the gate even when average quality still looks
+acceptable.
 
-Benchmark 汇总会包含递归 case 数、memory compaction 计数、runtime forward-signal case 数、runtime KV export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、memory compaction 计数、runtime forward-signal case 数、runtime KV export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile 以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 
