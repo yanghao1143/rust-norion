@@ -250,6 +250,23 @@ Run the same suite as a regression gate:
 cargo run -- --benchmark target/noiron-benchmark.jsonl --benchmark-gate --benchmark-min-quality 0.6 --benchmark-min-reward 0.5 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
+Benchmark runs seed deterministic local sparse-memory fixtures before the
+cases execute, so `--benchmark-min-sparse-skipped-cases` and
+`--benchmark-min-sparse-skipped-tokens` can validate Infini/SpeContext filtering
+from a clean state:
+
+```powershell
+cargo run -- --benchmark target/noiron-sparse-benchmark.jsonl --benchmark-gate --benchmark-min-sparse-skipped-cases 1 --benchmark-min-sparse-skipped-tokens 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
+benchmark 会在执行 case 前注入确定性的本地稀疏记忆 fixture，因此即使使用全新的
+memory / experience / adaptive 文件，也可以用 `--benchmark-min-sparse-skipped-cases`
+和 `--benchmark-min-sparse-skipped-tokens` 检查 Infini/SpeContext 过滤没有退化：
+
+```powershell
+cargo run -- --benchmark target/noiron-sparse-benchmark.jsonl --benchmark-gate --benchmark-min-sparse-skipped-cases 1 --benchmark-min-sparse-skipped-tokens 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+```
+
 Validate an existing trace JSONL file against the required local control-plane
 schema fields, including runtime token uncertainty, the stable
 `runtime_device_contract`, and device-derived hardware KV budgets:
@@ -933,7 +950,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
   `ModelRuntimeForwardKernel<LocalTransformerRuntime>` adapter as ABI/CI
   harnesses until the trained production kernel is attached
 - expand mixed-precision 4/8-bit KV quantization benchmarks and policies
-- add Infini-style global/local KV separation and sparse context filtering
+- expand Infini-style global/local KV separation and sparse context filtering
 - add recursive scheduling for inputs beyond the native model window
 - add benchmark cases for long-context routing and memory reuse
 - tune configurable memory retention and compaction policies from the CLI
@@ -944,7 +961,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 在 `ProductionTransformerRuntime` 的 manifest / 设备边界后面接入真实自研 forward kernel
 - 在训练好的生产 kernel 接入前，保留确定性 reference production kernel 和 local `ModelRuntimeForwardKernel<LocalTransformerRuntime>` adapter 作为 ABI / CI 验证 harness
 - 扩展 4/8-bit 混合精度 KV 量化 benchmark 和策略
-- 增加 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
+- 扩展 Infini 风格全局/局部 KV 分离和稀疏上下文筛选
 - 增加超过模型原生窗口输入的递归调度
 - 增加长上下文路由和记忆复用 benchmark
 - 通过 CLI 调整可配置的记忆保留与压缩合并策略

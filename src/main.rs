@@ -424,6 +424,7 @@ fn run_benchmark<B: InferenceBackend>(
     trace_path: &PathBuf,
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
+    seed_sparse_benchmark_memories(engine);
 
     for case in default_benchmark_cases() {
         let timed = run_timed_inference(
@@ -438,6 +439,34 @@ fn run_benchmark<B: InferenceBackend>(
     }
 
     Ok(summary)
+}
+
+fn seed_sparse_benchmark_memories(engine: &mut NoironEngine) {
+    if engine
+        .cache
+        .entries()
+        .iter()
+        .any(|entry| entry.key.starts_with("benchmark_sparse_seed:long_context:"))
+    {
+        return;
+    }
+
+    for index in 0..28 {
+        let key = format!(
+            "benchmark_sparse_seed:long_context:{index}: FHT-DKE Noiron disk KV sparse context memory routing compression"
+        );
+        let vector = sparse_benchmark_vector(index);
+        let id = engine.cache.store_or_fuse(key, vector, 1.0);
+        engine.cache.reinforce(id, 1.0);
+    }
+}
+
+fn sparse_benchmark_vector(index: usize) -> Vec<f32> {
+    let mut vector = vec![0.0; 64];
+    vector[index % 64] = 1.0;
+    vector[(index * 7 + 3) % 64] = 0.45;
+    vector[(index * 13 + 11) % 64] = 0.25;
+    vector
 }
 
 fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripReport> {
@@ -585,7 +614,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.elapsed_ms,
@@ -602,6 +631,10 @@ fn print_benchmark_summary(
             result.auto_replay_avg_recursive_call_pressure,
             result.auto_replay_max_recursive_call_pressure,
             result.used_memories,
+            result.infini_local_window,
+            result.infini_global_memory,
+            result.sparse_skipped,
+            result.sparse_skipped_tokens,
             result.stored_memories,
             result.compacted_memories,
             result.runtime_forward_signal,
@@ -1041,6 +1074,8 @@ struct Args {
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
     benchmark_max_auto_replay_recursive_call_pressure: Option<f32>,
+    benchmark_min_sparse_skipped_cases: Option<usize>,
+    benchmark_min_sparse_skipped_tokens: Option<usize>,
     benchmark_min_runtime_forward_cases: Option<usize>,
     benchmark_min_runtime_kv_exported: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
@@ -1111,6 +1146,8 @@ impl Args {
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
         let mut benchmark_max_auto_replay_recursive_call_pressure = None;
+        let mut benchmark_min_sparse_skipped_cases = None;
+        let mut benchmark_min_sparse_skipped_tokens = None;
         let mut benchmark_min_runtime_forward_cases = None;
         let mut benchmark_min_runtime_kv_exported = None;
         let mut benchmark_max_drift_blocks = None;
@@ -1246,6 +1283,16 @@ impl Args {
                 "--benchmark-max-auto-replay-recursive-call-pressure" if index + 1 < raw.len() => {
                     benchmark_max_auto_replay_recursive_call_pressure =
                         Some(parse_f32(&raw[index + 1], 1.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-sparse-skipped-cases" if index + 1 < raw.len() => {
+                    benchmark_min_sparse_skipped_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-sparse-skipped-tokens" if index + 1 < raw.len() => {
+                    benchmark_min_sparse_skipped_tokens = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1555,6 +1602,8 @@ impl Args {
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure,
+            benchmark_min_sparse_skipped_cases,
+            benchmark_min_sparse_skipped_tokens,
             benchmark_min_runtime_forward_cases,
             benchmark_min_runtime_kv_exported,
             benchmark_max_drift_blocks,
@@ -1635,6 +1684,12 @@ impl Args {
         }
         if let Some(value) = self.benchmark_max_auto_replay_recursive_call_pressure {
             gate.max_auto_replay_recursive_call_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_min_sparse_skipped_cases {
+            gate.min_sparse_skipped_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_sparse_skipped_tokens {
+            gate.min_sparse_skipped_tokens = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_forward_cases {
             gate.min_runtime_forward_cases = Some(value);
@@ -1798,7 +1853,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-kv-exported n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -1864,6 +1919,10 @@ mod tests {
             "0.05".to_owned(),
             "--benchmark-max-auto-replay-recursive-call-pressure".to_owned(),
             "0.25".to_owned(),
+            "--benchmark-min-sparse-skipped-cases".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-sparse-skipped-tokens".to_owned(),
+            "3".to_owned(),
             "--benchmark-min-runtime-forward-cases".to_owned(),
             "4".to_owned(),
             "--benchmark-min-runtime-kv-exported".to_owned(),
@@ -1978,6 +2037,10 @@ mod tests {
                 .max_auto_replay_recursive_call_pressure,
             Some(0.25)
         );
+        assert_eq!(args.benchmark_min_sparse_skipped_cases, Some(1));
+        assert_eq!(args.benchmark_min_sparse_skipped_tokens, Some(3));
+        assert_eq!(args.benchmark_gate().min_sparse_skipped_cases, Some(1));
+        assert_eq!(args.benchmark_gate().min_sparse_skipped_tokens, Some(3));
         assert_eq!(args.benchmark_min_runtime_forward_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_forward_cases, Some(4));

@@ -484,7 +484,10 @@ These are algorithmic references, not product dependencies:
   `--production-kernel-conformance-gate` now runs a short manifest-backed
   forward pass with deterministic KV import and fails unless the attached
   kernel returns token uncertainty, reasoning trace, forward energy, KV
-  influence, and exported KV when enabled)
+  influence, and exported KV when enabled; benchmark runs now seed
+  deterministic sparse-memory fixtures and can gate Infini/SpeContext coverage
+  with minimum sparse-skipped case/token counts, so sparse filtering regressions
+  are caught from a clean state)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -601,5 +604,5 @@ These are algorithmic references, not product dependencies:
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime KV export, auto-replay recursive pressure
-  coverage/bounds, drift block/rollback counts, or persistent state reuse
-  regress.
+  coverage/bounds, Infini/SpeContext sparse filtering coverage, drift
+  block/rollback counts, or persistent state reuse regress.

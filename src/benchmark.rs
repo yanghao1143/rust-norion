@@ -79,6 +79,10 @@ pub struct BenchmarkCaseResult {
     pub auto_replay_avg_recursive_call_pressure: f32,
     pub auto_replay_max_recursive_call_pressure: f32,
     pub used_memories: usize,
+    pub infini_local_window: usize,
+    pub infini_global_memory: usize,
+    pub sparse_skipped: usize,
+    pub sparse_skipped_tokens: usize,
     pub stored_memories: usize,
     pub compacted_memories: usize,
     pub runtime_forward_signal: bool,
@@ -100,6 +104,8 @@ pub struct BenchmarkGate {
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
+    pub min_sparse_skipped_cases: Option<usize>,
+    pub min_sparse_skipped_tokens: Option<usize>,
     pub min_runtime_forward_cases: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
     pub max_drift_blocks: Option<usize>,
@@ -118,6 +124,8 @@ impl Default for BenchmarkGate {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_sparse_skipped_cases: None,
+            min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
             min_runtime_kv_exported: None,
             max_drift_blocks: Some(0),
@@ -489,6 +497,7 @@ impl BenchmarkSummary {
             + outcome.stored_gist_memory_ids.len()
             + outcome.stored_runtime_kv_memory_ids.len();
         let auto_replay = outcome.auto_replay_report.as_ref();
+        let infini_counts = outcome.infini_memory_plan.counts();
 
         self.results.push(BenchmarkCaseResult {
             name: case.name.clone(),
@@ -515,6 +524,10 @@ impl BenchmarkSummary {
                 .map(|report| report.max_recursive_call_pressure)
                 .unwrap_or(0.0),
             used_memories: outcome.used_memories.len(),
+            infini_local_window: infini_counts.local_window,
+            infini_global_memory: infini_counts.global_memory,
+            sparse_skipped: infini_counts.skipped,
+            sparse_skipped_tokens: infini_counts.skipped_tokens,
             stored_memories,
             compacted_memories: outcome.memory_compaction_report.merged.len(),
             runtime_forward_signal: outcome.runtime_diagnostics.has_forward_signal(),
@@ -603,6 +616,27 @@ impl BenchmarkSummary {
         self.results
             .iter()
             .map(|result| result.compacted_memories)
+            .sum()
+    }
+
+    pub fn sparse_skipped_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.sparse_skipped > 0)
+            .count()
+    }
+
+    pub fn total_sparse_skipped(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.sparse_skipped)
+            .sum()
+    }
+
+    pub fn total_sparse_skipped_tokens(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.sparse_skipped_tokens)
             .sum()
     }
 
@@ -784,6 +818,26 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_sparse_skipped_cases) = gate.min_sparse_skipped_cases {
+            let sparse_skipped_cases = self.sparse_skipped_cases();
+            if sparse_skipped_cases < min_sparse_skipped_cases {
+                failures.push(format!(
+                    "sparse_skipped_cases {} below minimum {}",
+                    sparse_skipped_cases, min_sparse_skipped_cases
+                ));
+            }
+        }
+
+        if let Some(min_sparse_skipped_tokens) = gate.min_sparse_skipped_tokens {
+            let sparse_skipped_tokens = self.total_sparse_skipped_tokens();
+            if sparse_skipped_tokens < min_sparse_skipped_tokens {
+                failures.push(format!(
+                    "sparse_skipped_tokens {} below minimum {}",
+                    sparse_skipped_tokens, min_sparse_skipped_tokens
+                ));
+            }
+        }
+
         if let Some(min_runtime_forward_cases) = gate.min_runtime_forward_cases {
             let runtime_forward_cases = self.runtime_forward_cases();
             if runtime_forward_cases < min_runtime_forward_cases {
@@ -832,7 +886,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -845,6 +899,9 @@ impl BenchmarkSummary {
             self.total_auto_replay_recursive_items(),
             self.total_auto_replay_recursive_runtime_calls(),
             self.max_auto_replay_recursive_call_pressure(),
+            self.sparse_skipped_cases(),
+            self.total_sparse_skipped(),
+            self.total_sparse_skipped_tokens(),
             self.total_stored_memories(),
             self.total_compacted_memories(),
             self.runtime_forward_cases(),
@@ -1069,6 +1126,8 @@ mod tests {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_sparse_skipped_cases: None,
+            min_sparse_skipped_tokens: None,
             min_runtime_forward_cases: None,
             min_runtime_kv_exported: None,
             max_drift_blocks: Some(0),
@@ -1151,6 +1210,10 @@ mod tests {
                 auto_replay_avg_recursive_call_pressure: 0.35,
                 auto_replay_max_recursive_call_pressure: 0.35,
                 used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
@@ -1202,6 +1265,10 @@ mod tests {
                 auto_replay_avg_recursive_call_pressure: 0.0,
                 auto_replay_max_recursive_call_pressure: 0.0,
                 used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
@@ -1252,6 +1319,10 @@ mod tests {
                 auto_replay_avg_recursive_call_pressure: 0.0,
                 auto_replay_max_recursive_call_pressure: 0.0,
                 used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
@@ -1299,6 +1370,76 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_sparse_filtering_coverage() {
+        let summary = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                name: "sparse_filter".to_owned(),
+                profile: TaskProfile::LongDocument,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 2,
+                infini_local_window: 1,
+                infini_global_memory: 1,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: false,
+                runtime_kv_exported: 0,
+                runtime_kv_stored: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_sparse_skipped_cases = Some(1);
+        gate.min_sparse_skipped_tokens = Some(3);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("sparse_skipped_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("sparse_skipped_tokens"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                sparse_skipped: 2,
+                sparse_skipped_tokens: 7,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.sparse_skipped_cases(), 1);
+        assert_eq!(passing.total_sparse_skipped_tokens(), 7);
+        assert!(passing.summary_line().contains("sparse_skipped_cases=1"));
+        assert!(passing.summary_line().contains("sparse_skipped_tokens=7"));
+    }
+
+    #[test]
     fn gate_reports_drift_failures() {
         let summary = BenchmarkSummary {
             results: vec![BenchmarkCaseResult {
@@ -1318,6 +1459,10 @@ mod tests {
                 auto_replay_avg_recursive_call_pressure: 0.0,
                 auto_replay_max_recursive_call_pressure: 0.0,
                 used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
                 stored_memories: 0,
                 compacted_memories: 0,
                 runtime_forward_signal: false,
