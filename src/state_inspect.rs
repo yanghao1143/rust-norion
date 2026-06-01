@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use crate::adaptive_state::EvolutionLedger;
 use crate::engine::NoironEngine;
 use crate::experience::recursive_runtime_calls_from_notes;
 use crate::hierarchy::{
@@ -65,6 +66,7 @@ pub struct StateInspectionReport {
     pub tier_counts: TierCounts,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
+    pub evolution_ledger: EvolutionLedger,
     pub memory_vector_dimensions: Vec<StateMemoryVectorDimensions>,
     pub top_memories: Vec<StateMemorySummary>,
     pub top_experiences: Vec<StateExperienceSummary>,
@@ -169,6 +171,7 @@ impl StateInspectionReport {
             tier_counts: adaptive_state.tier_plan.counts(),
             memory_retention_policy: engine.memory_retention_policy,
             memory_compaction_policy: engine.memory_compaction_policy.clone(),
+            evolution_ledger: adaptive_state.evolution_ledger,
             memory_vector_dimensions: memory_vector_dimensions(engine),
             top_memories,
             top_experiences,
@@ -177,7 +180,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) memory_vector_dimensions={}",
+            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} memory_vector_dimensions={}",
             self.memory_count,
             self.experience_count,
             self.router_threshold,
@@ -196,6 +199,12 @@ impl StateInspectionReport {
             self.tier_counts.hot_gpu,
             self.tier_counts.warm_ram,
             self.tier_counts.cold_disk,
+            self.evolution_ledger.replay_runs,
+            self.evolution_ledger.replay_items,
+            self.evolution_ledger.router_threshold_mutations,
+            self.evolution_ledger.hierarchy_weight_mutations,
+            self.evolution_ledger.memory_updates(),
+            self.evolution_ledger.recursive_runtime_calls,
             format_memory_vector_dimensions(&self.memory_vector_dimensions)
         )
     }
@@ -255,6 +264,18 @@ mod tests {
                 .cache
                 .store_or_fuse("fallback embedding memory", vec![0.0, 1.0, 0.0, 0.0], 0.7);
         engine.cache.reinforce(memory_id, 0.8);
+        engine.evolution_ledger = EvolutionLedger {
+            replay_runs: 2,
+            replay_items: 5,
+            router_threshold_mutations: 3,
+            hierarchy_weight_mutations: 4,
+            router_threshold_delta: 0.17,
+            hierarchy_weight_delta: 0.08,
+            memory_reinforcements: 6,
+            memory_penalties: 1,
+            recursive_replay_items: 1,
+            recursive_runtime_calls: 9,
+        };
         engine.set_memory_retention_policy(MemoryRetentionPolicy {
             stale_after: 12,
             decay_rate: 0.12,
@@ -342,6 +363,9 @@ mod tests {
         );
         assert_eq!(report.memory_retention_policy.stale_after, 12);
         assert_eq!(report.memory_compaction_policy.max_merges, 4);
+        assert_eq!(report.evolution_ledger.replay_runs, 2);
+        assert_eq!(report.evolution_ledger.memory_updates(), 7);
+        assert_eq!(report.evolution_ledger.recursive_runtime_calls, 9);
         assert_eq!(
             report.top_experiences[0].reward_action,
             RewardAction::Reinforce
@@ -372,5 +396,11 @@ mod tests {
                 .summary_line()
                 .contains("memory_vector_dimensions=3:1|4:1")
         );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_router_threshold_mutations=3")
+        );
+        assert!(report.summary_line().contains("evolution_memory_updates=7"));
     }
 }

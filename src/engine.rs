@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::adaptive_state::AdaptiveState;
+use crate::adaptive_state::{AdaptiveState, EvolutionLedger};
 use crate::agent_team::{AgentTeamInput, AgentTeamPlan, AgentTeamPlanner};
 use crate::drift::{DriftGuard, DriftInput, DriftReport};
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
@@ -232,6 +232,7 @@ pub struct NoironEngine {
     pub auto_replay_limit: usize,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
+    pub evolution_ledger: EvolutionLedger,
     last_tier_plan: TieredCachePlan,
     embedder: TextEmbedder,
 }
@@ -260,6 +261,7 @@ impl Default for NoironEngine {
             auto_replay_limit: 2,
             memory_retention_policy: MemoryRetentionPolicy::default(),
             memory_compaction_policy: MemoryCompactionPolicy::default(),
+            evolution_ledger: EvolutionLedger::default(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
         }
@@ -318,6 +320,7 @@ impl NoironEngine {
             tier_plan: self.last_tier_plan.clone(),
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
+            evolution_ledger: self.evolution_ledger,
         }
     }
 
@@ -327,6 +330,7 @@ impl NoironEngine {
         self.last_tier_plan = state.tier_plan;
         self.memory_retention_policy = state.memory_retention_policy;
         self.memory_compaction_policy = state.memory_compaction_policy;
+        self.evolution_ledger = state.evolution_ledger;
     }
 
     pub fn save_adaptive_state(&self, path: impl AsRef<Path>) -> io::Result<()> {
@@ -424,6 +428,7 @@ impl NoironEngine {
             ));
         }
 
+        self.evolution_ledger.record_replay(&report);
         report
     }
 
@@ -1385,6 +1390,20 @@ mod tests {
         assert_eq!(report.hierarchy_updates, report.applied);
         assert!(report.reinforced >= 1 || report.penalized >= 1);
         assert!(report.memory_reinforcements + report.memory_penalties >= 1);
+        assert_eq!(engine.evolution_ledger.replay_runs, 1);
+        assert_eq!(engine.evolution_ledger.replay_items, report.applied as u64);
+        assert_eq!(
+            engine.evolution_ledger.router_threshold_mutations,
+            report.router_threshold_mutations as u64
+        );
+        assert_eq!(
+            engine.evolution_ledger.hierarchy_weight_mutations,
+            report.hierarchy_weight_mutations as u64
+        );
+        assert_eq!(
+            engine.evolution_ledger.memory_updates(),
+            (report.memory_reinforcements + report.memory_penalties) as u64
+        );
     }
 
     #[test]
@@ -2229,6 +2248,10 @@ mod tests {
         assert_eq!(report.memory_reinforcements, 1);
         assert!(engine.cache.entries()[0].hits > before_hits);
         assert!(engine.router.observations() > 0);
+        assert_eq!(engine.evolution_ledger.replay_runs, 1);
+        assert_eq!(engine.evolution_ledger.replay_items, 1);
+        assert_eq!(engine.evolution_ledger.memory_reinforcements, 1);
+        assert_eq!(engine.evolution_ledger.memory_penalties, 0);
     }
 
     #[test]
@@ -2274,6 +2297,8 @@ mod tests {
         assert_eq!(report.touched_memories, 1);
         assert_eq!(report.memory_reinforcements, 1);
         assert!(engine.cache.entries()[0].hits > before_hits);
+        assert_eq!(engine.evolution_ledger.replay_runs, 1);
+        assert_eq!(engine.evolution_ledger.memory_updates(), 1);
     }
 
     #[test]
@@ -2388,6 +2413,10 @@ mod tests {
         assert!((restored.memory_retention_policy.decay_rate - 0.12).abs() < 0.0001);
         assert_eq!(restored.memory_compaction_policy.max_candidates, 64);
         assert_eq!(restored.memory_compaction_policy.max_merges, 4);
+        assert_eq!(
+            restored.evolution_ledger.replay_runs,
+            engine.evolution_ledger.replay_runs
+        );
         let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::default());
         let second = restored.infer(
             InferenceRequest::new(prompt, TaskProfile::Coding),
@@ -2478,6 +2507,77 @@ mod tests {
         assert!((restored.memory_retention_policy.decay_rate - 0.18).abs() < 0.0001);
         assert_eq!(restored.memory_compaction_policy.max_candidates, 48);
         assert_eq!(restored.memory_compaction_policy.max_merges, 3);
+    }
+
+    #[test]
+    fn replay_evolution_ledger_persists_through_full_state() {
+        let memory_path = temp_path("ledger-memory", "ndkv");
+        let experience_path = temp_path("ledger-experience", "ndkv");
+        let adaptive_path = temp_path("ledger-adaptive", "ndkv");
+
+        let mut engine = NoironEngine::new();
+        let memory_id =
+            engine
+                .cache
+                .store_or_fuse("persistent ledger memory", vec![1.0, 0.0, 0.0], 0.8);
+        engine.experience.record(ExperienceInput {
+            prompt: "persistent ledger replay".to_owned(),
+            profile: TaskProfile::LongDocument,
+            lesson: "persist control-plane evolution evidence across restarts".to_owned(),
+            quality: 0.94,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: Some(memory_id),
+            router_threshold_after: 0.52,
+            stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.52,
+                attention_tokens: 3,
+                fast_tokens: 1,
+                attention_fraction: 0.75,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.2, 0.6),
+            used_memory_ids: vec![memory_id],
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
+            process_reward: ProcessRewardReport {
+                total: 0.93,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: vec![
+                    "recursive:chunks=4:merge_rounds=2:waves=2:parallel=2:runtime_calls=7"
+                        .to_owned(),
+                ],
+            },
+        });
+
+        let report = engine.replay_experience(4);
+        assert_eq!(report.applied, 1);
+        assert_eq!(engine.evolution_ledger.replay_runs, 1);
+        assert_eq!(engine.evolution_ledger.replay_items, 1);
+        assert_eq!(engine.evolution_ledger.recursive_replay_items, 1);
+        assert_eq!(engine.evolution_ledger.recursive_runtime_calls, 7);
+
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+        let restored =
+            NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+
+        assert_eq!(restored.evolution_ledger, engine.evolution_ledger);
+        assert!(
+            restored
+                .evolution_ledger
+                .summary_line()
+                .contains("replay_runs=1")
+        );
+
+        cleanup(memory_path);
+        cleanup(experience_path);
+        cleanup(adaptive_path);
     }
 
     fn temp_path(label: &str, extension: &str) -> std::path::PathBuf {

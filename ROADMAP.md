@@ -390,7 +390,10 @@ These are algorithmic references, not product dependencies:
   traces, CLI output, and benchmark gates now expose router updates, hierarchy
   updates, router-threshold mutation counts/deltas, hierarchy-weight mutation
   counts/deltas, memory reinforcements, and memory penalties so automatic replay
-  must prove measurable control-plane mutation, not just execution; replay planning now
+  must prove measurable control-plane mutation, not just execution; adaptive
+  state now persists a cumulative self-evolution ledger across restarts for
+  replay runs, applied items, router/hierarchy mutation deltas, memory updates,
+  and recursive replay cost evidence; replay planning now
   keeps at least one recursive runtime sample when the limit allows so
   long-context cost learning is not starved by short high-reward samples;
   replay pressure now parses
@@ -554,14 +557,15 @@ These are algorithmic references, not product dependencies:
   language.
 - Self-evolution is bounded by drift controls: confidence gates, decay,
   rollback, configurable retention, protected-id memory compaction, and
-  inspectable local state.
+  inspectable local state with a persisted evolution ledger.
 - The CLI can inspect memory count, experience count, adaptive global/profile
   router state, hierarchy weights, tier counts, effective memory policies,
-  memory-vector dimension buckets, and top memories/lessons from persisted
-  local files without invoking a model runtime.
+  cumulative replay mutation counters, memory-vector dimension buckets, and top
+  memories/lessons from persisted local files without invoking a model runtime.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
-  placement, and memory governance policies, while legacy adaptive files
-  without policy keys still load with conservative defaults.
+  placement, memory governance policies, and the cumulative self-evolution
+  ledger, while legacy adaptive files without policy keys still load with
+  conservative defaults.
 - The control plane remains compatible with future self-developed model
   versions through stable Rust traits.
 - A built-in local runtime prototype proves tokenizer, model-side embedding,

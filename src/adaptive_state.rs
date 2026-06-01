@@ -2,6 +2,7 @@ use std::io;
 use std::path::Path;
 
 use crate::disk_kv::DiskKvStore;
+use crate::experience_replay::ExperienceReplayReport;
 use crate::hierarchy::{
     HierarchyState, HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights,
 };
@@ -16,6 +17,72 @@ pub struct AdaptiveState {
     pub tier_plan: TieredCachePlan,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
+    pub evolution_ledger: EvolutionLedger,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct EvolutionLedger {
+    pub replay_runs: u64,
+    pub replay_items: u64,
+    pub router_threshold_mutations: u64,
+    pub hierarchy_weight_mutations: u64,
+    pub router_threshold_delta: f32,
+    pub hierarchy_weight_delta: f32,
+    pub memory_reinforcements: u64,
+    pub memory_penalties: u64,
+    pub recursive_replay_items: u64,
+    pub recursive_runtime_calls: u64,
+}
+
+impl EvolutionLedger {
+    pub fn record_replay(&mut self, report: &ExperienceReplayReport) {
+        if report.applied == 0 {
+            return;
+        }
+
+        self.replay_runs = self.replay_runs.saturating_add(1);
+        self.replay_items = self.replay_items.saturating_add(report.applied as u64);
+        self.router_threshold_mutations = self
+            .router_threshold_mutations
+            .saturating_add(report.router_threshold_mutations as u64);
+        self.hierarchy_weight_mutations = self
+            .hierarchy_weight_mutations
+            .saturating_add(report.hierarchy_weight_mutations as u64);
+        self.router_threshold_delta += report.router_threshold_delta;
+        self.hierarchy_weight_delta += report.hierarchy_weight_delta;
+        self.memory_reinforcements = self
+            .memory_reinforcements
+            .saturating_add(report.memory_reinforcements as u64);
+        self.memory_penalties = self
+            .memory_penalties
+            .saturating_add(report.memory_penalties as u64);
+        self.recursive_replay_items = self
+            .recursive_replay_items
+            .saturating_add(report.recursive_runtime_items as u64);
+        self.recursive_runtime_calls = self
+            .recursive_runtime_calls
+            .saturating_add(report.recursive_runtime_calls as u64);
+    }
+
+    pub fn memory_updates(self) -> u64 {
+        self.memory_reinforcements
+            .saturating_add(self.memory_penalties)
+    }
+
+    pub fn summary_line(self) -> String {
+        format!(
+            "evolution: replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} recursive_replay_items={} recursive_runtime_calls={}",
+            self.replay_runs,
+            self.replay_items,
+            self.router_threshold_mutations,
+            self.hierarchy_weight_mutations,
+            self.router_threshold_delta,
+            self.hierarchy_weight_delta,
+            self.memory_updates(),
+            self.recursive_replay_items,
+            self.recursive_runtime_calls
+        )
+    }
 }
 
 impl AdaptiveState {
@@ -53,6 +120,10 @@ impl AdaptiveState {
         store.put(
             "adaptive/memory_compaction",
             serialize_memory_compaction_policy(&self.memory_compaction_policy).as_bytes(),
+        )?;
+        store.put(
+            "adaptive/evolution_ledger",
+            serialize_evolution_ledger(self.evolution_ledger).as_bytes(),
         )?;
         store.compact()
     }
@@ -97,6 +168,11 @@ impl AdaptiveState {
             } else {
                 MemoryCompactionPolicy::default()
             };
+        let evolution_ledger = if let Some(ledger_bytes) = store.get("adaptive/evolution_ledger")? {
+            parse_evolution_ledger(&String::from_utf8_lossy(&ledger_bytes)).unwrap_or_default()
+        } else {
+            EvolutionLedger::default()
+        };
 
         Ok(Some(Self {
             router,
@@ -104,6 +180,7 @@ impl AdaptiveState {
             tier_plan,
             memory_retention_policy,
             memory_compaction_policy,
+            evolution_ledger,
         }))
     }
 }
@@ -288,6 +365,42 @@ fn parse_memory_compaction_policy(value: &str) -> Option<MemoryCompactionPolicy>
     })
 }
 
+fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
+    format!(
+        "{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}",
+        ledger.replay_runs,
+        ledger.replay_items,
+        ledger.router_threshold_mutations,
+        ledger.hierarchy_weight_mutations,
+        ledger.router_threshold_delta,
+        ledger.hierarchy_weight_delta,
+        ledger.memory_reinforcements,
+        ledger.memory_penalties,
+        ledger.recursive_replay_items,
+        ledger.recursive_runtime_calls
+    )
+}
+
+fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
+    let fields = value.split('\t').collect::<Vec<_>>();
+    if fields.len() != 10 {
+        return None;
+    }
+
+    Some(EvolutionLedger {
+        replay_runs: fields[0].parse::<u64>().ok()?,
+        replay_items: fields[1].parse::<u64>().ok()?,
+        router_threshold_mutations: fields[2].parse::<u64>().ok()?,
+        hierarchy_weight_mutations: fields[3].parse::<u64>().ok()?,
+        router_threshold_delta: fields[4].parse::<f32>().ok()?.max(0.0),
+        hierarchy_weight_delta: fields[5].parse::<f32>().ok()?.max(0.0),
+        memory_reinforcements: fields[6].parse::<u64>().ok()?,
+        memory_penalties: fields[7].parse::<u64>().ok()?,
+        recursive_replay_items: fields[8].parse::<u64>().ok()?,
+        recursive_runtime_calls: fields[9].parse::<u64>().ok()?,
+    })
+}
+
 fn parse_memory_placement(value: &str) -> Option<MemoryPlacement> {
     let fields = value.split('\t').collect::<Vec<_>>();
     if fields.len() != 4 {
@@ -394,6 +507,18 @@ mod tests {
                 max_candidates: 64,
                 max_merges: 4,
             },
+            evolution_ledger: EvolutionLedger {
+                replay_runs: 3,
+                replay_items: 9,
+                router_threshold_mutations: 5,
+                hierarchy_weight_mutations: 7,
+                router_threshold_delta: 0.42,
+                hierarchy_weight_delta: 0.21,
+                memory_reinforcements: 4,
+                memory_penalties: 2,
+                recursive_replay_items: 1,
+                recursive_runtime_calls: 8,
+            },
         };
 
         state.save_to_disk_kv(&path).unwrap();
@@ -416,6 +541,15 @@ mod tests {
         assert!((loaded.memory_compaction_policy.similarity_threshold - 0.91).abs() < 0.0001);
         assert_eq!(loaded.memory_compaction_policy.max_candidates, 64);
         assert_eq!(loaded.memory_compaction_policy.max_merges, 4);
+        assert_eq!(loaded.evolution_ledger.replay_runs, 3);
+        assert_eq!(loaded.evolution_ledger.replay_items, 9);
+        assert_eq!(loaded.evolution_ledger.router_threshold_mutations, 5);
+        assert_eq!(loaded.evolution_ledger.hierarchy_weight_mutations, 7);
+        assert!((loaded.evolution_ledger.router_threshold_delta - 0.42).abs() < 0.0001);
+        assert!((loaded.evolution_ledger.hierarchy_weight_delta - 0.21).abs() < 0.0001);
+        assert_eq!(loaded.evolution_ledger.memory_updates(), 6);
+        assert_eq!(loaded.evolution_ledger.recursive_replay_items, 1);
+        assert_eq!(loaded.evolution_ledger.recursive_runtime_calls, 8);
         cleanup(path);
     }
 
@@ -446,6 +580,7 @@ mod tests {
                 .abs()
                 < 0.0001
         );
+        assert_eq!(loaded.evolution_ledger, EvolutionLedger::default());
         cleanup(path);
     }
 

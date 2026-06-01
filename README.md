@@ -142,7 +142,7 @@ Implemented modules:
 已实现模块：
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
-- `src/adaptive_state.rs`: persisted router, hierarchy, and tier-plan control state
+- `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, and recursive-cost mutations
 - `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, and device-adapter-contract gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
@@ -168,7 +168,7 @@ Implemented modules:
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Infini/SpeContext-filtered KV import candidates, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
 - `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, and a deterministic `ReferenceProductionForwardKernel` for end-to-end boundary validation
-- `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, and persisted memory vector dimensions
+- `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob, Rust-only Toolsmith planning, and read-only Agent Team planning feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
