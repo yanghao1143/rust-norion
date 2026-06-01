@@ -525,8 +525,9 @@ These are algorithmic references, not product dependencies:
   reference kernel, so tokenizer/embedding/Transformer-plan/KV exchange
   behavior is gated through the production ABI rather than only through local
   unit tests; benchmark summaries and gates now count runtime adapter contract
-  cases and violations, so production all-device sweeps must prove every
-  selected adapter is inside that device's allowed adapter hints; benchmark
+  cases, violations, and adapter-kind diversity, so production all-device sweeps
+  must prove every selected adapter is inside that device's allowed adapter
+  hints without silently collapsing every target to the same fallback; benchmark
   summaries and gates also count runtime KV import cases and imported block
   totals, so production sweeps must prove persisted Noiron memory is actually
   fed back into the runtime rather than only exported after generation;

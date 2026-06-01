@@ -154,6 +154,7 @@ pub struct BenchmarkGate {
     pub min_runtime_kv_imported: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
     pub min_runtime_adapter_contract_cases: Option<usize>,
+    pub min_runtime_adapter_kinds: Option<usize>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
     pub min_device_profiles: Option<usize>,
     pub min_recursive_device_profiles: Option<usize>,
@@ -203,6 +204,7 @@ impl Default for BenchmarkGate {
             min_runtime_kv_imported: None,
             min_runtime_kv_exported: None,
             min_runtime_adapter_contract_cases: None,
+            min_runtime_adapter_kinds: None,
             max_runtime_adapter_contract_violations: Some(0),
             min_device_profiles: None,
             min_recursive_device_profiles: None,
@@ -859,6 +861,22 @@ impl BenchmarkSummary {
             .count()
     }
 
+    pub fn runtime_adapter_kinds(&self) -> usize {
+        let mut adapters = Vec::new();
+
+        for result in &self.results {
+            if result.runtime_forward_signal && result.runtime_adapter_contract_ok {
+                if let Some(adapter) = result.runtime_selected_adapter.as_deref() {
+                    if !adapters.contains(&adapter) {
+                        adapters.push(adapter);
+                    }
+                }
+            }
+        }
+
+        adapters.len()
+    }
+
     pub fn total_runtime_adapter_contract_violations(&self) -> usize {
         self.results
             .iter()
@@ -1508,6 +1526,16 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_adapter_kinds) = gate.min_runtime_adapter_kinds {
+            let runtime_adapter_kinds = self.runtime_adapter_kinds();
+            if runtime_adapter_kinds < min_runtime_adapter_kinds {
+                failures.push(format!(
+                    "runtime_adapter_kinds {} below minimum {}",
+                    runtime_adapter_kinds, min_runtime_adapter_kinds
+                ));
+            }
+        }
+
         if let Some(max_runtime_adapter_contract_violations) =
             gate.max_runtime_adapter_contract_violations
         {
@@ -1581,7 +1609,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1636,6 +1664,7 @@ impl BenchmarkSummary {
             self.total_runtime_kv_exported(),
             self.total_runtime_kv_stored(),
             self.runtime_adapter_contract_cases(),
+            self.runtime_adapter_kinds(),
             self.total_runtime_adapter_contract_violations(),
             self.total_runtime_adapter_observations(),
             option_f32_display(self.max_runtime_adapter_score()),
@@ -1925,6 +1954,7 @@ mod tests {
             min_runtime_kv_imported: None,
             min_runtime_kv_exported: None,
             min_runtime_adapter_contract_cases: None,
+            min_runtime_adapter_kinds: None,
             max_runtime_adapter_contract_violations: Some(0),
             min_device_profiles: None,
             min_recursive_device_profiles: None,
@@ -2990,18 +3020,26 @@ mod tests {
         };
         let mut gate = BenchmarkGate::default();
         gate.min_runtime_adapter_contract_cases = Some(2);
+        gate.min_runtime_adapter_kinds = Some(2);
         gate.max_runtime_adapter_contract_violations = Some(0);
 
         let report = summary.evaluate(&gate);
 
         assert!(!report.passed);
         assert_eq!(summary.runtime_adapter_contract_cases(), 1);
+        assert_eq!(summary.runtime_adapter_kinds(), 1);
         assert_eq!(summary.total_runtime_adapter_contract_violations(), 1);
         assert!(
             report
                 .failures
                 .iter()
                 .any(|failure| failure.contains("runtime_adapter_contract_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_kinds"))
         );
         assert!(
             report
@@ -3014,11 +3052,148 @@ mod tests {
                 .summary_line()
                 .contains("runtime_adapter_contract_cases=1")
         );
+        assert!(summary.summary_line().contains("runtime_adapter_kinds=1"));
         assert!(
             summary
                 .summary_line()
                 .contains("runtime_adapter_contract_violations=1")
         );
+    }
+
+    #[test]
+    fn gate_reports_runtime_adapter_kind_collapse() {
+        let summary = BenchmarkSummary {
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![
+                BenchmarkCaseResult {
+                    name: "cpu".to_owned(),
+                    profile: TaskProfile::General,
+                    device: DeviceClass::CpuOnly,
+                    elapsed_ms: 1,
+                    quality: 0.9,
+                    process_reward: 0.9,
+                    attention_fraction: 0.5,
+                    requires_recursion: false,
+                    recursive_chunks: 1,
+                    recursive_waves: 1,
+                    recursive_runtime_calls: 1,
+                    auto_replay_applied: 0,
+                    auto_replay_router_updates: 0,
+                    auto_replay_hierarchy_updates: 0,
+                    auto_replay_router_threshold_mutations: 0,
+                    auto_replay_hierarchy_weight_mutations: 0,
+                    auto_replay_router_threshold_delta: 0.0,
+                    auto_replay_hierarchy_weight_delta: 0.0,
+                    auto_replay_memory_reinforcements: 0,
+                    auto_replay_memory_penalties: 0,
+                    auto_replay_recursive_runtime_items: 0,
+                    auto_replay_recursive_runtime_calls: 0,
+                    auto_replay_avg_recursive_call_pressure: 0.0,
+                    auto_replay_max_recursive_call_pressure: 0.0,
+                    used_memories: 0,
+                    infini_local_window: 0,
+                    infini_global_memory: 0,
+                    sparse_skipped: 0,
+                    sparse_skipped_tokens: 0,
+                    stored_memories: 0,
+                    compacted_memories: 0,
+                    runtime_forward_signal: true,
+                    runtime_forward_energy_signal: false,
+                    runtime_kv_influence_signal: false,
+                    runtime_token_count: 0,
+                    runtime_uncertainty_token_count: 0,
+                    runtime_uncertainty_signal: false,
+                    runtime_kv_imported: 0,
+                    runtime_kv_exported: 1,
+                    runtime_kv_stored: 1,
+                    runtime_selected_adapter: Some("portable-rust".to_owned()),
+                    runtime_adapter_contract_ok: true,
+                    runtime_adapter_contract_violations: 0,
+                    runtime_adapter_observations: 0,
+                    runtime_adapter_best_score: None,
+                    drift_severity: DriftSeverity::Stable,
+                },
+                BenchmarkCaseResult {
+                    name: "gpu".to_owned(),
+                    device: DeviceClass::DiscreteGpu,
+                    ..BenchmarkCaseResult {
+                        name: "template".to_owned(),
+                        profile: TaskProfile::General,
+                        device: DeviceClass::CpuOnly,
+                        elapsed_ms: 1,
+                        quality: 0.9,
+                        process_reward: 0.9,
+                        attention_fraction: 0.5,
+                        requires_recursion: false,
+                        recursive_chunks: 1,
+                        recursive_waves: 1,
+                        recursive_runtime_calls: 1,
+                        auto_replay_applied: 0,
+                        auto_replay_router_updates: 0,
+                        auto_replay_hierarchy_updates: 0,
+                        auto_replay_router_threshold_mutations: 0,
+                        auto_replay_hierarchy_weight_mutations: 0,
+                        auto_replay_router_threshold_delta: 0.0,
+                        auto_replay_hierarchy_weight_delta: 0.0,
+                        auto_replay_memory_reinforcements: 0,
+                        auto_replay_memory_penalties: 0,
+                        auto_replay_recursive_runtime_items: 0,
+                        auto_replay_recursive_runtime_calls: 0,
+                        auto_replay_avg_recursive_call_pressure: 0.0,
+                        auto_replay_max_recursive_call_pressure: 0.0,
+                        used_memories: 0,
+                        infini_local_window: 0,
+                        infini_global_memory: 0,
+                        sparse_skipped: 0,
+                        sparse_skipped_tokens: 0,
+                        stored_memories: 0,
+                        compacted_memories: 0,
+                        runtime_forward_signal: true,
+                        runtime_forward_energy_signal: false,
+                        runtime_kv_influence_signal: false,
+                        runtime_token_count: 0,
+                        runtime_uncertainty_token_count: 0,
+                        runtime_uncertainty_signal: false,
+                        runtime_kv_imported: 0,
+                        runtime_kv_exported: 1,
+                        runtime_kv_stored: 1,
+                        runtime_selected_adapter: Some("portable-rust".to_owned()),
+                        runtime_adapter_contract_ok: true,
+                        runtime_adapter_contract_violations: 0,
+                        runtime_adapter_observations: 0,
+                        runtime_adapter_best_score: None,
+                        drift_severity: DriftSeverity::Stable,
+                    }
+                },
+            ],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_adapter_kinds = Some(2);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_adapter_kinds(), 1);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_kinds"))
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![
+                summary.results[0].clone(),
+                BenchmarkCaseResult {
+                    runtime_selected_adapter: Some("cuda".to_owned()),
+                    ..summary.results[1].clone()
+                },
+            ],
+            ..summary.clone()
+        };
+
+        assert_eq!(passing.runtime_adapter_kinds(), 2);
+        assert!(passing.evaluate(&gate).passed);
     }
 
     #[test]
