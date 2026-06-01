@@ -333,7 +333,11 @@ These are algorithmic references, not product dependencies:
   gate now checks deterministic q4/q8 accuracy, compression ratio, and elapsed
   time before compression policy changes are accepted)
 - v0.4: Infini-style global/local KV split and sparse context filtering
-  (initial control-plane memory planner with token-budget filtering is in place)
+  (initial control-plane memory planner with token-budget filtering is in
+  place; the runtime KV import path now consumes the Infini local/global plan
+  directly, imports local-window candidates before global-memory candidates,
+  and treats sparse-skipped memories as a hard exclusion rather than falling
+  back to all active memory)
 - v0.5: hierarchical gist memory and recursive long-context scheduler
   (initial native-window-aware recursive schedule planning, chunk overlap, merge
   rounds, runtime prompt propagation, CLI reporting, document/section/paragraph
@@ -560,6 +564,9 @@ These are algorithmic references, not product dependencies:
 - Runtime-generated KV import blocks are bounded by the target Transformer
   architecture layer/head shape, so active memory import cannot create
   out-of-manifest heads on self-developed runtimes.
+- Runtime KV import now honors the Infini/SpeContext sparse plan before model
+  execution: local-window memory is imported first, global memory is second,
+  and skipped memory never enters the expensive backend attention path.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.

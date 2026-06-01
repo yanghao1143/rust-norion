@@ -9,6 +9,7 @@ use crate::engine::{GenerationContext, InferenceBackend};
 use crate::experience::ExperienceMatch;
 use crate::hardware::{HardwarePlan, RuntimeAdapterHint};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::infini_memory::InfiniMemoryItem;
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
@@ -1649,10 +1650,9 @@ fn runtime_kv_blocks_from_context(
         .min(manifest_limit)
         .max(1);
 
-    context
-        .memories
-        .iter()
-        .filter(|memory| !memory.vector.is_empty())
+    runtime_kv_import_candidates(context)
+        .into_iter()
+        .filter(|candidate| !candidate.vector.is_empty())
         .filter(|memory| {
             context
                 .tier_plan
@@ -1662,12 +1662,12 @@ fn runtime_kv_blocks_from_context(
         })
         .take(prefetch_limit)
         .enumerate()
-        .map(|(index, memory)| {
-            let key = fit_runtime_vector(&memory.vector, dimensions);
-            let weighted = memory
+        .map(|(index, candidate)| {
+            let key = fit_runtime_vector(candidate.vector, dimensions);
+            let weighted = candidate
                 .vector
                 .iter()
-                .map(|value| value * memory.strength)
+                .map(|value| value * candidate.weight)
                 .collect::<Vec<_>>();
             let value = fit_runtime_vector(&weighted, dimensions);
 
@@ -1683,6 +1683,49 @@ fn runtime_kv_blocks_from_context(
             )
         })
         .collect()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeKvImportCandidate<'a> {
+    id: u64,
+    vector: &'a [f32],
+    weight: f32,
+}
+
+fn runtime_kv_import_candidates<'a>(
+    context: &'a GenerationContext<'_>,
+) -> Vec<RuntimeKvImportCandidate<'a>> {
+    let has_infini_decisions = !context.infini_memory_plan.local_window().is_empty()
+        || !context.infini_memory_plan.global_memory().is_empty()
+        || !context.infini_memory_plan.skipped().is_empty();
+
+    if has_infini_decisions {
+        return context
+            .infini_memory_plan
+            .local_window()
+            .iter()
+            .chain(context.infini_memory_plan.global_memory())
+            .map(candidate_from_infini_item)
+            .collect();
+    }
+
+    context
+        .memories
+        .iter()
+        .map(|memory| RuntimeKvImportCandidate {
+            id: memory.id,
+            vector: &memory.vector,
+            weight: memory.strength,
+        })
+        .collect()
+}
+
+fn candidate_from_infini_item(item: &InfiniMemoryItem) -> RuntimeKvImportCandidate<'_> {
+    RuntimeKvImportCandidate {
+        id: item.id,
+        vector: &item.vector,
+        weight: item.score.max(0.05),
+    }
 }
 
 fn validate_runtime_response_contract(
@@ -1897,6 +1940,7 @@ mod tests {
             vec![InfiniMemoryItem {
                 id: 1,
                 key: "local kv memory".to_owned(),
+                vector: vec![0.1, 0.2, 0.3],
                 scope: InfiniMemoryScope::LocalWindow,
                 score: 0.91,
                 estimated_tokens: 3,
@@ -2298,6 +2342,152 @@ mod tests {
 
         assert_eq!(backend.runtime().imported_blocks, 6);
         assert_eq!(backend.runtime().imported_heads, vec![0, 1, 2, 3, 0, 1]);
+    }
+
+    #[test]
+    fn runtime_kv_import_uses_infini_sparse_plan_before_active_memories() {
+        let memories = vec![
+            MemoryMatch {
+                id: 7,
+                key: "local planned memory".to_owned(),
+                similarity: 0.95,
+                strength: 1.25,
+                vector: vec![0.1, 0.2, 0.3],
+            },
+            MemoryMatch {
+                id: 8,
+                key: "sparse skipped memory".to_owned(),
+                similarity: 0.94,
+                strength: 1.20,
+                vector: vec![0.4, 0.5, 0.6],
+            },
+            MemoryMatch {
+                id: 9,
+                key: "global planned memory".to_owned(),
+                similarity: 0.20,
+                strength: 1.60,
+                vector: vec![0.7, 0.8, 0.9],
+            },
+        ];
+        let infini_memory_plan = InfiniMemoryPlan::new(
+            vec![InfiniMemoryItem {
+                id: 7,
+                key: "local planned memory".to_owned(),
+                vector: vec![0.1, 0.2, 0.3],
+                scope: InfiniMemoryScope::LocalWindow,
+                score: 0.92,
+                estimated_tokens: 3,
+                reason: "local_window:test".to_owned(),
+            }],
+            vec![InfiniMemoryItem {
+                id: 9,
+                key: "global planned memory".to_owned(),
+                vector: vec![0.7, 0.8, 0.9],
+                scope: InfiniMemoryScope::GlobalMemory,
+                score: 0.84,
+                estimated_tokens: 3,
+                reason: "global_memory:test".to_owned(),
+            }],
+            vec![InfiniMemoryItem {
+                id: 8,
+                key: "sparse skipped memory".to_owned(),
+                vector: vec![0.4, 0.5, 0.6],
+                scope: InfiniMemoryScope::Skipped,
+                score: 0.90,
+                estimated_tokens: 3,
+                reason: "sparse_filter:test".to_owned(),
+            }],
+        );
+        let tier_plan = TieredCachePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let mut hardware_plan = HardwarePlan::default();
+        hardware_plan.execution.kv_prefetch_blocks = 3;
+        let context = GenerationContext {
+            prompt: "sparse runtime kv",
+            profile: TaskProfile::Coding,
+            memories: &memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+        let _draft = backend.generate(context);
+
+        assert_eq!(backend.runtime().imported_blocks, 2);
+        assert_eq!(backend.runtime().imported_heads, vec![0, 1]);
+    }
+
+    #[test]
+    fn runtime_kv_import_does_not_fallback_when_infini_skips_everything() {
+        let memories = vec![MemoryMatch {
+            id: 8,
+            key: "skipped memory should stay out".to_owned(),
+            similarity: 0.94,
+            strength: 1.20,
+            vector: vec![0.4, 0.5, 0.6],
+        }];
+        let infini_memory_plan = InfiniMemoryPlan::new(
+            Vec::new(),
+            Vec::new(),
+            vec![InfiniMemoryItem {
+                id: 8,
+                key: "skipped memory should stay out".to_owned(),
+                vector: vec![0.4, 0.5, 0.6],
+                scope: InfiniMemoryScope::Skipped,
+                score: 0.90,
+                estimated_tokens: 5,
+                reason: "sparse_filter:test".to_owned(),
+            }],
+        );
+        let tier_plan = TieredCachePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let context = GenerationContext {
+            prompt: "skip all sparse runtime kv",
+            profile: TaskProfile::Coding,
+            memories: &memories,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+        let draft = backend.generate(context);
+
+        assert_eq!(backend.runtime().imported_blocks, 0);
+        assert!(
+            !draft
+                .trace
+                .iter()
+                .any(|step| step.label == "runtime_kv_import")
+        );
     }
 
     #[test]

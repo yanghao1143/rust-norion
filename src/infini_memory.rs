@@ -14,6 +14,7 @@ pub enum InfiniMemoryScope {
 pub struct InfiniMemoryItem {
     pub id: u64,
     pub key: String,
+    pub vector: Vec<f32>,
     pub scope: InfiniMemoryScope,
     pub score: f32,
     pub estimated_tokens: usize,
@@ -232,6 +233,7 @@ impl InfiniMemoryPlanner {
             skipped.push(InfiniMemoryItem {
                 id: memory.id,
                 key: memory.key.clone(),
+                vector: memory.vector.clone(),
                 scope: InfiniMemoryScope::Skipped,
                 score: memory.similarity * memory.strength,
                 estimated_tokens: estimate_tokens(&memory.key),
@@ -250,6 +252,7 @@ fn local_item(memory: &MemoryMatch) -> InfiniMemoryItem {
     InfiniMemoryItem {
         id: memory.id,
         key: memory.key.clone(),
+        vector: memory.vector.clone(),
         scope: InfiniMemoryScope::LocalWindow,
         score,
         estimated_tokens: estimate_tokens(&memory.key),
@@ -280,6 +283,7 @@ fn global_item(entry: &MemoryEntry, max_access: u64) -> InfiniMemoryItem {
     InfiniMemoryItem {
         id: entry.id,
         key: entry.key.clone(),
+        vector: entry.vector.clone(),
         scope: InfiniMemoryScope::GlobalMemory,
         score,
         estimated_tokens: estimate_tokens(&entry.key),
