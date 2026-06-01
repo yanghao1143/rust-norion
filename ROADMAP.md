@@ -388,8 +388,9 @@ These are algorithmic references, not product dependencies:
   checks; benchmark gates can now require auto-replay recursive coverage and
   enforce replay recursive call pressure floors and ceilings; replay reports,
   traces, CLI output, and benchmark gates now expose router updates, hierarchy
-  updates, memory reinforcements, and memory penalties so automatic replay must
-  prove real control-plane mutation, not just execution; replay planning now
+  updates, router-threshold mutation counts/deltas, hierarchy-weight mutation
+  counts/deltas, memory reinforcements, and memory penalties so automatic replay
+  must prove measurable control-plane mutation, not just execution; replay planning now
   keeps at least one recursive runtime sample when the limit allows so
   long-context cost learning is not starved by short high-reward samples;
   replay pressure now parses
@@ -677,6 +678,7 @@ These are algorithmic references, not product dependencies:
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
   runtime adapter contract coverage,
-  auto-replay router/hierarchy/memory update coverage, auto-replay recursive pressure coverage/bounds,
+  auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
+  auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
   drift block/rollback counts, or persistent state reuse regress.

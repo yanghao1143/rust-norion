@@ -227,6 +227,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"hierarchy_updates\":",
     },
     TraceRequiredField {
+        name: "auto_replay_router_threshold_mutations",
+        marker: "\"router_threshold_mutations\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_hierarchy_weight_mutations",
+        marker: "\"hierarchy_weight_mutations\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_router_threshold_delta",
+        marker: "\"router_threshold_delta\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_hierarchy_weight_delta",
+        marker: "\"hierarchy_weight_delta\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_memory_reinforcements",
         marker: "\"memory_reinforcements\":",
     },
@@ -386,7 +402,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -535,6 +551,18 @@ pub fn trace_json_line_with_case(
         auto_replay
             .map(|report| report.hierarchy_updates)
             .unwrap_or(0),
+        auto_replay
+            .map(|report| report.router_threshold_mutations)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.hierarchy_weight_mutations)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.router_threshold_delta)
+            .unwrap_or(0.0),
+        auto_replay
+            .map(|report| report.hierarchy_weight_delta)
+            .unwrap_or(0.0),
         auto_replay.map(|report| report.reinforced).unwrap_or(0),
         auto_replay.map(|report| report.penalized).unwrap_or(0),
         auto_replay
@@ -728,6 +756,10 @@ mod tests {
         assert!(line.contains("\"auto_replay\":"));
         assert!(line.contains("\"router_updates\":"));
         assert!(line.contains("\"hierarchy_updates\":"));
+        assert!(line.contains("\"router_threshold_mutations\":"));
+        assert!(line.contains("\"hierarchy_weight_mutations\":"));
+        assert!(line.contains("\"router_threshold_delta\":"));
+        assert!(line.contains("\"hierarchy_weight_delta\":"));
         assert!(line.contains("\"memory_reinforcements\":"));
         assert!(line.contains("\"memory_penalties\":"));
         assert!(line.contains("\"recursive_runtime_items\":"));

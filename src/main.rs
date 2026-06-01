@@ -576,47 +576,89 @@ fn seed_sparse_benchmark_memories(engine: &mut NoironEngine) {
 }
 
 fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
-    if engine.experience.records().iter().any(|record| {
-        record
-            .lesson
-            .starts_with("benchmark_auto_replay_seed:control_plane:")
-    }) {
+    const SEED_PREFIX: &str = "benchmark_auto_replay_seed:v2:control_plane:";
+
+    if engine
+        .experience
+        .records()
+        .iter()
+        .any(|record| record.lesson.starts_with(SEED_PREFIX))
+    {
         return;
     }
 
-    let memory_id = engine.cache.store_or_fuse(
+    let reinforce_memory_id = engine.cache.store_or_fuse(
         "benchmark_auto_replay_seed:control_plane: reinforced memory",
         vec![0.70, 0.20, 0.10, 0.40],
         0.82,
     );
+    let penalize_memory_id = engine.cache.store_or_fuse(
+        "benchmark_auto_replay_seed:control_plane: penalized memory",
+        vec![0.10, 0.60, 0.30, 0.20],
+        0.42,
+    );
+
     engine.experience.record(ExperienceInput {
         prompt: "benchmark auto replay control plane".to_owned(),
         profile: TaskProfile::Coding,
-        lesson: "benchmark_auto_replay_seed:control_plane: verify router hierarchy memory updates"
-            .to_owned(),
-        quality: 0.90,
+        lesson:
+            "benchmark_auto_replay_seed:v2:control_plane: reinforce router threshold and hierarchy"
+                .to_owned(),
+        quality: 1.0,
         contradictions: Vec::new(),
         reflection_issues: Vec::new(),
         revision_actions: Vec::new(),
-        stored_memory_id: Some(memory_id),
-        router_threshold_after: 0.54,
-        stream_windows: 2,
+        stored_memory_id: Some(reinforce_memory_id),
+        router_threshold_after: 0.52,
+        stream_windows: 0,
         route_budget: RouteBudget {
-            threshold: 0.54,
+            threshold: 0.52,
             attention_tokens: 2,
             fast_tokens: 2,
             attention_fraction: 0.5,
         },
         hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
-        used_memory_ids: vec![memory_id],
+        used_memory_ids: vec![reinforce_memory_id],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),
         runtime_diagnostics: RuntimeDiagnostics::default(),
         process_reward: ProcessRewardReport {
-            total: 0.90,
+            total: 1.0,
             components: ProcessRewardComponents::default(),
             action: RewardAction::Reinforce,
+            notes: Vec::new(),
+        },
+    });
+    engine.experience.record(ExperienceInput {
+        prompt: "benchmark auto replay control plane drift".to_owned(),
+        profile: TaskProfile::Coding,
+        lesson:
+            "benchmark_auto_replay_seed:v2:control_plane: penalize weak router hierarchy memory"
+                .to_owned(),
+        quality: 0.0,
+        contradictions: vec!["benchmark contradiction".to_owned()],
+        reflection_issues: Vec::new(),
+        revision_actions: vec!["regenerate".to_owned()],
+        stored_memory_id: Some(penalize_memory_id),
+        router_threshold_after: 0.52,
+        stream_windows: 4,
+        route_budget: RouteBudget {
+            threshold: 0.52,
+            attention_tokens: 1,
+            fast_tokens: 3,
+            attention_fraction: 0.25,
+        },
+        hierarchy: HierarchyWeights::new(0.24, 0.58, 0.18),
+        used_memory_ids: vec![penalize_memory_id],
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: RuntimeDiagnostics::default(),
+        process_reward: ProcessRewardReport {
+            total: 0.0,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Penalize,
             notes: Vec::new(),
         },
     });
@@ -776,7 +818,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.device.as_str(),
@@ -791,6 +833,10 @@ fn print_benchmark_summary(
             result.auto_replay_applied,
             result.auto_replay_router_updates,
             result.auto_replay_hierarchy_updates,
+            result.auto_replay_router_threshold_mutations,
+            result.auto_replay_hierarchy_weight_mutations,
+            result.auto_replay_router_threshold_delta,
+            result.auto_replay_hierarchy_weight_delta,
             result.auto_replay_memory_reinforcements,
             result.auto_replay_memory_penalties,
             result.auto_replay_recursive_runtime_items,
@@ -1315,6 +1361,10 @@ struct Args {
     benchmark_min_recursive_runtime_calls: Option<usize>,
     benchmark_min_auto_replay_router_updates: Option<usize>,
     benchmark_min_auto_replay_hierarchy_updates: Option<usize>,
+    benchmark_min_auto_replay_router_threshold_mutations: Option<usize>,
+    benchmark_min_auto_replay_hierarchy_weight_mutations: Option<usize>,
+    benchmark_min_auto_replay_router_threshold_delta: Option<f32>,
+    benchmark_min_auto_replay_hierarchy_weight_delta: Option<f32>,
     benchmark_min_auto_replay_memory_updates: Option<usize>,
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
@@ -1402,6 +1452,10 @@ impl Args {
         let mut benchmark_min_recursive_runtime_calls = None;
         let mut benchmark_min_auto_replay_router_updates = None;
         let mut benchmark_min_auto_replay_hierarchy_updates = None;
+        let mut benchmark_min_auto_replay_router_threshold_mutations = None;
+        let mut benchmark_min_auto_replay_hierarchy_weight_mutations = None;
+        let mut benchmark_min_auto_replay_router_threshold_delta = None;
+        let mut benchmark_min_auto_replay_hierarchy_weight_delta = None;
         let mut benchmark_min_auto_replay_memory_updates = None;
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
@@ -1552,6 +1606,34 @@ impl Args {
                 "--benchmark-min-auto-replay-hierarchy-updates" if index + 1 < raw.len() => {
                     benchmark_min_auto_replay_hierarchy_updates =
                         Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-router-threshold-mutations"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_auto_replay_router_threshold_mutations =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-hierarchy-weight-mutations"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_auto_replay_hierarchy_weight_mutations =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-router-threshold-delta" if index + 1 < raw.len() => {
+                    benchmark_min_auto_replay_router_threshold_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-hierarchy-weight-delta" if index + 1 < raw.len() => {
+                    benchmark_min_auto_replay_hierarchy_weight_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -1955,6 +2037,10 @@ impl Args {
             benchmark_min_recursive_runtime_calls,
             benchmark_min_auto_replay_router_updates,
             benchmark_min_auto_replay_hierarchy_updates,
+            benchmark_min_auto_replay_router_threshold_mutations,
+            benchmark_min_auto_replay_hierarchy_weight_mutations,
+            benchmark_min_auto_replay_router_threshold_delta,
+            benchmark_min_auto_replay_hierarchy_weight_delta,
             benchmark_min_auto_replay_memory_updates,
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
@@ -2049,6 +2135,18 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_auto_replay_hierarchy_updates {
             gate.min_auto_replay_hierarchy_updates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_router_threshold_mutations {
+            gate.min_auto_replay_router_threshold_mutations = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_hierarchy_weight_mutations {
+            gate.min_auto_replay_hierarchy_weight_mutations = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_router_threshold_delta {
+            gate.min_auto_replay_router_threshold_delta = Some(value.max(0.0));
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_hierarchy_weight_delta {
+            gate.min_auto_replay_hierarchy_weight_delta = Some(value.max(0.0));
         }
         if let Some(value) = self.benchmark_min_auto_replay_memory_updates {
             gate.min_auto_replay_memory_updates = Some(value);
@@ -2278,7 +2376,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2343,6 +2441,14 @@ mod tests {
             "1".to_owned(),
             "--benchmark-min-auto-replay-hierarchy-updates".to_owned(),
             "1".to_owned(),
+            "--benchmark-min-auto-replay-router-threshold-mutations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-auto-replay-hierarchy-weight-mutations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-auto-replay-router-threshold-delta".to_owned(),
+            "0.01".to_owned(),
+            "--benchmark-min-auto-replay-hierarchy-weight-delta".to_owned(),
+            "0.01".to_owned(),
             "--benchmark-min-auto-replay-memory-updates".to_owned(),
             "1".to_owned(),
             "--benchmark-min-auto-replay-recursive-items".to_owned(),
@@ -2470,6 +2576,22 @@ mod tests {
         assert_eq!(args.benchmark_min_recursive_runtime_calls, Some(4));
         assert_eq!(args.benchmark_min_auto_replay_router_updates, Some(1));
         assert_eq!(args.benchmark_min_auto_replay_hierarchy_updates, Some(1));
+        assert_eq!(
+            args.benchmark_min_auto_replay_router_threshold_mutations,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_min_auto_replay_hierarchy_weight_mutations,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_min_auto_replay_router_threshold_delta,
+            Some(0.01)
+        );
+        assert_eq!(
+            args.benchmark_min_auto_replay_hierarchy_weight_delta,
+            Some(0.01)
+        );
         assert_eq!(args.benchmark_min_auto_replay_memory_updates, Some(1));
         assert_eq!(
             args.benchmark_gate().min_auto_replay_router_updates,
@@ -2478,6 +2600,24 @@ mod tests {
         assert_eq!(
             args.benchmark_gate().min_auto_replay_hierarchy_updates,
             Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_auto_replay_router_threshold_mutations,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_auto_replay_hierarchy_weight_mutations,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_auto_replay_router_threshold_delta,
+            Some(0.01)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_auto_replay_hierarchy_weight_delta,
+            Some(0.01)
         );
         assert_eq!(
             args.benchmark_gate().min_auto_replay_memory_updates,
@@ -3297,6 +3437,14 @@ mod tests {
             (device_count * case_count).to_string(),
             "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
             "0".to_owned(),
+            "--benchmark-min-auto-replay-router-threshold-mutations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-auto-replay-hierarchy-weight-mutations".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-auto-replay-router-threshold-delta".to_owned(),
+            "0.001".to_owned(),
+            "--benchmark-min-auto-replay-hierarchy-weight-delta".to_owned(),
+            "0.001".to_owned(),
             "--benchmark-max-drift-blocks".to_owned(),
             "0".to_owned(),
             "--benchmark-max-drift-rollbacks".to_owned(),
@@ -3371,6 +3519,10 @@ mod tests {
         );
         assert_eq!(summary.total_runtime_adapter_contract_violations(), 0);
         assert!(summary.total_runtime_kv_exported() >= device_count * case_count);
+        assert!(summary.total_auto_replay_router_threshold_mutations() >= 1);
+        assert!(summary.total_auto_replay_hierarchy_weight_mutations() >= 1);
+        assert!(summary.total_auto_replay_router_threshold_delta() >= 0.001);
+        assert!(summary.total_auto_replay_hierarchy_weight_delta() >= 0.001);
         assert!(summary.results().iter().any(|result| {
             result.device == DeviceClass::Microcontroller
                 && result.name.starts_with("microcontroller_")
@@ -3464,6 +3616,26 @@ mod tests {
             summary
                 .summary_line()
                 .contains("runtime_kv_import_cases=48")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("auto_replay_router_threshold_mutations=")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("auto_replay_hierarchy_weight_mutations=")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("auto_replay_router_threshold_delta=")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("auto_replay_hierarchy_weight_delta=")
         );
         assert!(
             summary

@@ -368,10 +368,24 @@ impl NoironEngine {
 
         for item in plan.items {
             let metrics = replay_metrics(&item);
+            let router_before = self.router.threshold_for(item.profile);
             self.router.observe_with_profile(item.profile, metrics);
             report.router_updates += 1;
-            self.hierarchy.observe(item.profile, metrics);
+            let router_after = self.router.threshold_for(item.profile);
+            let router_delta = (router_after - router_before).abs();
+            if router_delta > 0.000001 {
+                report.router_threshold_mutations += 1;
+                report.router_threshold_delta += router_delta;
+            }
+
+            let hierarchy_before = self.hierarchy.state().profile_weights.get(item.profile);
+            let hierarchy_after = self.hierarchy.observe(item.profile, metrics);
             report.hierarchy_updates += 1;
+            let hierarchy_delta = hierarchy_weight_delta(hierarchy_before, hierarchy_after);
+            if hierarchy_delta > 0.000001 {
+                report.hierarchy_weight_mutations += 1;
+                report.hierarchy_weight_delta += hierarchy_delta;
+            }
 
             match item.action {
                 RewardAction::Reinforce => {
@@ -993,6 +1007,13 @@ fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
             token_count,
         },
     }
+}
+
+fn hierarchy_weight_delta(before: HierarchyWeights, after: HierarchyWeights) -> f32 {
+    ((before.global - after.global).abs()
+        + (before.local - after.local).abs()
+        + (before.convolution - after.convolution).abs())
+        / 3.0
 }
 
 fn approximate_token_count(text: &str) -> usize {

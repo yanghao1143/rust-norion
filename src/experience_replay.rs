@@ -276,6 +276,10 @@ pub struct ExperienceReplayReport {
     pub applied: usize,
     pub router_updates: usize,
     pub hierarchy_updates: usize,
+    pub router_threshold_mutations: usize,
+    pub hierarchy_weight_mutations: usize,
+    pub router_threshold_delta: f32,
+    pub hierarchy_weight_delta: f32,
     pub reinforced: usize,
     pub penalized: usize,
     pub touched_memories: usize,
@@ -335,11 +339,15 @@ impl ExperienceReplayReport {
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} router_updates={} hierarchy_updates={} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3}",
             self.planned,
             self.applied,
             self.router_updates,
             self.hierarchy_updates,
+            self.router_threshold_mutations,
+            self.hierarchy_weight_mutations,
+            self.router_threshold_delta,
+            self.hierarchy_weight_delta,
             self.reinforced,
             self.penalized,
             self.touched_memories,

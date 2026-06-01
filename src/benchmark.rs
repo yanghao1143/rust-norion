@@ -78,6 +78,10 @@ pub struct BenchmarkCaseResult {
     pub auto_replay_applied: usize,
     pub auto_replay_router_updates: usize,
     pub auto_replay_hierarchy_updates: usize,
+    pub auto_replay_router_threshold_mutations: usize,
+    pub auto_replay_hierarchy_weight_mutations: usize,
+    pub auto_replay_router_threshold_delta: f32,
+    pub auto_replay_hierarchy_weight_delta: f32,
     pub auto_replay_memory_reinforcements: usize,
     pub auto_replay_memory_penalties: usize,
     pub auto_replay_recursive_runtime_items: usize,
@@ -118,6 +122,10 @@ pub struct BenchmarkGate {
     pub min_recursive_runtime_calls: Option<usize>,
     pub min_auto_replay_router_updates: Option<usize>,
     pub min_auto_replay_hierarchy_updates: Option<usize>,
+    pub min_auto_replay_router_threshold_mutations: Option<usize>,
+    pub min_auto_replay_hierarchy_weight_mutations: Option<usize>,
+    pub min_auto_replay_router_threshold_delta: Option<f32>,
+    pub min_auto_replay_hierarchy_weight_delta: Option<f32>,
     pub min_auto_replay_memory_updates: Option<usize>,
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
@@ -151,6 +159,10 @@ impl Default for BenchmarkGate {
             min_recursive_runtime_calls: None,
             min_auto_replay_router_updates: None,
             min_auto_replay_hierarchy_updates: None,
+            min_auto_replay_router_threshold_mutations: None,
+            min_auto_replay_hierarchy_weight_mutations: None,
+            min_auto_replay_router_threshold_delta: None,
+            min_auto_replay_hierarchy_weight_delta: None,
             min_auto_replay_memory_updates: None,
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
@@ -579,6 +591,18 @@ impl BenchmarkSummary {
             auto_replay_hierarchy_updates: auto_replay
                 .map(|report| report.hierarchy_updates)
                 .unwrap_or(0),
+            auto_replay_router_threshold_mutations: auto_replay
+                .map(|report| report.router_threshold_mutations)
+                .unwrap_or(0),
+            auto_replay_hierarchy_weight_mutations: auto_replay
+                .map(|report| report.hierarchy_weight_mutations)
+                .unwrap_or(0),
+            auto_replay_router_threshold_delta: auto_replay
+                .map(|report| report.router_threshold_delta)
+                .unwrap_or(0.0),
+            auto_replay_hierarchy_weight_delta: auto_replay
+                .map(|report| report.hierarchy_weight_delta)
+                .unwrap_or(0.0),
             auto_replay_memory_reinforcements: auto_replay
                 .map(|report| report.memory_reinforcements)
                 .unwrap_or(0),
@@ -956,6 +980,34 @@ impl BenchmarkSummary {
             .sum()
     }
 
+    pub fn total_auto_replay_router_threshold_mutations(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_router_threshold_mutations)
+            .sum()
+    }
+
+    pub fn total_auto_replay_hierarchy_weight_mutations(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_hierarchy_weight_mutations)
+            .sum()
+    }
+
+    pub fn total_auto_replay_router_threshold_delta(&self) -> f32 {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_router_threshold_delta)
+            .sum()
+    }
+
+    pub fn total_auto_replay_hierarchy_weight_delta(&self) -> f32 {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_hierarchy_weight_delta)
+            .sum()
+    }
+
     pub fn total_auto_replay_memory_reinforcements(&self) -> usize {
         self.results
             .iter()
@@ -1074,6 +1126,60 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "auto_replay_hierarchy_updates {} below minimum {}",
                     auto_replay_hierarchy_updates, min_auto_replay_hierarchy_updates
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_router_threshold_mutations) =
+            gate.min_auto_replay_router_threshold_mutations
+        {
+            let auto_replay_router_threshold_mutations =
+                self.total_auto_replay_router_threshold_mutations();
+            if auto_replay_router_threshold_mutations < min_auto_replay_router_threshold_mutations {
+                failures.push(format!(
+                    "auto_replay_router_threshold_mutations {} below minimum {}",
+                    auto_replay_router_threshold_mutations,
+                    min_auto_replay_router_threshold_mutations
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_hierarchy_weight_mutations) =
+            gate.min_auto_replay_hierarchy_weight_mutations
+        {
+            let auto_replay_hierarchy_weight_mutations =
+                self.total_auto_replay_hierarchy_weight_mutations();
+            if auto_replay_hierarchy_weight_mutations < min_auto_replay_hierarchy_weight_mutations {
+                failures.push(format!(
+                    "auto_replay_hierarchy_weight_mutations {} below minimum {}",
+                    auto_replay_hierarchy_weight_mutations,
+                    min_auto_replay_hierarchy_weight_mutations
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_router_threshold_delta) =
+            gate.min_auto_replay_router_threshold_delta
+        {
+            let auto_replay_router_threshold_delta =
+                self.total_auto_replay_router_threshold_delta();
+            if auto_replay_router_threshold_delta < min_auto_replay_router_threshold_delta {
+                failures.push(format!(
+                    "auto_replay_router_threshold_delta {:.6} below minimum {:.6}",
+                    auto_replay_router_threshold_delta, min_auto_replay_router_threshold_delta
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_hierarchy_weight_delta) =
+            gate.min_auto_replay_hierarchy_weight_delta
+        {
+            let auto_replay_hierarchy_weight_delta =
+                self.total_auto_replay_hierarchy_weight_delta();
+            if auto_replay_hierarchy_weight_delta < min_auto_replay_hierarchy_weight_delta {
+                failures.push(format!(
+                    "auto_replay_hierarchy_weight_delta {:.6} below minimum {:.6}",
+                    auto_replay_hierarchy_weight_delta, min_auto_replay_hierarchy_weight_delta
                 ));
             }
         }
@@ -1307,7 +1413,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1323,6 +1429,10 @@ impl BenchmarkSummary {
             self.total_auto_replay_applied(),
             self.total_auto_replay_router_updates(),
             self.total_auto_replay_hierarchy_updates(),
+            self.total_auto_replay_router_threshold_mutations(),
+            self.total_auto_replay_hierarchy_weight_mutations(),
+            self.total_auto_replay_router_threshold_delta(),
+            self.total_auto_replay_hierarchy_weight_delta(),
             self.total_auto_replay_memory_updates(),
             self.total_auto_replay_memory_reinforcements(),
             self.total_auto_replay_memory_penalties(),
@@ -1570,6 +1680,10 @@ mod tests {
             min_recursive_runtime_calls: None,
             min_auto_replay_router_updates: None,
             min_auto_replay_hierarchy_updates: None,
+            min_auto_replay_router_threshold_mutations: None,
+            min_auto_replay_hierarchy_weight_mutations: None,
+            min_auto_replay_router_threshold_delta: None,
+            min_auto_replay_hierarchy_weight_delta: None,
             min_auto_replay_memory_updates: None,
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
@@ -1666,6 +1780,10 @@ mod tests {
                 auto_replay_applied: 1,
                 auto_replay_router_updates: 1,
                 auto_replay_hierarchy_updates: 1,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 1,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 1,
@@ -1735,6 +1853,10 @@ mod tests {
                 auto_replay_applied: 1,
                 auto_replay_router_updates: 1,
                 auto_replay_hierarchy_updates: 1,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 1,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 1,
@@ -1803,6 +1925,10 @@ mod tests {
                 auto_replay_applied: 1,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
@@ -1836,6 +1962,10 @@ mod tests {
         let mut gate = BenchmarkGate::default();
         gate.min_auto_replay_router_updates = Some(1);
         gate.min_auto_replay_hierarchy_updates = Some(1);
+        gate.min_auto_replay_router_threshold_mutations = Some(1);
+        gate.min_auto_replay_hierarchy_weight_mutations = Some(1);
+        gate.min_auto_replay_router_threshold_delta = Some(0.01);
+        gate.min_auto_replay_hierarchy_weight_delta = Some(0.01);
         gate.min_auto_replay_memory_updates = Some(1);
 
         let report = summary.evaluate(&gate);
@@ -1857,6 +1987,30 @@ mod tests {
             report
                 .failures
                 .iter()
+                .any(|failure| failure.contains("auto_replay_router_threshold_mutations"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_hierarchy_weight_mutations"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_router_threshold_delta"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_hierarchy_weight_delta"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
                 .any(|failure| failure.contains("auto_replay_memory_updates"))
         );
 
@@ -1864,6 +2018,10 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 auto_replay_router_updates: 1,
                 auto_replay_hierarchy_updates: 1,
+                auto_replay_router_threshold_mutations: 1,
+                auto_replay_hierarchy_weight_mutations: 1,
+                auto_replay_router_threshold_delta: 0.02,
+                auto_replay_hierarchy_weight_delta: 0.03,
                 auto_replay_memory_reinforcements: 1,
                 ..summary.results[0].clone()
             }],
@@ -1873,7 +2031,31 @@ mod tests {
         assert!(passing_report.passed, "{:?}", passing_report.failures);
         assert_eq!(passing.total_auto_replay_router_updates(), 1);
         assert_eq!(passing.total_auto_replay_hierarchy_updates(), 1);
+        assert_eq!(passing.total_auto_replay_router_threshold_mutations(), 1);
+        assert_eq!(passing.total_auto_replay_hierarchy_weight_mutations(), 1);
+        assert!(passing.total_auto_replay_router_threshold_delta() >= 0.02);
+        assert!(passing.total_auto_replay_hierarchy_weight_delta() >= 0.03);
         assert_eq!(passing.total_auto_replay_memory_updates(), 1);
+        assert!(
+            passing
+                .summary_line()
+                .contains("auto_replay_router_threshold_mutations=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("auto_replay_hierarchy_weight_mutations=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("auto_replay_router_threshold_delta=0.020000")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("auto_replay_hierarchy_weight_delta=0.030000")
+        );
         assert!(
             passing
                 .summary_line()
@@ -1899,6 +2081,10 @@ mod tests {
                 auto_replay_applied: 0,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
@@ -1987,6 +2173,10 @@ mod tests {
                 auto_replay_applied: 0,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
@@ -2081,6 +2271,10 @@ mod tests {
                 auto_replay_applied: 0,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
@@ -2177,6 +2371,10 @@ mod tests {
                 auto_replay_applied: 0,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
@@ -2263,6 +2461,10 @@ mod tests {
                     auto_replay_applied: 0,
                     auto_replay_router_updates: 0,
                     auto_replay_hierarchy_updates: 0,
+                    auto_replay_router_threshold_mutations: 0,
+                    auto_replay_hierarchy_weight_mutations: 0,
+                    auto_replay_router_threshold_delta: 0.0,
+                    auto_replay_hierarchy_weight_delta: 0.0,
                     auto_replay_memory_reinforcements: 0,
                     auto_replay_memory_penalties: 0,
                     auto_replay_recursive_runtime_items: 0,
@@ -2307,6 +2509,10 @@ mod tests {
                     auto_replay_applied: 0,
                     auto_replay_router_updates: 0,
                     auto_replay_hierarchy_updates: 0,
+                    auto_replay_router_threshold_mutations: 0,
+                    auto_replay_hierarchy_weight_mutations: 0,
+                    auto_replay_router_threshold_delta: 0.0,
+                    auto_replay_hierarchy_weight_delta: 0.0,
                     auto_replay_memory_reinforcements: 0,
                     auto_replay_memory_penalties: 0,
                     auto_replay_recursive_runtime_items: 0,
@@ -2389,6 +2595,10 @@ mod tests {
                 auto_replay_applied: 0,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
@@ -2472,6 +2682,10 @@ mod tests {
             auto_replay_applied: 0,
             auto_replay_router_updates: 0,
             auto_replay_hierarchy_updates: 0,
+            auto_replay_router_threshold_mutations: 0,
+            auto_replay_hierarchy_weight_mutations: 0,
+            auto_replay_router_threshold_delta: 0.0,
+            auto_replay_hierarchy_weight_delta: 0.0,
             auto_replay_memory_reinforcements: 0,
             auto_replay_memory_penalties: 0,
             auto_replay_recursive_runtime_items: 0,
@@ -2559,6 +2773,10 @@ mod tests {
             auto_replay_applied: 0,
             auto_replay_router_updates: 0,
             auto_replay_hierarchy_updates: 0,
+            auto_replay_router_threshold_mutations: 0,
+            auto_replay_hierarchy_weight_mutations: 0,
+            auto_replay_router_threshold_delta: 0.0,
+            auto_replay_hierarchy_weight_delta: 0.0,
             auto_replay_memory_reinforcements: 0,
             auto_replay_memory_penalties: 0,
             auto_replay_recursive_runtime_items: 0,
@@ -2659,6 +2877,10 @@ mod tests {
                 auto_replay_applied: 0,
                 auto_replay_router_updates: 0,
                 auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
