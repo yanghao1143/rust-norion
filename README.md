@@ -384,6 +384,14 @@ trigger recursive long-context scheduling:
 cargo run -- --production-reference-kernel --benchmark target/noiron-production-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-production-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-quality 0.45 --benchmark-min-reward 0.30 --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --benchmark-min-runtime-forward-cases 48 --benchmark-min-runtime-kv-exported 48 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 64 --runtime-embedding-dims 64 --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --chunk-tokens 32 --chunk-overlap 8
 ```
 
+Use the same gate with `--production-local-kernel` when the Rust-native
+`LocalTransformerRuntime` prototype itself must pass the production boundary,
+KV exchange, all-device contracts, and recursive long-context schedule:
+
+```powershell
+cargo run -- --production-local-kernel --benchmark target/noiron-production-local-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-production-local-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-quality 0.45 --benchmark-min-reward 0.30 --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --benchmark-min-runtime-forward-cases 48 --benchmark-min-runtime-kv-exported 48 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 64 --runtime-embedding-dims 64 --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --chunk-tokens 32 --chunk-overlap 8
+```
+
 当 production runtime benchmark 和 `--benchmark-all-devices` 同时启用时，CLI
 会为每一个显式设备 profile 重新构造 manifest-backed runtime。这样选中的
 adapter、runtime device contract、KV 预取/精度限制、递归并行预算和 trace
@@ -393,6 +401,14 @@ forward diagnostics 和导出 KV，同时 12 个设备 profile 都真实触发�
 
 ```powershell
 cargo run -- --production-reference-kernel --benchmark target/noiron-production-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-production-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-quality 0.45 --benchmark-min-reward 0.30 --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --benchmark-min-runtime-forward-cases 48 --benchmark-min-runtime-kv-exported 48 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 64 --runtime-embedding-dims 64 --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --chunk-tokens 32 --chunk-overlap 8
+```
+
+如果要验证 Rust-native `LocalTransformerRuntime` 原型本身已经能穿过生产边界、
+KV 交换、全设备契约和递归长上下文调度，可以把同一套门禁切到
+`--production-local-kernel`：
+
+```powershell
+cargo run -- --production-local-kernel --benchmark target/noiron-production-local-all-devices-recursive.jsonl --benchmark-all-devices --trace-schema-gate target/noiron-production-local-all-devices-recursive.jsonl --benchmark-gate --benchmark-min-quality 0.45 --benchmark-min-reward 0.30 --benchmark-min-device-profiles 12 --benchmark-min-recursive-device-profiles 12 --benchmark-min-recursive-cases 12 --benchmark-min-runtime-forward-cases 48 --benchmark-min-runtime-kv-exported 48 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0 --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 64 --runtime-embedding-dims 64 --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --chunk-tokens 32 --chunk-overlap 8
 ```
 
 Run the KV quantization gate for reproducible 4/8-bit compression accuracy,

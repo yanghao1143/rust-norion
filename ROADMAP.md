@@ -507,7 +507,12 @@ These are algorithmic references, not product dependencies:
   explicit device profile, so the reference/local production kernel path is
   checked with the matching runtime device contract, adapter hint, KV
   prefetch/precision boundary, and recursive parallelism budget for each
-  target instead of reusing one runtime contract across the matrix)
+  target instead of reusing one runtime contract across the matrix; the
+  Rust-native `LocalTransformerRuntime` prototype now has the same
+  production-local all-device recursive benchmark coverage as the deterministic
+  reference kernel, so tokenizer/embedding/Transformer-plan/KV exchange
+  behavior is gated through the production ABI rather than only through local
+  unit tests)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -636,6 +641,9 @@ These are algorithmic references, not product dependencies:
   per explicit device profile during `--benchmark-all-devices`, so reference and
   local production kernels can be gated against each device's own runtime
   device contract and long-context recursion path.
+- The Rust-native local Transformer runtime prototype must pass the same
+  production-local all-device recursive benchmark gate as the deterministic
+  reference kernel before it is treated as a valid self-owned runtime boundary.
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime KV export, auto-replay router/hierarchy/memory

@@ -3081,7 +3081,25 @@ mod tests {
 
     #[test]
     fn production_reference_kernel_all_devices_gates_recursive_runtime_coverage() {
-        let asset_dir = temp_asset_dir("production-reference-all-device-recursive");
+        assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
+            "--production-reference-kernel",
+            "production-reference-all-device-recursive",
+        );
+    }
+
+    #[test]
+    fn production_local_kernel_all_devices_gates_recursive_runtime_coverage() {
+        assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
+            "--production-local-kernel",
+            "production-local-all-device-recursive",
+        );
+    }
+
+    fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
+        kernel_flag: &str,
+        asset_name: &str,
+    ) {
+        let asset_dir = temp_asset_dir(asset_name);
         fs::create_dir_all(&asset_dir).unwrap();
         let weights = asset_dir.join("weights.noiron");
         let tokenizer = asset_dir.join("tokenizer.noiron");
@@ -3091,7 +3109,7 @@ mod tests {
         let device_count = DeviceClass::explicit_profiles().len();
         let case_count = default_benchmark_cases().len();
         let args = Args::parse(vec![
-            "--production-reference-kernel".to_owned(),
+            kernel_flag.to_owned(),
             "--benchmark".to_owned(),
             trace_path.display().to_string(),
             "--benchmark-all-devices".to_owned(),
@@ -3152,6 +3170,12 @@ mod tests {
         let gate_report = summary.evaluate(&args.benchmark_gate());
         let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
 
+        assert!(args.production_runtime);
+        match kernel_flag {
+            "--production-reference-kernel" => assert!(args.production_reference_kernel),
+            "--production-local-kernel" => assert!(args.production_local_kernel),
+            _ => panic!("unexpected production kernel flag {kernel_flag}"),
+        }
         assert_eq!(summary.len(), device_count * case_count);
         assert_eq!(summary.explicit_device_profiles_covered(), device_count);
         assert_eq!(summary.recursive_device_profiles_covered(), device_count);
@@ -3179,7 +3203,22 @@ mod tests {
             .find(|line| line.contains("\"case\":\"discrete_long_context_scheduler\""))
             .unwrap();
         assert!(discrete_line.contains("\"runtime_device_contract\":\"device=discrete"));
-        assert!(discrete_line.contains("\"selected_adapter\":\"cuda\""));
+        if kernel_flag == "--production-reference-kernel" {
+            assert!(discrete_line.contains("\"selected_adapter\":\"cuda\""));
+        } else {
+            assert_trace_selected_adapter_allowed(
+                discrete_line,
+                &[
+                    "cuda",
+                    "rocm",
+                    "vulkan",
+                    "wgpu",
+                    "oneapi",
+                    "directml",
+                    "portable-rust",
+                ],
+            );
+        }
         assert!(discrete_line.contains("\"execution_waves\":23"));
 
         let multi_gpu_line = trace
@@ -3187,7 +3226,23 @@ mod tests {
             .find(|line| line.contains("\"case\":\"multi-gpu_long_context_scheduler\""))
             .unwrap();
         assert!(multi_gpu_line.contains("\"runtime_device_contract\":\"device=multi-gpu"));
-        assert!(multi_gpu_line.contains("\"selected_adapter\":\"multi-device\""));
+        if kernel_flag == "--production-reference-kernel" {
+            assert!(multi_gpu_line.contains("\"selected_adapter\":\"multi-device\""));
+        } else {
+            assert_trace_selected_adapter_allowed(
+                multi_gpu_line,
+                &[
+                    "multi-device",
+                    "cuda",
+                    "rocm",
+                    "oneapi",
+                    "vulkan",
+                    "wgpu",
+                    "custom-accelerator",
+                    "portable-rust",
+                ],
+            );
+        }
         assert!(multi_gpu_line.contains("\"execution_waves\":12"));
         assert!(
             summary
@@ -3199,6 +3254,17 @@ mod tests {
         assert_eq!(trace_report.checked_lines, summary.len());
 
         fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    fn assert_trace_selected_adapter_allowed(line: &str, allowed: &[&str]) {
+        assert!(
+            allowed
+                .iter()
+                .any(|adapter| line.contains(&format!("\"selected_adapter\":\"{adapter}\""))),
+            "selected adapter was outside allowed set {:?}: {}",
+            allowed,
+            line
+        );
     }
 
     #[test]
