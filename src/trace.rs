@@ -369,6 +369,85 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
 
     failures.extend(evaluate_trace_device_contract(line));
+    failures.extend(evaluate_trace_adapter_observations(line));
+
+    failures
+}
+
+fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let observation_count = extract_json_usize_field(line, "observation_count").unwrap_or(0);
+    let best_adapter = extract_json_nullable_string_field(line, "best_adapter");
+    let best_score = extract_json_nullable_f32_field(line, "best_score");
+    let best_reward = extract_json_nullable_f32_field(line, "best_reward");
+    let best_quality = extract_json_nullable_f32_field(line, "best_quality");
+    let best_experience_id = extract_json_nullable_u64_field(line, "best_experience_id");
+
+    if observation_count == 0 {
+        if best_adapter.is_some()
+            || best_score.is_some()
+            || best_reward.is_some()
+            || best_quality.is_some()
+            || best_experience_id.is_some()
+        {
+            failures.push(
+                "runtime_adapter_observations count is zero but best observation fields are populated"
+                    .to_owned(),
+            );
+        }
+        return failures;
+    }
+
+    let Some(best_adapter) = best_adapter else {
+        failures.push(
+            "runtime_adapter_observations count is positive but best_adapter is missing".to_owned(),
+        );
+        return failures;
+    };
+
+    for (name, value) in [
+        ("best_score", best_score),
+        ("best_reward", best_reward),
+        ("best_quality", best_quality),
+    ] {
+        match value {
+            Some(value) if (0.0..=1.0).contains(&value) => {}
+            Some(value) => failures.push(format!(
+                "runtime_adapter_observations {name} {value:.3} is outside 0..1"
+            )),
+            None => failures.push(format!(
+                "runtime_adapter_observations count is positive but {name} is missing"
+            )),
+        }
+    }
+
+    if best_experience_id.is_none() {
+        failures.push(
+            "runtime_adapter_observations count is positive but best_experience_id is missing"
+                .to_owned(),
+        );
+    }
+
+    let adapter_hints = extract_json_string_array_field(line, "adapter_hints").unwrap_or_default();
+    if !adapter_hints.iter().any(|adapter| adapter == &best_adapter) {
+        failures.push(format!(
+            "best_adapter {best_adapter} is outside trace adapter_hints"
+        ));
+    }
+
+    if let Some(contract) = extract_json_string_field(line, "runtime_device_contract") {
+        let contract_adapters = contract_value(&contract, "adapters")
+            .map(split_contract_adapters)
+            .unwrap_or_default();
+        if !contract_adapters
+            .iter()
+            .any(|adapter| adapter == &best_adapter)
+        {
+            failures.push(format!(
+                "best_adapter {best_adapter} is outside runtime_device_contract adapters"
+            ));
+        }
+    }
 
     failures
 }
@@ -547,6 +626,14 @@ fn extract_json_string_field(line: &str, field: &str) -> Option<String> {
     parse_json_string(value).map(|(parsed, _)| parsed)
 }
 
+fn extract_json_nullable_string_field(line: &str, field: &str) -> Option<String> {
+    let value = value_after_json_field(line, field)?;
+    if value.starts_with("null") {
+        return None;
+    }
+    parse_json_string(value).map(|(parsed, _)| parsed)
+}
+
 fn extract_json_usize_field(line: &str, field: &str) -> Option<usize> {
     let value = value_after_json_field(line, field)?;
     let digits = value
@@ -557,6 +644,36 @@ fn extract_json_usize_field(line: &str, field: &str) -> Option<usize> {
         return None;
     }
     digits.parse().ok()
+}
+
+fn extract_json_nullable_u64_field(line: &str, field: &str) -> Option<u64> {
+    let value = value_after_json_field(line, field)?;
+    if value.starts_with("null") {
+        return None;
+    }
+    let digits = value
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+fn extract_json_nullable_f32_field(line: &str, field: &str) -> Option<f32> {
+    let value = value_after_json_field(line, field)?;
+    if value.starts_with("null") {
+        return None;
+    }
+    let number = value
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit() || matches!(ch, '-' | '+' | '.' | 'e' | 'E'))
+        .collect::<String>();
+    if number.is_empty() {
+        return None;
+    }
+    number.parse::<f32>().ok().filter(|value| value.is_finite())
 }
 
 fn extract_json_bool_field(line: &str, field: &str) -> Option<bool> {
@@ -1212,6 +1329,102 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| failure.contains("selected_adapter cuda")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_accepts_valid_runtime_adapter_observation() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace adapter observation", TaskProfile::Coding),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace adapter observation",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
+        .replacen("\"observation_count\":0", "\"observation_count\":1", 1)
+        .replacen(
+            "\"best_adapter\":null",
+            "\"best_adapter\":\"portable-rust\"",
+            1,
+        )
+        .replacen("\"best_score\":null", "\"best_score\":0.510000", 1)
+        .replacen("\"best_reward\":null", "\"best_reward\":0.500000", 1)
+        .replacen("\"best_quality\":null", "\"best_quality\":0.800000", 1)
+        .replacen("\"best_experience_id\":null", "\"best_experience_id\":7", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_adapter_observation_contract_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace adapter observation mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace adapter observation mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        )
+        .replacen("\"observation_count\":0", "\"observation_count\":1", 1)
+        .replacen(
+            "\"best_adapter\":null",
+            "\"best_adapter\":\"not-a-device-adapter\"",
+            1,
+        )
+        .replacen("\"best_score\":null", "\"best_score\":0.510000", 1)
+        .replacen("\"best_reward\":null", "\"best_reward\":0.500000", 1)
+        .replacen("\"best_quality\":null", "\"best_quality\":0.800000", 1)
+        .replacen("\"best_experience_id\":null", "\"best_experience_id\":7", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("best_adapter not-a-device-adapter")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_incomplete_runtime_adapter_observation() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace adapter observation incomplete", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace adapter observation incomplete",
+            TaskProfile::General,
+            5,
+            &outcome,
+        )
+        .replacen("\"observation_count\":0", "\"observation_count\":1", 1)
+        .replacen(
+            "\"best_adapter\":null",
+            "\"best_adapter\":\"portable-rust\"",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("best_score is missing")),
             "{failures:?}"
         );
     }

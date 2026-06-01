@@ -563,7 +563,9 @@ These are algorithmic references, not product dependencies:
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear or when the hardware execution block,
   selected adapter, adapter hints, KV budgets, and `runtime_device_contract`
-  disagree.
+  disagree. The gate also validates runtime adapter observation semantics: a
+  positive observation count must include bounded score/reward/quality values,
+  an experience id, and a best adapter allowed by the current device contract.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
   before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, including gates that
@@ -695,6 +697,9 @@ These are algorithmic references, not product dependencies:
   positive scored best observation through
   `--benchmark-min-runtime-adapter-best-score`, so production sweeps fail when
   runtime/adapter history is not entering the next control-plane request.
+- Trace schema validation rejects incomplete or out-of-device runtime adapter
+  observations, so the same observation evidence cannot bypass the current
+  device contract even when it exists in persisted experience.
 - The Rust-native local Transformer runtime prototype must pass the same
   production-local all-device recursive benchmark gate as the deterministic
   reference kernel before it is treated as a valid self-owned runtime boundary.

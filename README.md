@@ -318,13 +318,16 @@ schema fields, including runtime token uncertainty, the stable
 `runtime_device_contract`, cumulative `evolution_ledger` counters, and
 device-derived hardware KV budgets. The gate also checks that the emitted
 hardware device, execution lanes, KV budgets, adapter hints, and selected
-runtime adapter agree with the single-line runtime device contract:
+runtime adapter agree with the single-line runtime device contract. Runtime
+adapter observations are schema-checked as well: a positive observation count
+must carry a bounded best score/reward/quality, an experience id, and a best
+adapter allowed by the current device contract:
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
 ```
 
-检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract`、累计 `evolution_ledger` 计数与设备推导出的硬件 KV budget。门禁还会检查 trace 里的设备、执行通道、KV budget、adapter hints 和实际 selected runtime adapter 是否与单行 runtime device contract 一致：
+检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract`、累计 `evolution_ledger` 计数与设备推导出的硬件 KV budget。门禁还会检查 trace 里的设备、执行通道、KV budget、adapter hints 和实际 selected runtime adapter 是否与单行 runtime device contract 一致。runtime adapter observation 也会做语义检查：只要 observation count 为正，就必须带有有界 best score/reward/quality、experience id，并且 best adapter 必须被当前设备契约允许：
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
@@ -504,18 +507,20 @@ cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --exper
 Benchmark summaries include recursive case counts, recursive device-profile
 coverage, compacted memory counts, runtime forward-signal case counts, runtime
 forward-energy and KV-influence coverage, runtime KV import/export counts,
-runtime adapter contract coverage and adapter-kind diversity,
+runtime adapter contract coverage, adapter-kind diversity, runtime adapter
+observation counts and best scores,
 auto-replay router/hierarchy/memory update counts, recursive pressure, covered
 device profiles, cumulative evolution-ledger replay/mutation/memory/recursive
 cost counters, drift rollback safety counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
-diagnostics, missing KV exchange, missing replay control-plane coverage,
+diagnostics, missing KV exchange, missing runtime adapter observation reuse,
+missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
 recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、runtime adapter contract 覆盖和 adapter 种类数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、runtime adapter 全部坍缩到同一 fallback、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量和 best score、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 The default benchmark gate also caps cumulative evolution-ledger drift
 rollbacks and rollback deltas at zero. Use
