@@ -143,7 +143,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, and recursive-cost mutations
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, and device-adapter-contract gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, cumulative evolution-ledger gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, and device-adapter-contract gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering and vector-carrying import decisions
@@ -268,17 +268,19 @@ cargo run -- --benchmark target/noiron-sparse-benchmark.jsonl --benchmark-gate -
 ```
 
 Benchmark runs also seed deterministic replay experience, so the suite can
-prove that auto-replay updates the router, hierarchy, and memory control plane:
+prove that auto-replay updates the router, hierarchy, and memory control plane
+and that the cumulative self-evolution ledger records the mutation:
 
 ```powershell
-cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-min-evolution-replay-runs 1 --benchmark-min-evolution-replay-items 1 --benchmark-min-evolution-router-threshold-mutations 1 --benchmark-min-evolution-hierarchy-weight-mutations 1 --benchmark-min-evolution-router-threshold-delta 0.001 --benchmark-min-evolution-hierarchy-weight-delta 0.001 --benchmark-min-evolution-memory-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
 benchmark 也会注入确定性的 replay experience，因此可以要求 auto-replay
-真实改变 router threshold、hierarchy weights 和 memory 控制面，而不是只记录发生过回放：
+真实改变 router threshold、hierarchy weights 和 memory 控制面，并要求累计 self-evolution ledger
+保留这次变化，而不是只记录发生过回放：
 
 ```powershell
-cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-min-evolution-replay-runs 1 --benchmark-min-evolution-replay-items 1 --benchmark-min-evolution-router-threshold-mutations 1 --benchmark-min-evolution-hierarchy-weight-mutations 1 --benchmark-min-evolution-router-threshold-delta 0.001 --benchmark-min-evolution-hierarchy-weight-delta 0.001 --benchmark-min-evolution-memory-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
 Run the same benchmark cases across every built-in explicit device profile
@@ -499,7 +501,8 @@ Benchmark summaries include recursive case counts, recursive device-profile
 coverage, compacted memory counts, runtime forward-signal case counts, runtime
 forward-energy and KV-influence coverage, runtime KV import/export counts,
 auto-replay router/hierarchy/memory update counts, recursive pressure, covered
-device profiles, and drift watch/block/rollback counts, so long-context
+device profiles, cumulative evolution-ledger replay/mutation/memory/recursive
+cost counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
 diagnostics, missing KV exchange, missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
@@ -507,7 +510,7 @@ recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile 以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 
 Apply universal device-profile hardware pressure hints:
 

@@ -1369,6 +1369,15 @@ struct Args {
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
     benchmark_max_auto_replay_recursive_call_pressure: Option<f32>,
+    benchmark_min_evolution_replay_runs: Option<u64>,
+    benchmark_min_evolution_replay_items: Option<u64>,
+    benchmark_min_evolution_router_threshold_mutations: Option<u64>,
+    benchmark_min_evolution_hierarchy_weight_mutations: Option<u64>,
+    benchmark_min_evolution_router_threshold_delta: Option<f32>,
+    benchmark_min_evolution_hierarchy_weight_delta: Option<f32>,
+    benchmark_min_evolution_memory_updates: Option<u64>,
+    benchmark_min_evolution_recursive_replay_items: Option<u64>,
+    benchmark_min_evolution_recursive_runtime_calls: Option<u64>,
     benchmark_min_sparse_skipped_cases: Option<usize>,
     benchmark_min_sparse_skipped_tokens: Option<usize>,
     benchmark_min_runtime_forward_cases: Option<usize>,
@@ -1460,6 +1469,15 @@ impl Args {
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
         let mut benchmark_max_auto_replay_recursive_call_pressure = None;
+        let mut benchmark_min_evolution_replay_runs = None;
+        let mut benchmark_min_evolution_replay_items = None;
+        let mut benchmark_min_evolution_router_threshold_mutations = None;
+        let mut benchmark_min_evolution_hierarchy_weight_mutations = None;
+        let mut benchmark_min_evolution_router_threshold_delta = None;
+        let mut benchmark_min_evolution_hierarchy_weight_delta = None;
+        let mut benchmark_min_evolution_memory_updates = None;
+        let mut benchmark_min_evolution_recursive_replay_items = None;
+        let mut benchmark_min_evolution_recursive_runtime_calls = None;
         let mut benchmark_min_sparse_skipped_cases = None;
         let mut benchmark_min_sparse_skipped_tokens = None;
         let mut benchmark_min_runtime_forward_cases = None;
@@ -1658,6 +1676,57 @@ impl Args {
                 "--benchmark-max-auto-replay-recursive-call-pressure" if index + 1 < raw.len() => {
                     benchmark_max_auto_replay_recursive_call_pressure =
                         Some(parse_f32(&raw[index + 1], 1.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-replay-runs" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_replay_runs = Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-replay-items" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_replay_items = Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-router-threshold-mutations" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_router_threshold_mutations =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-hierarchy-weight-mutations" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_hierarchy_weight_mutations =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-router-threshold-delta" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_router_threshold_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-hierarchy-weight-delta" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_hierarchy_weight_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-memory-updates" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_memory_updates = Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-recursive-replay-items" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_recursive_replay_items =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-recursive-runtime-calls" if index + 1 < raw.len() => {
+                    benchmark_min_evolution_recursive_runtime_calls =
+                        Some(parse_u64(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -2045,6 +2114,15 @@ impl Args {
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure,
+            benchmark_min_evolution_replay_runs,
+            benchmark_min_evolution_replay_items,
+            benchmark_min_evolution_router_threshold_mutations,
+            benchmark_min_evolution_hierarchy_weight_mutations,
+            benchmark_min_evolution_router_threshold_delta,
+            benchmark_min_evolution_hierarchy_weight_delta,
+            benchmark_min_evolution_memory_updates,
+            benchmark_min_evolution_recursive_replay_items,
+            benchmark_min_evolution_recursive_runtime_calls,
             benchmark_min_sparse_skipped_cases,
             benchmark_min_sparse_skipped_tokens,
             benchmark_min_runtime_forward_cases,
@@ -2159,6 +2237,33 @@ impl Args {
         }
         if let Some(value) = self.benchmark_max_auto_replay_recursive_call_pressure {
             gate.max_auto_replay_recursive_call_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_min_evolution_replay_runs {
+            gate.min_evolution_replay_runs = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_replay_items {
+            gate.min_evolution_replay_items = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_router_threshold_mutations {
+            gate.min_evolution_router_threshold_mutations = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_hierarchy_weight_mutations {
+            gate.min_evolution_hierarchy_weight_mutations = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_router_threshold_delta {
+            gate.min_evolution_router_threshold_delta = Some(value.max(0.0));
+        }
+        if let Some(value) = self.benchmark_min_evolution_hierarchy_weight_delta {
+            gate.min_evolution_hierarchy_weight_delta = Some(value.max(0.0));
+        }
+        if let Some(value) = self.benchmark_min_evolution_memory_updates {
+            gate.min_evolution_memory_updates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_recursive_replay_items {
+            gate.min_evolution_recursive_replay_items = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_recursive_runtime_calls {
+            gate.min_evolution_recursive_runtime_calls = Some(value);
         }
         if let Some(value) = self.benchmark_min_sparse_skipped_cases {
             gate.min_sparse_skipped_cases = Some(value);
@@ -2376,7 +2481,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-evolution-replay-runs n] [--benchmark-min-evolution-replay-items n] [--benchmark-min-evolution-router-threshold-mutations n] [--benchmark-min-evolution-hierarchy-weight-mutations n] [--benchmark-min-evolution-router-threshold-delta f] [--benchmark-min-evolution-hierarchy-weight-delta f] [--benchmark-min-evolution-memory-updates n] [--benchmark-min-evolution-recursive-replay-items n] [--benchmark-min-evolution-recursive-runtime-calls n] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2457,6 +2562,24 @@ mod tests {
             "0.05".to_owned(),
             "--benchmark-max-auto-replay-recursive-call-pressure".to_owned(),
             "0.25".to_owned(),
+            "--benchmark-min-evolution-replay-runs".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-evolution-replay-items".to_owned(),
+            "2".to_owned(),
+            "--benchmark-min-evolution-router-threshold-mutations".to_owned(),
+            "3".to_owned(),
+            "--benchmark-min-evolution-hierarchy-weight-mutations".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-evolution-router-threshold-delta".to_owned(),
+            "0.02".to_owned(),
+            "--benchmark-min-evolution-hierarchy-weight-delta".to_owned(),
+            "0.03".to_owned(),
+            "--benchmark-min-evolution-memory-updates".to_owned(),
+            "5".to_owned(),
+            "--benchmark-min-evolution-recursive-replay-items".to_owned(),
+            "6".to_owned(),
+            "--benchmark-min-evolution-recursive-runtime-calls".to_owned(),
+            "7".to_owned(),
             "--benchmark-min-sparse-skipped-cases".to_owned(),
             "1".to_owned(),
             "--benchmark-min-sparse-skipped-tokens".to_owned(),
@@ -2645,6 +2768,59 @@ mod tests {
             args.benchmark_gate()
                 .max_auto_replay_recursive_call_pressure,
             Some(0.25)
+        );
+        assert_eq!(args.benchmark_min_evolution_replay_runs, Some(1));
+        assert_eq!(args.benchmark_min_evolution_replay_items, Some(2));
+        assert_eq!(
+            args.benchmark_min_evolution_router_threshold_mutations,
+            Some(3)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_hierarchy_weight_mutations,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_router_threshold_delta,
+            Some(0.02)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_hierarchy_weight_delta,
+            Some(0.03)
+        );
+        assert_eq!(args.benchmark_min_evolution_memory_updates, Some(5));
+        assert_eq!(args.benchmark_min_evolution_recursive_replay_items, Some(6));
+        assert_eq!(
+            args.benchmark_min_evolution_recursive_runtime_calls,
+            Some(7)
+        );
+        assert_eq!(args.benchmark_gate().min_evolution_replay_runs, Some(1));
+        assert_eq!(args.benchmark_gate().min_evolution_replay_items, Some(2));
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_router_threshold_mutations,
+            Some(3)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_hierarchy_weight_mutations,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_evolution_router_threshold_delta,
+            Some(0.02)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_evolution_hierarchy_weight_delta,
+            Some(0.03)
+        );
+        assert_eq!(args.benchmark_gate().min_evolution_memory_updates, Some(5));
+        assert_eq!(
+            args.benchmark_gate().min_evolution_recursive_replay_items,
+            Some(6)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_evolution_recursive_runtime_calls,
+            Some(7)
         );
         assert_eq!(args.benchmark_min_sparse_skipped_cases, Some(1));
         assert_eq!(args.benchmark_min_sparse_skipped_tokens, Some(3));

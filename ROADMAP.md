@@ -394,7 +394,10 @@ These are algorithmic references, not product dependencies:
   state now persists a cumulative self-evolution ledger across restarts for
   replay runs, applied items, router/hierarchy mutation deltas, memory updates,
   and recursive replay cost evidence, and trace schema gates now require those
-  cumulative ledger fields in every generated JSONL record; replay planning now
+  cumulative ledger fields in every generated JSONL record; benchmark summaries
+  now expose the same cumulative ledger snapshot, and benchmark gates can enforce
+  minimum replay runs, applied items, mutation counts/deltas, memory updates, and
+  recursive replay cost evidence; replay planning now
   keeps at least one recursive runtime sample when the limit allows so
   long-context cost learning is not starved by short high-reward samples;
   replay pressure now parses
