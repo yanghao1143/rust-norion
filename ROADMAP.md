@@ -393,7 +393,8 @@ These are algorithmic references, not product dependencies:
   must prove measurable control-plane mutation, not just execution; adaptive
   state now persists a cumulative self-evolution ledger across restarts for
   replay runs, applied items, router/hierarchy mutation deltas, memory updates,
-  and recursive replay cost evidence; replay planning now
+  and recursive replay cost evidence, and trace schema gates now require those
+  cumulative ledger fields in every generated JSONL record; replay planning now
   keeps at least one recursive runtime sample when the limit allows so
   long-context cost learning is not starved by short high-reward samples;
   replay pressure now parses

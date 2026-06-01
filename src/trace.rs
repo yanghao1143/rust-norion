@@ -259,6 +259,30 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"max_recursive_call_pressure\":",
     },
     TraceRequiredField {
+        name: "evolution_ledger",
+        marker: "\"evolution_ledger\":{",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_runs",
+        marker: "\"replay_runs\":",
+    },
+    TraceRequiredField {
+        name: "evolution_router_threshold_mutations",
+        marker: "\"cumulative_router_threshold_mutations\":",
+    },
+    TraceRequiredField {
+        name: "evolution_hierarchy_weight_mutations",
+        marker: "\"cumulative_hierarchy_weight_mutations\":",
+    },
+    TraceRequiredField {
+        name: "evolution_memory_updates",
+        marker: "\"cumulative_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "evolution_recursive_runtime_calls",
+        marker: "\"cumulative_recursive_runtime_calls\":",
+    },
+    TraceRequiredField {
         name: "retention",
         marker: "\"retention\":{",
     },
@@ -403,6 +427,7 @@ pub fn trace_json_line_with_case(
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"evolution_ledger\":{{\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -586,6 +611,17 @@ pub fn trace_json_line_with_case(
         auto_replay
             .map(|report| report.max_recursive_call_pressure)
             .unwrap_or(0.0),
+        outcome.evolution_ledger.replay_runs,
+        outcome.evolution_ledger.replay_items,
+        outcome.evolution_ledger.router_threshold_mutations,
+        outcome.evolution_ledger.hierarchy_weight_mutations,
+        outcome.evolution_ledger.router_threshold_delta,
+        outcome.evolution_ledger.hierarchy_weight_delta,
+        outcome.evolution_ledger.memory_reinforcements,
+        outcome.evolution_ledger.memory_penalties,
+        outcome.evolution_ledger.memory_updates(),
+        outcome.evolution_ledger.recursive_replay_items,
+        outcome.evolution_ledger.recursive_runtime_calls,
         outcome.memory_retention_policy.stale_after,
         outcome.memory_retention_policy.decay_rate,
         outcome.memory_retention_policy.remove_below_strength,
@@ -766,6 +802,11 @@ mod tests {
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));
         assert!(line.contains("\"max_recursive_call_pressure\":"));
+        assert!(line.contains("\"evolution_ledger\":"));
+        assert!(line.contains("\"cumulative_router_threshold_mutations\":"));
+        assert!(line.contains("\"cumulative_hierarchy_weight_mutations\":"));
+        assert!(line.contains("\"cumulative_memory_updates\":"));
+        assert!(line.contains("\"cumulative_recursive_runtime_calls\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
         assert!(line.contains("\"stale_after\":"));
         assert!(line.contains("\"decay_rate\":"));

@@ -134,6 +134,7 @@ pub struct InferenceOutcome {
     pub memory_compaction_report: MemoryCompactionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
+    pub evolution_ledger: EvolutionLedger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -711,6 +712,7 @@ impl NoironEngine {
             memory_compaction_report,
             experience_id,
             router_threshold_after,
+            evolution_ledger: self.evolution_ledger,
         }
     }
 
