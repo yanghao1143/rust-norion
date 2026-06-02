@@ -189,6 +189,11 @@ pub struct LiveMemoryFeedbackStats {
     pub penalized: usize,
     pub reinforcement_amount: f32,
     pub penalty_amount: f32,
+    pub applied: usize,
+    pub removed: usize,
+    pub missing: usize,
+    pub strength_delta: f32,
+    pub detailed_evidence: bool,
 }
 
 impl LiveMemoryFeedbackStats {
@@ -197,6 +202,10 @@ impl LiveMemoryFeedbackStats {
             .iter()
             .filter(|note| note.starts_with("memory_feedback:"))
             .find_map(|note| {
+                let applied = memory_feedback_note_usize(note, "applied=");
+                let removed = memory_feedback_note_usize(note, "removed=");
+                let missing = memory_feedback_note_usize(note, "missing=");
+                let strength_delta = memory_feedback_note_f32(note, "strength_delta=");
                 let stats = Self {
                     reinforced: memory_feedback_note_usize(note, "reinforced=").unwrap_or(0),
                     penalized: memory_feedback_note_usize(note, "penalized=").unwrap_or(0),
@@ -204,6 +213,14 @@ impl LiveMemoryFeedbackStats {
                         .unwrap_or(0.0),
                     penalty_amount: memory_feedback_note_f32(note, "penalty_amount=")
                         .unwrap_or(0.0),
+                    applied: applied.unwrap_or(0),
+                    removed: removed.unwrap_or(0),
+                    missing: missing.unwrap_or(0),
+                    strength_delta: strength_delta.unwrap_or(0.0),
+                    detailed_evidence: applied.is_some()
+                        && removed.is_some()
+                        && missing.is_some()
+                        && strength_delta.is_some(),
                 };
 
                 stats.has_updates().then_some(stats)
@@ -220,6 +237,19 @@ impl LiveMemoryFeedbackStats {
 
     pub fn penalty_average(&self) -> Option<f32> {
         (self.penalized > 0).then(|| self.penalty_amount / self.penalized as f32)
+    }
+
+    pub fn has_detailed_update_evidence(&self) -> bool {
+        self.detailed_evidence
+            && self.applied.saturating_add(self.missing) == self.updates()
+            && self.removed <= self.applied
+            && self.strength_delta.is_finite()
+            && self.strength_delta >= 0.0
+    }
+
+    pub fn applied_ratio(&self) -> Option<f32> {
+        (self.has_detailed_update_evidence() && self.updates() > 0)
+            .then(|| self.applied as f32 / self.updates() as f32)
     }
 
     fn has_updates(&self) -> bool {
@@ -363,6 +393,11 @@ pub struct ExperienceReplayReport {
     pub live_memory_feedback_updates: usize,
     pub live_memory_feedback_reinforcements: usize,
     pub live_memory_feedback_penalties: usize,
+    pub live_memory_feedback_detail_items: usize,
+    pub live_memory_feedback_applied: usize,
+    pub live_memory_feedback_removed: usize,
+    pub live_memory_feedback_missing: usize,
+    pub live_memory_feedback_strength_delta: f32,
     pub notes: Vec<String>,
 }
 
@@ -417,6 +452,36 @@ impl ExperienceReplayReport {
             .sum();
         let live_memory_feedback_updates =
             live_memory_feedback_reinforcements + live_memory_feedback_penalties;
+        let live_memory_feedback_detail_items = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .filter(LiveMemoryFeedbackStats::has_detailed_update_evidence)
+            .count();
+        let live_memory_feedback_applied = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .map(|feedback| feedback.applied)
+            .sum();
+        let live_memory_feedback_removed = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .map(|feedback| feedback.removed)
+            .sum();
+        let live_memory_feedback_missing = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .map(|feedback| feedback.missing)
+            .sum();
+        let live_memory_feedback_strength_delta = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .map(|feedback| feedback.strength_delta)
+            .sum();
 
         Self {
             planned: plan.items.len(),
@@ -429,13 +494,18 @@ impl ExperienceReplayReport {
             live_memory_feedback_updates,
             live_memory_feedback_reinforcements,
             live_memory_feedback_penalties,
+            live_memory_feedback_detail_items,
+            live_memory_feedback_applied,
+            live_memory_feedback_removed,
+            live_memory_feedback_missing,
+            live_memory_feedback_strength_delta,
             ..Self::default()
         }
     }
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_detail_items={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6}",
             self.planned,
             self.applied,
             self.router_updates,
@@ -461,7 +531,12 @@ impl ExperienceReplayReport {
             self.live_memory_feedback_items,
             self.live_memory_feedback_updates,
             self.live_memory_feedback_reinforcements,
-            self.live_memory_feedback_penalties
+            self.live_memory_feedback_penalties,
+            self.live_memory_feedback_detail_items,
+            self.live_memory_feedback_applied,
+            self.live_memory_feedback_removed,
+            self.live_memory_feedback_missing,
+            self.live_memory_feedback_strength_delta
         )
     }
 
@@ -543,6 +618,11 @@ mod tests {
                 penalized: 0,
                 reinforcement_amount: 1.2,
                 penalty_amount: 0.0,
+                applied: 2,
+                removed: 0,
+                missing: 0,
+                strength_delta: 0.42,
+                detailed_evidence: true,
             })
         );
         assert_eq!(
@@ -692,7 +772,7 @@ mod tests {
                 notes: vec![
                     "recursive:chunks=4:merge_rounds=2:waves=2:parallel=2:runtime_calls=7"
                         .to_owned(),
-                    "memory_feedback:reinforced=2:penalized=0:reinforcement_amount=1.200000:penalty_amount=0.000000"
+                    "memory_feedback:reinforced=2:penalized=0:reinforcement_amount=1.200000:penalty_amount=0.000000:applied=2:removed=0:missing=0:strength_delta=0.420000"
                         .to_owned(),
                 ],
             },
@@ -765,7 +845,7 @@ mod tests {
         let reinforced = record(9, 0.88, RewardAction::Reinforce);
         let mut penalized = record(10, 0.12, RewardAction::Penalize);
         penalized.process_reward.notes = vec![
-            "memory_feedback:reinforced=0:penalized=3:reinforcement_amount=0.000000:penalty_amount=1.500000"
+            "memory_feedback:reinforced=0:penalized=3:reinforcement_amount=0.000000:penalty_amount=1.500000:applied=2:removed=1:missing=1:strength_delta=0.660000"
                 .to_owned(),
         ];
 
@@ -776,6 +856,31 @@ mod tests {
         assert_eq!(report.live_memory_feedback_updates, 5);
         assert_eq!(report.live_memory_feedback_reinforcements, 2);
         assert_eq!(report.live_memory_feedback_penalties, 3);
+        assert_eq!(report.live_memory_feedback_detail_items, 2);
+        assert_eq!(report.live_memory_feedback_applied, 4);
+        assert_eq!(report.live_memory_feedback_removed, 1);
+        assert_eq!(report.live_memory_feedback_missing, 1);
+        assert!((report.live_memory_feedback_strength_delta - 1.08).abs() < 0.0001);
         assert!(report.summary().contains("live_memory_feedback_updates=5"));
+        assert!(
+            report
+                .summary()
+                .contains("live_memory_feedback_detail_items=2")
+        );
+        assert!(report.summary().contains("live_memory_feedback_applied=4"));
+    }
+
+    #[test]
+    fn live_memory_feedback_stats_keep_legacy_notes_without_detail_evidence() {
+        let stats = LiveMemoryFeedbackStats::from_notes(&[
+            "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.800000:penalty_amount=0.000000"
+                .to_owned(),
+        ])
+        .unwrap();
+
+        assert_eq!(stats.updates(), 1);
+        assert_eq!(stats.applied, 0);
+        assert!(!stats.has_detailed_update_evidence());
+        assert_eq!(stats.applied_ratio(), None);
     }
 }

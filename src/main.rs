@@ -1376,7 +1376,7 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
     } else {
         for experience in &report.top_experiences {
             println!(
-                "  id={} profile={:?} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} layers={} hidden={} local_window={} forward_energy={} kv_influence={} runtime_kv_imported={} runtime_kv_exported={} recursive_runtime_calls={} live_memory_feedback_updates={} live_memory_feedback_reinforced={} live_memory_feedback_penalized={} reflection_issues={} critical={} revision_actions={} lesson={}",
+                "  id={} profile={:?} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} layers={} hidden={} local_window={} forward_energy={} kv_influence={} runtime_kv_imported={} runtime_kv_exported={} recursive_runtime_calls={} live_memory_feedback_updates={} live_memory_feedback_reinforced={} live_memory_feedback_penalized={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} live_memory_feedback_detail={} reflection_issues={} critical={} revision_actions={} lesson={}",
                 experience.id,
                 experience.profile,
                 experience.quality,
@@ -1395,6 +1395,11 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
                 experience.live_memory_feedback_updates,
                 experience.live_memory_feedback_reinforced,
                 experience.live_memory_feedback_penalized,
+                experience.live_memory_feedback_applied,
+                experience.live_memory_feedback_removed,
+                experience.live_memory_feedback_missing,
+                experience.live_memory_feedback_strength_delta,
+                experience.live_memory_feedback_detail,
                 experience.reflection_issues,
                 experience.critical_reflection_issues,
                 experience.revision_actions,
@@ -1425,7 +1430,7 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
             device_report.runtime_kv_memories,
@@ -1440,6 +1445,11 @@ fn print_state_inspection_matrix_gate_report(
             device_report.revision_action_experiences,
             device_report.live_memory_feedback_experiences,
             device_report.live_memory_feedback_updates,
+            device_report.live_memory_feedback_detail_experiences,
+            device_report.live_memory_feedback_applied,
+            device_report.live_memory_feedback_removed,
+            device_report.live_memory_feedback_missing,
+            device_report.live_memory_feedback_strength_delta,
             device_report.evolution_live_inference_runs,
             device_report.evolution_live_router_threshold_mutations,
             device_report.evolution_live_hierarchy_weight_mutations,
@@ -1998,6 +2008,9 @@ struct Args {
     inspect_min_revision_action_experiences: Option<usize>,
     inspect_min_live_memory_feedback_experiences: Option<usize>,
     inspect_min_live_memory_feedback_updates: Option<usize>,
+    inspect_min_live_memory_feedback_detail_experiences: Option<usize>,
+    inspect_min_live_memory_feedback_applied: Option<usize>,
+    inspect_min_live_memory_feedback_strength_delta: Option<f32>,
     inspect_min_reflection_issue_device_profiles: Option<usize>,
     inspect_min_critical_reflection_issue_device_profiles: Option<usize>,
     inspect_min_revision_action_device_profiles: Option<usize>,
@@ -2247,6 +2260,9 @@ impl Args {
         let mut inspect_min_revision_action_experiences = None;
         let mut inspect_min_live_memory_feedback_experiences = None;
         let mut inspect_min_live_memory_feedback_updates = None;
+        let mut inspect_min_live_memory_feedback_detail_experiences = None;
+        let mut inspect_min_live_memory_feedback_applied = None;
+        let mut inspect_min_live_memory_feedback_strength_delta = None;
         let mut inspect_min_reflection_issue_device_profiles = None;
         let mut inspect_min_critical_reflection_issue_device_profiles = None;
         let mut inspect_min_revision_action_device_profiles = None;
@@ -3256,6 +3272,29 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-live-memory-feedback-detail-experiences"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_live_memory_feedback_detail_experiences =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-live-memory-feedback-applied" if index + 1 < raw.len() => {
+                    inspect_min_live_memory_feedback_applied =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-live-memory-feedback-strength-delta" if index + 1 < raw.len() => {
+                    inspect_min_live_memory_feedback_strength_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-min-reflection-issue-device-profiles" if index + 1 < raw.len() => {
                     inspect_min_reflection_issue_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
@@ -3992,6 +4031,9 @@ impl Args {
             inspect_min_revision_action_experiences,
             inspect_min_live_memory_feedback_experiences,
             inspect_min_live_memory_feedback_updates,
+            inspect_min_live_memory_feedback_detail_experiences,
+            inspect_min_live_memory_feedback_applied,
+            inspect_min_live_memory_feedback_strength_delta,
             inspect_min_reflection_issue_device_profiles,
             inspect_min_critical_reflection_issue_device_profiles,
             inspect_min_revision_action_device_profiles,
@@ -4395,6 +4437,12 @@ impl Args {
             min_revision_action_experiences: self.inspect_min_revision_action_experiences,
             min_live_memory_feedback_experiences: self.inspect_min_live_memory_feedback_experiences,
             min_live_memory_feedback_updates: self.inspect_min_live_memory_feedback_updates,
+            min_live_memory_feedback_detail_experiences: self
+                .inspect_min_live_memory_feedback_detail_experiences,
+            min_live_memory_feedback_applied: self.inspect_min_live_memory_feedback_applied,
+            min_live_memory_feedback_strength_delta: self
+                .inspect_min_live_memory_feedback_strength_delta
+                .map(|value| value.max(0.0)),
             min_router_observations: self.inspect_min_router_observations,
             min_evolution_live_inference_runs: self.inspect_min_evolution_live_inference_runs,
             min_evolution_live_router_threshold_mutations: self
@@ -4683,7 +4731,7 @@ fn print_help_and_exit() -> ! {
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
         "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
-        "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-device-profiles n\n",
+        "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-detail-experiences n --inspect-min-live-memory-feedback-applied n --inspect-min-live-memory-feedback-strength-delta f --inspect-min-live-memory-feedback-device-profiles n\n",
         "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-replay-live-memory-feedback-updates n --inspect-min-evolution-replay-live-memory-feedback-device-profiles n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Inspect live evolution: --inspect-min-evolution-live-inference-runs n --inspect-min-evolution-live-router-threshold-mutations n --inspect-min-evolution-live-hierarchy-weight-mutations n --inspect-min-evolution-live-router-threshold-delta f --inspect-min-evolution-live-hierarchy-weight-delta f --inspect-min-evolution-live-memory-updates n --inspect-min-evolution-live-stored-memory-updates n --inspect-min-evolution-live-reflection-issues n --inspect-min-evolution-live-critical-reflection-issues n --inspect-min-evolution-live-revision-actions n\n",
         "Inspect all-device live evolution: --inspect-min-evolution-live-inference-device-profiles n --inspect-min-evolution-live-router-threshold-mutation-device-profiles n --inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles n --inspect-min-evolution-live-memory-update-device-profiles n --inspect-min-evolution-live-stored-memory-update-device-profiles n --inspect-min-evolution-live-reflection-issue-device-profiles n --inspect-min-evolution-live-critical-reflection-issue-device-profiles n --inspect-min-evolution-live-revision-action-device-profiles n\n",
@@ -5005,6 +5053,12 @@ mod tests {
             "2".to_owned(),
             "--inspect-min-live-memory-feedback-updates".to_owned(),
             "5".to_owned(),
+            "--inspect-min-live-memory-feedback-detail-experiences".to_owned(),
+            "2".to_owned(),
+            "--inspect-min-live-memory-feedback-applied".to_owned(),
+            "4".to_owned(),
+            "--inspect-min-live-memory-feedback-strength-delta".to_owned(),
+            "0.51".to_owned(),
             "--inspect-min-reflection-issue-device-profiles".to_owned(),
             "12".to_owned(),
             "--inspect-min-critical-reflection-issue-device-profiles".to_owned(),
@@ -5720,6 +5774,15 @@ mod tests {
         assert_eq!(args.inspect_min_revision_action_experiences, Some(2));
         assert_eq!(args.inspect_min_live_memory_feedback_experiences, Some(2));
         assert_eq!(args.inspect_min_live_memory_feedback_updates, Some(5));
+        assert_eq!(
+            args.inspect_min_live_memory_feedback_detail_experiences,
+            Some(2)
+        );
+        assert_eq!(args.inspect_min_live_memory_feedback_applied, Some(4));
+        assert_eq!(
+            args.inspect_min_live_memory_feedback_strength_delta,
+            Some(0.51)
+        );
         assert_eq!(args.inspect_min_reflection_issue_device_profiles, Some(12));
         assert_eq!(
             args.inspect_min_critical_reflection_issue_device_profiles,
@@ -5943,6 +6006,21 @@ mod tests {
             args.state_inspection_gate()
                 .min_live_memory_feedback_updates,
             Some(5)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_live_memory_feedback_detail_experiences,
+            Some(2)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_live_memory_feedback_applied,
+            Some(4)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_live_memory_feedback_strength_delta,
+            Some(0.51)
         );
         assert_eq!(
             args.state_inspection_gate()
