@@ -678,7 +678,10 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
             total: 1.0,
             components: ProcessRewardComponents::default(),
             action: RewardAction::Reinforce,
-            notes: Vec::new(),
+            notes: vec![
+                "memory_feedback:reinforced=2:penalized=0:reinforcement_amount=1.600000:penalty_amount=0.000000"
+                    .to_owned(),
+            ],
         },
     });
     engine.experience.record(ExperienceInput {
@@ -714,7 +717,10 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
             total: 0.0,
             components: ProcessRewardComponents::default(),
             action: RewardAction::Penalize,
-            notes: Vec::new(),
+            notes: vec![
+                "memory_feedback:reinforced=0:penalized=1:reinforcement_amount=0.000000:penalty_amount=0.800000"
+                    .to_owned(),
+            ],
         },
     });
     engine.experience.record(ExperienceInput {
@@ -756,7 +762,10 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
             total: 0.90,
             components: ProcessRewardComponents::default(),
             action: RewardAction::Reinforce,
-            notes: Vec::new(),
+            notes: vec![
+                "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.700000:penalty_amount=0.000000"
+                    .to_owned(),
+            ],
         },
     });
 }
@@ -1118,7 +1127,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.device.as_str(),
@@ -1139,6 +1148,10 @@ fn print_benchmark_summary(
             result.auto_replay_hierarchy_weight_delta,
             result.auto_replay_memory_reinforcements,
             result.auto_replay_memory_penalties,
+            result.auto_replay_live_memory_feedback_items,
+            result.auto_replay_live_memory_feedback_updates,
+            result.auto_replay_live_memory_feedback_reinforcements,
+            result.auto_replay_live_memory_feedback_penalties,
             result.auto_replay_recursive_runtime_items,
             result.auto_replay_recursive_runtime_calls,
             result.auto_replay_avg_recursive_call_pressure,
@@ -1786,6 +1799,7 @@ struct Args {
     benchmark_min_auto_replay_hierarchy_weight_delta: Option<f32>,
     benchmark_min_auto_replay_memory_updates: Option<usize>,
     benchmark_min_live_memory_feedback_updates: Option<usize>,
+    benchmark_min_auto_replay_live_memory_feedback_updates: Option<usize>,
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
     benchmark_max_auto_replay_recursive_call_pressure: Option<f32>,
@@ -1968,6 +1982,7 @@ impl Args {
         let mut benchmark_min_auto_replay_hierarchy_weight_delta = None;
         let mut benchmark_min_auto_replay_memory_updates = None;
         let mut benchmark_min_live_memory_feedback_updates = None;
+        let mut benchmark_min_auto_replay_live_memory_feedback_updates = None;
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
         let mut benchmark_max_auto_replay_recursive_call_pressure = None;
@@ -2231,6 +2246,14 @@ impl Args {
                 }
                 "--benchmark-min-live-memory-feedback-updates" if index + 1 < raw.len() => {
                     benchmark_min_live_memory_feedback_updates =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-live-memory-feedback-updates"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_auto_replay_live_memory_feedback_updates =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
@@ -3138,6 +3161,7 @@ impl Args {
             benchmark_min_auto_replay_hierarchy_weight_delta,
             benchmark_min_auto_replay_memory_updates,
             benchmark_min_live_memory_feedback_updates,
+            benchmark_min_auto_replay_live_memory_feedback_updates,
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure,
@@ -3321,6 +3345,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_live_memory_feedback_updates {
             gate.min_live_memory_feedback_updates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_live_memory_feedback_updates {
+            gate.min_auto_replay_live_memory_feedback_updates = Some(value);
         }
         if let Some(value) = self.benchmark_min_auto_replay_recursive_items {
             gate.min_auto_replay_recursive_items = Some(value);
@@ -3795,6 +3822,8 @@ mod tests {
             "1".to_owned(),
             "--benchmark-min-live-memory-feedback-updates".to_owned(),
             "2".to_owned(),
+            "--benchmark-min-auto-replay-live-memory-feedback-updates".to_owned(),
+            "3".to_owned(),
             "--benchmark-min-auto-replay-recursive-items".to_owned(),
             "1".to_owned(),
             "--benchmark-min-auto-replay-recursive-call-pressure".to_owned(),
@@ -4081,6 +4110,10 @@ mod tests {
         assert_eq!(args.benchmark_min_auto_replay_memory_updates, Some(1));
         assert_eq!(args.benchmark_min_live_memory_feedback_updates, Some(2));
         assert_eq!(
+            args.benchmark_min_auto_replay_live_memory_feedback_updates,
+            Some(3)
+        );
+        assert_eq!(
             args.benchmark_gate().min_auto_replay_router_updates,
             Some(1)
         );
@@ -4113,6 +4146,11 @@ mod tests {
         assert_eq!(
             args.benchmark_gate().min_live_memory_feedback_updates,
             Some(2)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_auto_replay_live_memory_feedback_updates,
+            Some(3)
         );
         assert_eq!(args.benchmark_min_auto_replay_recursive_items, Some(1));
         assert_eq!(

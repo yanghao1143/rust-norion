@@ -267,6 +267,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"memory_penalties\":",
     },
     TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_items",
+        marker: "\"live_memory_feedback_items\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_updates",
+        marker: "\"live_memory_feedback_updates\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_reinforcements",
+        marker: "\"live_memory_feedback_reinforcements\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_penalties",
+        marker: "\"live_memory_feedback_penalties\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_recursive_runtime_calls",
         marker: "\"recursive_runtime_calls\":",
     },
@@ -881,7 +897,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"evolution_ledger\":{{\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
@@ -1057,6 +1073,18 @@ pub fn trace_json_line_with_case(
             .unwrap_or(0),
         auto_replay
             .map(|report| report.memory_penalties)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_items)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_updates)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_reinforcements)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_penalties)
             .unwrap_or(0),
         auto_replay
             .map(|report| report.recursive_runtime_items)
@@ -1260,6 +1288,10 @@ mod tests {
         assert!(line.contains("\"hierarchy_weight_delta\":"));
         assert!(line.contains("\"memory_reinforcements\":"));
         assert!(line.contains("\"memory_penalties\":"));
+        assert!(line.contains("\"live_memory_feedback_items\":"));
+        assert!(line.contains("\"live_memory_feedback_updates\":"));
+        assert!(line.contains("\"live_memory_feedback_reinforcements\":"));
+        assert!(line.contains("\"live_memory_feedback_penalties\":"));
         assert!(line.contains("\"recursive_runtime_items\":"));
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));

@@ -441,8 +441,20 @@ impl NoironEngine {
 
             report.applied += 1;
             let memory_update = replay_memory_update_amount(&item);
+            let live_feedback_updates = item
+                .live_memory_feedback
+                .map(|feedback| feedback.updates())
+                .unwrap_or(0);
+            let live_feedback_reinforced = item
+                .live_memory_feedback
+                .map(|feedback| feedback.reinforced)
+                .unwrap_or(0);
+            let live_feedback_penalized = item
+                .live_memory_feedback
+                .map(|feedback| feedback.penalized)
+                .unwrap_or(0);
             report.notes.push(format!(
-                "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} lesson={}",
+                "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} lesson={}",
                 item.experience_id,
                 item.action.as_str(),
                 item.reward,
@@ -453,6 +465,9 @@ impl NoironEngine {
                 item.recursive_runtime_calls
                     .map(|calls| calls.to_string())
                     .unwrap_or_else(|| "none".to_owned()),
+                live_feedback_updates,
+                live_feedback_reinforced,
+                live_feedback_penalized,
                 compact(&item.lesson, 64)
             ));
         }

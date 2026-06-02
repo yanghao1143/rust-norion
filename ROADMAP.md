@@ -765,6 +765,13 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-revision-action-device-profiles`, so all-device sweeps can
   fail when reflection evidence only appears on a subset of supported hardware
   classes.
+- Benchmark summaries and gates now distinguish live memory-feedback writes
+  from replay consumption of persisted feedback. Use
+  `--benchmark-min-live-memory-feedback-updates` to prove inference wrote
+  online memory feedback, and
+  `--benchmark-min-auto-replay-live-memory-feedback-updates` to prove
+  auto-replay consumed those persisted notes when scaling later KV memory
+  reinforcement or penalty decisions.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -827,6 +834,7 @@ These are algorithmic references, not product dependencies:
   reflection issue / critical issue coverage, revision-action coverage,
   per-device reflection/revision coverage,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
+  auto-replay live memory-feedback consumption,
   auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
   drift block/rollback counts, or persistent state reuse regress.

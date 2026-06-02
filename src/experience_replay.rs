@@ -353,6 +353,10 @@ pub struct ExperienceReplayReport {
     pub recursive_runtime_calls: usize,
     pub average_recursive_call_pressure: f32,
     pub max_recursive_call_pressure: f32,
+    pub live_memory_feedback_items: usize,
+    pub live_memory_feedback_updates: usize,
+    pub live_memory_feedback_reinforcements: usize,
+    pub live_memory_feedback_penalties: usize,
     pub notes: Vec<String>,
 }
 
@@ -388,6 +392,25 @@ impl ExperienceReplayReport {
             .iter()
             .map(ExperienceReplayItem::recursive_call_pressure)
             .fold(0.0_f32, f32::max);
+        let live_memory_feedback_items = plan
+            .items
+            .iter()
+            .filter(|item| item.live_memory_feedback.is_some())
+            .count();
+        let live_memory_feedback_reinforcements = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .map(|feedback| feedback.reinforced)
+            .sum();
+        let live_memory_feedback_penalties = plan
+            .items
+            .iter()
+            .filter_map(|item| item.live_memory_feedback)
+            .map(|feedback| feedback.penalized)
+            .sum();
+        let live_memory_feedback_updates =
+            live_memory_feedback_reinforcements + live_memory_feedback_penalties;
 
         Self {
             planned: plan.items.len(),
@@ -396,13 +419,17 @@ impl ExperienceReplayReport {
             recursive_runtime_calls,
             average_recursive_call_pressure,
             max_recursive_call_pressure,
+            live_memory_feedback_items,
+            live_memory_feedback_updates,
+            live_memory_feedback_reinforcements,
+            live_memory_feedback_penalties,
             ..Self::default()
         }
     }
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={}",
             self.planned,
             self.applied,
             self.router_updates,
@@ -420,7 +447,11 @@ impl ExperienceReplayReport {
             self.recursive_runtime_items,
             self.recursive_runtime_calls,
             self.average_recursive_call_pressure,
-            self.max_recursive_call_pressure
+            self.max_recursive_call_pressure,
+            self.live_memory_feedback_items,
+            self.live_memory_feedback_updates,
+            self.live_memory_feedback_reinforcements,
+            self.live_memory_feedback_penalties
         )
     }
 }
@@ -691,5 +722,25 @@ mod tests {
         assert!(report.summary().contains("memory_penalties=0"));
         assert!(report.summary().contains("recursive_runtime_calls=96"));
         assert!(report.summary().contains("max_recursive_call_pressure="));
+    }
+
+    #[test]
+    fn report_summarizes_live_memory_feedback_consumed_by_replay() {
+        let planner = ExperienceReplayPlanner::new();
+        let reinforced = record(9, 0.88, RewardAction::Reinforce);
+        let mut penalized = record(10, 0.12, RewardAction::Penalize);
+        penalized.process_reward.notes = vec![
+            "memory_feedback:reinforced=0:penalized=3:reinforcement_amount=0.000000:penalty_amount=1.500000"
+                .to_owned(),
+        ];
+
+        let plan = planner.plan(&[reinforced, penalized], 4);
+        let report = ExperienceReplayReport::from_plan(&plan);
+
+        assert_eq!(report.live_memory_feedback_items, 2);
+        assert_eq!(report.live_memory_feedback_updates, 5);
+        assert_eq!(report.live_memory_feedback_reinforcements, 2);
+        assert_eq!(report.live_memory_feedback_penalties, 3);
+        assert!(report.summary().contains("live_memory_feedback_updates=5"));
     }
 }

@@ -85,6 +85,10 @@ pub struct BenchmarkCaseResult {
     pub auto_replay_hierarchy_weight_delta: f32,
     pub auto_replay_memory_reinforcements: usize,
     pub auto_replay_memory_penalties: usize,
+    pub auto_replay_live_memory_feedback_items: usize,
+    pub auto_replay_live_memory_feedback_updates: usize,
+    pub auto_replay_live_memory_feedback_reinforcements: usize,
+    pub auto_replay_live_memory_feedback_penalties: usize,
     pub auto_replay_recursive_runtime_items: usize,
     pub auto_replay_recursive_runtime_calls: usize,
     pub auto_replay_avg_recursive_call_pressure: f32,
@@ -129,6 +133,7 @@ pub struct BenchmarkGate {
     pub min_auto_replay_hierarchy_weight_delta: Option<f32>,
     pub min_auto_replay_memory_updates: Option<usize>,
     pub min_live_memory_feedback_updates: Option<usize>,
+    pub min_auto_replay_live_memory_feedback_updates: Option<usize>,
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
@@ -192,6 +197,7 @@ impl Default for BenchmarkGate {
             min_auto_replay_hierarchy_weight_delta: None,
             min_auto_replay_memory_updates: None,
             min_live_memory_feedback_updates: None,
+            min_auto_replay_live_memory_feedback_updates: None,
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
@@ -890,6 +896,18 @@ impl BenchmarkSummary {
             auto_replay_memory_penalties: auto_replay
                 .map(|report| report.memory_penalties)
                 .unwrap_or(0),
+            auto_replay_live_memory_feedback_items: auto_replay
+                .map(|report| report.live_memory_feedback_items)
+                .unwrap_or(0),
+            auto_replay_live_memory_feedback_updates: auto_replay
+                .map(|report| report.live_memory_feedback_updates)
+                .unwrap_or(0),
+            auto_replay_live_memory_feedback_reinforcements: auto_replay
+                .map(|report| report.live_memory_feedback_reinforcements)
+                .unwrap_or(0),
+            auto_replay_live_memory_feedback_penalties: auto_replay
+                .map(|report| report.live_memory_feedback_penalties)
+                .unwrap_or(0),
             auto_replay_recursive_runtime_items: auto_replay
                 .map(|report| report.recursive_runtime_items)
                 .unwrap_or(0),
@@ -1342,6 +1360,34 @@ impl BenchmarkSummary {
         self.total_auto_replay_memory_reinforcements() + self.total_auto_replay_memory_penalties()
     }
 
+    pub fn total_auto_replay_live_memory_feedback_items(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_live_memory_feedback_items)
+            .sum()
+    }
+
+    pub fn total_auto_replay_live_memory_feedback_reinforcements(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_live_memory_feedback_reinforcements)
+            .sum()
+    }
+
+    pub fn total_auto_replay_live_memory_feedback_penalties(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_live_memory_feedback_penalties)
+            .sum()
+    }
+
+    pub fn total_auto_replay_live_memory_feedback_updates(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.auto_replay_live_memory_feedback_updates)
+            .sum()
+    }
+
     pub fn total_auto_replay_recursive_items(&self) -> usize {
         self.results
             .iter()
@@ -1520,6 +1566,22 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "live_memory_feedback_updates {} below minimum {}",
                     live_memory_feedback_updates, min_live_memory_feedback_updates
+                ));
+            }
+        }
+
+        if let Some(min_auto_replay_live_memory_feedback_updates) =
+            gate.min_auto_replay_live_memory_feedback_updates
+        {
+            let auto_replay_live_memory_feedback_updates =
+                self.total_auto_replay_live_memory_feedback_updates();
+            if auto_replay_live_memory_feedback_updates
+                < min_auto_replay_live_memory_feedback_updates
+            {
+                failures.push(format!(
+                    "auto_replay_live_memory_feedback_updates {} below minimum {}",
+                    auto_replay_live_memory_feedback_updates,
+                    min_auto_replay_live_memory_feedback_updates
                 ));
             }
         }
@@ -2015,7 +2077,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -2041,6 +2103,10 @@ impl BenchmarkSummary {
             self.total_live_memory_feedback_updates(),
             self.total_live_memory_feedback_reinforcements(),
             self.total_live_memory_feedback_penalties(),
+            self.total_auto_replay_live_memory_feedback_items(),
+            self.total_auto_replay_live_memory_feedback_updates(),
+            self.total_auto_replay_live_memory_feedback_reinforcements(),
+            self.total_auto_replay_live_memory_feedback_penalties(),
             self.total_auto_replay_recursive_items(),
             self.total_auto_replay_recursive_runtime_calls(),
             self.max_auto_replay_recursive_call_pressure(),
@@ -2377,6 +2443,90 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_auto_replay_live_memory_feedback_consumption() {
+        let mut summary = BenchmarkSummary::new();
+        let mut gate = BenchmarkGate::default();
+        gate.min_auto_replay_live_memory_feedback_updates = Some(2);
+
+        let missing_report = summary.evaluate(&gate);
+
+        assert!(!missing_report.passed);
+        assert!(
+            missing_report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay_live_memory_feedback_updates"))
+        );
+
+        summary.results.push(BenchmarkCaseResult {
+            name: "replay_live_feedback".to_owned(),
+            profile: TaskProfile::Coding,
+            device: DeviceClass::CpuOnly,
+            elapsed_ms: 1,
+            quality: 0.9,
+            process_reward: 0.9,
+            attention_fraction: 0.5,
+            requires_recursion: false,
+            recursive_chunks: 1,
+            recursive_waves: 1,
+            recursive_runtime_calls: 1,
+            auto_replay_applied: 1,
+            auto_replay_router_updates: 1,
+            auto_replay_hierarchy_updates: 1,
+            auto_replay_router_threshold_mutations: 0,
+            auto_replay_hierarchy_weight_mutations: 0,
+            auto_replay_router_threshold_delta: 0.0,
+            auto_replay_hierarchy_weight_delta: 0.0,
+            auto_replay_memory_reinforcements: 1,
+            auto_replay_memory_penalties: 0,
+            auto_replay_live_memory_feedback_items: 1,
+            auto_replay_live_memory_feedback_updates: 2,
+            auto_replay_live_memory_feedback_reinforcements: 2,
+            auto_replay_live_memory_feedback_penalties: 0,
+            auto_replay_recursive_runtime_items: 0,
+            auto_replay_recursive_runtime_calls: 0,
+            auto_replay_avg_recursive_call_pressure: 0.0,
+            auto_replay_max_recursive_call_pressure: 0.0,
+            used_memories: 0,
+            infini_local_window: 0,
+            infini_global_memory: 0,
+            sparse_skipped: 0,
+            sparse_skipped_tokens: 0,
+            stored_memories: 0,
+            compacted_memories: 0,
+            runtime_forward_signal: false,
+            runtime_forward_energy_signal: false,
+            runtime_kv_influence_signal: false,
+            runtime_token_count: 0,
+            runtime_uncertainty_token_count: 0,
+            runtime_uncertainty_signal: false,
+            runtime_kv_imported: 0,
+            runtime_kv_exported: 0,
+            runtime_kv_stored: 0,
+            runtime_selected_adapter: None,
+            runtime_adapter_contract_ok: false,
+            runtime_adapter_contract_violations: 0,
+            runtime_adapter_observations: 0,
+            runtime_adapter_best_score: None,
+            drift_severity: DriftSeverity::Stable,
+        });
+        let passing_report = summary.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(summary.total_auto_replay_live_memory_feedback_items(), 1);
+        assert_eq!(summary.total_auto_replay_live_memory_feedback_updates(), 2);
+        assert_eq!(
+            summary.total_auto_replay_live_memory_feedback_reinforcements(),
+            2
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("auto_replay_live_memory_feedback_updates=2")
+        );
+    }
+
+    #[test]
     fn gate_reports_threshold_failures() {
         let mut engine = NoironEngine::new();
         let mut backend = HeuristicBackend;
@@ -2401,6 +2551,7 @@ mod tests {
             min_auto_replay_hierarchy_weight_delta: None,
             min_auto_replay_memory_updates: None,
             min_live_memory_feedback_updates: None,
+            min_auto_replay_live_memory_feedback_updates: None,
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
@@ -2638,6 +2789,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 1,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 1,
                 auto_replay_recursive_runtime_calls: 96,
                 auto_replay_avg_recursive_call_pressure: 0.35,
@@ -2713,6 +2868,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 1,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 1,
                 auto_replay_recursive_runtime_calls: 7,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -2787,6 +2946,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -2947,6 +3110,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3081,6 +3248,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3155,6 +3326,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3251,6 +3426,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3353,6 +3532,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3457,6 +3640,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3550,6 +3737,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3634,6 +3825,10 @@ mod tests {
                     auto_replay_hierarchy_weight_delta: 0.0,
                     auto_replay_memory_reinforcements: 0,
                     auto_replay_memory_penalties: 0,
+                    auto_replay_live_memory_feedback_items: 0,
+                    auto_replay_live_memory_feedback_updates: 0,
+                    auto_replay_live_memory_feedback_reinforcements: 0,
+                    auto_replay_live_memory_feedback_penalties: 0,
                     auto_replay_recursive_runtime_items: 0,
                     auto_replay_recursive_runtime_calls: 0,
                     auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3682,6 +3877,10 @@ mod tests {
                     auto_replay_hierarchy_weight_delta: 0.0,
                     auto_replay_memory_reinforcements: 0,
                     auto_replay_memory_penalties: 0,
+                    auto_replay_live_memory_feedback_items: 0,
+                    auto_replay_live_memory_feedback_updates: 0,
+                    auto_replay_live_memory_feedback_reinforcements: 0,
+                    auto_replay_live_memory_feedback_penalties: 0,
                     auto_replay_recursive_runtime_items: 0,
                     auto_replay_recursive_runtime_calls: 0,
                     auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3780,6 +3979,10 @@ mod tests {
                     auto_replay_hierarchy_weight_delta: 0.0,
                     auto_replay_memory_reinforcements: 0,
                     auto_replay_memory_penalties: 0,
+                    auto_replay_live_memory_feedback_items: 0,
+                    auto_replay_live_memory_feedback_updates: 0,
+                    auto_replay_live_memory_feedback_reinforcements: 0,
+                    auto_replay_live_memory_feedback_penalties: 0,
                     auto_replay_recursive_runtime_items: 0,
                     auto_replay_recursive_runtime_calls: 0,
                     auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3831,6 +4034,10 @@ mod tests {
                         auto_replay_hierarchy_weight_delta: 0.0,
                         auto_replay_memory_reinforcements: 0,
                         auto_replay_memory_penalties: 0,
+                        auto_replay_live_memory_feedback_items: 0,
+                        auto_replay_live_memory_feedback_updates: 0,
+                        auto_replay_live_memory_feedback_reinforcements: 0,
+                        auto_replay_live_memory_feedback_penalties: 0,
                         auto_replay_recursive_runtime_items: 0,
                         auto_replay_recursive_runtime_calls: 0,
                         auto_replay_avg_recursive_call_pressure: 0.0,
@@ -3917,6 +4124,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -4019,6 +4230,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
@@ -4108,6 +4323,10 @@ mod tests {
             auto_replay_hierarchy_weight_delta: 0.0,
             auto_replay_memory_reinforcements: 0,
             auto_replay_memory_penalties: 0,
+            auto_replay_live_memory_feedback_items: 0,
+            auto_replay_live_memory_feedback_updates: 0,
+            auto_replay_live_memory_feedback_reinforcements: 0,
+            auto_replay_live_memory_feedback_penalties: 0,
             auto_replay_recursive_runtime_items: 0,
             auto_replay_recursive_runtime_calls: 0,
             auto_replay_avg_recursive_call_pressure: 0.0,
@@ -4203,6 +4422,10 @@ mod tests {
             auto_replay_hierarchy_weight_delta: 0.0,
             auto_replay_memory_reinforcements: 0,
             auto_replay_memory_penalties: 0,
+            auto_replay_live_memory_feedback_items: 0,
+            auto_replay_live_memory_feedback_updates: 0,
+            auto_replay_live_memory_feedback_reinforcements: 0,
+            auto_replay_live_memory_feedback_penalties: 0,
             auto_replay_recursive_runtime_items: 0,
             auto_replay_recursive_runtime_calls: 0,
             auto_replay_avg_recursive_call_pressure: 0.0,
@@ -4313,6 +4536,10 @@ mod tests {
                 auto_replay_hierarchy_weight_delta: 0.0,
                 auto_replay_memory_reinforcements: 0,
                 auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
                 auto_replay_recursive_runtime_items: 0,
                 auto_replay_recursive_runtime_calls: 0,
                 auto_replay_avg_recursive_call_pressure: 0.0,
