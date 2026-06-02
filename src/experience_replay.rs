@@ -36,10 +36,14 @@ impl ExperienceReplayPlanner {
         if limit == 0 {
             items.clear();
         } else if items.len() > limit {
-            let recursive_candidate = items
+            let overflow = items.iter().skip(limit).cloned().collect::<Vec<_>>();
+            let recursive_candidate = overflow
                 .iter()
-                .skip(limit)
                 .find(|item| item.recursive_runtime_calls.is_some())
+                .cloned();
+            let live_evolution_candidate = overflow
+                .iter()
+                .find(|item| item.live_evolution.has_evidence())
                 .cloned();
             items.truncate(limit);
 
@@ -60,6 +64,30 @@ impl ExperienceReplayPlanner {
                         })
                     {
                         items[replace_index] = recursive_item;
+                        sort_replay_items(&mut items);
+                    }
+                }
+            }
+            if !items.iter().any(|item| item.live_evolution.has_evidence()) {
+                if let Some(live_evolution_item) = live_evolution_candidate {
+                    let has_recursive_item = items
+                        .iter()
+                        .any(|item| item.recursive_runtime_calls.is_some());
+                    if let Some((replace_index, _)) = items
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, item)| !item.live_evolution.has_evidence())
+                        .filter(|(_, item)| {
+                            !has_recursive_item || item.recursive_runtime_calls.is_none()
+                        })
+                        .min_by(|(_, left), (_, right)| {
+                            left.priority
+                                .partial_cmp(&right.priority)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .then_with(|| left.experience_id.cmp(&right.experience_id))
+                        })
+                    {
+                        items[replace_index] = live_evolution_item;
                         sort_replay_items(&mut items);
                     }
                 }
@@ -740,13 +768,16 @@ mod tests {
         let planner = ExperienceReplayPlanner::new();
         let mut recursive = record(5, 0.80, RewardAction::Reinforce);
         recursive.profile = TaskProfile::LongDocument;
+        recursive.live_evolution = LiveInferenceEvolution::default();
         recursive.process_reward.notes = vec![
             "recursive:chunks=32:merge_rounds=2:waves=8:parallel=2:runtime_calls=96".to_owned(),
         ];
         let mut high_priority = record(1, 0.96, RewardAction::Reinforce);
         high_priority.process_reward.notes.clear();
+        high_priority.live_evolution = LiveInferenceEvolution::default();
         let mut second_priority = record(2, 0.95, RewardAction::Reinforce);
         second_priority.process_reward.notes.clear();
+        second_priority.live_evolution = LiveInferenceEvolution::default();
         let records = vec![high_priority, second_priority, recursive];
 
         let plan = planner.plan(&records, 2);
@@ -770,6 +801,55 @@ mod tests {
                 .iter()
                 .any(|item| item.experience_id == 1 || item.experience_id == 2)
         );
+    }
+
+    #[test]
+    fn planner_keeps_live_evolution_sample_when_limit_allows() {
+        let planner = ExperienceReplayPlanner::new();
+        let mut high_priority = record(1, 0.98, RewardAction::Reinforce);
+        high_priority.live_evolution = LiveInferenceEvolution::default();
+        high_priority.process_reward.notes.clear();
+        let mut second_priority = record(2, 0.97, RewardAction::Reinforce);
+        second_priority.live_evolution = LiveInferenceEvolution::default();
+        second_priority.process_reward.notes.clear();
+        let mut live_evolution = record(3, 0.80, RewardAction::Reinforce);
+        live_evolution.live_evolution.revision_actions = 1;
+        live_evolution.process_reward.notes.clear();
+        let records = vec![high_priority, second_priority, live_evolution];
+
+        let plan = planner.plan(&records, 2);
+
+        assert_eq!(plan.items.len(), 2);
+        assert!(
+            plan.items
+                .iter()
+                .any(|item| item.live_evolution.has_evidence())
+        );
+        assert!(plan.items.iter().any(|item| item.experience_id == 1));
+    }
+
+    #[test]
+    fn planner_does_not_displace_only_recursive_sample_for_live_evolution_at_tiny_limit() {
+        let planner = ExperienceReplayPlanner::new();
+        let mut recursive = record(5, 0.80, RewardAction::Reinforce);
+        recursive.profile = TaskProfile::LongDocument;
+        recursive.live_evolution = LiveInferenceEvolution::default();
+        recursive.process_reward.notes = vec![
+            "recursive:chunks=32:merge_rounds=2:waves=8:parallel=2:runtime_calls=96".to_owned(),
+        ];
+        let mut high_priority = record(1, 0.98, RewardAction::Reinforce);
+        high_priority.live_evolution = LiveInferenceEvolution::default();
+        high_priority.process_reward.notes.clear();
+        let mut live_evolution = record(3, 0.80, RewardAction::Reinforce);
+        live_evolution.live_evolution.revision_actions = 1;
+        live_evolution.process_reward.notes.clear();
+        let records = vec![high_priority, recursive, live_evolution];
+
+        let plan = planner.plan(&records, 1);
+
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].recursive_runtime_calls, Some(96));
+        assert!(!plan.items[0].live_evolution.has_evidence());
     }
 
     #[test]
