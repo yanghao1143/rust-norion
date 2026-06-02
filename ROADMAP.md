@@ -739,6 +739,11 @@ These are algorithmic references, not product dependencies:
 - Benchmark summaries and gates expose runtime KV long-term admission through
   `--benchmark-min-runtime-kv-stored`, so local/CI production sweeps can fail
   when exported runtime KV is never written back into reinforced memory.
+- Benchmark summaries and gates also expose runtime KV hold evidence through
+  `--benchmark-min-runtime-kv-hold-cases` and
+  `--benchmark-min-runtime-kv-held`, so fast-path watch cases can prove the
+  runtime exported KV while the control plane kept unsafe blocks out of durable
+  `runtime_kv:` memory.
 - The persistent roundtrip gate also checks that admitted runtime KV keeps the
   `runtime_kv:` namespace, is retrieved as a runtime KV memory after reload,
   and is reconstructed into imported KV blocks before the second runtime call.
@@ -772,7 +777,13 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-runtime-kv-import-device-profiles`, and
   `--inspect-min-runtime-kv-export-device-profiles`, so all-device state
   inspection can fail when a supported hardware class stops persisting runtime
-  ABI feedback even though its files exist. Evolution-ledger matrix coverage is
+  ABI feedback even though its files exist. State inspection can also require
+  exported-but-held runtime KV evidence with
+  `--inspect-min-runtime-kv-hold-experiences`,
+  `--inspect-min-runtime-kv-held-blocks`, and
+  `--inspect-min-runtime-kv-hold-device-profiles`, so fast-path watch safety is
+  auditable after reload instead of only during trace or benchmark evaluation.
+  Evolution-ledger matrix coverage is
   also available through
   `--inspect-min-evolution-replay-run-device-profiles`,
   `--inspect-min-evolution-replay-item-device-profiles`,
