@@ -5,7 +5,7 @@ use crate::adaptive_state::EvolutionLedger;
 use crate::engine::NoironEngine;
 use crate::experience::recursive_runtime_calls_from_notes;
 use crate::experience_replay::LiveMemoryFeedbackStats;
-use crate::hardware::DeviceClass;
+use crate::hardware::{DeviceClass, HardwarePlan};
 use crate::hierarchy::{
     HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
 };
@@ -81,6 +81,7 @@ pub struct StateInspectionGate {
     pub min_runtime_forward_energy_experiences: Option<usize>,
     pub min_runtime_kv_influence_experiences: Option<usize>,
     pub min_runtime_kv_precision_experiences: Option<usize>,
+    pub max_runtime_kv_precision_mismatches: Option<usize>,
     pub min_runtime_device_execution_experiences: Option<usize>,
     pub min_runtime_layer_mode_experiences: Option<usize>,
     pub min_runtime_all_layer_mode_experiences: Option<usize>,
@@ -193,6 +194,7 @@ pub struct StateInspectionDeviceGateReport {
     pub runtime_forward_energy_experiences: usize,
     pub runtime_kv_influence_experiences: usize,
     pub runtime_kv_precision_experiences: usize,
+    pub runtime_kv_precision_mismatches: usize,
     pub runtime_device_execution_experiences: usize,
     pub runtime_layer_mode_experiences: usize,
     pub runtime_all_layer_mode_experiences: usize,
@@ -242,6 +244,7 @@ impl StateInspectionDeviceGateReport {
             runtime_forward_energy_experiences: 0,
             runtime_kv_influence_experiences: 0,
             runtime_kv_precision_experiences: 0,
+            runtime_kv_precision_mismatches: 0,
             runtime_device_execution_experiences: 0,
             runtime_layer_mode_experiences: 0,
             runtime_all_layer_mode_experiences: 0,
@@ -295,6 +298,7 @@ impl StateInspectionDeviceGateReport {
             runtime_forward_energy_experiences: inspection.runtime_forward_energy_experience_count,
             runtime_kv_influence_experiences: inspection.runtime_kv_influence_experience_count,
             runtime_kv_precision_experiences: inspection.runtime_kv_precision_experience_count,
+            runtime_kv_precision_mismatches: inspection.runtime_kv_precision_mismatch_count,
             runtime_device_execution_experiences: inspection
                 .runtime_device_execution_experience_count,
             runtime_layer_mode_experiences: inspection.runtime_layer_mode_experience_count,
@@ -388,6 +392,14 @@ impl StateInspectionDeviceGateReport {
         runtime_kv_precision_experiences: usize,
     ) -> Self {
         self.runtime_kv_precision_experiences = runtime_kv_precision_experiences;
+        self
+    }
+
+    pub fn with_runtime_kv_precision_mismatches(
+        mut self,
+        runtime_kv_precision_mismatches: usize,
+    ) -> Self {
+        self.runtime_kv_precision_mismatches = runtime_kv_precision_mismatches;
         self
     }
 
@@ -1265,6 +1277,7 @@ pub struct StateInspectionReport {
     pub runtime_forward_energy_experience_count: usize,
     pub runtime_kv_influence_experience_count: usize,
     pub runtime_kv_precision_experience_count: usize,
+    pub runtime_kv_precision_mismatch_count: usize,
     pub runtime_device_execution_experience_count: usize,
     pub runtime_layer_mode_experience_count: usize,
     pub runtime_all_layer_mode_experience_count: usize,
@@ -1338,6 +1351,8 @@ impl StateInspectionReport {
             .iter()
             .filter(|record| record.runtime_diagnostics.has_valid_kv_precision_signal())
             .count();
+        let runtime_kv_precision_mismatch_count =
+            runtime_kv_precision_mismatch_count(engine, &inspection_hardware_plan(engine));
         let runtime_device_execution_experience_count = engine
             .experience
             .records()
@@ -1549,6 +1564,7 @@ impl StateInspectionReport {
             runtime_forward_energy_experience_count,
             runtime_kv_influence_experience_count,
             runtime_kv_precision_experience_count,
+            runtime_kv_precision_mismatch_count,
             runtime_device_execution_experience_count,
             runtime_layer_mode_experience_count,
             runtime_all_layer_mode_experience_count,
@@ -1588,7 +1604,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -1597,6 +1613,7 @@ impl StateInspectionReport {
             self.runtime_forward_energy_experience_count,
             self.runtime_kv_influence_experience_count,
             self.runtime_kv_precision_experience_count,
+            self.runtime_kv_precision_mismatch_count,
             self.runtime_device_execution_experience_count,
             self.runtime_layer_mode_experience_count,
             self.runtime_all_layer_mode_experience_count,
@@ -1720,6 +1737,12 @@ impl StateInspectionReport {
             "runtime_kv_precision_experience_count",
             self.runtime_kv_precision_experience_count,
             gate.min_runtime_kv_precision_experiences,
+        );
+        require_max_usize(
+            &mut failures,
+            "runtime_kv_precision_mismatch_count",
+            self.runtime_kv_precision_mismatch_count,
+            gate.max_runtime_kv_precision_mismatches,
         );
         require_min_usize(
             &mut failures,
@@ -2006,6 +2029,19 @@ fn require_min_usize(
     }
 }
 
+fn require_max_usize(
+    failures: &mut Vec<String>,
+    name: &str,
+    actual: usize,
+    maximum: Option<usize>,
+) {
+    if let Some(maximum) = maximum {
+        if actual > maximum {
+            failures.push(format!("{name} {actual} above maximum {maximum}"));
+        }
+    }
+}
+
 fn require_min_u64(failures: &mut Vec<String>, name: &str, actual: u64, required: Option<u64>) {
     if let Some(required) = required {
         if actual < required {
@@ -2124,6 +2160,35 @@ fn compact(text: &str, max_chars: usize) -> String {
         out.push_str("...");
     }
     out
+}
+
+fn inspection_hardware_plan(engine: &NoironEngine) -> HardwarePlan {
+    engine.hardware_allocator.plan(
+        engine.hardware_snapshot,
+        TaskProfile::General,
+        1,
+        engine.hierarchy.current(),
+    )
+}
+
+fn runtime_kv_precision_mismatch_count(
+    engine: &NoironEngine,
+    hardware_plan: &HardwarePlan,
+) -> usize {
+    engine
+        .experience
+        .records()
+        .iter()
+        .filter(|record| {
+            let diagnostics = &record.runtime_diagnostics;
+            diagnostics.has_device_execution_signal()
+                && diagnostics.has_valid_kv_precision_signal()
+                && (diagnostics.hot_kv_precision_bits
+                    != Some(hardware_plan.execution.hot_kv_precision_bits)
+                    || diagnostics.cold_kv_precision_bits
+                        != Some(hardware_plan.execution.cold_kv_precision_bits))
+        })
+        .count()
 }
 
 fn has_text(value: Option<&str>) -> bool {
@@ -2308,6 +2373,7 @@ mod tests {
         assert_eq!(report.runtime_forward_energy_experience_count, 1);
         assert_eq!(report.runtime_kv_influence_experience_count, 1);
         assert_eq!(report.runtime_kv_precision_experience_count, 1);
+        assert_eq!(report.runtime_kv_precision_mismatch_count, 0);
         assert_eq!(report.runtime_device_execution_experience_count, 1);
         assert_eq!(report.runtime_kv_import_experience_count, 1);
         assert_eq!(report.runtime_kv_export_experience_count, 1);
@@ -2460,6 +2526,11 @@ mod tests {
             report
                 .summary_line()
                 .contains("runtime_kv_precision_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_precision_mismatches=0")
         );
         assert!(
             report
@@ -2638,6 +2709,7 @@ mod tests {
             min_runtime_forward_energy_experiences: Some(1),
             min_runtime_kv_influence_experiences: Some(1),
             min_runtime_kv_precision_experiences: Some(1),
+            max_runtime_kv_precision_mismatches: Some(0),
             min_runtime_device_execution_experiences: Some(1),
             min_runtime_layer_mode_experiences: Some(1),
             min_runtime_all_layer_mode_experiences: Some(1),
@@ -2699,6 +2771,7 @@ mod tests {
             min_runtime_forward_energy_experiences: Some(2),
             min_runtime_kv_influence_experiences: Some(2),
             min_runtime_kv_precision_experiences: Some(2),
+            max_runtime_kv_precision_mismatches: Some(0),
             min_runtime_device_execution_experiences: Some(2),
             min_runtime_layer_mode_experiences: Some(2),
             min_runtime_all_layer_mode_experiences: Some(2),
@@ -3143,6 +3216,83 @@ mod tests {
     }
 
     #[test]
+    fn inspection_gate_rejects_runtime_kv_precision_execution_mismatch() {
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+            DeviceClass::Embedded,
+            0.35,
+            0.00,
+            0.45,
+            0.20,
+        ));
+        engine.experience.record(ExperienceInput {
+            prompt: "inspect runtime kv precision mismatch".to_owned(),
+            profile: TaskProfile::General,
+            lesson: "persisted diagnostics must match the device execution precision".to_owned(),
+            quality: 0.88,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.50,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.50,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.34, 0.33, 0.33),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
+                model_id: Some("inspect-runtime".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                device_profile: Some("embedded".to_owned()),
+                primary_lane: Some("disk-streaming".to_owned()),
+                fallback_lane: Some("cpu-portable".to_owned()),
+                memory_mode: Some("minimal-disk".to_owned()),
+                layer_count: 4,
+                global_layers: 1,
+                local_window_layers: 2,
+                convolutional_fusion_layers: 1,
+                hidden_size: 64,
+                local_window_tokens: 512,
+                forward_energy: Some(0.24),
+                kv_influence: Some(0.36),
+                imported_kv_blocks: 1,
+                exported_kv_blocks: 1,
+                hot_kv_precision_bits: Some(8),
+                cold_kv_precision_bits: Some(4),
+            },
+            process_reward: ProcessRewardReport::default(),
+        });
+
+        let report = StateInspectionReport::from_engine(&engine, 1);
+        let gate_report = report.evaluate(&StateInspectionGate {
+            min_runtime_kv_precision_experiences: Some(1),
+            max_runtime_kv_precision_mismatches: Some(0),
+            ..StateInspectionGate::default()
+        });
+
+        assert_eq!(report.runtime_kv_precision_experience_count, 1);
+        assert_eq!(report.runtime_kv_precision_mismatch_count, 1);
+        assert!(!gate_report.passed());
+        assert!(
+            gate_report.failures.iter().any(|failure| {
+                failure == "runtime_kv_precision_mismatch_count 1 above maximum 0"
+            })
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_precision_mismatches=1")
+        );
+    }
+
+    #[test]
     fn state_inspection_matrix_gate_can_require_reflection_evidence_per_device() {
         let passing = StateInspectionGateReport {
             passed: true,
@@ -3501,6 +3651,7 @@ mod tests {
             min_runtime_forward_energy_experiences: Some(1),
             min_runtime_kv_influence_experiences: Some(1),
             min_runtime_kv_precision_experiences: Some(1),
+            max_runtime_kv_precision_mismatches: Some(0),
             min_runtime_device_execution_experiences: Some(1),
             min_runtime_layer_mode_experiences: Some(1),
             min_runtime_all_layer_mode_experiences: Some(1),
@@ -3555,6 +3706,7 @@ mod tests {
         assert_eq!(report.runtime_forward_energy_experience_count, 0);
         assert_eq!(report.runtime_kv_influence_experience_count, 0);
         assert_eq!(report.runtime_kv_precision_experience_count, 0);
+        assert_eq!(report.runtime_kv_precision_mismatch_count, 0);
         assert_eq!(report.runtime_device_execution_experience_count, 0);
         assert_eq!(report.runtime_layer_mode_experience_count, 0);
         assert_eq!(report.runtime_all_layer_mode_experience_count, 0);

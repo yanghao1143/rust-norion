@@ -270,8 +270,10 @@ modules, not external product dependencies:
   persisted runtime KV, experience, reflection diagnostics, router
   observations, and evolution-ledger counts plus router-threshold,
   hierarchy-weight, and recursive-replay evidence, along with runtime
-  model/adapter/forward-energy/KV-influence/KV-import/KV-export diagnostics and
-  live memory-feedback notes captured in persisted experiences. It should also
+  model/adapter/forward-energy/KV-influence/hot-cold KV precision/KV-import/
+  KV-export diagnostics and live memory-feedback notes captured in persisted
+  experiences. It should also fail when persisted runtime KV precision evidence
+  exists but no longer matches the current device execution plan. It should also
   expose live-inference evolution ledger gates for inference-run counts,
   router-threshold mutations and deltas, hierarchy-weight mutations and deltas,
   live KV feedback updates, durable semantic/gist/runtime-KV memory writes,
@@ -636,7 +638,10 @@ These are algorithmic references, not product dependencies:
   hierarchy-weight deltas, recursive replay item evidence, and maximum drift
   rollback deltas for router/hierarchy state. It can also require persisted
   runtime evidence in experience records: model id, selected adapter, forward
-  energy, KV influence, imported KV, and exported KV. The same inspection gate
+  energy, KV influence, hot/cold KV precision, imported KV, and exported KV.
+  It can also cap runtime KV precision mismatches against the current device
+  execution plan, so stale or wrong persisted runtime diagnostics cannot pass
+  only because the precision fields are present. The same inspection gate
   can require live-inference self-evolution evidence through
   `--inspect-min-evolution-live-*`, including online inference counts,
   router/hierarchy mutations and deltas, live memory feedback, durable memory
@@ -782,6 +787,11 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-precision-device-profiles`, so local/CI
   production sweeps can fail when a runtime stops echoing the device-specific
   hot/cold KV precision ABI across the supported device matrix.
+- State inspection also gates persisted runtime KV precision through
+  `--inspect-min-runtime-kv-precision-experiences` and
+  `--inspect-max-runtime-kv-precision-mismatches`, so local/CI checks can fail
+  when reloaded experience diagnostics disagree with the current device
+  execution plan's hot/cold KV precision policy.
 - Benchmark summaries and gates expose closed-loop reflection evidence through
   `--benchmark-min-reflection-issue-cases`,
   `--benchmark-min-reflection-issues`,
