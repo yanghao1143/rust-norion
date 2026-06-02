@@ -692,6 +692,10 @@ impl NoironEngine {
             toolsmith_plan: toolsmith_plan.clone(),
             agent_team_plan: agent_team_plan.clone(),
         });
+        let mut experience_process_reward = process_reward.clone();
+        if let Some(note) = memory_feedback_note(memory_feedback) {
+            experience_process_reward.notes.push(note);
+        }
         let experience_id = self.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),
             profile: request.profile,
@@ -710,7 +714,7 @@ impl NoironEngine {
             gist_memory_ids: stored_gist_memory_ids.clone(),
             stored_runtime_kv_memory_ids: stored_runtime_kv_memory_ids.clone(),
             runtime_diagnostics: runtime_diagnostics.clone(),
-            process_reward: process_reward.clone(),
+            process_reward: experience_process_reward,
         });
         let retention_report = self.cache.apply_retention(self.memory_retention_policy);
         let protected_memory_ids = protected_memory_ids(
@@ -1039,7 +1043,20 @@ fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         + item.critical_reflection_issue_count as f32 * 0.16
         + item.revision_action_count as f32 * 0.02;
     let runtime_bonus = runtime_kv_influence_bonus(item);
-    (item.reward + runtime_bonus - reflection_drag - item.recursive_call_pressure() * 0.25)
+    let live_feedback_bonus = item
+        .live_memory_feedback
+        .and_then(|feedback| feedback.reinforcement_average())
+        .map(|average| average.clamp(0.0, 1.0) * 0.08)
+        .unwrap_or(0.0);
+    let live_penalty_drag = item
+        .live_memory_feedback
+        .and_then(|feedback| feedback.penalty_average())
+        .map(|average| average.clamp(0.0, 1.0) * 0.12)
+        .unwrap_or(0.0);
+    (item.reward + runtime_bonus + live_feedback_bonus
+        - reflection_drag
+        - live_penalty_drag
+        - item.recursive_call_pressure() * 0.25)
         .clamp(0.05, 1.0)
 }
 
@@ -1047,7 +1064,15 @@ fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
     let reflection_pressure = item.reflection_issue_count as f32 * 0.04
         + item.critical_reflection_issue_count as f32 * 0.18
         + item.revision_action_count as f32 * 0.03;
-    (1.0 - item.reward + reflection_pressure + item.recursive_call_pressure() * 0.20)
+    let live_penalty_pressure = item
+        .live_memory_feedback
+        .and_then(|feedback| feedback.penalty_average())
+        .map(|average| average.clamp(0.0, 1.0) * 0.18)
+        .unwrap_or(0.0);
+    (1.0 - item.reward
+        + reflection_pressure
+        + live_penalty_pressure
+        + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
 }
 
@@ -1057,6 +1082,18 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
         .filter(|value| value.is_finite())
         .map(|value| value.clamp(0.0, 1.0) * 0.10)
         .unwrap_or(0.0)
+}
+
+fn memory_feedback_note(report: MemoryFeedbackReport) -> Option<String> {
+    (report.total_updates() > 0).then(|| {
+        format!(
+            "memory_feedback:reinforced={}:penalized={}:reinforcement_amount={:.6}:penalty_amount={:.6}",
+            report.reinforced,
+            report.penalized,
+            report.reinforcement_amount,
+            report.penalty_amount
+        )
+    })
 }
 
 fn used_memory_reinforcement_amount(report: &ReflectionReport) -> f32 {
@@ -1941,6 +1978,13 @@ mod tests {
         assert_eq!(outcome.memory_feedback.penalized, 1);
         assert!(outcome.memory_feedback.penalty_amount > 0.10);
         assert_eq!(outcome.memory_feedback.total_updates(), 1);
+        assert!(
+            engine.experience.records()[0]
+                .process_reward
+                .notes
+                .iter()
+                .any(|note| note.starts_with("memory_feedback:") && note.contains("penalized=1"))
+        );
         assert!(outcome.report.critical_issue_count() > 0);
         assert!(memory_strength(&engine, memory_id) < before_strength - 0.10);
     }
@@ -2612,6 +2656,80 @@ mod tests {
     }
 
     #[test]
+    fn replay_experience_uses_live_memory_feedback_notes() {
+        let mut engine = NoironEngine::new();
+        let plain_memory_id =
+            engine
+                .cache
+                .store_or_fuse("plain live feedback replay", vec![1.0, 0.0, 0.0], 0.8);
+        let live_memory_id =
+            engine
+                .cache
+                .store_or_fuse("boosted live feedback replay", vec![0.0, 1.0, 0.0], 0.8);
+        let live_penalty_memory_id =
+            engine
+                .cache
+                .store_or_fuse("penalized live feedback replay", vec![0.0, 0.0, 1.0], 0.8);
+        engine.experience.record(replay_memory_input(
+            "plain live feedback reinforcement",
+            "reinforce without online memory evidence",
+            0.80,
+            plain_memory_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            Vec::new(),
+        ));
+        engine.experience.record(replay_memory_input(
+            "boosted live feedback reinforcement",
+            "reinforce memory with online reinforcement evidence",
+            0.80,
+            live_memory_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            vec![
+                "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.900000:penalty_amount=0.000000"
+                    .to_owned(),
+            ],
+        ));
+        engine.experience.record(replay_memory_input(
+            "penalized live feedback path",
+            "penalize memory with online penalty evidence",
+            0.30,
+            live_penalty_memory_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            vec![
+                "memory_feedback:reinforced=0:penalized=1:reinforcement_amount=0.000000:penalty_amount=0.900000"
+                    .to_owned(),
+            ],
+        ));
+
+        let report = engine.replay_experience(4);
+
+        assert_eq!(report.memory_reinforcements, 2);
+        assert_eq!(report.memory_penalties, 1);
+        assert!(
+            memory_strength(&engine, live_memory_id) > memory_strength(&engine, plain_memory_id)
+        );
+        assert!(memory_strength(&engine, live_penalty_memory_id) < 0.62);
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|note| note.contains("memory_update=0.872"))
+        );
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|note| note.contains("memory_update=0.862"))
+        );
+    }
+
+    #[test]
     fn inference_tracks_tier_migrations_across_runs() {
         let mut cache = KvFusionCache::new();
         cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
@@ -3070,6 +3188,7 @@ mod tests {
                 parallel: Some(2),
                 runtime_calls: Some(runtime_calls),
             }),
+            live_memory_feedback: None,
             priority: 0.86,
             lesson: "long-context recursive replay path".to_owned(),
         }

@@ -94,6 +94,8 @@ impl ExperienceReplayPlanner {
         memory_ids.dedup();
 
         let recursive_stats = RecursiveReplayStats::from_notes(&record.process_reward.notes);
+        let live_memory_feedback =
+            LiveMemoryFeedbackStats::from_notes(&record.process_reward.notes);
 
         Some(ExperienceReplayItem {
             experience_id: record.id,
@@ -116,6 +118,7 @@ impl ExperienceReplayPlanner {
                 .and_then(|stats| stats.runtime_calls)
                 .or_else(|| recursive_runtime_calls_from_notes(&record.process_reward.notes)),
             recursive_stats,
+            live_memory_feedback,
             priority,
             lesson: record.lesson.clone(),
         })
@@ -160,6 +163,7 @@ pub struct ExperienceReplayItem {
     pub runtime_diagnostics: RuntimeDiagnostics,
     pub recursive_runtime_calls: Option<usize>,
     pub recursive_stats: Option<RecursiveReplayStats>,
+    pub live_memory_feedback: Option<LiveMemoryFeedbackStats>,
     pub priority: f32,
     pub lesson: String,
 }
@@ -176,6 +180,65 @@ impl ExperienceReplayItem {
             self.route_token_count(),
         )
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LiveMemoryFeedbackStats {
+    pub reinforced: usize,
+    pub penalized: usize,
+    pub reinforcement_amount: f32,
+    pub penalty_amount: f32,
+}
+
+impl LiveMemoryFeedbackStats {
+    pub fn from_notes(notes: &[String]) -> Option<Self> {
+        notes
+            .iter()
+            .filter(|note| note.starts_with("memory_feedback:"))
+            .find_map(|note| {
+                let stats = Self {
+                    reinforced: memory_feedback_note_usize(note, "reinforced=").unwrap_or(0),
+                    penalized: memory_feedback_note_usize(note, "penalized=").unwrap_or(0),
+                    reinforcement_amount: memory_feedback_note_f32(note, "reinforcement_amount=")
+                        .unwrap_or(0.0),
+                    penalty_amount: memory_feedback_note_f32(note, "penalty_amount=")
+                        .unwrap_or(0.0),
+                };
+
+                stats.has_updates().then_some(stats)
+            })
+    }
+
+    pub fn updates(&self) -> usize {
+        self.reinforced + self.penalized
+    }
+
+    pub fn reinforcement_average(&self) -> Option<f32> {
+        (self.reinforced > 0).then(|| self.reinforcement_amount / self.reinforced as f32)
+    }
+
+    pub fn penalty_average(&self) -> Option<f32> {
+        (self.penalized > 0).then(|| self.penalty_amount / self.penalized as f32)
+    }
+
+    fn has_updates(&self) -> bool {
+        self.updates() > 0
+            && self.reinforcement_amount.is_finite()
+            && self.penalty_amount.is_finite()
+    }
+}
+
+fn memory_feedback_note_usize(note: &str, key: &str) -> Option<usize> {
+    note.split(':')
+        .find_map(|part| part.strip_prefix(key))
+        .and_then(|value| value.parse::<usize>().ok())
+}
+
+fn memory_feedback_note_f32(note: &str, key: &str) -> Option<f32> {
+    note.split(':')
+        .find_map(|part| part.strip_prefix(key))
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -415,6 +478,15 @@ mod tests {
         assert_eq!(penalized.critical_reflection_issue_count, 1);
         assert_eq!(penalized.revision_action_count, 1);
         assert_eq!(
+            reinforced.live_memory_feedback,
+            Some(LiveMemoryFeedbackStats {
+                reinforced: 2,
+                penalized: 0,
+                reinforcement_amount: 1.2,
+                penalty_amount: 0.0,
+            })
+        );
+        assert_eq!(
             reinforced.recursive_stats,
             Some(RecursiveReplayStats {
                 chunks: Some(4),
@@ -553,6 +625,8 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: vec![
                     "recursive:chunks=4:merge_rounds=2:waves=2:parallel=2:runtime_calls=7"
+                        .to_owned(),
+                    "memory_feedback:reinforced=2:penalized=0:reinforcement_amount=1.200000:penalty_amount=0.000000"
                         .to_owned(),
                 ],
             },

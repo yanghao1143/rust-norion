@@ -401,13 +401,14 @@ These are algorithmic references, not product dependencies:
   drift checks, router/hierarchy adaptation, process rewards, and experience
   replay instead of remaining limited to token-window monitoring;
   experience records now persist route budgets plus used/stored/gist/runtime-KV
-  memory ids, structured reflection issues, and revision actions for replay;
+  memory ids, live memory-feedback notes, structured reflection issues, and revision actions for replay;
   recursive runtime call costs now feed replay metrics so expensive successful
   long-context paths are weaker control-plane exemplars than efficient ones,
-  runtime KV influence now increases useful replay memory reinforcement, and
-  critical reflection issues plus revision actions increase replay penalties or
-  dampen reinforcement so diagnostics change actual KV memory strength instead
-  of only appearing in reports;
+  runtime KV influence and persisted live memory-feedback notes now increase
+  useful replay memory reinforcement, while critical reflection issues,
+  revision actions, live penalty feedback, and recursive cost increase replay
+  penalties or dampen reinforcement so diagnostics change actual KV memory
+  strength instead of only appearing in reports;
   and replay summaries/traces expose recursive call pressure for regression
   checks; benchmark gates can now require auto-replay recursive coverage and
   enforce replay recursive call pressure floors and ceilings; replay reports,

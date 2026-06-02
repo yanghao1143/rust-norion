@@ -873,6 +873,13 @@ mod tests {
         assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
         assert_eq!(loaded.records()[0].used_memory_ids, vec![3, 5]);
         assert_eq!(loaded.records()[0].stored_runtime_kv_memory_ids, vec![11]);
+        assert!(
+            loaded.records()[0]
+                .process_reward
+                .notes
+                .iter()
+                .any(|note| note.starts_with("memory_feedback:"))
+        );
         assert_eq!(
             loaded.records()[0].runtime_diagnostics.model_id.as_deref(),
             Some("noiron-test-runtime")
@@ -1057,7 +1064,13 @@ mod tests {
                 imported_kv_blocks: 1,
                 exported_kv_blocks: 2,
             },
-            process_reward: ProcessRewardReport::default(),
+            process_reward: ProcessRewardReport {
+                notes: vec![
+                    "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.820000:penalty_amount=0.000000"
+                        .to_owned(),
+                ],
+                ..ProcessRewardReport::default()
+            },
         }
     }
 
