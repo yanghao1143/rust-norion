@@ -5294,6 +5294,9 @@ impl Args {
             min_evolution_live_hierarchy_weight_delta: self
                 .inspect_min_evolution_live_hierarchy_weight_delta
                 .map(|value| value.max(0.0)),
+            min_evolution_live_online_reward_feedbacks: None,
+            min_evolution_live_online_reward_reinforcements: None,
+            min_evolution_live_online_reward_penalties: None,
             min_evolution_live_memory_updates: self.inspect_min_evolution_live_memory_updates,
             min_evolution_live_stored_memory_updates: self
                 .inspect_min_evolution_live_stored_memory_updates,
@@ -5325,6 +5328,9 @@ impl Args {
                 .map(|value| value.max(0.0)),
             min_evolution_replay_live_evolution_items: self
                 .inspect_min_evolution_replay_live_evolution_items,
+            min_evolution_replay_live_evolution_online_reward_feedbacks: None,
+            min_evolution_replay_live_evolution_online_reward_reinforcements: None,
+            min_evolution_replay_live_evolution_online_reward_penalties: None,
             min_evolution_replay_live_evolution_memory_updates: self
                 .inspect_min_evolution_replay_live_evolution_memory_updates,
             min_evolution_replay_live_evolution_stored_memory_updates: self
@@ -5392,6 +5398,7 @@ impl Args {
                 .inspect_min_evolution_live_router_threshold_mutation_device_profiles,
             min_evolution_live_hierarchy_weight_mutation_device_profiles: self
                 .inspect_min_evolution_live_hierarchy_weight_mutation_device_profiles,
+            min_evolution_live_online_reward_device_profiles: None,
             min_evolution_live_memory_update_device_profiles: self
                 .inspect_min_evolution_live_memory_update_device_profiles,
             min_evolution_live_stored_memory_update_device_profiles: self
@@ -5418,6 +5425,7 @@ impl Args {
                 .inspect_min_evolution_replay_live_memory_feedback_detail_device_profiles,
             min_evolution_replay_live_evolution_device_profiles: self
                 .inspect_min_evolution_replay_live_evolution_device_profiles,
+            min_evolution_replay_live_evolution_online_reward_device_profiles: None,
             min_evolution_replay_live_evolution_memory_update_device_profiles: self
                 .inspect_min_evolution_replay_live_evolution_memory_update_device_profiles,
             min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles: self

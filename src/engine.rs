@@ -853,12 +853,21 @@ impl NoironEngine {
             toolsmith_plan: toolsmith_plan.clone(),
             agent_team_plan: agent_team_plan.clone(),
         });
+        let mut online_reward_feedbacks = 0;
+        let mut online_reward_reinforcements = 0;
+        let mut online_reward_penalties = 0;
         if let Some(reward_metrics) =
             process_reward_feedback_metrics(&process_reward, metrics, &report, &drift_report)
         {
             self.router
                 .observe_with_profile(request.profile, reward_metrics);
             hierarchy = self.hierarchy.observe(request.profile, reward_metrics);
+            online_reward_feedbacks = 1;
+            match process_reward.action {
+                RewardAction::Reinforce => online_reward_reinforcements = 1,
+                RewardAction::Penalize => online_reward_penalties = 1,
+                RewardAction::Hold => {}
+            }
             let feedback_note = process_reward_feedback_note(&process_reward, reward_metrics);
             process_reward.notes.push(feedback_note);
         }
@@ -884,6 +893,9 @@ impl NoironEngine {
         let live_evolution = LiveInferenceEvolution {
             router_threshold_delta: live_router_threshold_delta,
             hierarchy_weight_delta: live_hierarchy_weight_delta,
+            online_reward_feedbacks,
+            online_reward_reinforcements,
+            online_reward_penalties,
             memory_reinforcements: memory_feedback.reinforced,
             memory_penalties: memory_feedback.penalized,
             stored_memory: stored_memory_id.is_some(),
@@ -2621,6 +2633,15 @@ mod tests {
         assert!(outcome.router_threshold_after < threshold_before);
         assert!(outcome.live_evolution.router_threshold_delta > 0.0);
         assert!(outcome.live_evolution.hierarchy_weight_delta > 0.0);
+        assert_eq!(outcome.live_evolution.online_reward_feedbacks, 1);
+        assert_eq!(outcome.live_evolution.online_reward_reinforcements, 0);
+        assert_eq!(outcome.live_evolution.online_reward_penalties, 1);
+        assert_eq!(outcome.evolution_ledger.live_online_reward_feedbacks, 1);
+        assert_eq!(
+            outcome.evolution_ledger.live_online_reward_reinforcements,
+            0
+        );
+        assert_eq!(outcome.evolution_ledger.live_online_reward_penalties, 1);
         assert_eq!(
             engine.router.observations(),
             outcome.stream_reports.len() as u64 + 2
@@ -2683,6 +2704,8 @@ mod tests {
         assert!(outcome.stored_memory_id.is_none());
         assert_eq!(outcome.live_evolution.router_threshold_delta, 0.0);
         assert_eq!(outcome.live_evolution.hierarchy_weight_delta, 0.0);
+        assert_eq!(outcome.live_evolution.online_reward_feedbacks, 0);
+        assert_eq!(outcome.evolution_ledger.live_online_reward_feedbacks, 0);
         assert!(
             !outcome
                 .process_reward
@@ -3417,6 +3440,9 @@ mod tests {
                 LiveInferenceEvolution {
                     router_threshold_delta: 0.18,
                     hierarchy_weight_delta: 0.08,
+                    online_reward_feedbacks: 1,
+                    online_reward_reinforcements: 1,
+                    online_reward_penalties: 0,
                     memory_reinforcements: 3,
                     memory_penalties: 0,
                     stored_memory: true,
@@ -3447,6 +3473,9 @@ mod tests {
                 LiveInferenceEvolution {
                     router_threshold_delta: 0.0,
                     hierarchy_weight_delta: 0.0,
+                    online_reward_feedbacks: 1,
+                    online_reward_reinforcements: 0,
+                    online_reward_penalties: 1,
                     memory_reinforcements: 0,
                     memory_penalties: 3,
                     stored_memory: false,

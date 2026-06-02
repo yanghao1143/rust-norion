@@ -248,16 +248,20 @@ modules, not external product dependencies:
   KV reads, hierarchy weights, latency, structured issue severity, revision
   actions, contradictions, and memory admission. Process rewards should feed
   the live adaptive router/hierarchy loop during the same inference when drift
-  gates allow it, then persist the same evidence for later replay.
+  gates allow it, then persist the same evidence for later replay. Online
+  reward feedback must be counted as structured live-evolution evidence, split
+  into reinforcement and penalty components, and carried into traces, state
+  inspection, replay reports, and the cumulative evolution ledger.
 - Experience replay:
   the experience store should become replayable training data for the control
   plane state while leaving model weights untouched. Records should preserve
   route budgets, used KV memory ids, gist memory ids, runtime-KV memory ids,
-  structured live-inference evolution evidence, structured reflection issues,
-  and revision actions so replay can reinforce or penalize the actual memory
-  and reasoning path used by an answer. Replay reports and the cumulative
-  evolution ledger should record when that structured live-evolution evidence is
-  consumed, so self-evolution can be audited beyond text notes.
+  structured live-inference evolution evidence, online reward feedback,
+  structured reflection issues, and revision actions so replay can reinforce or
+  penalize the actual memory and reasoning path used by an answer. Replay
+  reports and the cumulative evolution ledger should record when that
+  structured live-evolution evidence is consumed, so self-evolution can be
+  audited beyond text notes.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated

@@ -434,6 +434,9 @@ pub struct ExperienceReplayReport {
     pub live_evolution_hierarchy_weight_mutations: usize,
     pub live_evolution_router_threshold_delta: f32,
     pub live_evolution_hierarchy_weight_delta: f32,
+    pub live_evolution_online_reward_feedbacks: usize,
+    pub live_evolution_online_reward_reinforcements: usize,
+    pub live_evolution_online_reward_penalties: usize,
     pub live_evolution_memory_updates: usize,
     pub live_evolution_stored_memory_updates: usize,
     pub live_evolution_reflection_issues: usize,
@@ -548,6 +551,21 @@ impl ExperienceReplayReport {
             .iter()
             .map(|item| item.live_evolution.hierarchy_weight_delta.max(0.0))
             .sum();
+        let live_evolution_online_reward_feedbacks = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.online_reward_feedbacks)
+            .sum();
+        let live_evolution_online_reward_reinforcements = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.online_reward_reinforcements)
+            .sum();
+        let live_evolution_online_reward_penalties = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.online_reward_penalties)
+            .sum();
         let live_evolution_memory_updates = plan
             .items
             .iter()
@@ -595,6 +613,9 @@ impl ExperienceReplayReport {
             live_evolution_hierarchy_weight_mutations,
             live_evolution_router_threshold_delta,
             live_evolution_hierarchy_weight_delta,
+            live_evolution_online_reward_feedbacks,
+            live_evolution_online_reward_reinforcements,
+            live_evolution_online_reward_penalties,
             live_evolution_memory_updates,
             live_evolution_stored_memory_updates,
             live_evolution_reflection_issues,
@@ -606,7 +627,7 @@ impl ExperienceReplayReport {
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_detail_items={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} live_evolution_items={} live_evolution_router_threshold_mutations={} live_evolution_hierarchy_weight_mutations={} live_evolution_router_threshold_delta={:.6} live_evolution_hierarchy_weight_delta={:.6} live_evolution_memory_updates={} live_evolution_stored_memory_updates={} live_evolution_reflection_issues={} live_evolution_critical_reflection_issues={} live_evolution_revision_actions={}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_detail_items={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} live_evolution_items={} live_evolution_router_threshold_mutations={} live_evolution_hierarchy_weight_mutations={} live_evolution_router_threshold_delta={:.6} live_evolution_hierarchy_weight_delta={:.6} live_evolution_online_reward_feedbacks={} live_evolution_online_reward_reinforcements={} live_evolution_online_reward_penalties={} live_evolution_memory_updates={} live_evolution_stored_memory_updates={} live_evolution_reflection_issues={} live_evolution_critical_reflection_issues={} live_evolution_revision_actions={}",
             self.planned,
             self.applied,
             self.router_updates,
@@ -643,6 +664,9 @@ impl ExperienceReplayReport {
             self.live_evolution_hierarchy_weight_mutations,
             self.live_evolution_router_threshold_delta,
             self.live_evolution_hierarchy_weight_delta,
+            self.live_evolution_online_reward_feedbacks,
+            self.live_evolution_online_reward_reinforcements,
+            self.live_evolution_online_reward_penalties,
             self.live_evolution_memory_updates,
             self.live_evolution_stored_memory_updates,
             self.live_evolution_reflection_issues,
@@ -945,6 +969,9 @@ mod tests {
             live_evolution: LiveInferenceEvolution {
                 router_threshold_delta: 0.02,
                 hierarchy_weight_delta: 0.03,
+                online_reward_feedbacks: 1,
+                online_reward_reinforcements: usize::from(action == RewardAction::Reinforce),
+                online_reward_penalties: usize::from(action == RewardAction::Penalize),
                 memory_reinforcements: 2,
                 memory_penalties: 0,
                 stored_memory: true,
@@ -1009,12 +1036,20 @@ mod tests {
         assert_eq!(report.live_evolution_hierarchy_weight_mutations, 2);
         assert!((report.live_evolution_router_threshold_delta - 0.04).abs() < 0.0001);
         assert!((report.live_evolution_hierarchy_weight_delta - 0.06).abs() < 0.0001);
+        assert_eq!(report.live_evolution_online_reward_feedbacks, 2);
+        assert_eq!(report.live_evolution_online_reward_reinforcements, 1);
+        assert_eq!(report.live_evolution_online_reward_penalties, 1);
         assert_eq!(report.live_evolution_memory_updates, 4);
         assert_eq!(report.live_evolution_stored_memory_updates, 6);
         assert_eq!(report.live_evolution_reflection_issues, 1);
         assert_eq!(report.live_evolution_critical_reflection_issues, 1);
         assert_eq!(report.live_evolution_revision_actions, 1);
         assert!(report.summary().contains("live_evolution_items=2"));
+        assert!(
+            report
+                .summary()
+                .contains("live_evolution_online_reward_feedbacks=2")
+        );
         assert!(report.summary().contains("live_evolution_memory_updates=4"));
     }
 

@@ -560,6 +560,9 @@ fn serialize_live_evolution(report: LiveInferenceEvolution) -> String {
     [
         finite_f32_to_field(report.router_threshold_delta),
         finite_f32_to_field(report.hierarchy_weight_delta),
+        report.online_reward_feedbacks.to_string(),
+        report.online_reward_reinforcements.to_string(),
+        report.online_reward_penalties.to_string(),
         report.memory_reinforcements.to_string(),
         report.memory_penalties.to_string(),
         bool_to_field(report.stored_memory).to_owned(),
@@ -578,21 +581,38 @@ fn deserialize_live_evolution(value: &str) -> Option<LiveInferenceEvolution> {
     }
 
     let fields = value.split(',').collect::<Vec<_>>();
-    if fields.len() != 10 {
+    if fields.len() != 10 && fields.len() != 13 {
         return None;
     }
+    let has_online_reward_feedback = fields.len() == 13;
+    let memory_index = if has_online_reward_feedback { 5 } else { 2 };
 
     Some(LiveInferenceEvolution {
         router_threshold_delta: field_to_finite_f32(fields[0])?.max(0.0),
         hierarchy_weight_delta: field_to_finite_f32(fields[1])?.max(0.0),
-        memory_reinforcements: fields[2].parse::<usize>().ok()?,
-        memory_penalties: fields[3].parse::<usize>().ok()?,
-        stored_memory: field_to_bool(fields[4])?,
-        stored_gist_memories: fields[5].parse::<usize>().ok()?,
-        stored_runtime_kv_memories: fields[6].parse::<usize>().ok()?,
-        reflection_issues: fields[7].parse::<usize>().ok()?,
-        critical_reflection_issues: fields[8].parse::<usize>().ok()?,
-        revision_actions: fields[9].parse::<usize>().ok()?,
+        online_reward_feedbacks: if has_online_reward_feedback {
+            fields[2].parse::<usize>().ok()?
+        } else {
+            0
+        },
+        online_reward_reinforcements: if has_online_reward_feedback {
+            fields[3].parse::<usize>().ok()?
+        } else {
+            0
+        },
+        online_reward_penalties: if has_online_reward_feedback {
+            fields[4].parse::<usize>().ok()?
+        } else {
+            0
+        },
+        memory_reinforcements: fields[memory_index].parse::<usize>().ok()?,
+        memory_penalties: fields[memory_index + 1].parse::<usize>().ok()?,
+        stored_memory: field_to_bool(fields[memory_index + 2])?,
+        stored_gist_memories: fields[memory_index + 3].parse::<usize>().ok()?,
+        stored_runtime_kv_memories: fields[memory_index + 4].parse::<usize>().ok()?,
+        reflection_issues: fields[memory_index + 5].parse::<usize>().ok()?,
+        critical_reflection_issues: fields[memory_index + 6].parse::<usize>().ok()?,
+        revision_actions: fields[memory_index + 7].parse::<usize>().ok()?,
     })
 }
 
@@ -1232,6 +1252,20 @@ mod tests {
         assert!(
             (loaded.records()[0].live_evolution.hierarchy_weight_delta - 0.040000).abs() < 0.0001
         );
+        assert_eq!(
+            loaded.records()[0].live_evolution.online_reward_feedbacks,
+            1
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .live_evolution
+                .online_reward_reinforcements,
+            1
+        );
+        assert_eq!(
+            loaded.records()[0].live_evolution.online_reward_penalties,
+            0
+        );
         assert_eq!(loaded.records()[0].live_evolution.memory_reinforcements, 1);
         assert_eq!(loaded.records()[0].live_evolution.memory_penalties, 0);
         assert!(loaded.records()[0].live_evolution.stored_memory);
@@ -1251,6 +1285,18 @@ mod tests {
         );
         assert_eq!(loaded.records()[0].live_evolution.revision_actions, 1);
         cleanup(path);
+    }
+
+    #[test]
+    fn legacy_live_evolution_without_online_reward_feedback_loads_defaults() {
+        let loaded = deserialize_live_evolution("0.030000,0.040000,1,0,1,2,1,1,0,1").unwrap();
+
+        assert_eq!(loaded.online_reward_feedbacks, 0);
+        assert_eq!(loaded.online_reward_reinforcements, 0);
+        assert_eq!(loaded.online_reward_penalties, 0);
+        assert_eq!(loaded.memory_reinforcements, 1);
+        assert_eq!(loaded.stored_gist_memories, 2);
+        assert_eq!(loaded.revision_actions, 1);
     }
 
     #[test]
@@ -1503,6 +1549,9 @@ mod tests {
             live_evolution: LiveInferenceEvolution {
                 router_threshold_delta: 0.03,
                 hierarchy_weight_delta: 0.04,
+                online_reward_feedbacks: 1,
+                online_reward_reinforcements: 1,
+                online_reward_penalties: 0,
                 memory_reinforcements: 1,
                 memory_penalties: 0,
                 stored_memory: true,

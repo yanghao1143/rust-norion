@@ -61,6 +61,9 @@ pub struct StateExperienceSummary {
     pub runtime_imported_kv_blocks: usize,
     pub runtime_exported_kv_blocks: usize,
     pub recursive_runtime_calls: Option<usize>,
+    pub live_online_reward_feedbacks: usize,
+    pub live_online_reward_reinforcements: usize,
+    pub live_online_reward_penalties: usize,
     pub live_memory_feedback_updates: usize,
     pub live_memory_feedback_reinforced: usize,
     pub live_memory_feedback_penalized: usize,
@@ -113,6 +116,9 @@ pub struct StateInspectionGate {
     pub min_evolution_live_hierarchy_weight_mutations: Option<u64>,
     pub min_evolution_live_router_threshold_delta: Option<f32>,
     pub min_evolution_live_hierarchy_weight_delta: Option<f32>,
+    pub min_evolution_live_online_reward_feedbacks: Option<u64>,
+    pub min_evolution_live_online_reward_reinforcements: Option<u64>,
+    pub min_evolution_live_online_reward_penalties: Option<u64>,
     pub min_evolution_live_memory_updates: Option<u64>,
     pub min_evolution_live_stored_memory_updates: Option<u64>,
     pub min_evolution_live_reflection_issues: Option<u64>,
@@ -130,6 +136,9 @@ pub struct StateInspectionGate {
     pub min_evolution_replay_live_memory_feedback_applied: Option<u64>,
     pub min_evolution_replay_live_memory_feedback_strength_delta: Option<f32>,
     pub min_evolution_replay_live_evolution_items: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_feedbacks: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_reinforcements: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_penalties: Option<u64>,
     pub min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
@@ -168,6 +177,7 @@ pub struct StateInspectionMatrixGate {
     pub min_evolution_live_inference_device_profiles: Option<usize>,
     pub min_evolution_live_router_threshold_mutation_device_profiles: Option<usize>,
     pub min_evolution_live_hierarchy_weight_mutation_device_profiles: Option<usize>,
+    pub min_evolution_live_online_reward_device_profiles: Option<usize>,
     pub min_evolution_live_memory_update_device_profiles: Option<usize>,
     pub min_evolution_live_stored_memory_update_device_profiles: Option<usize>,
     pub min_evolution_live_reflection_issue_device_profiles: Option<usize>,
@@ -181,6 +191,7 @@ pub struct StateInspectionMatrixGate {
     pub min_evolution_replay_live_memory_feedback_device_profiles: Option<usize>,
     pub min_evolution_replay_live_memory_feedback_detail_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_device_profiles: Option<usize>,
+    pub min_evolution_replay_live_evolution_online_reward_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_memory_update_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles:
         Option<usize>,
@@ -243,6 +254,9 @@ pub struct StateInspectionDeviceGateReport {
     pub evolution_live_inference_runs: u64,
     pub evolution_live_router_threshold_mutations: u64,
     pub evolution_live_hierarchy_weight_mutations: u64,
+    pub evolution_live_online_reward_feedbacks: u64,
+    pub evolution_live_online_reward_reinforcements: u64,
+    pub evolution_live_online_reward_penalties: u64,
     pub evolution_live_memory_updates: u64,
     pub evolution_live_stored_memory_updates: u64,
     pub evolution_live_reflection_issues: u64,
@@ -260,6 +274,9 @@ pub struct StateInspectionDeviceGateReport {
     pub evolution_replay_live_memory_feedback_missing: u64,
     pub evolution_replay_live_memory_feedback_strength_delta: f32,
     pub evolution_replay_live_evolution_items: u64,
+    pub evolution_replay_live_evolution_online_reward_feedbacks: u64,
+    pub evolution_replay_live_evolution_online_reward_reinforcements: u64,
+    pub evolution_replay_live_evolution_online_reward_penalties: u64,
     pub evolution_replay_live_evolution_memory_updates: u64,
     pub evolution_replay_live_evolution_stored_memory_updates: u64,
     pub evolution_replay_live_evolution_reflection_issues: u64,
@@ -304,6 +321,9 @@ impl StateInspectionDeviceGateReport {
             evolution_live_inference_runs: 0,
             evolution_live_router_threshold_mutations: 0,
             evolution_live_hierarchy_weight_mutations: 0,
+            evolution_live_online_reward_feedbacks: 0,
+            evolution_live_online_reward_reinforcements: 0,
+            evolution_live_online_reward_penalties: 0,
             evolution_live_memory_updates: 0,
             evolution_live_stored_memory_updates: 0,
             evolution_live_reflection_issues: 0,
@@ -321,6 +341,9 @@ impl StateInspectionDeviceGateReport {
             evolution_replay_live_memory_feedback_missing: 0,
             evolution_replay_live_memory_feedback_strength_delta: 0.0,
             evolution_replay_live_evolution_items: 0,
+            evolution_replay_live_evolution_online_reward_feedbacks: 0,
+            evolution_replay_live_evolution_online_reward_reinforcements: 0,
+            evolution_replay_live_evolution_online_reward_penalties: 0,
             evolution_replay_live_evolution_memory_updates: 0,
             evolution_replay_live_evolution_stored_memory_updates: 0,
             evolution_replay_live_evolution_reflection_issues: 0,
@@ -377,6 +400,15 @@ impl StateInspectionDeviceGateReport {
             evolution_live_hierarchy_weight_mutations: inspection
                 .evolution_ledger
                 .live_hierarchy_weight_mutations,
+            evolution_live_online_reward_feedbacks: inspection
+                .evolution_ledger
+                .live_online_reward_feedbacks,
+            evolution_live_online_reward_reinforcements: inspection
+                .evolution_ledger
+                .live_online_reward_reinforcements,
+            evolution_live_online_reward_penalties: inspection
+                .evolution_ledger
+                .live_online_reward_penalties,
             evolution_live_memory_updates: inspection.evolution_ledger.live_memory_updates(),
             evolution_live_stored_memory_updates: inspection
                 .evolution_ledger
@@ -416,6 +448,15 @@ impl StateInspectionDeviceGateReport {
             evolution_replay_live_evolution_items: inspection
                 .evolution_ledger
                 .replay_live_evolution_items,
+            evolution_replay_live_evolution_online_reward_feedbacks: inspection
+                .evolution_ledger
+                .replay_live_evolution_online_reward_feedbacks,
+            evolution_replay_live_evolution_online_reward_reinforcements: inspection
+                .evolution_ledger
+                .replay_live_evolution_online_reward_reinforcements,
+            evolution_replay_live_evolution_online_reward_penalties: inspection
+                .evolution_ledger
+                .replay_live_evolution_online_reward_penalties,
             evolution_replay_live_evolution_memory_updates: inspection
                 .evolution_ledger
                 .replay_live_evolution_memory_updates,
@@ -572,6 +613,18 @@ impl StateInspectionDeviceGateReport {
         self
     }
 
+    pub fn with_live_evolution_online_reward_evidence(
+        mut self,
+        feedbacks: u64,
+        reinforcements: u64,
+        penalties: u64,
+    ) -> Self {
+        self.evolution_live_online_reward_feedbacks = feedbacks;
+        self.evolution_live_online_reward_reinforcements = reinforcements;
+        self.evolution_live_online_reward_penalties = penalties;
+        self
+    }
+
     pub fn with_evolution_evidence(
         mut self,
         replay_runs: u64,
@@ -626,6 +679,18 @@ impl StateInspectionDeviceGateReport {
         self.evolution_replay_live_evolution_critical_reflection_issues =
             critical_reflection_issues;
         self.evolution_replay_live_evolution_revision_actions = revision_actions;
+        self
+    }
+
+    pub fn with_evolution_replay_live_evolution_online_reward_evidence(
+        mut self,
+        feedbacks: u64,
+        reinforcements: u64,
+        penalties: u64,
+    ) -> Self {
+        self.evolution_replay_live_evolution_online_reward_feedbacks = feedbacks;
+        self.evolution_replay_live_evolution_online_reward_reinforcements = reinforcements;
+        self.evolution_replay_live_evolution_online_reward_penalties = penalties;
         self
     }
 }
@@ -816,6 +881,12 @@ impl StateInspectionMatrixGateReport {
         );
         require_min_device_profiles(
             &mut failures,
+            "evolution_live_online_reward_device_profiles",
+            evolution_live_online_reward_device_profiles(&device_reports),
+            gate.min_evolution_live_online_reward_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "evolution_live_memory_update_device_profiles",
             evolution_live_memory_update_device_profiles(&device_reports),
             gate.min_evolution_live_memory_update_device_profiles,
@@ -891,6 +962,12 @@ impl StateInspectionMatrixGateReport {
             "evolution_replay_live_evolution_device_profiles",
             evolution_replay_live_evolution_device_profiles(&device_reports),
             gate.min_evolution_replay_live_evolution_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "evolution_replay_live_evolution_online_reward_device_profiles",
+            evolution_replay_live_evolution_online_reward_device_profiles(&device_reports),
+            gate.min_evolution_replay_live_evolution_online_reward_device_profiles,
         );
         require_min_device_profiles(
             &mut failures,
@@ -1044,6 +1121,10 @@ impl StateInspectionMatrixGateReport {
         evolution_live_hierarchy_weight_mutation_device_profiles(&self.device_reports)
     }
 
+    pub fn evolution_live_online_reward_device_profiles(&self) -> usize {
+        evolution_live_online_reward_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_live_memory_update_device_profiles(&self) -> usize {
         evolution_live_memory_update_device_profiles(&self.device_reports)
     }
@@ -1096,6 +1177,10 @@ impl StateInspectionMatrixGateReport {
         evolution_replay_live_evolution_device_profiles(&self.device_reports)
     }
 
+    pub fn evolution_replay_live_evolution_online_reward_device_profiles(&self) -> usize {
+        evolution_replay_live_evolution_online_reward_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_replay_live_evolution_memory_update_device_profiles(&self) -> usize {
         evolution_replay_live_evolution_memory_update_device_profiles(&self.device_reports)
     }
@@ -1122,7 +1207,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_uncertainty_device_profiles={} runtime_uncertainty_token_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} runtime_kv_hold_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_uncertainty_device_profiles={} runtime_uncertainty_token_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} runtime_kv_hold_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_online_reward_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_online_reward_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -1150,6 +1235,7 @@ impl StateInspectionMatrixGateReport {
             self.evolution_live_inference_device_profiles(),
             self.evolution_live_router_threshold_mutation_device_profiles(),
             self.evolution_live_hierarchy_weight_mutation_device_profiles(),
+            self.evolution_live_online_reward_device_profiles(),
             self.evolution_live_memory_update_device_profiles(),
             self.evolution_live_stored_memory_update_device_profiles(),
             self.evolution_live_reflection_issue_device_profiles(),
@@ -1163,6 +1249,7 @@ impl StateInspectionMatrixGateReport {
             self.evolution_replay_live_memory_feedback_device_profiles(),
             self.evolution_replay_live_memory_feedback_detail_device_profiles(),
             self.evolution_replay_live_evolution_device_profiles(),
+            self.evolution_replay_live_evolution_online_reward_device_profiles(),
             self.evolution_replay_live_evolution_memory_update_device_profiles(),
             self.evolution_replay_live_evolution_critical_reflection_issue_device_profiles(),
             self.evolution_replay_live_evolution_revision_action_device_profiles(),
@@ -1362,6 +1449,18 @@ fn evolution_live_hierarchy_weight_mutation_device_profiles(
     })
 }
 
+fn evolution_live_online_reward_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.evolution_live_online_reward_feedbacks > 0
+            && device_report.evolution_live_online_reward_feedbacks
+                == device_report
+                    .evolution_live_online_reward_reinforcements
+                    .saturating_add(device_report.evolution_live_online_reward_penalties)
+    })
+}
+
 fn evolution_live_memory_update_device_profiles(
     device_reports: &[StateInspectionDeviceGateReport],
 ) -> usize {
@@ -1473,6 +1572,20 @@ fn evolution_replay_live_evolution_device_profiles(
 ) -> usize {
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.evolution_replay_live_evolution_items > 0
+    })
+}
+
+fn evolution_replay_live_evolution_online_reward_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.evolution_replay_live_evolution_online_reward_feedbacks > 0
+            && device_report.evolution_replay_live_evolution_online_reward_feedbacks
+                == device_report
+                    .evolution_replay_live_evolution_online_reward_reinforcements
+                    .saturating_add(
+                        device_report.evolution_replay_live_evolution_online_reward_penalties,
+                    )
     })
 }
 
@@ -1860,6 +1973,11 @@ impl StateInspectionReport {
                     recursive_runtime_calls: recursive_runtime_calls_from_notes(
                         &record.process_reward.notes,
                     ),
+                    live_online_reward_feedbacks: record.live_evolution.online_reward_feedbacks,
+                    live_online_reward_reinforcements: record
+                        .live_evolution
+                        .online_reward_reinforcements,
+                    live_online_reward_penalties: record.live_evolution.online_reward_penalties,
                     live_memory_feedback_updates: live_memory_feedback
                         .map(|stats| stats.updates())
                         .unwrap_or(0),
@@ -1957,7 +2075,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_adapter_selection_mismatches={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_uncertainty_experiences={} runtime_uncertainty_tokens={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} runtime_kv_hold_experiences={} runtime_kv_held_blocks={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_adapter_selection_mismatches={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_uncertainty_experiences={} runtime_uncertainty_tokens={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} runtime_kv_hold_experiences={} runtime_kv_held_blocks={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_online_reward_feedbacks={} evolution_live_online_reward_reinforcements={} evolution_live_online_reward_penalties={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_online_reward_feedbacks={} evolution_replay_live_evolution_online_reward_reinforcements={} evolution_replay_live_evolution_online_reward_penalties={} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -2011,6 +2129,9 @@ impl StateInspectionReport {
             self.evolution_ledger.live_hierarchy_weight_mutations,
             self.evolution_ledger.live_router_threshold_delta,
             self.evolution_ledger.live_hierarchy_weight_delta,
+            self.evolution_ledger.live_online_reward_feedbacks,
+            self.evolution_ledger.live_online_reward_reinforcements,
+            self.evolution_ledger.live_online_reward_penalties,
             self.evolution_ledger.live_memory_updates(),
             self.evolution_ledger.live_stored_memory_updates(),
             self.evolution_ledger.live_reflection_issues,
@@ -2044,6 +2165,12 @@ impl StateInspectionReport {
                 .replay_live_evolution_router_threshold_delta,
             self.evolution_ledger
                 .replay_live_evolution_hierarchy_weight_delta,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_feedbacks,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_reinforcements,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_penalties,
             self.evolution_ledger.replay_live_evolution_memory_updates,
             self.evolution_ledger
                 .replay_live_evolution_stored_memory_updates,
@@ -2283,6 +2410,24 @@ impl StateInspectionReport {
         );
         require_min_u64(
             &mut failures,
+            "evolution_live_online_reward_feedbacks",
+            self.evolution_ledger.live_online_reward_feedbacks,
+            gate.min_evolution_live_online_reward_feedbacks,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_live_online_reward_reinforcements",
+            self.evolution_ledger.live_online_reward_reinforcements,
+            gate.min_evolution_live_online_reward_reinforcements,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_live_online_reward_penalties",
+            self.evolution_ledger.live_online_reward_penalties,
+            gate.min_evolution_live_online_reward_penalties,
+        );
+        require_min_u64(
+            &mut failures,
             "evolution_live_memory_updates",
             self.evolution_ledger.live_memory_updates(),
             gate.min_evolution_live_memory_updates,
@@ -2384,6 +2529,27 @@ impl StateInspectionReport {
             "evolution_replay_live_evolution_items",
             self.evolution_ledger.replay_live_evolution_items,
             gate.min_evolution_replay_live_evolution_items,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_live_evolution_online_reward_feedbacks",
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_feedbacks,
+            gate.min_evolution_replay_live_evolution_online_reward_feedbacks,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_live_evolution_online_reward_reinforcements",
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_reinforcements,
+            gate.min_evolution_replay_live_evolution_online_reward_reinforcements,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_live_evolution_online_reward_penalties",
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_penalties,
+            gate.min_evolution_replay_live_evolution_online_reward_penalties,
         );
         require_min_u64(
             &mut failures,
@@ -2785,6 +2951,9 @@ mod tests {
             live_hierarchy_weight_mutations: 1,
             live_router_threshold_delta: 0.05,
             live_hierarchy_weight_delta: 0.04,
+            live_online_reward_feedbacks: 3,
+            live_online_reward_reinforcements: 2,
+            live_online_reward_penalties: 1,
             live_memory_reinforcements: 4,
             live_memory_penalties: 1,
             live_stored_memories: 2,
@@ -2814,6 +2983,9 @@ mod tests {
             replay_live_evolution_hierarchy_weight_mutations: 1,
             replay_live_evolution_router_threshold_delta: 0.04,
             replay_live_evolution_hierarchy_weight_delta: 0.03,
+            replay_live_evolution_online_reward_feedbacks: 2,
+            replay_live_evolution_online_reward_reinforcements: 1,
+            replay_live_evolution_online_reward_penalties: 1,
             replay_live_evolution_memory_updates: 3,
             replay_live_evolution_stored_memory_updates: 2,
             replay_live_evolution_reflection_issues: 2,
@@ -3266,6 +3438,11 @@ mod tests {
         assert!(
             report
                 .summary_line()
+                .contains("evolution_live_online_reward_feedbacks=3")
+        );
+        assert!(
+            report
+                .summary_line()
                 .contains("evolution_live_memory_updates=5")
         );
         assert!(
@@ -3297,6 +3474,11 @@ mod tests {
             report
                 .summary_line()
                 .contains("evolution_replay_live_evolution_items=2")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_replay_live_evolution_online_reward_feedbacks=2")
         );
         assert!(
             report
@@ -3366,6 +3548,9 @@ mod tests {
             min_evolution_live_hierarchy_weight_mutations: Some(1),
             min_evolution_live_router_threshold_delta: Some(0.05),
             min_evolution_live_hierarchy_weight_delta: Some(0.04),
+            min_evolution_live_online_reward_feedbacks: Some(3),
+            min_evolution_live_online_reward_reinforcements: Some(2),
+            min_evolution_live_online_reward_penalties: Some(1),
             min_evolution_live_memory_updates: Some(5),
             min_evolution_live_stored_memory_updates: Some(6),
             min_evolution_live_reflection_issues: Some(5),
@@ -3383,6 +3568,9 @@ mod tests {
             min_evolution_replay_live_memory_feedback_applied: Some(3),
             min_evolution_replay_live_memory_feedback_strength_delta: Some(0.52),
             min_evolution_replay_live_evolution_items: Some(2),
+            min_evolution_replay_live_evolution_online_reward_feedbacks: Some(2),
+            min_evolution_replay_live_evolution_online_reward_reinforcements: Some(1),
+            min_evolution_replay_live_evolution_online_reward_penalties: Some(1),
             min_evolution_replay_live_evolution_memory_updates: Some(3),
             min_evolution_replay_live_evolution_stored_memory_updates: Some(2),
             min_evolution_replay_live_evolution_reflection_issues: Some(2),
@@ -3439,6 +3627,9 @@ mod tests {
             min_evolution_live_hierarchy_weight_mutations: Some(2),
             min_evolution_live_router_threshold_delta: Some(0.06),
             min_evolution_live_hierarchy_weight_delta: Some(0.05),
+            min_evolution_live_online_reward_feedbacks: Some(4),
+            min_evolution_live_online_reward_reinforcements: Some(3),
+            min_evolution_live_online_reward_penalties: Some(2),
             min_evolution_live_memory_updates: Some(6),
             min_evolution_live_stored_memory_updates: Some(7),
             min_evolution_live_reflection_issues: Some(6),
@@ -3456,6 +3647,9 @@ mod tests {
             min_evolution_replay_live_memory_feedback_applied: Some(4),
             min_evolution_replay_live_memory_feedback_strength_delta: Some(0.53),
             min_evolution_replay_live_evolution_items: Some(3),
+            min_evolution_replay_live_evolution_online_reward_feedbacks: Some(3),
+            min_evolution_replay_live_evolution_online_reward_reinforcements: Some(2),
+            min_evolution_replay_live_evolution_online_reward_penalties: Some(2),
             min_evolution_replay_live_evolution_memory_updates: Some(4),
             min_evolution_replay_live_evolution_stored_memory_updates: Some(3),
             min_evolution_replay_live_evolution_reflection_issues: Some(3),
@@ -3600,6 +3794,19 @@ mod tests {
         assert!(
             failing_report
                 .failures
+                .contains(&"evolution_live_online_reward_feedbacks 3 below required 4".to_owned())
+        );
+        assert!(failing_report.failures.contains(
+            &"evolution_live_online_reward_reinforcements 2 below required 3".to_owned()
+        ));
+        assert!(
+            failing_report
+                .failures
+                .contains(&"evolution_live_online_reward_penalties 1 below required 2".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
                 .contains(&"evolution_live_memory_updates 5 below required 6".to_owned())
         );
         assert!(
@@ -3650,6 +3857,24 @@ mod tests {
             failing_report
                 .failures
                 .contains(&"evolution_replay_live_evolution_items 2 below required 3".to_owned())
+        );
+        assert!(
+            failing_report.failures.contains(
+                &"evolution_replay_live_evolution_online_reward_feedbacks 2 below required 3"
+                    .to_owned()
+            )
+        );
+        assert!(
+            failing_report.failures.contains(
+                &"evolution_replay_live_evolution_online_reward_reinforcements 1 below required 2"
+                    .to_owned()
+            )
+        );
+        assert!(
+            failing_report.failures.contains(
+                &"evolution_replay_live_evolution_online_reward_penalties 1 below required 2"
+                    .to_owned()
+            )
         );
         assert!(failing_report.failures.contains(
             &"evolution_replay_live_evolution_memory_updates 3 below required 4".to_owned()
@@ -4676,8 +4901,6 @@ mod tests {
 
         let report = StateInspectionReport::from_engine(&engine, 3);
         let gate = StateInspectionGate {
-            min_memories: None,
-            min_runtime_kv_memories: None,
             min_experiences: Some(1),
             min_runtime_model_experiences: Some(1),
             min_runtime_adapter_experiences: Some(1),
@@ -4696,50 +4919,8 @@ mod tests {
             min_runtime_convolutional_fusion_layers: Some(1),
             min_runtime_kv_import_experiences: Some(1),
             min_runtime_kv_export_experiences: Some(1),
-            min_runtime_kv_hold_experiences: None,
-            min_runtime_kv_held_blocks: None,
-            min_reflection_issue_experiences: None,
-            min_critical_reflection_issue_experiences: None,
-            min_revision_action_experiences: None,
-            min_live_memory_feedback_experiences: None,
-            min_live_memory_feedback_updates: None,
-            min_live_memory_feedback_detail_experiences: None,
-            min_live_memory_feedback_applied: None,
-            min_live_memory_feedback_strength_delta: None,
-            min_router_observations: None,
-            min_evolution_live_inference_runs: None,
-            min_evolution_live_router_threshold_mutations: None,
-            min_evolution_live_hierarchy_weight_mutations: None,
-            min_evolution_live_router_threshold_delta: None,
-            min_evolution_live_hierarchy_weight_delta: None,
-            min_evolution_live_memory_updates: None,
-            min_evolution_live_stored_memory_updates: None,
-            min_evolution_live_reflection_issues: None,
-            min_evolution_live_critical_reflection_issues: None,
-            min_evolution_live_revision_actions: None,
-            min_evolution_replay_runs: None,
-            min_evolution_replay_items: None,
-            min_evolution_router_threshold_mutations: None,
-            min_evolution_hierarchy_weight_mutations: None,
-            min_evolution_router_threshold_delta: None,
-            min_evolution_hierarchy_weight_delta: None,
-            min_evolution_memory_updates: None,
-            min_evolution_replay_live_memory_feedback_updates: None,
-            min_evolution_replay_live_memory_feedback_detail_items: None,
-            min_evolution_replay_live_memory_feedback_applied: None,
-            min_evolution_replay_live_memory_feedback_strength_delta: None,
-            min_evolution_replay_live_evolution_items: None,
-            min_evolution_replay_live_evolution_memory_updates: None,
-            min_evolution_replay_live_evolution_stored_memory_updates: None,
-            min_evolution_replay_live_evolution_reflection_issues: None,
-            min_evolution_replay_live_evolution_critical_reflection_issues: None,
-            min_evolution_replay_live_evolution_revision_actions: None,
-            min_evolution_recursive_replay_items: None,
-            min_evolution_recursive_runtime_calls: None,
-            max_evolution_drift_rollbacks: None,
-            max_evolution_rollback_router_threshold_delta: None,
-            max_evolution_rollback_hierarchy_weight_delta: None,
             require_runtime_kv_dimensions: false,
+            ..StateInspectionGate::default()
         };
 
         let gate_report = report.evaluate(&gate);

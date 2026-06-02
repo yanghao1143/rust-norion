@@ -4264,6 +4264,15 @@ fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> Evolut
         live_hierarchy_weight_delta: left
             .live_hierarchy_weight_delta
             .max(right.live_hierarchy_weight_delta),
+        live_online_reward_feedbacks: left
+            .live_online_reward_feedbacks
+            .max(right.live_online_reward_feedbacks),
+        live_online_reward_reinforcements: left
+            .live_online_reward_reinforcements
+            .max(right.live_online_reward_reinforcements),
+        live_online_reward_penalties: left
+            .live_online_reward_penalties
+            .max(right.live_online_reward_penalties),
         live_memory_reinforcements: left
             .live_memory_reinforcements
             .max(right.live_memory_reinforcements),
@@ -4337,6 +4346,15 @@ fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> Evolut
         replay_live_evolution_hierarchy_weight_delta: left
             .replay_live_evolution_hierarchy_weight_delta
             .max(right.replay_live_evolution_hierarchy_weight_delta),
+        replay_live_evolution_online_reward_feedbacks: left
+            .replay_live_evolution_online_reward_feedbacks
+            .max(right.replay_live_evolution_online_reward_feedbacks),
+        replay_live_evolution_online_reward_reinforcements: left
+            .replay_live_evolution_online_reward_reinforcements
+            .max(right.replay_live_evolution_online_reward_reinforcements),
+        replay_live_evolution_online_reward_penalties: left
+            .replay_live_evolution_online_reward_penalties
+            .max(right.replay_live_evolution_online_reward_penalties),
         replay_live_evolution_memory_updates: left
             .replay_live_evolution_memory_updates
             .max(right.replay_live_evolution_memory_updates),
@@ -6483,6 +6501,9 @@ mod tests {
                 live_hierarchy_weight_mutations: 1,
                 live_router_threshold_delta: 0.07,
                 live_hierarchy_weight_delta: 0.04,
+                live_online_reward_feedbacks: 3,
+                live_online_reward_reinforcements: 2,
+                live_online_reward_penalties: 1,
                 live_memory_reinforcements: 3,
                 live_memory_penalties: 2,
                 live_stored_memories: 1,
@@ -6512,6 +6533,9 @@ mod tests {
                 replay_live_evolution_hierarchy_weight_mutations: 1,
                 replay_live_evolution_router_threshold_delta: 0.04,
                 replay_live_evolution_hierarchy_weight_delta: 0.03,
+                replay_live_evolution_online_reward_feedbacks: 2,
+                replay_live_evolution_online_reward_reinforcements: 1,
+                replay_live_evolution_online_reward_penalties: 1,
                 replay_live_evolution_memory_updates: 3,
                 replay_live_evolution_stored_memory_updates: 2,
                 replay_live_evolution_reflection_issues: 2,
