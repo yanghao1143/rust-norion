@@ -368,7 +368,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -398,6 +398,8 @@ impl StateInspectionReport {
             self.evolution_ledger.replay_items,
             self.evolution_ledger.router_threshold_mutations,
             self.evolution_ledger.hierarchy_weight_mutations,
+            self.evolution_ledger.router_threshold_delta,
+            self.evolution_ledger.hierarchy_weight_delta,
             self.evolution_ledger.memory_updates(),
             self.evolution_ledger.recursive_runtime_calls,
             self.evolution_ledger.drift_rollbacks,
@@ -902,11 +904,31 @@ mod tests {
                 .summary_line()
                 .contains("evolution_router_threshold_mutations=3")
         );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_hierarchy_weight_mutations=4")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_router_threshold_delta=0.170000")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_hierarchy_weight_delta=0.080000")
+        );
         assert!(report.summary_line().contains("evolution_memory_updates=7"));
         assert!(
             report
                 .summary_line()
                 .contains("evolution_drift_rollbacks=2")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_rollback_router_threshold_delta=0.030000")
         );
 
         let passing_gate = StateInspectionGate {
