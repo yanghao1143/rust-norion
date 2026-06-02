@@ -72,6 +72,7 @@ pub struct StateInspectionGate {
     pub min_evolution_router_threshold_delta: Option<f32>,
     pub min_evolution_hierarchy_weight_delta: Option<f32>,
     pub min_evolution_memory_updates: Option<u64>,
+    pub min_evolution_recursive_replay_items: Option<u64>,
     pub min_evolution_recursive_runtime_calls: Option<u64>,
     pub max_evolution_drift_rollbacks: Option<u64>,
     pub require_runtime_kv_dimensions: bool,
@@ -368,7 +369,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -401,6 +402,7 @@ impl StateInspectionReport {
             self.evolution_ledger.router_threshold_delta,
             self.evolution_ledger.hierarchy_weight_delta,
             self.evolution_ledger.memory_updates(),
+            self.evolution_ledger.recursive_replay_items,
             self.evolution_ledger.recursive_runtime_calls,
             self.evolution_ledger.drift_rollbacks,
             self.evolution_ledger.rollback_router_threshold_delta,
@@ -514,6 +516,12 @@ impl StateInspectionReport {
             "evolution_memory_updates",
             self.evolution_ledger.memory_updates(),
             gate.min_evolution_memory_updates,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_recursive_replay_items",
+            self.evolution_ledger.recursive_replay_items,
+            gate.min_evolution_recursive_replay_items,
         );
         require_min_u64(
             &mut failures,
@@ -705,7 +713,7 @@ mod tests {
             hierarchy_weight_delta: 0.08,
             memory_reinforcements: 6,
             memory_penalties: 1,
-            recursive_replay_items: 1,
+            recursive_replay_items: 8,
             recursive_runtime_calls: 9,
             drift_rollbacks: 2,
             rollback_router_threshold_delta: 0.03,
@@ -831,6 +839,7 @@ mod tests {
         assert_eq!(report.memory_compaction_policy.max_merges, 4);
         assert_eq!(report.evolution_ledger.replay_runs, 2);
         assert_eq!(report.evolution_ledger.memory_updates(), 7);
+        assert_eq!(report.evolution_ledger.recursive_replay_items, 8);
         assert_eq!(report.evolution_ledger.recursive_runtime_calls, 9);
         assert_eq!(report.evolution_ledger.drift_rollbacks, 2);
         assert_eq!(
@@ -923,6 +932,11 @@ mod tests {
         assert!(
             report
                 .summary_line()
+                .contains("evolution_recursive_replay_items=8")
+        );
+        assert!(
+            report
+                .summary_line()
                 .contains("evolution_drift_rollbacks=2")
         );
         assert!(
@@ -949,6 +963,7 @@ mod tests {
             min_evolution_router_threshold_delta: Some(0.17),
             min_evolution_hierarchy_weight_delta: Some(0.08),
             min_evolution_memory_updates: Some(7),
+            min_evolution_recursive_replay_items: Some(8),
             min_evolution_recursive_runtime_calls: Some(9),
             max_evolution_drift_rollbacks: Some(2),
             require_runtime_kv_dimensions: true,
@@ -978,6 +993,7 @@ mod tests {
             min_evolution_router_threshold_delta: Some(0.18),
             min_evolution_hierarchy_weight_delta: Some(0.09),
             min_evolution_memory_updates: Some(8),
+            min_evolution_recursive_replay_items: Some(9),
             min_evolution_recursive_runtime_calls: Some(10),
             max_evolution_drift_rollbacks: Some(1),
             require_runtime_kv_dimensions: true,
@@ -1019,6 +1035,11 @@ mod tests {
             failing_report
                 .failures
                 .contains(&"evolution_memory_updates 7 below required 8".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"evolution_recursive_replay_items 8 below required 9".to_owned())
         );
         assert!(
             failing_report
@@ -1151,6 +1172,7 @@ mod tests {
             min_evolution_router_threshold_delta: None,
             min_evolution_hierarchy_weight_delta: None,
             min_evolution_memory_updates: None,
+            min_evolution_recursive_replay_items: None,
             min_evolution_recursive_runtime_calls: None,
             max_evolution_drift_rollbacks: None,
             require_runtime_kv_dimensions: false,
