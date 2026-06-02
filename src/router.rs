@@ -550,6 +550,31 @@ mod tests {
     }
 
     #[test]
+    fn cache_hits_conserve_attention_for_reusable_context() {
+        let router = NoironRouter::new();
+        let uncached = router.route_entropy_with_context(
+            "token",
+            0.78,
+            RoutingContext {
+                cache_hit_rate: 0.0,
+                ..RoutingContext::default()
+            },
+        );
+        let cached = router.route_entropy_with_context(
+            "token",
+            0.78,
+            RoutingContext {
+                cache_hit_rate: 1.0,
+                ..RoutingContext::default()
+            },
+        );
+
+        assert!(uncached.route.uses_attention_budget());
+        assert_eq!(cached.route, Route::FastProjection);
+        assert!(cached.score < uncached.score);
+    }
+
+    #[test]
     fn hardware_pressure_conserves_attention_budget() {
         let router = NoironRouter::new();
         let normal = router.route_entropy("token", 0.76);

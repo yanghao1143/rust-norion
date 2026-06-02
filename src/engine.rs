@@ -2576,6 +2576,43 @@ mod tests {
     }
 
     #[test]
+    fn cache_hits_flow_into_route_budget_to_reduce_attention() {
+        let prompt = (0..8)
+            .map(|index| format!("CacheHitA{index}B{index}C{index}D"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut uncached_engine = NoironEngine::new();
+        let mut cached_cache = KvFusionCache::with_limits(0.99, 16);
+        let query = TextEmbedder::default().embed(&prompt);
+        cached_cache.store_or_fuse("cache hit memory 1", query.clone(), 1.0);
+        cached_cache.store_or_fuse("cache hit memory 2", perturbed_vector(&query, 1), 1.0);
+        cached_cache.store_or_fuse("cache hit memory 3", perturbed_vector(&query, 2), 1.0);
+        cached_cache.store_or_fuse("cache hit memory 4", perturbed_vector(&query, 3), 1.0);
+        let mut cached_engine = NoironEngine::with_cache(cached_cache);
+        let mut uncached_backend = HeuristicBackend;
+        let mut cached_backend = HeuristicBackend;
+
+        let uncached = uncached_engine.infer(
+            InferenceRequest::new(prompt.clone(), TaskProfile::Coding),
+            &mut uncached_backend,
+        );
+        let cached = cached_engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding),
+            &mut cached_backend,
+        );
+
+        assert!(uncached.used_memories.is_empty());
+        assert_eq!(cached.used_memories.len(), 4);
+        assert!(uncached.route_budget.attention_tokens > cached.route_budget.attention_tokens);
+        assert!(
+            uncached.route_budget.attention_fraction > cached.route_budget.attention_fraction,
+            "uncached={:?} cached={:?}",
+            uncached.route_budget,
+            cached.route_budget
+        );
+    }
+
+    #[test]
     fn runtime_token_uncertainty_raises_generation_perplexity() {
         let low_entropy = InferenceDraft::new(
             "A stable local runtime answer with enough detail to pass reflection.",
@@ -3645,6 +3682,20 @@ mod tests {
             .find(|entry| entry.id == memory_id)
             .map(|entry| entry.strength)
             .unwrap()
+    }
+
+    fn perturbed_vector(vector: &[f32], salt: usize) -> Vec<f32> {
+        let mut out = vector.to_vec();
+        let len = out.len().max(1);
+        out[(salt * 13 + 7) % len] += 1.0;
+        out[(salt * 29 + 11) % len] += 1.0;
+        let norm = out.iter().map(|value| value * value).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            for value in &mut out {
+                *value /= norm;
+            }
+        }
+        out
     }
 
     fn replay_runtime_diagnostics(kv_influence: f32) -> RuntimeDiagnostics {
