@@ -1748,6 +1748,9 @@ struct Args {
     inspect_min_runtime_kv_influence_experiences: Option<usize>,
     inspect_min_runtime_kv_import_experiences: Option<usize>,
     inspect_min_runtime_kv_export_experiences: Option<usize>,
+    inspect_min_reflection_issue_experiences: Option<usize>,
+    inspect_min_critical_reflection_issue_experiences: Option<usize>,
+    inspect_min_revision_action_experiences: Option<usize>,
     inspect_min_router_observations: Option<u64>,
     inspect_min_evolution_replay_runs: Option<u64>,
     inspect_min_evolution_replay_items: Option<u64>,
@@ -1897,6 +1900,9 @@ impl Args {
         let mut inspect_min_runtime_kv_influence_experiences = None;
         let mut inspect_min_runtime_kv_import_experiences = None;
         let mut inspect_min_runtime_kv_export_experiences = None;
+        let mut inspect_min_reflection_issue_experiences = None;
+        let mut inspect_min_critical_reflection_issue_experiences = None;
+        let mut inspect_min_revision_action_experiences = None;
         let mut inspect_min_router_observations = None;
         let mut inspect_min_evolution_replay_runs = None;
         let mut inspect_min_evolution_replay_items = None;
@@ -2399,6 +2405,26 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-reflection-issue-experiences" if index + 1 < raw.len() => {
+                    inspect_min_reflection_issue_experiences =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-critical-reflection-issue-experiences" if index + 1 < raw.len() => {
+                    inspect_min_critical_reflection_issue_experiences =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-revision-action-experiences" if index + 1 < raw.len() => {
+                    inspect_min_revision_action_experiences = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-min-router-observations" if index + 1 < raw.len() => {
                     inspect_min_router_observations = Some(parse_u64(&raw[index + 1], 0));
                     inspect_state = true;
@@ -2786,6 +2812,9 @@ impl Args {
             inspect_min_runtime_kv_influence_experiences,
             inspect_min_runtime_kv_import_experiences,
             inspect_min_runtime_kv_export_experiences,
+            inspect_min_reflection_issue_experiences,
+            inspect_min_critical_reflection_issue_experiences,
+            inspect_min_revision_action_experiences,
             inspect_min_router_observations,
             inspect_min_evolution_replay_runs,
             inspect_min_evolution_replay_items,
@@ -2994,6 +3023,10 @@ impl Args {
             min_runtime_kv_influence_experiences: self.inspect_min_runtime_kv_influence_experiences,
             min_runtime_kv_import_experiences: self.inspect_min_runtime_kv_import_experiences,
             min_runtime_kv_export_experiences: self.inspect_min_runtime_kv_export_experiences,
+            min_reflection_issue_experiences: self.inspect_min_reflection_issue_experiences,
+            min_critical_reflection_issue_experiences: self
+                .inspect_min_critical_reflection_issue_experiences,
+            min_revision_action_experiences: self.inspect_min_revision_action_experiences,
             min_router_observations: self.inspect_min_router_observations,
             min_evolution_replay_runs: self.inspect_min_evolution_replay_runs,
             min_evolution_replay_items: self.inspect_min_evolution_replay_items,
@@ -3195,6 +3228,7 @@ fn print_help_and_exit() -> ! {
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
         "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n\n",
+        "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n\n",
         "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Device: --list-devices --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
     );
@@ -3386,6 +3420,12 @@ mod tests {
             "--inspect-min-runtime-kv-import-experiences".to_owned(),
             "2".to_owned(),
             "--inspect-min-runtime-kv-export-experiences".to_owned(),
+            "2".to_owned(),
+            "--inspect-min-reflection-issue-experiences".to_owned(),
+            "3".to_owned(),
+            "--inspect-min-critical-reflection-issue-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-revision-action-experiences".to_owned(),
             "2".to_owned(),
             "--inspect-min-router-observations".to_owned(),
             "4".to_owned(),
@@ -3720,6 +3760,12 @@ mod tests {
         assert_eq!(args.inspect_min_runtime_kv_influence_experiences, Some(2));
         assert_eq!(args.inspect_min_runtime_kv_import_experiences, Some(2));
         assert_eq!(args.inspect_min_runtime_kv_export_experiences, Some(2));
+        assert_eq!(args.inspect_min_reflection_issue_experiences, Some(3));
+        assert_eq!(
+            args.inspect_min_critical_reflection_issue_experiences,
+            Some(1)
+        );
+        assert_eq!(args.inspect_min_revision_action_experiences, Some(2));
         assert_eq!(args.inspect_min_router_observations, Some(4));
         assert_eq!(args.inspect_min_evolution_replay_runs, Some(5));
         assert_eq!(args.inspect_min_evolution_replay_items, Some(6));
@@ -3784,6 +3830,20 @@ mod tests {
         assert_eq!(
             args.state_inspection_gate()
                 .min_runtime_kv_export_experiences,
+            Some(2)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_reflection_issue_experiences,
+            Some(3)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_critical_reflection_issue_experiences,
+            Some(1)
+        );
+        assert_eq!(
+            args.state_inspection_gate().min_revision_action_experiences,
             Some(2)
         );
         assert_eq!(

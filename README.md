@@ -219,21 +219,23 @@ The report includes effective memory retention/compaction policy values and a
 memory-vector dimension histogram, plus `runtime_kv:` memory counts, runtime
 KV vector dimensions, and top persisted runtime KV memories. Top experience
 rows also expose persisted runtime model id, adapter, forward energy, KV
-influence, and KV import/export counts, so runtime embedding-space changes or
-fallback/runtime mixing can be audited before another inference writes more
-durable state.
+influence, KV import/export counts, reflection issue counts, critical
+reflection issue counts, and revision action counts, so runtime embedding-space
+changes, fallback/runtime mixing, and closed-loop reflection persistence can be
+audited before another inference writes more durable state.
 
 Turn the same inspection into a local/CI gate by requiring persisted evidence:
 
 ```powershell
-cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 Any `--inspect-min-*` threshold implies `--inspect-state --inspect-gate` and
 exits with code `2` when persisted runtime KV, experience, router observations,
-runtime diagnostics evidence, or self-evolution ledger counters/deltas are
-missing. Use `--inspect-min-evolution-recursive-replay-items` when long-context
-replay evidence must also survive in persisted adaptive state, and use the
+runtime diagnostics evidence, reflection diagnostics evidence, or
+self-evolution ledger counters/deltas are missing. Use
+`--inspect-min-evolution-recursive-replay-items` when long-context replay
+evidence must also survive in persisted adaptive state, and use the
 `--inspect-max-evolution-rollback-*` flags to make drift rollback magnitude a
 state-inspection safety cap.
 
@@ -242,14 +244,14 @@ created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
 `memory.mobile.ndkv`, and `memory.server.ndkv`:
 
 ```powershell
-cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 For a single CI smoke gate that writes fresh runtime KV state and immediately
 inspects the persisted evidence, combine roundtrip and inspection:
 
 ```powershell
-cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 查看本地持久化状态，但不执行推理：
@@ -261,17 +263,18 @@ cargo run -- --inspect-state --inspect-limit 5
 报告会包含实际生效的记忆保留 / 压缩策略，以及持久化 memory vector
 维度直方图，同时单独展示 `runtime_kv:` 记忆数量、runtime KV 维度桶和高价值
 runtime KV 长期记忆。高价值 experience 行也会展示已持久化的 runtime model id、
-adapter、forward energy、KV influence 和 KV 导入 / 导出计数，便于在继续写入长期
-状态前检查自研 runtime embedding 空间变化或 fallback/runtime 混用。
+adapter、forward energy、KV influence、KV 导入 / 导出计数、reflection issue 数量、
+critical reflection issue 数量和 revision action 数量，便于在继续写入长期
+状态前检查自研 runtime embedding 空间变化、fallback/runtime 混用或闭环反思是否已经持久化。
 
 同一条检查路径也可以作为本地 / CI 门禁：
 
 ```powershell
-cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 任意 `--inspect-min-*` 阈值都会隐式开启 `--inspect-state --inspect-gate`；如果
-持久化 runtime KV、experience、runtime diagnostics、router observation 或自进化 ledger 计数 / delta 证据不足，
+持久化 runtime KV、experience、runtime diagnostics、reflection diagnostics、router observation 或自进化 ledger 计数 / delta 证据不足，
 进程会用退出码 `2` 失败。
 
 加上 `--benchmark-all-devices` 后，会检查 all-device roundtrip 门禁写出的同一组
@@ -279,14 +282,14 @@ device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
 `memory.server.ndkv`：
 
 ```powershell
-cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 如果希望一条 CI 命令先写入新的 runtime KV 状态，再立刻检查持久化证据，可以组合
 roundtrip 和 inspection：
 
 ```powershell
-cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 Write one structured JSONL trace record for benchmark comparison:
