@@ -89,16 +89,18 @@ impl RuntimeMetadata {
     }
 
     pub fn with_kv_precision(mut self, hot_bits: u8, cold_bits: u8) -> Self {
-        self.hot_kv_precision_bits = if matches!(hot_bits, 4 | 8) {
+        let hot_bits = if matches!(hot_bits, 4 | 8) {
             hot_bits
         } else {
             8
         };
-        self.cold_kv_precision_bits = if matches!(cold_bits, 4 | 8) {
+        let cold_bits = if matches!(cold_bits, 4 | 8) {
             cold_bits
         } else {
             4
         };
+        self.hot_kv_precision_bits = hot_bits;
+        self.cold_kv_precision_bits = cold_bits.min(hot_bits);
         self
     }
 
@@ -2383,6 +2385,16 @@ mod tests {
                 request.runtime_metadata.model_id
             )))
         }
+    }
+
+    #[test]
+    fn runtime_metadata_clamps_cold_kv_precision_to_hot_precision() {
+        let metadata =
+            RuntimeMetadata::new("compact-runtime", "tok", 4096, 128).with_kv_precision(4, 8);
+
+        assert_eq!(metadata.hot_kv_precision_bits, 4);
+        assert_eq!(metadata.cold_kv_precision_bits, 4);
+        assert!(metadata.summary().contains("kv_bits=4/4"));
     }
 
     #[derive(Debug, Default, Clone)]

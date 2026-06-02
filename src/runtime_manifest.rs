@@ -34,6 +34,7 @@ impl RuntimeManifest {
     pub fn from_metadata(metadata: RuntimeMetadata) -> Self {
         let native_context_window = metadata.native_context_window.max(1);
         let embedding_dimensions = metadata.embedding_dimensions.max(1);
+        let quantization = RuntimeQuantizationPolicy::from_metadata(&metadata);
         let kv_policy = RuntimeKvPolicy::from_capabilities(
             metadata.supports_kv_import,
             metadata.supports_kv_export,
@@ -46,7 +47,7 @@ impl RuntimeManifest {
             ),
             assets: RuntimeAssetPaths::default(),
             kv_policy,
-            quantization: RuntimeQuantizationPolicy::default(),
+            quantization,
             supported_devices: DeviceClass::explicit_profiles().to_vec(),
             adapter_hints: default_adapter_hints(),
         }
@@ -379,6 +380,27 @@ impl Default for RuntimeQuantizationPolicy {
     }
 }
 
+impl RuntimeQuantizationPolicy {
+    pub fn from_metadata(metadata: &RuntimeMetadata) -> Self {
+        let hot_kv = QuantizationBits::from_width(metadata.hot_kv_precision_bits)
+            .unwrap_or(QuantizationBits::Eight);
+        let cold_kv = QuantizationBits::from_width(metadata.cold_kv_precision_bits)
+            .filter(|bits| bits.width() <= hot_kv.width())
+            .unwrap_or_else(|| {
+                if metadata.cold_kv_precision_bits > hot_kv.width() {
+                    hot_kv
+                } else {
+                    QuantizationBits::Four
+                }
+            });
+        Self {
+            hot_kv,
+            cold_kv,
+            weights: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeManifestValidation {
     pub errors: Vec<String>,
@@ -606,6 +628,18 @@ mod tests {
         assert!(manifest.runtime_metadata().supports_kv_import);
         assert!(manifest.runtime_metadata().supports_kv_export);
         assert!(manifest.validate().passed());
+    }
+
+    #[test]
+    fn manifest_inherits_kv_precision_from_runtime_metadata() {
+        let manifest = RuntimeManifest::from_metadata(
+            RuntimeMetadata::new("compact-model", "tok", 4096, 64).with_kv_precision(4, 4),
+        );
+
+        assert_eq!(manifest.quantization.hot_kv, QuantizationBits::Four);
+        assert_eq!(manifest.quantization.cold_kv, QuantizationBits::Four);
+        assert_eq!(manifest.runtime_metadata().hot_kv_precision_bits, 4);
+        assert_eq!(manifest.runtime_metadata().cold_kv_precision_bits, 4);
     }
 
     #[test]

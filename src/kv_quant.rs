@@ -21,7 +21,7 @@ impl QuantizationBits {
         }
     }
 
-    fn from_width(width: u8) -> Option<Self> {
+    pub fn from_width(width: u8) -> Option<Self> {
         match width {
             4 => Some(Self::Four),
             8 => Some(Self::Eight),

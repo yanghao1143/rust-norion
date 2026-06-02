@@ -125,6 +125,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"adapter_hints\":",
     },
     TraceRequiredField {
+        name: "hot_kv_bits",
+        marker: "\"hot_kv_bits\":",
+    },
+    TraceRequiredField {
+        name: "cold_kv_bits",
+        marker: "\"cold_kv_bits\":",
+    },
+    TraceRequiredField {
         name: "local_kv_token_budget",
         marker: "\"local_kv_token_budget\":",
     },
@@ -1977,6 +1985,8 @@ fn evaluate_trace_device_contract(line: &str) -> Vec<String> {
     };
     let hardware = json_object_after_field(line, "hardware").unwrap_or(line);
     let execution = json_object_after_field(hardware, "execution").unwrap_or(hardware);
+    let hot_kv_bits = extract_json_usize_field(execution, "hot_kv_bits");
+    let cold_kv_bits = extract_json_usize_field(execution, "cold_kv_bits");
 
     require_contract_string(
         &mut failures,
@@ -2024,14 +2034,32 @@ fn evaluate_trace_device_contract(line: &str) -> Vec<String> {
         &mut failures,
         &contract,
         "kv_bits",
-        match (
-            extract_json_usize_field(execution, "hot_kv_bits"),
-            extract_json_usize_field(execution, "cold_kv_bits"),
-        ) {
+        match (hot_kv_bits, cold_kv_bits) {
             (Some(hot), Some(cold)) => Some(format!("{hot}/{cold}")),
             _ => None,
         },
     );
+    match hot_kv_bits {
+        Some(4 | 8) => {}
+        Some(value) => failures.push(format!(
+            "hardware execution hot_kv_bits {value} must be 4 or 8"
+        )),
+        None => failures.push("hardware execution hot_kv_bits missing".to_owned()),
+    }
+    match cold_kv_bits {
+        Some(4 | 8) => {}
+        Some(value) => failures.push(format!(
+            "hardware execution cold_kv_bits {value} must be 4 or 8"
+        )),
+        None => failures.push("hardware execution cold_kv_bits missing".to_owned()),
+    }
+    if let (Some(hot), Some(cold)) = (hot_kv_bits, cold_kv_bits) {
+        if cold > hot {
+            failures.push(format!(
+                "hardware execution cold_kv_bits {cold} must not exceed hot_kv_bits {hot}"
+            ));
+        }
+    }
     require_contract_string(
         &mut failures,
         &contract,
@@ -3763,6 +3791,45 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| failure.contains("runtime_device_contract device=")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_invalid_kv_precision_order() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace kv precision policy", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace kv precision policy",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let hot = extract_json_usize_field(&line, "hot_kv_bits").unwrap();
+        let cold = extract_json_usize_field(&line, "cold_kv_bits").unwrap();
+        let invalid = line
+            .replacen(
+                &format!("\"hot_kv_bits\":{hot},\"cold_kv_bits\":{cold}"),
+                "\"hot_kv_bits\":4,\"cold_kv_bits\":8",
+                1,
+            )
+            .replacen(&format!("kv_bits={hot}/{cold}"), "kv_bits=4/8", 1)
+            .replacen(
+                &format!("hot_kv_bits={hot} cold_kv_bits={cold}"),
+                "hot_kv_bits=4 cold_kv_bits=8",
+                1,
+            );
+
+        let failures = evaluate_trace_schema_line(&invalid);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("cold_kv_bits 8")),
             "{failures:?}"
         );
     }
