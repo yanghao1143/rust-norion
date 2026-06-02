@@ -126,6 +126,8 @@ pub struct StateInspectionGate {
     pub min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
+    pub min_evolution_replay_live_evolution_critical_reflection_issues: Option<u64>,
+    pub min_evolution_replay_live_evolution_revision_actions: Option<u64>,
     pub min_evolution_recursive_replay_items: Option<u64>,
     pub min_evolution_recursive_runtime_calls: Option<u64>,
     pub max_evolution_drift_rollbacks: Option<u64>,
@@ -2162,6 +2164,19 @@ impl StateInspectionReport {
         );
         require_min_u64(
             &mut failures,
+            "evolution_replay_live_evolution_critical_reflection_issues",
+            self.evolution_ledger
+                .replay_live_evolution_critical_reflection_issues,
+            gate.min_evolution_replay_live_evolution_critical_reflection_issues,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_live_evolution_revision_actions",
+            self.evolution_ledger.replay_live_evolution_revision_actions,
+            gate.min_evolution_replay_live_evolution_revision_actions,
+        );
+        require_min_u64(
+            &mut failures,
             "evolution_recursive_replay_items",
             self.evolution_ledger.recursive_replay_items,
             gate.min_evolution_recursive_replay_items,
@@ -3087,6 +3102,8 @@ mod tests {
             min_evolution_replay_live_evolution_memory_updates: Some(3),
             min_evolution_replay_live_evolution_stored_memory_updates: Some(2),
             min_evolution_replay_live_evolution_reflection_issues: Some(2),
+            min_evolution_replay_live_evolution_critical_reflection_issues: Some(1),
+            min_evolution_replay_live_evolution_revision_actions: Some(2),
             min_evolution_recursive_replay_items: Some(8),
             min_evolution_recursive_runtime_calls: Some(9),
             max_evolution_drift_rollbacks: Some(2),
@@ -3154,6 +3171,8 @@ mod tests {
             min_evolution_replay_live_evolution_memory_updates: Some(4),
             min_evolution_replay_live_evolution_stored_memory_updates: Some(3),
             min_evolution_replay_live_evolution_reflection_issues: Some(3),
+            min_evolution_replay_live_evolution_critical_reflection_issues: Some(2),
+            min_evolution_replay_live_evolution_revision_actions: Some(3),
             min_evolution_recursive_replay_items: Some(9),
             min_evolution_recursive_runtime_calls: Some(10),
             max_evolution_drift_rollbacks: Some(1),
@@ -3337,6 +3356,15 @@ mod tests {
         ));
         assert!(failing_report.failures.contains(
             &"evolution_replay_live_evolution_reflection_issues 2 below required 3".to_owned()
+        ));
+        assert!(
+            failing_report.failures.contains(
+                &"evolution_replay_live_evolution_critical_reflection_issues 1 below required 2"
+                    .to_owned()
+            )
+        );
+        assert!(failing_report.failures.contains(
+            &"evolution_replay_live_evolution_revision_actions 2 below required 3".to_owned()
         ));
         assert!(
             failing_report
@@ -4243,6 +4271,8 @@ mod tests {
             min_evolution_replay_live_evolution_memory_updates: None,
             min_evolution_replay_live_evolution_stored_memory_updates: None,
             min_evolution_replay_live_evolution_reflection_issues: None,
+            min_evolution_replay_live_evolution_critical_reflection_issues: None,
+            min_evolution_replay_live_evolution_revision_actions: None,
             min_evolution_recursive_replay_items: None,
             min_evolution_recursive_runtime_calls: None,
             max_evolution_drift_rollbacks: None,

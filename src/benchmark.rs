@@ -190,6 +190,8 @@ pub struct BenchmarkGate {
     pub min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
+    pub min_evolution_replay_live_evolution_critical_reflection_issues: Option<u64>,
+    pub min_evolution_replay_live_evolution_revision_actions: Option<u64>,
     pub min_evolution_replay_live_evolution_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_memory_update_device_profiles: Option<usize>,
     pub min_evolution_recursive_replay_items: Option<u64>,
@@ -306,6 +308,8 @@ impl Default for BenchmarkGate {
             min_evolution_replay_live_evolution_memory_updates: None,
             min_evolution_replay_live_evolution_stored_memory_updates: None,
             min_evolution_replay_live_evolution_reflection_issues: None,
+            min_evolution_replay_live_evolution_critical_reflection_issues: None,
+            min_evolution_replay_live_evolution_revision_actions: None,
             min_evolution_replay_live_evolution_device_profiles: None,
             min_evolution_replay_live_evolution_memory_update_device_profiles: None,
             min_evolution_recursive_replay_items: None,
@@ -3005,6 +3009,32 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "evolution_replay_live_evolution_reflection_issues {} below minimum {}",
                     observed, min_evolution_replay_live_evolution_reflection_issues
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_critical_reflection_issues) =
+            gate.min_evolution_replay_live_evolution_critical_reflection_issues
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_critical_reflection_issues;
+            if observed < min_evolution_replay_live_evolution_critical_reflection_issues {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_critical_reflection_issues {} below minimum {}",
+                    observed, min_evolution_replay_live_evolution_critical_reflection_issues
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_revision_actions) =
+            gate.min_evolution_replay_live_evolution_revision_actions
+        {
+            let observed = self.evolution_ledger.replay_live_evolution_revision_actions;
+            if observed < min_evolution_replay_live_evolution_revision_actions {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_revision_actions {} below minimum {}",
+                    observed, min_evolution_replay_live_evolution_revision_actions
                 ));
             }
         }
@@ -5925,6 +5955,8 @@ mod tests {
         gate.min_evolution_replay_live_evolution_memory_updates = Some(3);
         gate.min_evolution_replay_live_evolution_stored_memory_updates = Some(2);
         gate.min_evolution_replay_live_evolution_reflection_issues = Some(2);
+        gate.min_evolution_replay_live_evolution_critical_reflection_issues = Some(1);
+        gate.min_evolution_replay_live_evolution_revision_actions = Some(2);
         gate.min_evolution_recursive_replay_items = Some(6);
         gate.min_evolution_recursive_runtime_calls = Some(7);
         gate.max_evolution_drift_rollbacks = Some(0);
@@ -5960,6 +5992,8 @@ mod tests {
             "evolution_replay_live_evolution_memory_updates",
             "evolution_replay_live_evolution_stored_memory_updates",
             "evolution_replay_live_evolution_reflection_issues",
+            "evolution_replay_live_evolution_critical_reflection_issues",
+            "evolution_replay_live_evolution_revision_actions",
             "evolution_recursive_replay_items",
             "evolution_recursive_runtime_calls",
         ] {
@@ -6097,6 +6131,16 @@ mod tests {
             passing
                 .summary_line()
                 .contains("evolution_replay_live_evolution_reflection_issues=2")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_replay_live_evolution_critical_reflection_issues=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_replay_live_evolution_revision_actions=2")
         );
         assert!(
             passing
