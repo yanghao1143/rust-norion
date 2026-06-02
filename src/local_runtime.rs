@@ -224,6 +224,8 @@ impl ModelRuntime for LocalTransformerRuntime {
                 kv_influence: Some(forward.kv_influence),
                 imported_kv_blocks: self.imported_kv_blocks.len(),
                 exported_kv_blocks: self.exported_kv_blocks.len(),
+                hot_kv_precision_bits: Some(request.runtime_metadata.hot_kv_precision_bits),
+                cold_kv_precision_bits: Some(request.runtime_metadata.cold_kv_precision_bits),
             });
         response.tokens = answer
             .split_whitespace()
@@ -762,6 +764,9 @@ mod tests {
         assert_eq!(response.diagnostics.hidden_size, 48);
         assert_eq!(response.diagnostics.local_window_tokens, 16_384);
         assert!(response.diagnostics.forward_energy.unwrap() > 0.0);
+        assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
+        assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
+        assert!(response.diagnostics.has_valid_kv_precision_signal());
         assert!(response.diagnostics.has_forward_signal());
         assert!(exported.len() <= 2);
     }

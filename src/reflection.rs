@@ -90,6 +90,8 @@ pub struct RuntimeDiagnostics {
     pub kv_influence: Option<f32>,
     pub imported_kv_blocks: usize,
     pub exported_kv_blocks: usize,
+    pub hot_kv_precision_bits: Option<u8>,
+    pub cold_kv_precision_bits: Option<u8>,
 }
 
 impl RuntimeDiagnostics {
@@ -132,6 +134,13 @@ impl RuntimeDiagnostics {
             && has_text(self.memory_mode.as_deref())
     }
 
+    pub fn has_valid_kv_precision_signal(&self) -> bool {
+        match (self.hot_kv_precision_bits, self.cold_kv_precision_bits) {
+            (Some(hot), Some(cold)) => matches!(hot, 4 | 8) && matches!(cold, 4 | 8) && cold <= hot,
+            _ => false,
+        }
+    }
+
     pub fn with_layer_modes(
         mut self,
         global: usize,
@@ -165,6 +174,20 @@ impl RuntimeDiagnostics {
         self.memory_mode = None;
         self
     }
+
+    pub fn clear_kv_precision(mut self) -> Self {
+        self.hot_kv_precision_bits = None;
+        self.cold_kv_precision_bits = None;
+        self
+    }
+
+    pub fn with_kv_precision(mut self, hot_bits: u8, cold_bits: u8) -> Self {
+        if matches!(hot_bits, 4 | 8) && matches!(cold_bits, 4 | 8) && cold_bits <= hot_bits {
+            self.hot_kv_precision_bits = Some(hot_bits);
+            self.cold_kv_precision_bits = Some(cold_bits);
+        }
+        self
+    }
 }
 
 impl Default for RuntimeDiagnostics {
@@ -186,6 +209,8 @@ impl Default for RuntimeDiagnostics {
             kv_influence: None,
             imported_kv_blocks: 0,
             exported_kv_blocks: 0,
+            hot_kv_precision_bits: None,
+            cold_kv_precision_bits: None,
         }
     }
 }

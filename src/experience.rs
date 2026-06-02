@@ -626,6 +626,8 @@ fn serialize_runtime_diagnostics(diagnostics: &RuntimeDiagnostics) -> String {
         option_f32_to_field(diagnostics.kv_influence),
         diagnostics.imported_kv_blocks.to_string(),
         diagnostics.exported_kv_blocks.to_string(),
+        option_u8_to_field(diagnostics.hot_kv_precision_bits),
+        option_u8_to_field(diagnostics.cold_kv_precision_bits),
     ]
     .join("\u{1f}")
 }
@@ -654,6 +656,8 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             kv_influence: field_to_finite_f32(fields[6]),
             imported_kv_blocks: fields[7].parse::<usize>().ok()?,
             exported_kv_blocks: fields[8].parse::<usize>().ok()?,
+            hot_kv_precision_bits: None,
+            cold_kv_precision_bits: None,
         }),
         12 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
@@ -672,8 +676,10 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             kv_influence: field_to_finite_f32(fields[9]),
             imported_kv_blocks: fields[10].parse::<usize>().ok()?,
             exported_kv_blocks: fields[11].parse::<usize>().ok()?,
+            hot_kv_precision_bits: None,
+            cold_kv_precision_bits: None,
         }),
-        16 => Some(RuntimeDiagnostics {
+        16 | 18 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
             device_profile: non_empty_string(fields[2]),
@@ -690,13 +696,19 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             kv_influence: field_to_finite_f32(fields[13]),
             imported_kv_blocks: fields[14].parse::<usize>().ok()?,
             exported_kv_blocks: fields[15].parse::<usize>().ok()?,
+            hot_kv_precision_bits: fields
+                .get(16)
+                .and_then(|value| field_to_kv_precision_bits(value)),
+            cold_kv_precision_bits: fields
+                .get(17)
+                .and_then(|value| field_to_kv_precision_bits(value)),
         }),
         _ => None,
     }
 }
 
 fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
-    [
+    let mut parts = [
         diagnostics.model_id.as_deref().unwrap_or_default(),
         diagnostics.selected_adapter.as_deref().unwrap_or_default(),
         diagnostics.device_profile.as_deref().unwrap_or_default(),
@@ -706,8 +718,33 @@ fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
     ]
     .into_iter()
     .filter(|item| !item.is_empty())
-    .collect::<Vec<_>>()
-    .join(" ")
+    .map(ToOwned::to_owned)
+    .collect::<Vec<_>>();
+    if diagnostics.has_valid_kv_precision_signal() {
+        parts.push(format!(
+            "kv_bits={}/{}",
+            diagnostics.hot_kv_precision_bits.unwrap_or_default(),
+            diagnostics.cold_kv_precision_bits.unwrap_or_default()
+        ));
+    }
+    parts.join(" ")
+}
+
+fn option_u8_to_field(value: Option<u8>) -> String {
+    value
+        .filter(|value| matches!(value, 4 | 8))
+        .map(|value| value.to_string())
+        .unwrap_or_default()
+}
+
+fn field_to_kv_precision_bits(value: &str) -> Option<u8> {
+    if value.is_empty() {
+        return None;
+    }
+    value
+        .parse::<u8>()
+        .ok()
+        .filter(|value| matches!(value, 4 | 8))
 }
 
 fn option_f32_to_field(value: Option<f32>) -> String {
@@ -1005,6 +1042,23 @@ mod tests {
             loaded.records()[0].runtime_diagnostics.kv_influence,
             Some(0.75)
         );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .hot_kv_precision_bits,
+            Some(8)
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .cold_kv_precision_bits,
+            Some(4)
+        );
+        assert!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .has_valid_kv_precision_signal()
+        );
         assert_eq!(loaded.records()[0].reflection_issues.len(), 1);
         assert_eq!(
             loaded.records()[0].reflection_issues[0].severity,
@@ -1094,6 +1148,8 @@ mod tests {
                 kv_influence: Some(0.44),
                 imported_kv_blocks: 2,
                 exported_kv_blocks: 3,
+                hot_kv_precision_bits: Some(8),
+                cold_kv_precision_bits: Some(4),
             },
             ..input("runtime", 0.9)
         });
@@ -1124,6 +1180,36 @@ mod tests {
         );
         assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
         assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
+    }
+
+    #[test]
+    fn legacy_runtime_diagnostics_deserialize_without_kv_precision() {
+        let legacy = [
+            "model",
+            "portable-rust",
+            "cpu",
+            "cpu-vector",
+            "cpu-portable",
+            "tiered-disk",
+            "8",
+            "2",
+            "4",
+            "2",
+            "64",
+            "2048",
+            "0.250000",
+            "0.750000",
+            "1",
+            "2",
+        ]
+        .join("\u{1f}");
+
+        let diagnostics = deserialize_runtime_diagnostics(&legacy).unwrap();
+
+        assert_eq!(diagnostics.model_id.as_deref(), Some("model"));
+        assert_eq!(diagnostics.hot_kv_precision_bits, None);
+        assert_eq!(diagnostics.cold_kv_precision_bits, None);
+        assert!(!diagnostics.has_valid_kv_precision_signal());
     }
 
     #[test]
@@ -1195,6 +1281,8 @@ mod tests {
                 kv_influence: Some(0.75),
                 imported_kv_blocks: 1,
                 exported_kv_blocks: 2,
+                hot_kv_precision_bits: Some(8),
+                cold_kv_precision_bits: Some(4),
             },
             process_reward: ProcessRewardReport {
                 notes: vec![

@@ -1578,6 +1578,14 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
         merge_runtime_diagnostic_text(&mut merged.primary_lane, &diagnostic.primary_lane);
         merge_runtime_diagnostic_text(&mut merged.fallback_lane, &diagnostic.fallback_lane);
         merge_runtime_diagnostic_text(&mut merged.memory_mode, &diagnostic.memory_mode);
+        merge_runtime_diagnostic_kv_precision(
+            &mut merged.hot_kv_precision_bits,
+            diagnostic.hot_kv_precision_bits,
+        );
+        merge_runtime_diagnostic_kv_precision(
+            &mut merged.cold_kv_precision_bits,
+            diagnostic.cold_kv_precision_bits,
+        );
         merged.layer_count += diagnostic.layer_count;
         merged.global_layers += diagnostic.global_layers;
         merged.local_window_layers += diagnostic.local_window_layers;
@@ -1601,6 +1609,9 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
 
     merged.forward_energy = average(forward_energy_total, forward_energy_count);
     merged.kv_influence = average(kv_influence_total, kv_influence_count);
+    if !merged.has_valid_kv_precision_signal() {
+        merged = merged.clear_kv_precision();
+    }
     merged
 }
 
@@ -1611,6 +1622,18 @@ fn merge_runtime_diagnostic_text(merged: &mut Option<String>, next: &Option<Stri
 
     match merged.as_deref() {
         None => *merged = Some(next.to_owned()),
+        Some(current) if current == next => {}
+        Some(_) => *merged = None,
+    }
+}
+
+fn merge_runtime_diagnostic_kv_precision(merged: &mut Option<u8>, next: Option<u8>) {
+    let Some(next) = next.filter(|value| matches!(value, 4 | 8)) else {
+        return;
+    };
+
+    match *merged {
+        None => *merged = Some(next),
         Some(current) if current == next => {}
         Some(_) => *merged = None,
     }

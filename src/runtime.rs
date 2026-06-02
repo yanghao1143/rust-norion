@@ -1140,6 +1140,8 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         kv_influence: extract_json_finite_number_field(payload, "kv_influence"),
         imported_kv_blocks: extract_json_usize_field(payload, "imported_kv_blocks").unwrap_or(0),
         exported_kv_blocks: extract_json_usize_field(payload, "exported_kv_blocks").unwrap_or(0),
+        hot_kv_precision_bits: extract_json_kv_precision_bits(payload, "hot_kv_precision_bits"),
+        cold_kv_precision_bits: extract_json_kv_precision_bits(payload, "cold_kv_precision_bits"),
     }
 }
 
@@ -1258,6 +1260,12 @@ fn extract_json_finite_number_field(source: &str, field: &str) -> Option<f32> {
 
 fn extract_json_usize_field(source: &str, field: &str) -> Option<usize> {
     extract_json_field(source, field).and_then(|value| value.trim().parse::<usize>().ok())
+}
+
+fn extract_json_kv_precision_bits(source: &str, field: &str) -> Option<u8> {
+    extract_json_field(source, field)
+        .and_then(|value| value.trim().parse::<u8>().ok())
+        .filter(|value| matches!(value, 4 | 8))
 }
 
 fn extract_json_array_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
@@ -1672,9 +1680,13 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                 if !runtime_contract_violations.is_empty() {
                     diagnostics.selected_adapter = None;
                     diagnostics = diagnostics.clear_device_execution();
+                    diagnostics = diagnostics.clear_kv_precision();
                 }
                 diagnostics.imported_kv_blocks = imported_kv_blocks;
                 diagnostics.exported_kv_blocks = exported_kv_blocks.len();
+                if runtime_contract_violations.is_empty() {
+                    populate_runtime_kv_precision(&mut diagnostics, &runtime_metadata);
+                }
                 InferenceDraft::new(response.answer, trace)
                     .with_tokens(tokens)
                     .with_exported_kv_blocks(exported_kv_blocks)
@@ -1932,6 +1944,32 @@ fn validate_runtime_response_contract(
             diagnostics.local_window_tokens, architecture.local_window_tokens
         ));
     }
+    if let Some(hot_bits) = diagnostics.hot_kv_precision_bits {
+        if hot_bits > metadata.hot_kv_precision_bits {
+            violations.push(format!(
+                "runtime diagnostics hot KV precision {hot_bits} exceeds request runtime hot KV precision {}",
+                metadata.hot_kv_precision_bits
+            ));
+        }
+    }
+    if let Some(cold_bits) = diagnostics.cold_kv_precision_bits {
+        if cold_bits > metadata.cold_kv_precision_bits {
+            violations.push(format!(
+                "runtime diagnostics cold KV precision {cold_bits} exceeds request runtime cold KV precision {}",
+                metadata.cold_kv_precision_bits
+            ));
+        }
+    }
+    if let (Some(hot_bits), Some(cold_bits)) = (
+        diagnostics.hot_kv_precision_bits,
+        diagnostics.cold_kv_precision_bits,
+    ) {
+        if cold_bits > hot_bits {
+            violations.push(format!(
+                "runtime diagnostics cold KV precision {cold_bits} exceeds hot KV precision {hot_bits}"
+            ));
+        }
+    }
 
     violations
 }
@@ -1951,6 +1989,19 @@ fn populate_runtime_device_execution(
     }
     if diagnostics.memory_mode.is_none() {
         diagnostics.memory_mode = Some(hardware_plan.execution.memory_mode.as_str().to_owned());
+    }
+}
+
+fn populate_runtime_kv_precision(diagnostics: &mut RuntimeDiagnostics, metadata: &RuntimeMetadata) {
+    if diagnostics.hot_kv_precision_bits.is_none() {
+        diagnostics.hot_kv_precision_bits = Some(metadata.hot_kv_precision_bits);
+    }
+    if diagnostics.cold_kv_precision_bits.is_none() {
+        diagnostics.cold_kv_precision_bits = Some(
+            metadata
+                .cold_kv_precision_bits
+                .min(metadata.hot_kv_precision_bits),
+        );
     }
 }
 
@@ -3114,7 +3165,9 @@ mod tests {
                 "forward_energy": 0.42,
                 "kv_influence": 0.18,
                 "imported_kv_blocks": 2,
-                "exported_kv_blocks": 3
+                "exported_kv_blocks": 3,
+                "hot_kv_precision_bits": 8,
+                "cold_kv_precision_bits": 4
             }
         }"#;
 
@@ -3141,6 +3194,9 @@ mod tests {
         assert_eq!(response.diagnostics.kv_influence, Some(0.18));
         assert_eq!(response.diagnostics.imported_kv_blocks, 2);
         assert_eq!(response.diagnostics.exported_kv_blocks, 3);
+        assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
+        assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
+        assert!(response.diagnostics.has_valid_kv_precision_signal());
     }
 
     #[test]

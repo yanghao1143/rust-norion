@@ -497,6 +497,8 @@ impl ProductionForwardKernel for ReferenceProductionForwardKernel {
             kv_influence: Some(forward.kv_influence),
             imported_kv_blocks: context.imported_kv_blocks.len(),
             exported_kv_blocks: exported_kv_blocks.len(),
+            hot_kv_precision_bits: Some(context.device_gate.hot_kv_precision_bits),
+            cold_kv_precision_bits: Some(context.device_gate.cold_kv_precision_bits),
         };
 
         Ok(ProductionKernelOutput::new(answer)
@@ -1043,6 +1045,12 @@ fn normalize_kernel_diagnostics(
     }
     if diagnostics.local_window_tokens == 0 {
         diagnostics.local_window_tokens = manifest.architecture.local_window_tokens;
+    }
+    if diagnostics.hot_kv_precision_bits.is_none() {
+        diagnostics.hot_kv_precision_bits = Some(device_gate.hot_kv_precision_bits);
+    }
+    if diagnostics.cold_kv_precision_bits.is_none() {
+        diagnostics.cold_kv_precision_bits = Some(device_gate.cold_kv_precision_bits);
     }
     diagnostics.imported_kv_blocks = imported_kv_blocks;
     diagnostics.exported_kv_blocks = exported_kv_blocks;
@@ -2130,6 +2138,9 @@ mod tests {
         assert_eq!(response.diagnostics.layer_count, 6);
         assert!(response.diagnostics.forward_energy.unwrap() > 0.0);
         assert!(response.diagnostics.kv_influence.unwrap() > 0.0);
+        assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
+        assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
+        assert!(response.diagnostics.has_valid_kv_precision_signal());
         assert_eq!(response.diagnostics.imported_kv_blocks, 1);
         assert!(!exported.is_empty());
         assert!(exported.iter().all(|block| block.layer < 6));
@@ -2236,6 +2247,9 @@ mod tests {
         assert_eq!(response.diagnostics.layer_count, 6);
         assert_eq!(response.diagnostics.hidden_size, 64);
         assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+        assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
+        assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
+        assert!(response.diagnostics.has_valid_kv_precision_signal());
         assert!(!response.tokens.is_empty());
         assert!(!response.trace.is_empty());
         assert!(!exported.is_empty());

@@ -764,6 +764,8 @@ mod tests {
                 kv_influence: Some(0.27),
                 imported_kv_blocks: 1,
                 exported_kv_blocks: 2,
+                hot_kv_precision_bits: Some(8),
+                cold_kv_precision_bits: Some(4),
             },
             process_reward: ProcessRewardReport {
                 total: reward,

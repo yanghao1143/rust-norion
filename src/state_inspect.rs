@@ -52,6 +52,8 @@ pub struct StateExperienceSummary {
     pub runtime_local_window_tokens: usize,
     pub runtime_forward_energy: Option<f32>,
     pub runtime_kv_influence: Option<f32>,
+    pub runtime_hot_kv_precision_bits: Option<u8>,
+    pub runtime_cold_kv_precision_bits: Option<u8>,
     pub runtime_imported_kv_blocks: usize,
     pub runtime_exported_kv_blocks: usize,
     pub recursive_runtime_calls: Option<usize>,
@@ -78,6 +80,7 @@ pub struct StateInspectionGate {
     pub min_runtime_adapter_experiences: Option<usize>,
     pub min_runtime_forward_energy_experiences: Option<usize>,
     pub min_runtime_kv_influence_experiences: Option<usize>,
+    pub min_runtime_kv_precision_experiences: Option<usize>,
     pub min_runtime_device_execution_experiences: Option<usize>,
     pub min_runtime_layer_mode_experiences: Option<usize>,
     pub min_runtime_all_layer_mode_experiences: Option<usize>,
@@ -131,6 +134,7 @@ pub struct StateInspectionMatrixGate {
     pub min_runtime_adapter_device_profiles: Option<usize>,
     pub min_runtime_forward_energy_device_profiles: Option<usize>,
     pub min_runtime_kv_influence_device_profiles: Option<usize>,
+    pub min_runtime_kv_precision_device_profiles: Option<usize>,
     pub min_runtime_device_execution_device_profiles: Option<usize>,
     pub min_runtime_layer_mode_device_profiles: Option<usize>,
     pub min_runtime_all_layer_mode_device_profiles: Option<usize>,
@@ -188,6 +192,7 @@ pub struct StateInspectionDeviceGateReport {
     pub runtime_adapter_experiences: usize,
     pub runtime_forward_energy_experiences: usize,
     pub runtime_kv_influence_experiences: usize,
+    pub runtime_kv_precision_experiences: usize,
     pub runtime_device_execution_experiences: usize,
     pub runtime_layer_mode_experiences: usize,
     pub runtime_all_layer_mode_experiences: usize,
@@ -236,6 +241,7 @@ impl StateInspectionDeviceGateReport {
             runtime_adapter_experiences: 0,
             runtime_forward_energy_experiences: 0,
             runtime_kv_influence_experiences: 0,
+            runtime_kv_precision_experiences: 0,
             runtime_device_execution_experiences: 0,
             runtime_layer_mode_experiences: 0,
             runtime_all_layer_mode_experiences: 0,
@@ -288,6 +294,7 @@ impl StateInspectionDeviceGateReport {
             runtime_adapter_experiences: inspection.runtime_adapter_experience_count,
             runtime_forward_energy_experiences: inspection.runtime_forward_energy_experience_count,
             runtime_kv_influence_experiences: inspection.runtime_kv_influence_experience_count,
+            runtime_kv_precision_experiences: inspection.runtime_kv_precision_experience_count,
             runtime_device_execution_experiences: inspection
                 .runtime_device_execution_experience_count,
             runtime_layer_mode_experiences: inspection.runtime_layer_mode_experience_count,
@@ -373,6 +380,14 @@ impl StateInspectionDeviceGateReport {
         self.runtime_device_execution_experiences = runtime_device_execution_experiences;
         self.runtime_kv_import_experiences = runtime_kv_import_experiences;
         self.runtime_kv_export_experiences = runtime_kv_export_experiences;
+        self
+    }
+
+    pub fn with_runtime_kv_precision_evidence(
+        mut self,
+        runtime_kv_precision_experiences: usize,
+    ) -> Self {
+        self.runtime_kv_precision_experiences = runtime_kv_precision_experiences;
         self
     }
 
@@ -560,6 +575,12 @@ impl StateInspectionMatrixGateReport {
             "runtime_kv_influence_device_profiles",
             runtime_kv_influence_device_profiles(&device_reports),
             gate.min_runtime_kv_influence_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_precision_device_profiles",
+            runtime_kv_precision_device_profiles(&device_reports),
+            gate.min_runtime_kv_precision_device_profiles,
         );
         require_min_device_profiles(
             &mut failures,
@@ -765,6 +786,10 @@ impl StateInspectionMatrixGateReport {
         runtime_kv_influence_device_profiles(&self.device_reports)
     }
 
+    pub fn runtime_kv_precision_device_profiles(&self) -> usize {
+        runtime_kv_precision_device_profiles(&self.device_reports)
+    }
+
     pub fn runtime_device_execution_device_profiles(&self) -> usize {
         runtime_device_execution_device_profiles(&self.device_reports)
     }
@@ -871,7 +896,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_precision_device_profiles={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -881,6 +906,7 @@ impl StateInspectionMatrixGateReport {
             self.runtime_adapter_device_profiles(),
             self.runtime_forward_energy_device_profiles(),
             self.runtime_kv_influence_device_profiles(),
+            self.runtime_kv_precision_device_profiles(),
             self.runtime_device_execution_device_profiles(),
             self.runtime_layer_mode_device_profiles(),
             self.runtime_all_layer_mode_device_profiles(),
@@ -943,6 +969,14 @@ fn runtime_kv_influence_device_profiles(
 ) -> usize {
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.runtime_kv_influence_experiences > 0
+    })
+}
+
+fn runtime_kv_precision_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_precision_experiences > 0
     })
 }
 
@@ -1230,6 +1264,7 @@ pub struct StateInspectionReport {
     pub runtime_adapter_experience_count: usize,
     pub runtime_forward_energy_experience_count: usize,
     pub runtime_kv_influence_experience_count: usize,
+    pub runtime_kv_precision_experience_count: usize,
     pub runtime_device_execution_experience_count: usize,
     pub runtime_layer_mode_experience_count: usize,
     pub runtime_all_layer_mode_experience_count: usize,
@@ -1296,6 +1331,12 @@ impl StateInspectionReport {
             .records()
             .iter()
             .filter(|record| record.runtime_diagnostics.kv_influence.is_some())
+            .count();
+        let runtime_kv_precision_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| record.runtime_diagnostics.has_valid_kv_precision_signal())
             .count();
         let runtime_device_execution_experience_count = engine
             .experience
@@ -1447,6 +1488,10 @@ impl StateInspectionReport {
                     runtime_local_window_tokens: record.runtime_diagnostics.local_window_tokens,
                     runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                     runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                    runtime_hot_kv_precision_bits: record.runtime_diagnostics.hot_kv_precision_bits,
+                    runtime_cold_kv_precision_bits: record
+                        .runtime_diagnostics
+                        .cold_kv_precision_bits,
                     runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
                     runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
                     recursive_runtime_calls: recursive_runtime_calls_from_notes(
@@ -1503,6 +1548,7 @@ impl StateInspectionReport {
             runtime_adapter_experience_count,
             runtime_forward_energy_experience_count,
             runtime_kv_influence_experience_count,
+            runtime_kv_precision_experience_count,
             runtime_device_execution_experience_count,
             runtime_layer_mode_experience_count,
             runtime_all_layer_mode_experience_count,
@@ -1542,7 +1588,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -1550,6 +1596,7 @@ impl StateInspectionReport {
             self.runtime_adapter_experience_count,
             self.runtime_forward_energy_experience_count,
             self.runtime_kv_influence_experience_count,
+            self.runtime_kv_precision_experience_count,
             self.runtime_device_execution_experience_count,
             self.runtime_layer_mode_experience_count,
             self.runtime_all_layer_mode_experience_count,
@@ -1667,6 +1714,12 @@ impl StateInspectionReport {
             "runtime_kv_influence_experience_count",
             self.runtime_kv_influence_experience_count,
             gate.min_runtime_kv_influence_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_kv_precision_experience_count",
+            self.runtime_kv_precision_experience_count,
+            gate.min_runtime_kv_precision_experiences,
         );
         require_min_usize(
             &mut failures,
@@ -2195,6 +2248,8 @@ mod tests {
                 kv_influence: Some(0.56),
                 imported_kv_blocks: 2,
                 exported_kv_blocks: 3,
+                hot_kv_precision_bits: Some(8),
+                cold_kv_precision_bits: Some(4),
             },
             process_reward: ProcessRewardReport {
                 total: 0.88,
@@ -2252,6 +2307,7 @@ mod tests {
         assert_eq!(report.runtime_adapter_experience_count, 1);
         assert_eq!(report.runtime_forward_energy_experience_count, 1);
         assert_eq!(report.runtime_kv_influence_experience_count, 1);
+        assert_eq!(report.runtime_kv_precision_experience_count, 1);
         assert_eq!(report.runtime_device_execution_experience_count, 1);
         assert_eq!(report.runtime_kv_import_experience_count, 1);
         assert_eq!(report.runtime_kv_export_experience_count, 1);
@@ -2399,6 +2455,11 @@ mod tests {
             report
                 .summary_line()
                 .contains("runtime_kv_influence_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_precision_experiences=1")
         );
         assert!(
             report
@@ -2576,6 +2637,7 @@ mod tests {
             min_runtime_adapter_experiences: Some(1),
             min_runtime_forward_energy_experiences: Some(1),
             min_runtime_kv_influence_experiences: Some(1),
+            min_runtime_kv_precision_experiences: Some(1),
             min_runtime_device_execution_experiences: Some(1),
             min_runtime_layer_mode_experiences: Some(1),
             min_runtime_all_layer_mode_experiences: Some(1),
@@ -2636,6 +2698,7 @@ mod tests {
             min_runtime_adapter_experiences: Some(2),
             min_runtime_forward_energy_experiences: Some(2),
             min_runtime_kv_influence_experiences: Some(2),
+            min_runtime_kv_precision_experiences: Some(2),
             min_runtime_device_execution_experiences: Some(2),
             min_runtime_layer_mode_experiences: Some(2),
             min_runtime_all_layer_mode_experiences: Some(2),
@@ -2955,6 +3018,7 @@ mod tests {
             min_runtime_adapter_device_profiles: Some(2),
             min_runtime_forward_energy_device_profiles: Some(1),
             min_runtime_kv_influence_device_profiles: Some(1),
+            min_runtime_kv_precision_device_profiles: Some(2),
             min_runtime_device_execution_device_profiles: Some(2),
             min_runtime_layer_mode_device_profiles: Some(2),
             min_runtime_all_layer_mode_device_profiles: Some(1),
@@ -2974,11 +3038,13 @@ mod tests {
                         DeviceClass::CpuOnly => {
                             device_report =
                                 device_report.with_runtime_evidence(1, 1, 1, 1, 1, 1, 1, 1);
+                            device_report = device_report.with_runtime_kv_precision_evidence(1);
                             device_report = device_report.with_runtime_layer_mode_evidence(1, 1);
                         }
                         DeviceClass::IntegratedGpu => {
                             device_report =
                                 device_report.with_runtime_evidence(2, 1, 1, 0, 0, 1, 0, 0);
+                            device_report = device_report.with_runtime_kv_precision_evidence(1);
                             device_report = device_report.with_runtime_layer_mode_evidence(1, 0);
                         }
                         _ => {}
@@ -2995,6 +3061,7 @@ mod tests {
         assert_eq!(report.runtime_adapter_device_profiles(), 2);
         assert_eq!(report.runtime_forward_energy_device_profiles(), 1);
         assert_eq!(report.runtime_kv_influence_device_profiles(), 1);
+        assert_eq!(report.runtime_kv_precision_device_profiles(), 2);
         assert_eq!(report.runtime_device_execution_device_profiles(), 2);
         assert_eq!(report.runtime_layer_mode_device_profiles(), 2);
         assert_eq!(report.runtime_all_layer_mode_device_profiles(), 1);
@@ -3014,6 +3081,11 @@ mod tests {
             report
                 .summary_line()
                 .contains("runtime_device_execution_device_profiles=2")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_precision_device_profiles=2")
         );
         assert!(
             report
@@ -3048,6 +3120,9 @@ mod tests {
         );
         assert!(failing.failures.iter().any(|failure| {
             failure == "runtime_forward_energy_device_profiles 0 below required 1"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "runtime_kv_precision_device_profiles 0 below required 2"
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "runtime_device_execution_device_profiles 0 below required 2"
@@ -3425,6 +3500,7 @@ mod tests {
             min_runtime_adapter_experiences: Some(1),
             min_runtime_forward_energy_experiences: Some(1),
             min_runtime_kv_influence_experiences: Some(1),
+            min_runtime_kv_precision_experiences: Some(1),
             min_runtime_device_execution_experiences: Some(1),
             min_runtime_layer_mode_experiences: Some(1),
             min_runtime_all_layer_mode_experiences: Some(1),
@@ -3478,6 +3554,7 @@ mod tests {
         assert_eq!(report.runtime_adapter_experience_count, 0);
         assert_eq!(report.runtime_forward_energy_experience_count, 0);
         assert_eq!(report.runtime_kv_influence_experience_count, 0);
+        assert_eq!(report.runtime_kv_precision_experience_count, 0);
         assert_eq!(report.runtime_device_execution_experience_count, 0);
         assert_eq!(report.runtime_layer_mode_experience_count, 0);
         assert_eq!(report.runtime_all_layer_mode_experience_count, 0);
