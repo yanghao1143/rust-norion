@@ -893,12 +893,14 @@ cargo run -- --runtime-command ./self-transformer-cli --runtime-wire-format json
 
 In JSON mode, stdin receives `rust-norion-runtime-request-v1` and stdout must
 return `rust-norion-runtime-response-v1` with an `answer`, optional `tokens`,
-and optional `trace` entries.
+optional `trace` entries, optional `diagnostics`, and optional
+`exported_kv_blocks` for model-owned KV export.
 
 当自研 runtime 支持机器可读协议时，可以使用结构化 JSON ABI。JSON 模式下 stdin 会收到
 `rust-norion-runtime-request-v1`，stdout 需要返回
-`rust-norion-runtime-response-v1`，其中包含 `answer`，并可选包含 `tokens` 与
-`trace`，方便 Noiron 控制层继续做 token 监控与反思。
+`rust-norion-runtime-response-v1`，其中包含 `answer`，并可选包含 `tokens`、
+`trace`、`diagnostics` 与 `exported_kv_blocks`，方便 Noiron 控制层继续做 token
+监控、反思和模型侧 KV 导出。
 
 When runtime tokens include `entropy` and/or `logprob`, the engine folds those
 token-level signals into the main generation perplexity used by drift checks,
@@ -1220,7 +1222,7 @@ fit the manifest/token span bound, and all values must be finite. Runtime KV
 imports generated from active memories are also assigned layer/head ids within
 the runtime architecture instead of assuming one unbounded head per memory.
 
-`ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。
+`ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。`--production-runtime --runtime-command ... --runtime-json` 会把外部自研命令 runtime 自动包装进同一条 production kernel slot，因此本地可执行文件、Rust prototype 和后续训练好的 forward kernel 都必须接受同一份 manifest / device / KV ABI 门禁。
 `ProductionTransformerRuntime::conformance_report` 和 CLI `--production-kernel-conformance-gate` 会把这份契约变成本地/CI 门禁：要求 kernel 已连接，并返回 runtime token uncertainty、reasoning trace、positive finite forward energy、finite KV influence，以及 manifest 启用 KV export 时的导出 KV。
 `--production-kernel-conformance-all-devices-gate` 会把同一份契约扩展到每一个显式设备 profile，并逐设备报告构造失败、adapter / device contract 失败和 kernel 输出失败，而不是把问题隐藏在一次 benchmark 运行里。
 Noiron 控制层导入的 KV 会先经过校验再被生产 runtime 接受，生产 kernel 导出的 KV 也会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须合法，key/value 不能为空且维度一致，向量长度必须符合 manifest 与 token span 上界，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。由活跃记忆生成的 runtime KV import 也会按 runtime 架构分配有界的 layer/head，而不是假设每条记忆都能占用一个无限 head。
@@ -1239,8 +1241,11 @@ The CLI exposes this metadata through `--runtime-model-id`,
 `--runtime-tokenizer-path`, `--runtime-config`, and `--runtime-manifest-gate`
 turn the same metadata into an executable production manifest check before the
 runtime is used. `--production-runtime` uses the same manifest and current
-device plan to instantiate the manifest-backed production boundary. The same
-explicit architecture flags also configure the built-in local runtime
+device plan to instantiate the manifest-backed production boundary; when it is
+combined with `--runtime-command ... --runtime-json`, the external
+self-developed executable is wrapped behind `ModelRuntimeForwardKernel` and is
+checked by the same production conformance gate. The same explicit architecture
+flags also configure the built-in local runtime
 prototype. Runtime metadata and the structured JSON request ABI carry the
 effective Transformer layer/head/window shape, KV import/export block limits,
 and hot/cold KV precision, so an external self-developed runtime can enforce
@@ -1255,7 +1260,7 @@ path.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
-`--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界。`--production-reference-kernel` 会同时启用这条边界并挂载内置 reference kernel，用于本地验证生产 ABI。
+`--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界；如果同时使用 `--runtime-command ... --runtime-json`，外部自研可执行文件会被 `ModelRuntimeForwardKernel` 包装到 production kernel slot 后面，并接受同一条 production conformance 门禁。`--production-reference-kernel` 会同时启用这条边界并挂载内置 reference kernel，用于本地验证生产 ABI。
 同一组显式架构参数也会配置内置 local runtime prototype。
 runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。
 

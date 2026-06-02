@@ -190,13 +190,7 @@ fn main() -> std::io::Result<()> {
                 let mut backend = RuntimeBackend::new(runtime);
                 run_benchmark(&mut engine, &mut backend, &benchmark_path)?
             }
-        } else if let Some(runtime_command) = args.runtime_command.clone() {
-            let runtime = CommandRuntime::new(runtime_command)
-                .args(args.runtime_args.clone())
-                .prompt_mode(args.runtime_prompt_mode)
-                .wire_format(args.runtime_wire_format)
-                .with_metadata(args.runtime_metadata.clone())
-                .with_architecture(args.runtime_manifest().architecture);
+        } else if let Some(runtime) = args.command_runtime() {
             let mut backend = RuntimeBackend::new(runtime);
             run_benchmark_for_args(&mut engine, &mut backend, &args, &benchmark_path)?
         } else if args.local_runtime {
@@ -244,13 +238,7 @@ fn main() -> std::io::Result<()> {
             args.trace_path.as_ref(),
             None,
         )?
-    } else if let Some(runtime_command) = args.runtime_command.clone() {
-        let runtime = CommandRuntime::new(runtime_command)
-            .args(args.runtime_args.clone())
-            .prompt_mode(args.runtime_prompt_mode)
-            .wire_format(args.runtime_wire_format)
-            .with_metadata(args.runtime_metadata.clone())
-            .with_architecture(args.runtime_manifest().architecture);
+    } else if let Some(runtime) = args.command_runtime() {
         let mut backend = RuntimeBackend::new(runtime);
         run_timed_inference(
             &mut engine,
@@ -4903,9 +4891,23 @@ impl Args {
             Ok(runtime.with_kernel(ModelRuntimeForwardKernel::new(local)))
         } else if self.production_reference_kernel {
             Ok(runtime.with_kernel(ReferenceProductionForwardKernel::new()))
+        } else if let Some(command_runtime) = self.command_runtime() {
+            Ok(runtime.with_kernel(ModelRuntimeForwardKernel::new(command_runtime)))
         } else {
             Ok(runtime)
         }
+    }
+
+    fn command_runtime(&self) -> Option<CommandRuntime> {
+        let manifest = self.runtime_manifest();
+        self.runtime_command.clone().map(|runtime_command| {
+            CommandRuntime::new(runtime_command)
+                .args(self.runtime_args.clone())
+                .prompt_mode(self.runtime_prompt_mode)
+                .wire_format(self.runtime_wire_format)
+                .with_metadata(manifest.runtime_metadata())
+                .with_architecture(manifest.architecture)
+        })
     }
 
     fn kv_quant_gate(&self) -> KvQuantBenchmarkGate {
@@ -7030,6 +7032,77 @@ mod tests {
     }
 
     #[test]
+    fn production_command_runtime_cli_passes_conformance_gate() {
+        let asset_dir = temp_asset_dir("production-runtime-cli-command-kernel");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let (program, runtime_args) = command_runtime_json_echo_args(
+            "{\"schema\":\"rust-norion-runtime-response-v1\",\"answer\":\"command runtime production answer\",\"tokens\":[{\"text\":\"command\",\"logprob\":-0.1,\"entropy\":0.2}],\"trace\":[{\"label\":\"command_kernel\",\"content\":\"external self-developed runtime executed through production ABI\",\"confidence\":0.92}],\"exported_kv_blocks\":[{\"layer\":1,\"head\":0,\"token_start\":0,\"token_end\":1,\"key\":[0.1,0.2],\"value\":[0.3,0.4]}],\"diagnostics\":{\"model_id\":\"self-owned-transformer\",\"selected_adapter\":\"portable-rust\",\"global_layers\":2,\"local_window_layers\":3,\"convolutional_fusion_layers\":1,\"forward_energy\":0.42,\"kv_influence\":0.25,\"hot_kv_precision_bits\":8,\"cold_kv_precision_bits\":4}}",
+        );
+        let mut raw = vec![
+            "--production-runtime".to_owned(),
+            "--production-kernel-conformance-gate".to_owned(),
+            "--runtime-command".to_owned(),
+            program,
+            "--runtime-json".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "64".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "1024".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ];
+        for arg in runtime_args {
+            raw.push("--runtime-arg".to_owned());
+            raw.push(arg);
+        }
+        let args = Args::parse(raw);
+
+        let runtime = args.production_runtime().unwrap();
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(args.production_runtime);
+        assert!(!args.production_reference_kernel);
+        assert!(!args.production_local_kernel);
+        assert!(args.runtime_command.is_some());
+        assert_eq!(args.runtime_wire_format, CommandWireFormat::Json);
+        assert!(runtime.kernel_connected());
+        assert!(report.passed, "{report:?}");
+        assert_eq!(report.model_id, "self-owned-transformer");
+        assert_eq!(report.selected_adapter, "portable-rust");
+        assert_eq!(report.token_count, 1);
+        assert!(report.trace_steps >= 2);
+        assert_eq!(report.imported_kv_blocks, 1);
+        assert_eq!(report.exported_kv_blocks, 1);
+        assert_eq!(report.forward_energy, Some(0.42));
+        assert_eq!(report.kv_influence, Some(0.25));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
     fn production_kernel_conformance_gate_cli_fails_without_kernel() {
         let asset_dir = temp_asset_dir("production-runtime-cli-conformance-missing");
         fs::create_dir_all(&asset_dir).unwrap();
@@ -8567,6 +8640,29 @@ mod tests {
             "--device".to_owned(),
             "cpu".to_owned(),
         ]
+    }
+
+    #[cfg(windows)]
+    fn command_runtime_json_echo_args(payload: &str) -> (String, Vec<String>) {
+        let escaped = payload.replace('\'', "''");
+        (
+            "powershell.exe".to_owned(),
+            vec![
+                "-NoProfile".to_owned(),
+                "-NonInteractive".to_owned(),
+                "-Command".to_owned(),
+                format!("Write-Output '{escaped}'"),
+            ],
+        )
+    }
+
+    #[cfg(not(windows))]
+    fn command_runtime_json_echo_args(payload: &str) -> (String, Vec<String>) {
+        let escaped = payload.replace('\'', "'\\''");
+        (
+            "sh".to_owned(),
+            vec!["-c".to_owned(), format!("printf '%s' '{escaped}'")],
+        )
     }
 
     fn assert_trace_selected_adapter_allowed(line: &str, allowed: &[&str]) {

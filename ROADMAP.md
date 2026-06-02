@@ -547,7 +547,11 @@ These are algorithmic references, not product dependencies:
   `--production-kernel-conformance-gate` now runs a short manifest-backed
   forward pass with deterministic KV import and fails unless the attached
   kernel returns token uncertainty, reasoning trace, forward energy, KV
-  influence, and exported KV when enabled; benchmark runs now seed
+  influence, and exported KV when enabled; external command runtimes can now be
+  attached behind the same production boundary with
+  `--production-runtime --runtime-command ... --runtime-json`, and JSON
+  `exported_kv_blocks` are parsed into the same manifest/device/KV ABI checks
+  used by Rust production kernels; benchmark runs now seed
   deterministic sparse-memory fixtures and can gate Infini/SpeContext coverage
   with minimum sparse-skipped case/token counts, so sparse filtering regressions
   are caught from a clean state; `--runtime-manifest-all-devices-gate` can now
@@ -852,6 +856,11 @@ These are algorithmic references, not product dependencies:
   `--production-local-kernel`, so the self-developed runtime prototype exercises
   the same production boundary and conformance gate before a trained kernel is
   available.
+- The CLI can attach an external self-developed command runtime through
+  `--production-runtime --runtime-command ... --runtime-json`, so local
+  executables can be validated by the same production manifest, device
+  contract, token/trace diagnostics, and KV export ABI before they are treated
+  as integrated.
 - The CLI can run `--production-kernel-conformance-gate` so a reference or real
   self-developed kernel must prove the full response/KV diagnostic surface
   before benchmark or integration claims rely on it.

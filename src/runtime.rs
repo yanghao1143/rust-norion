@@ -411,6 +411,7 @@ pub struct RuntimeResponse {
     pub tokens: Vec<RuntimeToken>,
     pub trace: Vec<ReasoningStep>,
     pub diagnostics: RuntimeDiagnostics,
+    pub exported_kv_blocks: Vec<RuntimeKvBlock>,
 }
 
 impl RuntimeResponse {
@@ -420,6 +421,7 @@ impl RuntimeResponse {
             tokens: Vec::new(),
             trace: Vec::new(),
             diagnostics: RuntimeDiagnostics::default(),
+            exported_kv_blocks: Vec::new(),
         }
     }
 
@@ -524,6 +526,7 @@ pub struct CommandRuntime {
     wire_format: CommandWireFormat,
     metadata: RuntimeMetadata,
     architecture: Option<TransformerRuntimeArchitecture>,
+    exported_kv_blocks: Vec<RuntimeKvBlock>,
 }
 
 impl CommandRuntime {
@@ -535,6 +538,7 @@ impl CommandRuntime {
             wire_format: CommandWireFormat::Text,
             metadata: RuntimeMetadata::default(),
             architecture: None,
+            exported_kv_blocks: Vec::new(),
         }
     }
 
@@ -651,7 +655,12 @@ impl ModelRuntime for CommandRuntime {
         })
     }
 
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        Ok(self.exported_kv_blocks.clone())
+    }
+
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        self.exported_kv_blocks.clear();
         let payload = format_runtime_payload(&request, self.wire_format);
         let mut command = Command::new(&self.program);
         command.args(self.expanded_args(&request, &payload));
@@ -693,6 +702,7 @@ impl ModelRuntime for CommandRuntime {
             CommandWireFormat::Text => RuntimeResponse::new(stdout),
             CommandWireFormat::Json => parse_runtime_response_json(&stdout)?,
         };
+        self.exported_kv_blocks = response.exported_kv_blocks.clone();
         response.trace.push(ReasoningStep::new(
             "command_runtime",
             format!("executed {}", self.program.display()),
@@ -1115,7 +1125,60 @@ pub fn parse_runtime_response_json(payload: &str) -> Result<RuntimeResponse, Run
     response.diagnostics = extract_json_object_field(payload, "diagnostics")
         .map(parse_runtime_diagnostics)
         .unwrap_or_default();
+    response.exported_kv_blocks = parse_runtime_kv_blocks(payload, "exported_kv_blocks")?;
     Ok(response)
+}
+
+fn parse_runtime_kv_blocks(
+    payload: &str,
+    field: &str,
+) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+    let Some(blocks) = extract_json_array_field_by_value_kind(payload, field) else {
+        return Ok(Vec::new());
+    };
+
+    split_json_objects(blocks)
+        .into_iter()
+        .enumerate()
+        .map(|(index, block)| parse_runtime_kv_block(block, index, field))
+        .collect()
+}
+
+fn parse_runtime_kv_block(
+    payload: &str,
+    index: usize,
+    field: &str,
+) -> Result<RuntimeKvBlock, RuntimeError> {
+    let required_usize = |name: &str| {
+        extract_json_usize_field(payload, name).ok_or_else(|| {
+            RuntimeError::new(format!(
+                "runtime response {field}[{index}] must include usize field {name}"
+            ))
+        })
+    };
+    let layer = required_usize("layer")?;
+    let head = required_usize("head")?;
+    let token_start = required_usize("token_start")?;
+    let token_end = required_usize("token_end")?;
+    let key = extract_json_f32_array_field(payload, "key").ok_or_else(|| {
+        RuntimeError::new(format!(
+            "runtime response {field}[{index}] must include finite f32 array key"
+        ))
+    })?;
+    let value = extract_json_f32_array_field(payload, "value").ok_or_else(|| {
+        RuntimeError::new(format!(
+            "runtime response {field}[{index}] must include finite f32 array value"
+        ))
+    })?;
+
+    Ok(RuntimeKvBlock::new(
+        layer,
+        head,
+        token_start,
+        token_end,
+        key,
+        value,
+    ))
 }
 
 fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
@@ -1268,8 +1331,43 @@ fn extract_json_kv_precision_bits(source: &str, field: &str) -> Option<u8> {
         .filter(|value| matches!(value, 4 | 8))
 }
 
+fn extract_json_f32_array_field(source: &str, field: &str) -> Option<Vec<f32>> {
+    let value = extract_json_array_field(source, field)?;
+    parse_json_f32_array(value)
+}
+
 fn extract_json_array_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
     extract_json_field(source, field).filter(|value| value.trim_start().starts_with('['))
+}
+
+fn extract_json_array_field_by_value_kind<'a>(source: &'a str, field: &str) -> Option<&'a str> {
+    let needle = json_string(field);
+    let mut search_start = 0;
+
+    while search_start < source.len() {
+        let Some(offset) = source[search_start..].find(&needle) else {
+            return None;
+        };
+        let key_start = search_start + offset;
+        let after_key = key_start + needle.len();
+        let colon_offset = source[after_key..].find(':')?;
+        let mut value_start = after_key + colon_offset + 1;
+        while source[value_start..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
+        {
+            value_start += source[value_start..].chars().next()?.len_utf8();
+        }
+        let value_end = json_value_end(source, value_start)?;
+        let value = &source[value_start..value_end];
+        if value.trim_start().starts_with('[') {
+            return Some(value);
+        }
+        search_start = after_key;
+    }
+
+    None
 }
 
 fn extract_json_object_field<'a>(source: &'a str, field: &str) -> Option<&'a str> {
@@ -1330,6 +1428,29 @@ fn split_json_objects(array_value: &str) -> Vec<&str> {
     }
 
     objects
+}
+
+fn parse_json_f32_array(array_value: &str) -> Option<Vec<f32>> {
+    let trimmed = array_value.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return None;
+    }
+
+    let inner = &trimmed[1..trimmed.len().saturating_sub(1)];
+    if inner.trim().is_empty() {
+        return Some(Vec::new());
+    }
+
+    inner
+        .split(',')
+        .map(|value| {
+            value
+                .trim()
+                .parse::<f32>()
+                .ok()
+                .filter(|value| value.is_finite())
+        })
+        .collect()
 }
 
 fn json_value_end(source: &str, start: usize) -> Option<usize> {
@@ -3156,6 +3277,16 @@ mod tests {
             "trace": [
                 {"label": "runtime", "content": "generated with JSON ABI", "confidence": 0.91}
             ],
+            "exported_kv_blocks": [
+                {
+                    "layer": 1,
+                    "head": 0,
+                    "token_start": 0,
+                    "token_end": 1,
+                    "key": [0.1, 0.2],
+                    "value": [0.3, 0.4]
+                }
+            ],
             "diagnostics": {
                 "model_id": "json-self-runtime",
                 "selected_adapter": "portable-rust",
@@ -3197,6 +3328,10 @@ mod tests {
         assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
         assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
         assert!(response.diagnostics.has_valid_kv_precision_signal());
+        assert_eq!(response.exported_kv_blocks.len(), 1);
+        assert_eq!(response.exported_kv_blocks[0].layer, 1);
+        assert_eq!(response.exported_kv_blocks[0].key, vec![0.1, 0.2]);
+        assert_eq!(response.exported_kv_blocks[0].value, vec![0.3, 0.4]);
     }
 
     #[test]
@@ -3227,6 +3362,47 @@ mod tests {
         let error = runtime.generate(sample_request()).unwrap_err();
 
         assert!(error.message().contains("failed to spawn runtime command"));
+    }
+
+    #[test]
+    fn command_runtime_exports_kv_blocks_from_json_response() {
+        let (program, args) = json_echo_command(
+            "{\"schema\":\"rust-norion-runtime-response-v1\",\"answer\":\"helper runtime answer\",\"tokens\":[{\"text\":\"helper\",\"entropy\":0.2}],\"trace\":[{\"label\":\"helper\",\"content\":\"json runtime helper\",\"confidence\":0.9}],\"exported_kv_blocks\":[{\"layer\":0,\"head\":0,\"token_start\":0,\"token_end\":1,\"key\":[0.1],\"value\":[0.2]}],\"diagnostics\":{\"model_id\":\"sample-transformer\",\"selected_adapter\":\"portable-rust\",\"global_layers\":1,\"local_window_layers\":1,\"convolutional_fusion_layers\":1,\"forward_energy\":0.4,\"kv_influence\":0.2}}",
+        );
+        let mut runtime = CommandRuntime::new(program)
+            .args(args)
+            .wire_format(CommandWireFormat::Json)
+            .prompt_mode(CommandPromptMode::Args);
+        let response = runtime.generate(sample_request()).unwrap();
+        let exported = runtime.export_kv().unwrap();
+
+        assert_eq!(response.answer, "helper runtime answer");
+        assert_eq!(exported.len(), 1);
+        assert_eq!(exported[0].layer, 0);
+        assert_eq!(exported[0].value, vec![0.2]);
+    }
+
+    #[cfg(windows)]
+    fn json_echo_command(payload: &str) -> (String, Vec<String>) {
+        let escaped = payload.replace('\'', "''");
+        (
+            "powershell.exe".to_owned(),
+            vec![
+                "-NoProfile".to_owned(),
+                "-NonInteractive".to_owned(),
+                "-Command".to_owned(),
+                format!("Write-Output '{escaped}'"),
+            ],
+        )
+    }
+
+    #[cfg(not(windows))]
+    fn json_echo_command(payload: &str) -> (String, Vec<String>) {
+        let escaped = payload.replace('\'', "'\\''");
+        (
+            "sh".to_owned(),
+            vec!["-c".to_owned(), format!("printf '%s' '{escaped}'")],
+        )
     }
 
     fn sample_request() -> RuntimeRequest {
