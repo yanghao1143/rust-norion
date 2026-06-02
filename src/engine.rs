@@ -1432,39 +1432,67 @@ fn process_reward_feedback_metrics(
         return None;
     }
 
+    let strength = process_reward_feedback_strength(report);
+
     match report.action {
         RewardAction::Reinforce
             if reflection.critical_issue_count() == 0
                 && reflection.contradictions.is_empty()
                 && reflection.issues.len() <= 1 =>
         {
+            let perplexity_scale = 0.88 - strength * 0.22;
+            let semantic_floor = 0.76 + strength * 0.12;
+            let semantic_ceiling = 0.92 + strength * 0.06;
             Some(GenerationMetrics {
-                perplexity: (base.perplexity * 0.72).clamp(3.0, 9.0),
+                perplexity: (base.perplexity * perplexity_scale).clamp(3.0, 12.0),
                 semantic_consistency: base
                     .semantic_consistency
                     .max(reflection.quality)
                     .max(report.total)
-                    .clamp(0.84, 0.98),
+                    .clamp(semantic_floor, semantic_ceiling),
                 contradiction_count: 0,
                 token_count: base.token_count,
             })
         }
-        RewardAction::Penalize => Some(GenerationMetrics {
-            perplexity: (base.perplexity + (1.0 - report.total).clamp(0.0, 1.0) * 18.0)
-                .clamp(18.0, 56.0),
-            semantic_consistency: base
-                .semantic_consistency
-                .min(reflection.quality)
-                .min(report.total)
-                .clamp(0.0, 0.46),
-            contradiction_count: base
-                .contradiction_count
-                .max(reflection.critical_issue_count())
-                .max(1),
-            token_count: base.token_count,
-        }),
+        RewardAction::Penalize => {
+            let perplexity_pressure = 8.0 + strength * 24.0;
+            let semantic_ceiling = 0.52 - strength * 0.24;
+            let contradiction_floor = 1 + (strength >= 0.75) as usize;
+            Some(GenerationMetrics {
+                perplexity: (base.perplexity + perplexity_pressure).clamp(12.0, 64.0),
+                semantic_consistency: base
+                    .semantic_consistency
+                    .min(reflection.quality)
+                    .min(report.total)
+                    .clamp(0.0, semantic_ceiling),
+                contradiction_count: base
+                    .contradiction_count
+                    .max(reflection.critical_issue_count())
+                    .max(contradiction_floor),
+                token_count: base.token_count,
+            })
+        }
         RewardAction::Hold => None,
         RewardAction::Reinforce => None,
+    }
+}
+
+fn process_reward_feedback_strength(report: &ProcessRewardReport) -> f32 {
+    const MIN_FEEDBACK_STRENGTH: f32 = 0.35;
+    const REINFORCE_THRESHOLD: f32 = 0.72;
+    const PENALIZE_THRESHOLD: f32 = 0.42;
+
+    match report.action {
+        RewardAction::Reinforce => {
+            let range = 1.0 - REINFORCE_THRESHOLD;
+            let normalized = (report.total - REINFORCE_THRESHOLD) / range;
+            normalized.clamp(MIN_FEEDBACK_STRENGTH, 1.0)
+        }
+        RewardAction::Penalize => {
+            let normalized = (PENALIZE_THRESHOLD - report.total) / PENALIZE_THRESHOLD;
+            normalized.clamp(MIN_FEEDBACK_STRENGTH, 1.0)
+        }
+        RewardAction::Hold => 0.0,
     }
 }
 
@@ -1473,8 +1501,9 @@ fn process_reward_feedback_note(
     metrics: GenerationMetrics,
 ) -> String {
     format!(
-        "online_reward_feedback:action={}:perplexity={:.3}:semantic={:.3}:contradictions={}",
+        "online_reward_feedback:action={}:strength={:.3}:perplexity={:.3}:semantic={:.3}:contradictions={}",
         report.action.as_str(),
+        process_reward_feedback_strength(report),
         metrics.perplexity,
         metrics.semantic_consistency,
         metrics.contradiction_count
@@ -2716,6 +2745,55 @@ mod tests {
     }
 
     #[test]
+    fn process_reward_reinforcement_feedback_scales_with_reward_strength() {
+        let base = feedback_base_metrics();
+        let reflection = clean_feedback_reflection(0.80);
+        let drift_report = stable_feedback_drift_report();
+        let near_threshold = feedback_reward_report(0.73, RewardAction::Reinforce);
+        let strong = feedback_reward_report(0.98, RewardAction::Reinforce);
+
+        let near_metrics =
+            process_reward_feedback_metrics(&near_threshold, base, &reflection, &drift_report)
+                .unwrap();
+        let strong_metrics =
+            process_reward_feedback_metrics(&strong, base, &reflection, &drift_report).unwrap();
+
+        assert!(
+            process_reward_feedback_strength(&strong)
+                > process_reward_feedback_strength(&near_threshold)
+        );
+        assert!(strong_metrics.perplexity < near_metrics.perplexity);
+        assert!(strong_metrics.semantic_consistency > near_metrics.semantic_consistency);
+        assert!(strong_metrics.quality_score() > near_metrics.quality_score());
+        assert!(process_reward_feedback_note(&strong, strong_metrics).contains("strength="));
+    }
+
+    #[test]
+    fn process_reward_penalty_feedback_scales_with_reward_strength() {
+        let base = feedback_base_metrics();
+        let reflection = clean_feedback_reflection(0.45);
+        let drift_report = stable_feedback_drift_report();
+        let near_threshold = feedback_reward_report(0.41, RewardAction::Penalize);
+        let strong = feedback_reward_report(0.05, RewardAction::Penalize);
+
+        let near_metrics =
+            process_reward_feedback_metrics(&near_threshold, base, &reflection, &drift_report)
+                .unwrap();
+        let strong_metrics =
+            process_reward_feedback_metrics(&strong, base, &reflection, &drift_report).unwrap();
+
+        assert!(
+            process_reward_feedback_strength(&strong)
+                > process_reward_feedback_strength(&near_threshold)
+        );
+        assert!(strong_metrics.perplexity > near_metrics.perplexity);
+        assert!(strong_metrics.semantic_consistency < near_metrics.semantic_consistency);
+        assert!(strong_metrics.contradiction_count >= near_metrics.contradiction_count);
+        assert!(strong_metrics.quality_score() < near_metrics.quality_score());
+        assert!(process_reward_feedback_note(&strong, strong_metrics).contains("strength="));
+    }
+
+    #[test]
     fn drift_guard_strongly_penalizes_used_memory_on_rollback() {
         struct BadBackend;
 
@@ -3927,6 +4005,48 @@ mod tests {
 
     fn cleanup(path: std::path::PathBuf) {
         let _ = fs::remove_file(path);
+    }
+
+    fn feedback_base_metrics() -> GenerationMetrics {
+        GenerationMetrics {
+            perplexity: 14.0,
+            semantic_consistency: 0.74,
+            contradiction_count: 0,
+            token_count: 96,
+        }
+    }
+
+    fn clean_feedback_reflection(quality: f32) -> ReflectionReport {
+        ReflectionReport {
+            quality,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "stable rust noiron feedback path".to_owned(),
+            store_as_memory: true,
+            lesson: "online reward feedback should scale with process reward strength".to_owned(),
+        }
+    }
+
+    fn stable_feedback_drift_report() -> DriftReport {
+        DriftReport {
+            severity: crate::drift::DriftSeverity::Stable,
+            allow_memory_write: true,
+            allow_runtime_kv_write: true,
+            penalize_used_memory: false,
+            rollback_adaptive: false,
+            notes: Vec::new(),
+        }
+    }
+
+    fn feedback_reward_report(total: f32, action: RewardAction) -> ProcessRewardReport {
+        ProcessRewardReport {
+            total,
+            action,
+            components: ProcessRewardComponents::default(),
+            notes: Vec::new(),
+        }
     }
 
     fn memory_strength(engine: &NoironEngine, memory_id: u64) -> f32 {
