@@ -119,6 +119,14 @@ pub struct ProductionKernelConformanceReport {
     pub model_id: String,
     pub selected_adapter: String,
     pub kernel_connected: bool,
+    pub manifest_hot_kv_bits: u8,
+    pub manifest_cold_kv_bits: u8,
+    pub device_hot_kv_bits: u8,
+    pub device_cold_kv_bits: u8,
+    pub request_runtime_hot_kv_bits: u8,
+    pub request_runtime_cold_kv_bits: u8,
+    pub request_device_hot_kv_bits: u8,
+    pub request_device_cold_kv_bits: u8,
     pub token_count: usize,
     pub trace_steps: usize,
     pub imported_kv_blocks: usize,
@@ -132,12 +140,24 @@ pub struct ProductionKernelConformanceReport {
 }
 
 impl ProductionKernelConformanceReport {
-    fn new(model_id: &str, selected_adapter: &str, kernel_connected: bool) -> Self {
+    fn new(
+        manifest: &RuntimeManifest,
+        device_gate: &RuntimeManifestDeviceGateReport,
+        kernel_connected: bool,
+    ) -> Self {
         Self {
             passed: false,
-            model_id: model_id.to_owned(),
-            selected_adapter: selected_adapter.to_owned(),
+            model_id: manifest.metadata.model_id.clone(),
+            selected_adapter: device_gate.runtime_adapter_name().to_owned(),
             kernel_connected,
+            manifest_hot_kv_bits: manifest.quantization.hot_kv.width(),
+            manifest_cold_kv_bits: manifest.quantization.cold_kv.width(),
+            device_hot_kv_bits: device_gate.hot_kv_precision_bits,
+            device_cold_kv_bits: device_gate.cold_kv_precision_bits,
+            request_runtime_hot_kv_bits: 0,
+            request_runtime_cold_kv_bits: 0,
+            request_device_hot_kv_bits: 0,
+            request_device_cold_kv_bits: 0,
             token_count: 0,
             trace_steps: 0,
             imported_kv_blocks: 0,
@@ -162,6 +182,14 @@ impl ProductionKernelConformanceReport {
             model_id: model_id.into(),
             selected_adapter: selected_adapter.into(),
             kernel_connected,
+            manifest_hot_kv_bits: 0,
+            manifest_cold_kv_bits: 0,
+            device_hot_kv_bits: 0,
+            device_cold_kv_bits: 0,
+            request_runtime_hot_kv_bits: 0,
+            request_runtime_cold_kv_bits: 0,
+            request_device_hot_kv_bits: 0,
+            request_device_cold_kv_bits: 0,
             token_count: 0,
             trace_steps: 0,
             imported_kv_blocks: 0,
@@ -179,11 +207,19 @@ impl ProductionKernelConformanceReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
             self.passed,
             self.model_id,
             self.selected_adapter,
             self.kernel_connected,
+            self.manifest_hot_kv_bits,
+            self.manifest_cold_kv_bits,
+            self.device_hot_kv_bits,
+            self.device_cold_kv_bits,
+            self.request_runtime_hot_kv_bits,
+            self.request_runtime_cold_kv_bits,
+            self.request_device_hot_kv_bits,
+            self.request_device_cold_kv_bits,
             self.token_count,
             self.trace_steps,
             self.imported_kv_blocks,
@@ -626,8 +662,8 @@ impl ProductionTransformerRuntime {
         gate: ProductionKernelConformanceGate,
     ) -> ProductionKernelConformanceReport {
         let mut report = ProductionKernelConformanceReport::new(
-            &self.manifest.metadata.model_id,
-            self.device_gate.runtime_adapter_name(),
+            &self.manifest,
+            &self.device_gate,
             self.kernel_connected(),
         );
 
@@ -659,6 +695,16 @@ impl ProductionTransformerRuntime {
         }
 
         let request = conformance_request(&self.manifest, &self.device_gate);
+        report.request_runtime_hot_kv_bits = request.runtime_metadata.hot_kv_precision_bits;
+        report.request_runtime_cold_kv_bits = request.runtime_metadata.cold_kv_precision_bits;
+        report.request_device_hot_kv_bits = request.hardware_plan.execution.hot_kv_precision_bits;
+        report.request_device_cold_kv_bits = request.hardware_plan.execution.cold_kv_precision_bits;
+        evaluate_conformance_request_contract(
+            &self.manifest,
+            &self.device_gate,
+            &request,
+            &mut report,
+        );
         let response = match runtime.generate(request) {
             Ok(response) => response,
             Err(error) => {
@@ -760,6 +806,7 @@ impl ModelRuntime for ProductionTransformerRuntime {
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         if let Some(kernel) = &self.kernel {
+            validate_production_runtime_request(&self.manifest, &self.device_gate, &request)?;
             self.exported_kv_blocks.clear();
             let output = kernel.generate(ProductionKernelContext {
                 manifest: &self.manifest,
@@ -1002,6 +1049,99 @@ fn normalize_kernel_diagnostics(
     diagnostics
 }
 
+fn validate_production_runtime_request(
+    manifest: &RuntimeManifest,
+    device_gate: &RuntimeManifestDeviceGateReport,
+    request: &RuntimeRequest,
+) -> Result<(), RuntimeError> {
+    let expected_metadata = manifest.runtime_metadata();
+    let mut failures = Vec::new();
+
+    if request.runtime_metadata.model_id != expected_metadata.model_id {
+        failures.push(format!(
+            "request model_id {} does not match manifest model_id {}",
+            request.runtime_metadata.model_id, expected_metadata.model_id
+        ));
+    }
+    if request.runtime_metadata.tokenizer != expected_metadata.tokenizer {
+        failures.push(format!(
+            "request tokenizer {} does not match manifest tokenizer {}",
+            request.runtime_metadata.tokenizer, expected_metadata.tokenizer
+        ));
+    }
+    if request.runtime_metadata.hot_kv_precision_bits > expected_metadata.hot_kv_precision_bits {
+        failures.push(format!(
+            "request runtime hot KV precision {} exceeds manifest hot KV precision {}",
+            request.runtime_metadata.hot_kv_precision_bits, expected_metadata.hot_kv_precision_bits
+        ));
+    }
+    if request.runtime_metadata.cold_kv_precision_bits > expected_metadata.cold_kv_precision_bits {
+        failures.push(format!(
+            "request runtime cold KV precision {} exceeds manifest cold KV precision {}",
+            request.runtime_metadata.cold_kv_precision_bits,
+            expected_metadata.cold_kv_precision_bits
+        ));
+    }
+    if request.runtime_metadata.cold_kv_precision_bits
+        > request.runtime_metadata.hot_kv_precision_bits
+    {
+        failures.push(format!(
+            "request runtime cold KV precision {} must not exceed hot KV precision {}",
+            request.runtime_metadata.cold_kv_precision_bits,
+            request.runtime_metadata.hot_kv_precision_bits
+        ));
+    }
+    if request.hardware_plan.device != DeviceClass::Auto
+        && request.hardware_plan.device != device_gate.device
+    {
+        failures.push(format!(
+            "request hardware device {} does not match production device gate {}",
+            request.hardware_plan.device.as_str(),
+            device_gate.device.as_str()
+        ));
+    }
+    if request.hardware_plan.execution.hot_kv_precision_bits > device_gate.hot_kv_precision_bits {
+        failures.push(format!(
+            "request device hot KV precision {} exceeds production device gate hot KV precision {}",
+            request.hardware_plan.execution.hot_kv_precision_bits,
+            device_gate.hot_kv_precision_bits
+        ));
+    }
+    if request.hardware_plan.execution.cold_kv_precision_bits > device_gate.cold_kv_precision_bits {
+        failures.push(format!(
+            "request device cold KV precision {} exceeds production device gate cold KV precision {}",
+            request.hardware_plan.execution.cold_kv_precision_bits,
+            device_gate.cold_kv_precision_bits
+        ));
+    }
+    if request.hardware_plan.execution.cold_kv_precision_bits
+        > request.hardware_plan.execution.hot_kv_precision_bits
+    {
+        failures.push(format!(
+            "request device cold KV precision {} must not exceed hot KV precision {}",
+            request.hardware_plan.execution.cold_kv_precision_bits,
+            request.hardware_plan.execution.hot_kv_precision_bits
+        ));
+    }
+    if request.runtime_architecture != manifest.architecture {
+        failures.push(format!(
+            "request architecture {} does not match manifest architecture {}",
+            request.runtime_architecture.summary(),
+            manifest.architecture.summary()
+        ));
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(RuntimeError::new(format!(
+            "production runtime request rejected for model_id={}: {}",
+            manifest.metadata.model_id,
+            failures.join("; ")
+        )))
+    }
+}
+
 fn conformance_import_blocks(manifest: &RuntimeManifest) -> Vec<RuntimeKvBlock> {
     if !manifest.kv_policy.import_enabled || manifest.kv_policy.max_import_blocks == 0 {
         return Vec::new();
@@ -1031,12 +1171,24 @@ fn conformance_request(
         manifest.metadata.model_id
     );
     let prompt_tokens = prompt.split_whitespace().count().max(1);
-    let hardware_plan = HardwareAllocator::new().plan(
+    let mut hardware_plan = HardwareAllocator::new().plan(
         HardwareSnapshot::new(device_gate.device, 0.35, 0.30, 0.45, 0.20),
         TaskProfile::Coding,
         prompt_tokens,
         HierarchyWeights::default(),
     );
+    hardware_plan.execution.primary_lane = device_gate.primary_lane;
+    hardware_plan.execution.fallback_lane = device_gate.fallback_lane;
+    hardware_plan.execution.memory_mode = device_gate.memory_mode;
+    hardware_plan.execution.adapter_hints = device_gate.adapter_hints.clone();
+    hardware_plan.execution.max_parallel_chunks = device_gate.max_parallel_chunks;
+    hardware_plan.execution.kv_prefetch_blocks = device_gate.kv_prefetch_blocks;
+    hardware_plan.execution.hot_kv_precision_bits = device_gate.hot_kv_precision_bits;
+    hardware_plan.execution.cold_kv_precision_bits = device_gate.cold_kv_precision_bits;
+    hardware_plan.execution.allow_disk_spill = device_gate.allow_disk_spill;
+    hardware_plan.local_kv_token_budget = device_gate.local_kv_token_budget;
+    hardware_plan.global_kv_token_budget = device_gate.global_kv_token_budget;
+    hardware_plan.latency_budget_ms = device_gate.latency_budget_ms;
 
     RuntimeRequest {
         prompt,
@@ -1060,6 +1212,91 @@ fn conformance_request(
         recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
         hardware_plan,
         max_tokens: 32,
+    }
+}
+
+fn evaluate_conformance_request_contract(
+    manifest: &RuntimeManifest,
+    device_gate: &RuntimeManifestDeviceGateReport,
+    request: &RuntimeRequest,
+    report: &mut ProductionKernelConformanceReport,
+) {
+    if report.manifest_hot_kv_bits != manifest.quantization.hot_kv.width()
+        || report.manifest_cold_kv_bits != manifest.quantization.cold_kv.width()
+    {
+        report.failures.push(format!(
+            "conformance report manifest KV precision {}/{} does not match runtime manifest {}/{}",
+            report.manifest_hot_kv_bits,
+            report.manifest_cold_kv_bits,
+            manifest.quantization.hot_kv.width(),
+            manifest.quantization.cold_kv.width()
+        ));
+    }
+    if report.device_hot_kv_bits != device_gate.hot_kv_precision_bits
+        || report.device_cold_kv_bits != device_gate.cold_kv_precision_bits
+    {
+        report.failures.push(format!(
+            "conformance report device KV precision {}/{} does not match device gate {}/{}",
+            report.device_hot_kv_bits,
+            report.device_cold_kv_bits,
+            device_gate.hot_kv_precision_bits,
+            device_gate.cold_kv_precision_bits
+        ));
+    }
+    if request.runtime_metadata.hot_kv_precision_bits != manifest.quantization.hot_kv.width()
+        || request.runtime_metadata.cold_kv_precision_bits != manifest.quantization.cold_kv.width()
+    {
+        report.failures.push(format!(
+            "conformance request runtime KV precision {}/{} does not match manifest KV precision {}/{}",
+            request.runtime_metadata.hot_kv_precision_bits,
+            request.runtime_metadata.cold_kv_precision_bits,
+            manifest.quantization.hot_kv.width(),
+            manifest.quantization.cold_kv.width()
+        ));
+    }
+    if request.hardware_plan.execution.hot_kv_precision_bits != device_gate.hot_kv_precision_bits
+        || request.hardware_plan.execution.cold_kv_precision_bits
+            != device_gate.cold_kv_precision_bits
+    {
+        report.failures.push(format!(
+            "conformance request device KV precision {}/{} does not match production device gate {}/{}",
+            request.hardware_plan.execution.hot_kv_precision_bits,
+            request.hardware_plan.execution.cold_kv_precision_bits,
+            device_gate.hot_kv_precision_bits,
+            device_gate.cold_kv_precision_bits
+        ));
+    }
+    if device_gate.hot_kv_precision_bits > manifest.quantization.hot_kv.width() {
+        report.failures.push(format!(
+            "production device gate hot KV precision {} exceeds manifest hot KV precision {}",
+            device_gate.hot_kv_precision_bits,
+            manifest.quantization.hot_kv.width()
+        ));
+    }
+    if device_gate.cold_kv_precision_bits > manifest.quantization.cold_kv.width() {
+        report.failures.push(format!(
+            "production device gate cold KV precision {} exceeds manifest cold KV precision {}",
+            device_gate.cold_kv_precision_bits,
+            manifest.quantization.cold_kv.width()
+        ));
+    }
+    if request.runtime_metadata.cold_kv_precision_bits
+        > request.runtime_metadata.hot_kv_precision_bits
+    {
+        report.failures.push(format!(
+            "conformance request runtime cold KV precision {} must not exceed hot KV precision {}",
+            request.runtime_metadata.cold_kv_precision_bits,
+            request.runtime_metadata.hot_kv_precision_bits
+        ));
+    }
+    if request.hardware_plan.execution.cold_kv_precision_bits
+        > request.hardware_plan.execution.hot_kv_precision_bits
+    {
+        report.failures.push(format!(
+            "conformance request device cold KV precision {} must not exceed hot KV precision {}",
+            request.hardware_plan.execution.cold_kv_precision_bits,
+            request.hardware_plan.execution.hot_kv_precision_bits
+        ));
     }
 }
 
@@ -1819,6 +2056,42 @@ mod tests {
     }
 
     #[test]
+    fn production_runtime_rejects_request_kv_precision_above_device_contract() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-request-kv-abi");
+        let manifest = production_manifest(&weights, &tokenizer)
+            .with_supported_devices(vec![DeviceClass::Microcontroller])
+            .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust]);
+        let mut request = sample_request();
+        request.runtime_metadata = manifest.runtime_metadata();
+        request.runtime_architecture = manifest.architecture;
+        request.hardware_plan = device_plan(DeviceClass::Microcontroller);
+        request.hardware_plan.execution.hot_kv_precision_bits = 8;
+        request.hardware_plan.execution.cold_kv_precision_bits = 4;
+        let mut runtime = ProductionTransformerRuntime::from_manifest_for_plan(
+            manifest,
+            &device_plan(DeviceClass::Microcontroller),
+        )
+        .unwrap()
+        .with_kernel(MockForwardKernel);
+
+        let error = runtime.generate(request).unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("production runtime request rejected")
+        );
+        assert!(
+            error
+                .message()
+                .contains("request device hot KV precision 8 exceeds")
+        );
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
     fn reference_production_kernel_generates_diagnostics_and_kv() {
         let (asset_dir, weights, tokenizer, _config) =
             create_assets("production-runtime-reference-kernel");
@@ -1884,7 +2157,52 @@ mod tests {
         assert!(report.exported_kv_blocks > 0);
         assert!(report.forward_energy.unwrap() > 0.0);
         assert!(report.kv_influence.unwrap() >= 0.0);
+        assert_eq!(report.manifest_hot_kv_bits, 8);
+        assert_eq!(report.manifest_cold_kv_bits, 4);
+        assert_eq!(report.device_hot_kv_bits, 8);
+        assert_eq!(report.device_cold_kv_bits, 4);
+        assert_eq!(report.request_runtime_hot_kv_bits, 8);
+        assert_eq!(report.request_runtime_cold_kv_bits, 4);
+        assert_eq!(report.request_device_hot_kv_bits, 8);
+        assert_eq!(report.request_device_cold_kv_bits, 4);
         assert!(report.summary_line().contains("passed=true"));
+        assert!(report.summary_line().contains("manifest_kv_bits=8/4"));
+        assert!(report.summary_line().contains("request_device_kv_bits=8/4"));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn reference_production_kernel_conformance_allows_q4_q4_tiny_device_contract() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-q4-tiny");
+        let manifest = production_manifest(&weights, &tokenizer)
+            .with_supported_devices(vec![DeviceClass::Microcontroller])
+            .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust])
+            .with_quantization(crate::runtime_manifest::RuntimeQuantizationPolicy {
+                hot_kv: crate::kv_quant::QuantizationBits::Four,
+                cold_kv: crate::kv_quant::QuantizationBits::Four,
+                weights: None,
+            });
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(
+            manifest,
+            &device_plan(DeviceClass::Microcontroller),
+        )
+        .unwrap()
+        .with_kernel(ReferenceProductionForwardKernel::new());
+
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(report.passed, "{report:?}");
+        assert_eq!(report.manifest_hot_kv_bits, 4);
+        assert_eq!(report.manifest_cold_kv_bits, 4);
+        assert_eq!(report.device_hot_kv_bits, 4);
+        assert_eq!(report.device_cold_kv_bits, 4);
+        assert_eq!(report.request_runtime_hot_kv_bits, 4);
+        assert_eq!(report.request_runtime_cold_kv_bits, 4);
+        assert_eq!(report.request_device_hot_kv_bits, 4);
+        assert_eq!(report.request_device_cold_kv_bits, 4);
+        assert!(report.summary_line().contains("manifest_kv_bits=4/4"));
 
         fs::remove_dir_all(asset_dir).unwrap();
     }
@@ -2029,6 +2347,14 @@ mod tests {
             model_id: "model".to_owned(),
             selected_adapter: "portable-rust".to_owned(),
             kernel_connected: true,
+            manifest_hot_kv_bits: 8,
+            manifest_cold_kv_bits: 4,
+            device_hot_kv_bits: 8,
+            device_cold_kv_bits: 4,
+            request_runtime_hot_kv_bits: 8,
+            request_runtime_cold_kv_bits: 4,
+            request_device_hot_kv_bits: 8,
+            request_device_cold_kv_bits: 4,
             token_count: 1,
             trace_steps: 1,
             imported_kv_blocks: 1,
