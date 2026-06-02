@@ -262,20 +262,21 @@ modules, not external product dependencies:
   persisted runtime KV, experience, reflection diagnostics, router
   observations, and evolution-ledger counts plus router-threshold,
   hierarchy-weight, and recursive-replay evidence, along with runtime
-  model/adapter/forward-energy/KV-influence/KV-import/KV-export diagnostics
-  captured in persisted experiences, so local/CI checks can fail when durable
-  self-evolution only records events without actually changing control-plane
-  parameters, when closed-loop reflection evidence is missing, when
-  long-context replay evidence is missing, when persisted drift rollback
-  magnitude exceeds local safety caps, or when runtime-boundary state is
-  missing.
+  model/adapter/forward-energy/KV-influence/KV-import/KV-export diagnostics and
+  live memory-feedback notes captured in persisted experiences, so local/CI
+  checks can fail when durable self-evolution only records events without
+  actually changing control-plane parameters, when closed-loop reflection or
+  live memory-feedback evidence is missing, when long-context replay evidence
+  is missing, when persisted drift rollback magnitude exceeds local safety
+  caps, or when runtime-boundary state is missing.
   With all-device mode, the inspection gate should evaluate the
   device-scoped state files emitted by persistence roundtrip runs so CPU,
   mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
   and multi-GPU profiles all prove durable local state independently. Matrix
   thresholds should also be able to require reflection-issue, critical
-  reflection-issue, and revision-action evidence across a minimum number of
-  explicit device profiles, not only inside individual state files.
+  reflection-issue, revision-action, and live memory-feedback evidence across a
+  minimum number of explicit device profiles, not only inside individual state
+  files.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -711,7 +712,11 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-revision-action-device-profiles` lift those reflection and
   revision checks to the matrix level, so all-device inspection can fail when
   durable self-evolution evidence is present only on a subset of supported
-  hardware classes. Runtime evidence has the same matrix-level coverage gates:
+  hardware classes. Live memory-feedback evidence can also be lifted to the
+  matrix level with `--inspect-min-live-memory-feedback-device-profiles`, so a
+  device profile cannot pass by persisting experience rows that never recorded
+  actual online memory reinforcement or penalty feedback. Runtime evidence has
+  the same matrix-level coverage gates:
   `--inspect-min-runtime-kv-memory-device-profiles`,
   `--inspect-min-runtime-model-device-profiles`,
   `--inspect-min-runtime-adapter-device-profiles`,

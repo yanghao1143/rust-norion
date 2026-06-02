@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use crate::adaptive_state::EvolutionLedger;
 use crate::engine::NoironEngine;
 use crate::experience::recursive_runtime_calls_from_notes;
+use crate::experience_replay::LiveMemoryFeedbackStats;
 use crate::hardware::DeviceClass;
 use crate::hierarchy::{
     HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
@@ -47,6 +48,9 @@ pub struct StateExperienceSummary {
     pub runtime_imported_kv_blocks: usize,
     pub runtime_exported_kv_blocks: usize,
     pub recursive_runtime_calls: Option<usize>,
+    pub live_memory_feedback_updates: usize,
+    pub live_memory_feedback_reinforced: usize,
+    pub live_memory_feedback_penalized: usize,
     pub reflection_issues: usize,
     pub critical_reflection_issues: usize,
     pub revision_actions: usize,
@@ -67,6 +71,8 @@ pub struct StateInspectionGate {
     pub min_reflection_issue_experiences: Option<usize>,
     pub min_critical_reflection_issue_experiences: Option<usize>,
     pub min_revision_action_experiences: Option<usize>,
+    pub min_live_memory_feedback_experiences: Option<usize>,
+    pub min_live_memory_feedback_updates: Option<usize>,
     pub min_router_observations: Option<u64>,
     pub min_evolution_replay_runs: Option<u64>,
     pub min_evolution_replay_items: Option<u64>,
@@ -95,6 +101,7 @@ pub struct StateInspectionMatrixGate {
     pub min_reflection_issue_device_profiles: Option<usize>,
     pub min_critical_reflection_issue_device_profiles: Option<usize>,
     pub min_revision_action_device_profiles: Option<usize>,
+    pub min_live_memory_feedback_device_profiles: Option<usize>,
     pub min_evolution_replay_run_device_profiles: Option<usize>,
     pub min_evolution_replay_item_device_profiles: Option<usize>,
     pub min_evolution_router_threshold_mutation_device_profiles: Option<usize>,
@@ -138,6 +145,8 @@ pub struct StateInspectionDeviceGateReport {
     pub reflection_issue_experiences: usize,
     pub critical_reflection_issue_experiences: usize,
     pub revision_action_experiences: usize,
+    pub live_memory_feedback_experiences: usize,
+    pub live_memory_feedback_updates: usize,
     pub evolution_replay_runs: u64,
     pub evolution_replay_items: u64,
     pub evolution_router_threshold_mutations: u64,
@@ -162,6 +171,8 @@ impl StateInspectionDeviceGateReport {
             reflection_issue_experiences: 0,
             critical_reflection_issue_experiences: 0,
             revision_action_experiences: 0,
+            live_memory_feedback_experiences: 0,
+            live_memory_feedback_updates: 0,
             evolution_replay_runs: 0,
             evolution_replay_items: 0,
             evolution_router_threshold_mutations: 0,
@@ -191,6 +202,8 @@ impl StateInspectionDeviceGateReport {
             critical_reflection_issue_experiences: inspection
                 .critical_reflection_issue_experience_count,
             revision_action_experiences: inspection.revision_action_experience_count,
+            live_memory_feedback_experiences: inspection.live_memory_feedback_experience_count,
+            live_memory_feedback_updates: inspection.live_memory_feedback_update_count,
             evolution_replay_runs: inspection.evolution_ledger.replay_runs,
             evolution_replay_items: inspection.evolution_ledger.replay_items,
             evolution_router_threshold_mutations: inspection
@@ -234,6 +247,16 @@ impl StateInspectionDeviceGateReport {
         self.reflection_issue_experiences = reflection_issue_experiences;
         self.critical_reflection_issue_experiences = critical_reflection_issue_experiences;
         self.revision_action_experiences = revision_action_experiences;
+        self
+    }
+
+    pub fn with_live_memory_feedback_evidence(
+        mut self,
+        live_memory_feedback_experiences: usize,
+        live_memory_feedback_updates: usize,
+    ) -> Self {
+        self.live_memory_feedback_experiences = live_memory_feedback_experiences;
+        self.live_memory_feedback_updates = live_memory_feedback_updates;
         self
     }
 
@@ -366,6 +389,12 @@ impl StateInspectionMatrixGateReport {
         );
         require_min_device_profiles(
             &mut failures,
+            "live_memory_feedback_device_profiles",
+            live_memory_feedback_device_profiles(&device_reports),
+            gate.min_live_memory_feedback_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "evolution_replay_run_device_profiles",
             evolution_replay_run_device_profiles(&device_reports),
             gate.min_evolution_replay_run_device_profiles,
@@ -474,6 +503,10 @@ impl StateInspectionMatrixGateReport {
         revision_action_device_profiles(&self.device_reports)
     }
 
+    pub fn live_memory_feedback_device_profiles(&self) -> usize {
+        live_memory_feedback_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_replay_run_device_profiles(&self) -> usize {
         evolution_replay_run_device_profiles(&self.device_reports)
     }
@@ -504,7 +537,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -519,6 +552,7 @@ impl StateInspectionMatrixGateReport {
             self.reflection_issue_device_profiles(),
             self.critical_reflection_issue_device_profiles(),
             self.revision_action_device_profiles(),
+            self.live_memory_feedback_device_profiles(),
             self.evolution_replay_run_device_profiles(),
             self.evolution_replay_item_device_profiles(),
             self.evolution_router_threshold_mutation_device_profiles(),
@@ -594,6 +628,15 @@ fn critical_reflection_issue_device_profiles(
 fn revision_action_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.revision_action_experiences > 0
+    })
+}
+
+fn live_memory_feedback_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.live_memory_feedback_experiences > 0
+            && device_report.live_memory_feedback_updates > 0
     })
 }
 
@@ -722,6 +765,8 @@ pub struct StateInspectionReport {
     pub reflection_issue_experience_count: usize,
     pub critical_reflection_issue_experience_count: usize,
     pub revision_action_experience_count: usize,
+    pub live_memory_feedback_experience_count: usize,
+    pub live_memory_feedback_update_count: usize,
     pub router_threshold: f32,
     pub router_observations: u64,
     pub profile_thresholds: ProfileThresholds,
@@ -809,6 +854,17 @@ impl StateInspectionReport {
             .iter()
             .filter(|record| !record.revision_actions.is_empty())
             .count();
+        let live_memory_feedback_stats = engine
+            .experience
+            .records()
+            .iter()
+            .filter_map(|record| LiveMemoryFeedbackStats::from_notes(&record.process_reward.notes))
+            .collect::<Vec<_>>();
+        let live_memory_feedback_experience_count = live_memory_feedback_stats.len();
+        let live_memory_feedback_update_count = live_memory_feedback_stats
+            .iter()
+            .map(LiveMemoryFeedbackStats::updates)
+            .sum::<usize>();
 
         let mut top_experiences = engine.experience.records().iter().collect::<Vec<_>>();
         top_experiences.sort_by(|left, right| {
@@ -829,34 +885,47 @@ impl StateInspectionReport {
         let top_experiences = top_experiences
             .into_iter()
             .take(limit)
-            .map(|record| StateExperienceSummary {
-                id: record.id,
-                profile: record.profile,
-                quality: record.quality,
-                process_reward: record.process_reward.total,
-                reward_action: record.process_reward.action,
-                runtime_model_id: record.runtime_diagnostics.model_id.clone(),
-                runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
-                runtime_layer_count: record.runtime_diagnostics.layer_count,
-                runtime_hidden_size: record.runtime_diagnostics.hidden_size,
-                runtime_local_window_tokens: record.runtime_diagnostics.local_window_tokens,
-                runtime_forward_energy: record.runtime_diagnostics.forward_energy,
-                runtime_kv_influence: record.runtime_diagnostics.kv_influence,
-                runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
-                runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
-                recursive_runtime_calls: recursive_runtime_calls_from_notes(
-                    &record.process_reward.notes,
-                ),
-                reflection_issues: record.reflection_issues.len(),
-                critical_reflection_issues: record
-                    .reflection_issues
-                    .iter()
-                    .filter(|issue| {
-                        issue.severity == crate::reflection::ReflectionSeverity::Critical
-                    })
-                    .count(),
-                revision_actions: record.revision_actions.len(),
-                lesson: compact(&record.lesson, 160),
+            .map(|record| {
+                let live_memory_feedback =
+                    LiveMemoryFeedbackStats::from_notes(&record.process_reward.notes);
+                StateExperienceSummary {
+                    id: record.id,
+                    profile: record.profile,
+                    quality: record.quality,
+                    process_reward: record.process_reward.total,
+                    reward_action: record.process_reward.action,
+                    runtime_model_id: record.runtime_diagnostics.model_id.clone(),
+                    runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
+                    runtime_layer_count: record.runtime_diagnostics.layer_count,
+                    runtime_hidden_size: record.runtime_diagnostics.hidden_size,
+                    runtime_local_window_tokens: record.runtime_diagnostics.local_window_tokens,
+                    runtime_forward_energy: record.runtime_diagnostics.forward_energy,
+                    runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                    runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
+                    runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
+                    recursive_runtime_calls: recursive_runtime_calls_from_notes(
+                        &record.process_reward.notes,
+                    ),
+                    live_memory_feedback_updates: live_memory_feedback
+                        .map(|stats| stats.updates())
+                        .unwrap_or(0),
+                    live_memory_feedback_reinforced: live_memory_feedback
+                        .map(|stats| stats.reinforced)
+                        .unwrap_or(0),
+                    live_memory_feedback_penalized: live_memory_feedback
+                        .map(|stats| stats.penalized)
+                        .unwrap_or(0),
+                    reflection_issues: record.reflection_issues.len(),
+                    critical_reflection_issues: record
+                        .reflection_issues
+                        .iter()
+                        .filter(|issue| {
+                            issue.severity == crate::reflection::ReflectionSeverity::Critical
+                        })
+                        .count(),
+                    revision_actions: record.revision_actions.len(),
+                    lesson: compact(&record.lesson, 160),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -878,6 +947,8 @@ impl StateInspectionReport {
             reflection_issue_experience_count,
             critical_reflection_issue_experience_count,
             revision_action_experience_count,
+            live_memory_feedback_experience_count,
+            live_memory_feedback_update_count,
             router_threshold: adaptive_state.router.threshold,
             router_observations: adaptive_state.router.observations,
             profile_thresholds: adaptive_state.router.profile_thresholds,
@@ -899,7 +970,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -912,6 +983,8 @@ impl StateInspectionReport {
             self.reflection_issue_experience_count,
             self.critical_reflection_issue_experience_count,
             self.revision_action_experience_count,
+            self.live_memory_feedback_experience_count,
+            self.live_memory_feedback_update_count,
             self.router_threshold,
             self.router_observations,
             self.profile_thresholds.general,
@@ -1019,6 +1092,18 @@ impl StateInspectionReport {
             "revision_action_experience_count",
             self.revision_action_experience_count,
             gate.min_revision_action_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "live_memory_feedback_experience_count",
+            self.live_memory_feedback_experience_count,
+            gate.min_live_memory_feedback_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "live_memory_feedback_update_count",
+            self.live_memory_feedback_update_count,
+            gate.min_live_memory_feedback_updates,
         );
         require_min_u64(
             &mut failures,
@@ -1345,6 +1430,8 @@ mod tests {
                 notes: vec![
                     "recursive:chunks=5:merge_rounds=2:waves=3:parallel=2:runtime_calls=9"
                         .to_owned(),
+                    "memory_feedback:reinforced=2:penalized=1:reinforcement_amount=1.400000:penalty_amount=0.300000"
+                        .to_owned(),
                 ],
             },
         });
@@ -1397,6 +1484,8 @@ mod tests {
         assert_eq!(report.reflection_issue_experience_count, 2);
         assert_eq!(report.critical_reflection_issue_experience_count, 1);
         assert_eq!(report.revision_action_experience_count, 1);
+        assert_eq!(report.live_memory_feedback_experience_count, 1);
+        assert_eq!(report.live_memory_feedback_update_count, 3);
         assert!(
             report
                 .top_memories
@@ -1472,6 +1561,9 @@ mod tests {
         assert_eq!(report.top_experiences[0].runtime_imported_kv_blocks, 2);
         assert_eq!(report.top_experiences[0].runtime_exported_kv_blocks, 3);
         assert_eq!(report.top_experiences[0].recursive_runtime_calls, Some(9));
+        assert_eq!(report.top_experiences[0].live_memory_feedback_updates, 3);
+        assert_eq!(report.top_experiences[0].live_memory_feedback_reinforced, 2);
+        assert_eq!(report.top_experiences[0].live_memory_feedback_penalized, 1);
         assert_eq!(report.top_experiences[0].reflection_issues, 1);
         assert_eq!(report.top_experiences[0].revision_actions, 1);
         assert!(report.summary_line().contains("memories=3"));
@@ -1520,6 +1612,16 @@ mod tests {
             report
                 .summary_line()
                 .contains("revision_action_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("live_memory_feedback_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("live_memory_feedback_updates=3")
         );
         assert!(
             report
@@ -1581,6 +1683,8 @@ mod tests {
             min_reflection_issue_experiences: Some(2),
             min_critical_reflection_issue_experiences: Some(1),
             min_revision_action_experiences: Some(1),
+            min_live_memory_feedback_experiences: Some(1),
+            min_live_memory_feedback_updates: Some(3),
             min_router_observations: Some(0),
             min_evolution_replay_runs: Some(2),
             min_evolution_replay_items: Some(5),
@@ -1616,6 +1720,8 @@ mod tests {
             min_reflection_issue_experiences: Some(3),
             min_critical_reflection_issue_experiences: Some(2),
             min_revision_action_experiences: Some(2),
+            min_live_memory_feedback_experiences: Some(2),
+            min_live_memory_feedback_updates: Some(4),
             min_router_observations: Some(1),
             min_evolution_replay_runs: Some(3),
             min_evolution_replay_items: Some(6),
@@ -1673,6 +1779,16 @@ mod tests {
                 .failures
                 .contains(&"revision_action_experience_count 1 below required 2".to_owned())
         );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"live_memory_feedback_experience_count 1 below required 2".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"live_memory_feedback_update_count 3 below required 4".to_owned())
+        );
         assert!(failing_report.failures.contains(
             &"evolution_router_threshold_delta 0.170000 below required 0.180000".to_owned()
         ));
@@ -1721,6 +1837,7 @@ mod tests {
                     StateInspectionDeviceGateReport::new(device, passing.clone())
                         .with_runtime_evidence(1, 1, 1, 1, 1, 1, 1)
                         .with_reflection_evidence(1, 1, 1)
+                        .with_live_memory_feedback_evidence(1, 2)
                 })
                 .collect(),
         );
@@ -1737,11 +1854,17 @@ mod tests {
                 .summary_line()
                 .contains("state_inspection_matrix_gate: passed=true")
         );
+        assert!(
+            complete
+                .summary_line()
+                .contains("live_memory_feedback_device_profiles=12")
+        );
 
         let incomplete = StateInspectionMatrixGateReport::evaluate(vec![
             StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
                 .with_runtime_evidence(1, 1, 1, 1, 1, 1, 1)
-                .with_reflection_evidence(1, 1, 1),
+                .with_reflection_evidence(1, 1, 1)
+                .with_live_memory_feedback_evidence(1, 2),
             StateInspectionDeviceGateReport::new(DeviceClass::IntegratedGpu, failing),
         ]);
 
@@ -1930,6 +2053,61 @@ mod tests {
     }
 
     #[test]
+    fn state_inspection_matrix_gate_can_require_live_memory_feedback_per_device() {
+        let passing = StateInspectionGateReport {
+            passed: true,
+            failures: Vec::new(),
+        };
+        let gate = StateInspectionMatrixGate {
+            min_live_memory_feedback_device_profiles: Some(2),
+            ..StateInspectionMatrixGate::default()
+        };
+
+        let report = StateInspectionMatrixGateReport::evaluate_with_gate(
+            DeviceClass::explicit_profiles()
+                .iter()
+                .copied()
+                .map(|device| {
+                    let mut device_report =
+                        StateInspectionDeviceGateReport::new(device, passing.clone());
+                    match device {
+                        DeviceClass::CpuOnly => {
+                            device_report = device_report.with_live_memory_feedback_evidence(1, 2);
+                        }
+                        DeviceClass::IntegratedGpu => {
+                            device_report = device_report.with_live_memory_feedback_evidence(2, 4);
+                        }
+                        _ => {}
+                    }
+                    device_report
+                })
+                .collect(),
+            &gate,
+        );
+
+        assert!(report.passed(), "{:?}", report.failures);
+        assert_eq!(report.live_memory_feedback_device_profiles(), 2);
+        assert!(
+            report
+                .summary_line()
+                .contains("live_memory_feedback_device_profiles=2")
+        );
+
+        let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
+            vec![
+                StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
+                    .with_live_memory_feedback_evidence(1, 0),
+            ],
+            &gate,
+        );
+
+        assert!(!failing.passed());
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "live_memory_feedback_device_profiles 0 below required 2"
+        }));
+    }
+
+    #[test]
     fn state_inspection_matrix_gate_can_require_evolution_evidence_per_device() {
         let passing = StateInspectionGateReport {
             passed: true,
@@ -2071,6 +2249,8 @@ mod tests {
             min_reflection_issue_experiences: None,
             min_critical_reflection_issue_experiences: None,
             min_revision_action_experiences: None,
+            min_live_memory_feedback_experiences: None,
+            min_live_memory_feedback_updates: None,
             min_router_observations: None,
             min_evolution_replay_runs: None,
             min_evolution_replay_items: None,
