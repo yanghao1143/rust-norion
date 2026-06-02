@@ -35,10 +35,10 @@ pub use agent_team::{
 };
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,
-    BenchmarkLiveEvolutionEvidence, BenchmarkSummary, KvQuantBenchmarkCaseResult,
-    KvQuantBenchmarkGate, KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary,
-    PersistentRoundtripDeviceReport, PersistentRoundtripInput, PersistentRoundtripMatrixReport,
-    PersistentRoundtripReport, default_benchmark_cases,
+    BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence, BenchmarkSummary,
+    KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
+    KvQuantBenchmarkSummary, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
+    PersistentRoundtripMatrixReport, PersistentRoundtripReport, default_benchmark_cases,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};

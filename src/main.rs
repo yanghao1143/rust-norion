@@ -1919,6 +1919,11 @@ struct Args {
     benchmark_min_runtime_adapter_observations: Option<usize>,
     benchmark_min_runtime_adapter_best_score: Option<f32>,
     benchmark_max_runtime_adapter_contract_violations: Option<usize>,
+    benchmark_max_memory_governance_failures: Option<usize>,
+    benchmark_min_memory_governance_cases: Option<usize>,
+    benchmark_min_memory_governance_device_profiles: Option<usize>,
+    benchmark_min_memory_retention_activity_cases: Option<usize>,
+    benchmark_min_memory_compaction_activity_cases: Option<usize>,
     benchmark_min_reflection_issue_cases: Option<usize>,
     benchmark_min_reflection_issues: Option<usize>,
     benchmark_min_critical_reflection_issue_cases: Option<usize>,
@@ -2142,6 +2147,11 @@ impl Args {
         let mut benchmark_min_runtime_adapter_observations = None;
         let mut benchmark_min_runtime_adapter_best_score = None;
         let mut benchmark_max_runtime_adapter_contract_violations = None;
+        let mut benchmark_max_memory_governance_failures = None;
+        let mut benchmark_min_memory_governance_cases = None;
+        let mut benchmark_min_memory_governance_device_profiles = None;
+        let mut benchmark_min_memory_retention_activity_cases = None;
+        let mut benchmark_min_memory_compaction_activity_cases = None;
         let mut benchmark_min_reflection_issue_cases = None;
         let mut benchmark_min_reflection_issues = None;
         let mut benchmark_min_critical_reflection_issue_cases = None;
@@ -2732,6 +2742,36 @@ impl Args {
                 "--benchmark-max-runtime-adapter-contract-violations" if index + 1 < raw.len() => {
                     benchmark_max_runtime_adapter_contract_violations =
                         Some(parse_usize(&raw[index + 1], usize::MAX));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-max-memory-governance-failures" if index + 1 < raw.len() => {
+                    benchmark_max_memory_governance_failures =
+                        Some(parse_usize(&raw[index + 1], usize::MAX));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-memory-governance-cases" if index + 1 < raw.len() => {
+                    benchmark_min_memory_governance_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-memory-governance-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_memory_governance_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--benchmark-min-memory-retention-activity-cases" if index + 1 < raw.len() => {
+                    benchmark_min_memory_retention_activity_cases =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-memory-compaction-activity-cases" if index + 1 < raw.len() => {
+                    benchmark_min_memory_compaction_activity_cases =
+                        Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -3692,6 +3732,11 @@ impl Args {
             benchmark_min_runtime_adapter_observations,
             benchmark_min_runtime_adapter_best_score,
             benchmark_max_runtime_adapter_contract_violations,
+            benchmark_max_memory_governance_failures,
+            benchmark_min_memory_governance_cases,
+            benchmark_min_memory_governance_device_profiles,
+            benchmark_min_memory_retention_activity_cases,
+            benchmark_min_memory_compaction_activity_cases,
             benchmark_min_reflection_issue_cases,
             benchmark_min_reflection_issues,
             benchmark_min_critical_reflection_issue_cases,
@@ -4025,6 +4070,21 @@ impl Args {
         }
         if let Some(value) = self.benchmark_max_runtime_adapter_contract_violations {
             gate.max_runtime_adapter_contract_violations = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_memory_governance_failures {
+            gate.max_memory_governance_failures = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_memory_governance_cases {
+            gate.min_memory_governance_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_memory_governance_device_profiles {
+            gate.min_memory_governance_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_memory_retention_activity_cases {
+            gate.min_memory_retention_activity_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_memory_compaction_activity_cases {
+            gate.min_memory_compaction_activity_cases = Some(value);
         }
         if let Some(value) = self.benchmark_min_reflection_issue_cases {
             gate.min_reflection_issue_cases = Some(value);
@@ -4361,6 +4421,7 @@ fn print_help_and_exit() -> ! {
         "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-evolution-replay-live-memory-feedback-updates n\n",
         "Benchmark live evolution: --benchmark-min-evolution-live-inference-runs n --benchmark-min-evolution-live-router-threshold-mutations n --benchmark-min-evolution-live-hierarchy-weight-mutations n --benchmark-min-evolution-live-router-threshold-delta f --benchmark-min-evolution-live-hierarchy-weight-delta f --benchmark-min-evolution-live-memory-updates n --benchmark-min-evolution-live-stored-memory-updates n --benchmark-min-evolution-live-reflection-issues n --benchmark-min-evolution-live-critical-reflection-issues n --benchmark-min-evolution-live-revision-actions n\n",
         "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
+        "Benchmark memory governance: --benchmark-max-memory-governance-failures n --benchmark-min-memory-governance-cases n --benchmark-min-memory-governance-device-profiles n --benchmark-min-memory-retention-activity-cases n --benchmark-min-memory-compaction-activity-cases n\n",
         "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
@@ -4551,6 +4612,16 @@ mod tests {
             "0.25".to_owned(),
             "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
             "0".to_owned(),
+            "--benchmark-max-memory-governance-failures".to_owned(),
+            "0".to_owned(),
+            "--benchmark-min-memory-governance-cases".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-memory-governance-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--benchmark-min-memory-retention-activity-cases".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-memory-compaction-activity-cases".to_owned(),
+            "1".to_owned(),
             "--benchmark-min-reflection-issue-cases".to_owned(),
             "2".to_owned(),
             "--benchmark-min-reflection-issues".to_owned(),
@@ -5130,6 +5201,14 @@ mod tests {
             args.benchmark_max_runtime_adapter_contract_violations,
             Some(0)
         );
+        assert_eq!(args.benchmark_max_memory_governance_failures, Some(0));
+        assert_eq!(args.benchmark_min_memory_governance_cases, Some(4));
+        assert_eq!(
+            args.benchmark_min_memory_governance_device_profiles,
+            Some(12)
+        );
+        assert_eq!(args.benchmark_min_memory_retention_activity_cases, Some(1));
+        assert_eq!(args.benchmark_min_memory_compaction_activity_cases, Some(1));
         assert_eq!(args.benchmark_min_reflection_issue_cases, Some(2));
         assert_eq!(args.benchmark_min_reflection_issues, Some(3));
         assert_eq!(args.benchmark_min_critical_reflection_issue_cases, Some(1));
@@ -5182,6 +5261,23 @@ mod tests {
             args.benchmark_gate()
                 .max_runtime_adapter_contract_violations,
             Some(0)
+        );
+        assert_eq!(
+            args.benchmark_gate().max_memory_governance_failures,
+            Some(0)
+        );
+        assert_eq!(args.benchmark_gate().min_memory_governance_cases, Some(4));
+        assert_eq!(
+            args.benchmark_gate().min_memory_governance_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_memory_retention_activity_cases,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_memory_compaction_activity_cases,
+            Some(1)
         );
         assert_eq!(args.benchmark_gate().min_reflection_issue_cases, Some(2));
         assert_eq!(args.benchmark_gate().min_reflection_issues, Some(3));
@@ -6978,6 +7074,12 @@ mod tests {
             "0.05".to_owned(),
             "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
             "0".to_owned(),
+            "--benchmark-max-memory-governance-failures".to_owned(),
+            "0".to_owned(),
+            "--benchmark-min-memory-governance-cases".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-memory-governance-device-profiles".to_owned(),
+            device_count.to_string(),
             "--benchmark-min-auto-replay-router-threshold-mutations".to_owned(),
             "1".to_owned(),
             "--benchmark-min-auto-replay-hierarchy-weight-mutations".to_owned(),
@@ -7082,6 +7184,9 @@ mod tests {
         assert!(summary.total_runtime_adapter_observations() >= 1);
         assert!(summary.max_runtime_adapter_score().unwrap_or(0.0) >= 0.05);
         assert_eq!(summary.total_runtime_adapter_contract_violations(), 0);
+        assert_eq!(summary.memory_governance_cases(), device_count * case_count);
+        assert_eq!(summary.memory_governance_device_profiles(), device_count);
+        assert_eq!(summary.memory_governance_evidence().failures.len(), 0);
         assert!(summary.total_runtime_kv_exported() >= device_count * case_count);
         assert!(summary.total_runtime_kv_stored() >= 1);
         assert!(summary.total_auto_replay_router_threshold_mutations() >= 1);
@@ -7228,6 +7333,21 @@ mod tests {
             summary
                 .summary_line()
                 .contains("runtime_adapter_contract_violations=0")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("memory_governance_cases=48")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("memory_governance_device_profiles=12")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("memory_governance_failures=0")
         );
         assert!(gate_report.passed, "{:?}", gate_report.failures);
         assert!(trace_report.passed, "{:?}", trace_report.failures);
