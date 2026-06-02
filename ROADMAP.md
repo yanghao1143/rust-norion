@@ -94,8 +94,11 @@ The north star is now explicitly scoped around five core requirements:
    constraints, and hierarchy weights. Profiles also map into capability tiers
    from tiny devices through distributed accelerators. The CLI should use
    best-effort local probing when no explicit profile is provided, while
-   preserving manual overrides. Each plan should also emit a device execution
-   profile: primary compute lane, portable fallback lane, memory mode, candidate
+   preserving manual overrides. Auto probing should also emit an auditable
+   report with the selected profile, reason, sanitized evidence, platform shape,
+   accelerator count, and load hints so new hardware support can be tested and
+   reviewed without relying on opaque heuristics. Each plan should also emit a
+   device execution profile: primary compute lane, portable fallback lane, memory mode, candidate
    runtime adapters, KV precision policy, prefetch budget, disk-spill policy,
    and recursive parallelism budget. Every explicit profile should also carry a
    coverage descriptor with common aliases so new device names map into stable
@@ -399,7 +402,8 @@ These are algorithmic references, not product dependencies:
   best-effort auto probing now maps OS,
   architecture, CPU parallelism, common GPU/NPU environment hints, edge device
   hints, WASM/tiny targets, and discrete GPU adapter names into a conservative
-  device profile; each profile now emits execution-lane, memory mode,
+  device profile and exposes an auditable `HardwareProbeReport` with reason,
+  sanitized evidence, accelerator count, and normalized load hints; each profile now emits execution-lane, memory mode,
   adapter-hint, KV-precision, prefetch, disk-spill, and recursive parallelism
   policies; runtime KV import now honors the device prefetch budget; recursive
   schedules are now grouped into execution waves using the device
@@ -928,7 +932,9 @@ These are algorithmic references, not product dependencies:
   governance bounds, a portable fallback, or required `runtime_device_contract`
   fields.
 - Default CLI execution performs conservative local device probing, and manual
-  device/load flags remain authoritative.
+  device/load flags remain authoritative. Hardware probing is auditable through
+  `HardwareProbeReport`, including the selected profile, reason, sanitized
+  evidence, accelerator count, and normalized load hints.
 - Benchmark execution can sweep every explicit device profile with
   `--benchmark-all-devices`, and the benchmark gate can require all-device
   control-loop coverage through `--benchmark-min-device-profiles`.

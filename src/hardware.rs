@@ -717,6 +717,10 @@ impl HardwareSnapshot {
         HardwareProbe::current().snapshot()
     }
 
+    pub fn auto_detect_report() -> HardwareProbeReport {
+        HardwareProbe::current().report()
+    }
+
     pub fn pressure(&self) -> f32 {
         let weights = device_pressure_weights(self.device);
         (self.cpu_load * weights.cpu
@@ -724,6 +728,55 @@ impl HardwareSnapshot {
             + self.ram_load * weights.ram
             + self.disk_load * weights.disk)
             .clamp(0.0, 1.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HardwareProbeReport {
+    pub device: DeviceClass,
+    pub reason: String,
+    pub os: String,
+    pub arch: String,
+    pub cpu_count: usize,
+    pub accelerator_count: usize,
+    pub evidence: Vec<String>,
+    pub cpu_load: f32,
+    pub gpu_load: f32,
+    pub ram_load: f32,
+    pub disk_load: f32,
+}
+
+impl HardwareProbeReport {
+    pub fn snapshot(&self) -> HardwareSnapshot {
+        HardwareSnapshot::new(
+            self.device,
+            self.cpu_load,
+            self.gpu_load,
+            self.ram_load,
+            self.disk_load,
+        )
+    }
+
+    pub fn summary(&self) -> String {
+        let evidence = if self.evidence.is_empty() {
+            "none".to_owned()
+        } else {
+            self.evidence.join("+")
+        };
+        format!(
+            "device={} reason={} os={} arch={} cpus={} accelerators={} loads={:.2}/{:.2}/{:.2}/{:.2} evidence={}",
+            self.device.as_str(),
+            self.reason,
+            self.os,
+            self.arch,
+            self.cpu_count,
+            self.accelerator_count,
+            self.cpu_load,
+            self.gpu_load,
+            self.ram_load,
+            self.disk_load,
+            evidence
+        )
     }
 }
 
@@ -762,24 +815,73 @@ impl HardwareProbe {
     }
 
     pub fn snapshot(&self) -> HardwareSnapshot {
-        let device = self.detect_device();
-        let defaults = default_probe_loads(device);
+        self.report().snapshot()
+    }
 
-        HardwareSnapshot::new(
-            device,
-            self.load_hint("NOIRON_CPU_LOAD", defaults.cpu),
-            self.load_hint("NOIRON_GPU_LOAD", defaults.gpu),
-            self.load_hint("NOIRON_RAM_LOAD", defaults.ram),
-            self.load_hint("NOIRON_DISK_LOAD", defaults.disk),
-        )
+    pub fn report(&self) -> HardwareProbeReport {
+        let mut evidence = vec![
+            format!("os:{}", sanitize_probe_token(&self.os)),
+            format!("arch:{}", sanitize_probe_token(&self.arch)),
+            format!("cpus:{}", self.cpu_count),
+        ];
+        let accelerator_count = self.accelerator_count();
+        if accelerator_count > 0 {
+            evidence.push(format!("accelerators:{accelerator_count}"));
+        }
+
+        let (device, reason) = self.detect_device_with_evidence(accelerator_count, &mut evidence);
+        self.load_evidence(&mut evidence);
+        self.report_for(device, reason, accelerator_count, evidence)
     }
 
     pub fn detect_device(&self) -> DeviceClass {
+        self.report().device
+    }
+
+    fn report_for(
+        &self,
+        device: DeviceClass,
+        reason: &'static str,
+        accelerator_count: usize,
+        evidence: Vec<String>,
+    ) -> HardwareProbeReport {
+        let defaults = default_probe_loads(device);
+        HardwareProbeReport {
+            device,
+            reason: reason.to_owned(),
+            os: self.os.clone(),
+            arch: self.arch.clone(),
+            cpu_count: self.cpu_count,
+            accelerator_count,
+            evidence,
+            cpu_load: normalize_load(self.load_hint("NOIRON_CPU_LOAD", defaults.cpu)),
+            gpu_load: normalize_load(self.load_hint("NOIRON_GPU_LOAD", defaults.gpu)),
+            ram_load: normalize_load(self.load_hint("NOIRON_RAM_LOAD", defaults.ram)),
+            disk_load: normalize_load(self.load_hint("NOIRON_DISK_LOAD", defaults.disk)),
+        }
+    }
+
+    fn detect_device_with_evidence(
+        &self,
+        accelerator_count: usize,
+        evidence: &mut Vec<String>,
+    ) -> (DeviceClass, &'static str) {
         if let Some(value) = self.env_value("NOIRON_DEVICE_PROFILE") {
+            let alias = sanitize_probe_token(value);
+            evidence.push(format!("explicit_profile_alias:{alias}"));
             match value.parse::<DeviceClass>() {
-                Ok(DeviceClass::Auto) => {}
-                Ok(device) => return device,
-                Err(_) => return DeviceClass::CpuOnly,
+                Ok(DeviceClass::Auto) => {
+                    evidence.push("explicit_profile:auto".to_owned());
+                }
+                Ok(device) => {
+                    evidence.push(format!("explicit_profile:{}", device.as_str()));
+                    return (device, "explicit-profile");
+                }
+                Err(_) => {
+                    evidence.push(format!("unknown_explicit_profile:{alias}"));
+                    evidence.push("portable_cpu_fallback".to_owned());
+                    return (DeviceClass::CpuOnly, "unknown-explicit-profile");
+                }
             }
         }
 
@@ -790,10 +892,12 @@ impl HardwareProbe {
             os.as_str(),
             "android" | "ios" | "tvos" | "visionos" | "watchos"
         ) {
-            return DeviceClass::Mobile;
+            evidence.push(format!("mobile_os:{os}"));
+            return (DeviceClass::Mobile, "mobile-os");
         }
         if arch.starts_with("wasm") || matches!(os.as_str(), "wasi") {
-            return DeviceClass::BrowserWasm;
+            evidence.push("wasm_target".to_owned());
+            return (DeviceClass::BrowserWasm, "wasm-target");
         }
         if matches!(os.as_str(), "espidf" | "none")
             || arch.contains("xtensa")
@@ -801,56 +905,84 @@ impl HardwareProbe {
             || arch.contains("cortex-m")
             || arch == "riscv32"
         {
-            return DeviceClass::Microcontroller;
+            evidence.push("microcontroller_target".to_owned());
+            return (DeviceClass::Microcontroller, "microcontroller-target");
         }
-        if self.has_npu_hint() {
-            return DeviceClass::NpuAccelerator;
+        if let Some(hint) = self.npu_hint_evidence() {
+            evidence.push(hint);
+            return (DeviceClass::NpuAccelerator, "npu-hint");
         }
-        if self.has_edge_hint() {
-            return DeviceClass::Edge;
+        if let Some(hint) = self.edge_hint_evidence() {
+            evidence.push(hint);
+            return (DeviceClass::Edge, "edge-hint");
         }
 
-        let accelerator_count = self.accelerator_count();
         if accelerator_count > 1 {
-            return DeviceClass::MultiGpu;
+            return (DeviceClass::MultiGpu, "multi-accelerator");
         }
         if accelerator_count == 1 {
-            if self.has_unified_memory_hint() {
-                return DeviceClass::UnifiedMemory;
+            if let Some(hint) = self.unified_memory_hint_evidence() {
+                evidence.push(hint);
+                return (DeviceClass::UnifiedMemory, "unified-memory-hint");
             }
-            if self.has_integrated_gpu_hint() {
-                return DeviceClass::IntegratedGpu;
+            if let Some(hint) = self.integrated_gpu_hint_evidence() {
+                evidence.push(hint);
+                return (DeviceClass::IntegratedGpu, "integrated-gpu-hint");
             }
-            return DeviceClass::DiscreteGpu;
+            return (DeviceClass::DiscreteGpu, "single-accelerator");
         }
 
-        if self.has_unified_memory_hint() || (os == "macos" && is_arm_arch(&arch)) {
-            return DeviceClass::UnifiedMemory;
+        if let Some(hint) = self.unified_memory_hint_evidence() {
+            evidence.push(hint);
+            return (DeviceClass::UnifiedMemory, "unified-memory-hint");
         }
-        if self.has_integrated_gpu_hint() {
-            return DeviceClass::IntegratedGpu;
+        if os == "macos" && is_arm_arch(&arch) {
+            evidence.push("apple_silicon_default".to_owned());
+            return (DeviceClass::UnifiedMemory, "unified-memory-default");
         }
-        if self.has_discrete_gpu_hint() {
-            return DeviceClass::DiscreteGpu;
+        if let Some(hint) = self.integrated_gpu_hint_evidence() {
+            evidence.push(hint);
+            return (DeviceClass::IntegratedGpu, "integrated-gpu-hint");
+        }
+        if let Some(hint) = self.discrete_gpu_hint_evidence() {
+            evidence.push(hint);
+            return (DeviceClass::DiscreteGpu, "discrete-gpu-hint");
         }
         if os == "linux" && is_arm_arch(&arch) {
             return if self.cpu_count <= 4 {
-                DeviceClass::Embedded
+                evidence.push("linux_arm_embedded".to_owned());
+                (DeviceClass::Embedded, "linux-arm-embedded")
             } else {
-                DeviceClass::Edge
+                evidence.push("linux_arm_edge".to_owned());
+                (DeviceClass::Edge, "linux-arm-edge")
             };
         }
         if self.cpu_count >= 32 {
-            return DeviceClass::Server;
+            evidence.push("high_cpu_count".to_owned());
+            return (DeviceClass::Server, "high-cpu-count");
         }
 
-        DeviceClass::CpuOnly
+        evidence.push("portable_cpu_default".to_owned());
+        (DeviceClass::CpuOnly, "portable-cpu-default")
     }
 
     fn load_hint(&self, key: &str, fallback: f32) -> f32 {
         self.env_value(key)
             .and_then(|value| value.parse::<f32>().ok())
             .unwrap_or(fallback)
+    }
+
+    fn load_evidence(&self, evidence: &mut Vec<String>) {
+        for key in [
+            "NOIRON_CPU_LOAD",
+            "NOIRON_GPU_LOAD",
+            "NOIRON_RAM_LOAD",
+            "NOIRON_DISK_LOAD",
+        ] {
+            if self.env_value(key).is_some() {
+                evidence.push(format!("load:{key}"));
+            }
+        }
     }
 
     fn env_value(&self, key: &str) -> Option<&str> {
@@ -864,32 +996,40 @@ impl HardwareProbe {
         keys.iter().find_map(|key| self.env_value(key))
     }
 
-    fn has_npu_hint(&self) -> bool {
-        self.env_flag("NOIRON_NPU")
-            || self
-                .env_value_any(&[
-                    "QNN_SDK_ROOT",
-                    "HEXAGON_SDK_ROOT",
-                    "COREML_ENABLE_NEURAL_ENGINE",
-                    "ANDROID_NNAPI_DEVICE",
-                    "NPU_VISIBLE_DEVICES",
-                    "DIRECTML_NPU_DEVICE",
-                    "ASCEND_HOME_PATH",
-                    "ASCEND_TOOLKIT_HOME",
-                    "ASCEND_RT_VISIBLE_DEVICES",
-                    "CAMBRICON_HOME",
-                    "MLU_VISIBLE_DEVICES",
-                    "KUNLUN_HOME",
-                    "SOPHGO_SDK_ROOT",
-                    "RKNN_TOOLKIT2",
-                    "HAILO_SDK_ROOT",
-                    "VITIS_AI_HOME",
-                    "ETHOS_U_HOME",
-                    "ETHOS_N_HOME",
-                    "MTK_NEUROPILOT_SDK",
-                ])
-                .is_some()
-            || self.adapter_hint_contains(&[
+    fn env_key_any<'a>(&self, keys: &'a [&'a str]) -> Option<&'a str> {
+        keys.iter()
+            .find(|key| self.env_value(key).is_some())
+            .copied()
+    }
+
+    fn npu_hint_evidence(&self) -> Option<String> {
+        if self.env_flag("NOIRON_NPU") {
+            return Some("env_flag:NOIRON_NPU".to_owned());
+        }
+        self.env_key_any(&[
+            "QNN_SDK_ROOT",
+            "HEXAGON_SDK_ROOT",
+            "COREML_ENABLE_NEURAL_ENGINE",
+            "ANDROID_NNAPI_DEVICE",
+            "NPU_VISIBLE_DEVICES",
+            "DIRECTML_NPU_DEVICE",
+            "ASCEND_HOME_PATH",
+            "ASCEND_TOOLKIT_HOME",
+            "ASCEND_RT_VISIBLE_DEVICES",
+            "CAMBRICON_HOME",
+            "MLU_VISIBLE_DEVICES",
+            "KUNLUN_HOME",
+            "SOPHGO_SDK_ROOT",
+            "RKNN_TOOLKIT2",
+            "HAILO_SDK_ROOT",
+            "VITIS_AI_HOME",
+            "ETHOS_U_HOME",
+            "ETHOS_N_HOME",
+            "MTK_NEUROPILOT_SDK",
+        ])
+        .map(|key| format!("env:{key}"))
+        .or_else(|| {
+            self.adapter_hint_evidence(&[
                 "npu",
                 "neural",
                 "ane",
@@ -910,41 +1050,46 @@ impl HardwareProbe {
                 "ethos",
                 "vitis",
             ])
+        })
     }
 
-    fn has_discrete_gpu_hint(&self) -> bool {
-        self.env_flag("NOIRON_DISCRETE_GPU")
-            || self.adapter_hint_contains(&[
-                "nvidia",
-                "geforce",
-                "rtx",
-                "tesla",
-                "quadro",
-                "cuda",
-                "radeon rx",
-                "radeon pro",
-                "amd gpu",
-                "arc",
-                "discrete",
-                "dgpu",
-                "opencl",
-                "directml",
-            ])
+    fn discrete_gpu_hint_evidence(&self) -> Option<String> {
+        if self.env_flag("NOIRON_DISCRETE_GPU") {
+            return Some("env_flag:NOIRON_DISCRETE_GPU".to_owned());
+        }
+        self.adapter_hint_evidence(&[
+            "nvidia",
+            "geforce",
+            "rtx",
+            "tesla",
+            "quadro",
+            "cuda",
+            "radeon rx",
+            "radeon pro",
+            "amd gpu",
+            "arc",
+            "discrete",
+            "dgpu",
+            "opencl",
+            "directml",
+        ])
     }
 
-    fn has_edge_hint(&self) -> bool {
-        self.env_flag("NOIRON_EDGE_DEVICE")
-            || self
-                .env_value_any(&[
-                    "JETSON_MODEL_NAME",
-                    "NVIDIA_JETSON_MODEL",
-                    "BALENA_DEVICE_TYPE",
-                    "RPI_MODEL",
-                    "ROCKCHIP_SOC",
-                    "NOIRON_EDGE_CLASS",
-                ])
-                .is_some()
-            || self.adapter_hint_contains(&[
+    fn edge_hint_evidence(&self) -> Option<String> {
+        if self.env_flag("NOIRON_EDGE_DEVICE") {
+            return Some("env_flag:NOIRON_EDGE_DEVICE".to_owned());
+        }
+        self.env_key_any(&[
+            "JETSON_MODEL_NAME",
+            "NVIDIA_JETSON_MODEL",
+            "BALENA_DEVICE_TYPE",
+            "RPI_MODEL",
+            "ROCKCHIP_SOC",
+            "NOIRON_EDGE_CLASS",
+        ])
+        .map(|key| format!("env:{key}"))
+        .or_else(|| {
+            self.adapter_hint_evidence(&[
                 "jetson",
                 "tegra",
                 "rk3588",
@@ -954,39 +1099,44 @@ impl HardwareProbe {
                 "gateway",
                 "industrial",
             ])
+        })
     }
 
-    fn has_unified_memory_hint(&self) -> bool {
-        self.env_flag("NOIRON_UNIFIED_MEMORY")
-            || self.adapter_hint_contains(&[
-                "apple",
-                "apple silicon",
-                "m1",
-                "m2",
-                "m3",
-                "m4",
-                "m5",
-                "unified",
-                "uma",
-            ])
+    fn unified_memory_hint_evidence(&self) -> Option<String> {
+        if self.env_flag("NOIRON_UNIFIED_MEMORY") {
+            return Some("env_flag:NOIRON_UNIFIED_MEMORY".to_owned());
+        }
+        self.adapter_hint_evidence(&[
+            "apple",
+            "apple silicon",
+            "m1",
+            "m2",
+            "m3",
+            "m4",
+            "m5",
+            "unified",
+            "uma",
+        ])
     }
 
-    fn has_integrated_gpu_hint(&self) -> bool {
-        self.env_flag("NOIRON_INTEGRATED_GPU")
-            || self.adapter_hint_contains(&[
-                "integrated",
-                "iris",
-                "uhd",
-                "intel",
-                "xe",
-                "apu",
-                "steam deck",
-                "radeon graphics",
-            ])
+    fn integrated_gpu_hint_evidence(&self) -> Option<String> {
+        if self.env_flag("NOIRON_INTEGRATED_GPU") {
+            return Some("env_flag:NOIRON_INTEGRATED_GPU".to_owned());
+        }
+        self.adapter_hint_evidence(&[
+            "integrated",
+            "iris",
+            "uhd",
+            "intel",
+            "xe",
+            "apu",
+            "steam deck",
+            "radeon graphics",
+        ])
     }
 
-    fn adapter_hint_contains(&self, needles: &[&str]) -> bool {
-        self.env_value_any(&[
+    fn adapter_hint_evidence(&self, needles: &[&str]) -> Option<String> {
+        for key in [
             "NOIRON_GPU_ADAPTER",
             "WGPU_ADAPTER_NAME",
             "WEBGPU_ADAPTER_NAME",
@@ -1000,12 +1150,15 @@ impl HardwareProbe {
             "COREML_DEVICE_NAME",
             "NNAPI_DEVICE_NAME",
             "QNN_DEVICE_NAME",
-        ])
-        .map(|value| {
-            let lower = value.to_ascii_lowercase();
-            needles.iter().any(|needle| lower.contains(needle))
-        })
-        .unwrap_or(false)
+        ] {
+            if let Some(value) = self.env_value(key) {
+                let lower = value.to_ascii_lowercase();
+                if let Some(needle) = needles.iter().find(|needle| lower.contains(**needle)) {
+                    return Some(format!("adapter:{key}:{}", sanitize_probe_token(needle)));
+                }
+            }
+        }
+        None
     }
 
     fn env_flag(&self, key: &str) -> bool {
@@ -2662,6 +2815,30 @@ fn count_visible_devices(value: &str) -> usize {
         .count()
 }
 
+fn sanitize_probe_token(value: &str) -> String {
+    let mut sanitized = value
+        .trim()
+        .chars()
+        .filter_map(|ch| {
+            let lower = ch.to_ascii_lowercase();
+            if lower.is_ascii_alphanumeric() {
+                Some(lower)
+            } else if matches!(lower, '-' | '_' | '.' | ':' | '/') {
+                Some(lower)
+            } else if lower.is_ascii_whitespace() {
+                Some('-')
+            } else {
+                None
+            }
+        })
+        .take(64)
+        .collect::<String>();
+    while sanitized.contains("--") {
+        sanitized = sanitized.replace("--", "-");
+    }
+    sanitized.trim_matches('-').to_owned()
+}
+
 fn is_arm_arch(arch: &str) -> bool {
     arch.contains("arm") || arch.contains("aarch64")
 }
@@ -2669,6 +2846,25 @@ fn is_arm_arch(arch: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_evidence(report: &HardwareProbeReport, expected: &str) {
+        assert!(
+            report.evidence.iter().any(|item| item == expected),
+            "missing evidence {expected}; report={}",
+            report.summary()
+        );
+    }
+
+    fn assert_evidence_prefix(report: &HardwareProbeReport, expected: &str) {
+        assert!(
+            report
+                .evidence
+                .iter()
+                .any(|item| item.starts_with(expected)),
+            "missing evidence prefix {expected}; report={}",
+            report.summary()
+        );
+    }
 
     #[test]
     fn cpu_only_high_pressure_tightens_budget_and_boosts_convolution() {
@@ -3430,66 +3626,112 @@ mod tests {
 
     #[test]
     fn probe_prefers_explicit_environment_profile() {
-        let snapshot = HardwareProbe::new("windows", "x86_64", 8)
+        let probe = HardwareProbe::new("windows", "x86_64", 8)
             .with_env("NOIRON_DEVICE_PROFILE", "rtx")
-            .with_env("NOIRON_CPU_LOAD", "80")
-            .snapshot();
+            .with_env("NOIRON_CPU_LOAD", "80");
+        let report = probe.report();
+        let snapshot = probe.snapshot();
 
+        assert_eq!(report.device, DeviceClass::DiscreteGpu);
+        assert_eq!(report.reason, "explicit-profile");
+        let report_snapshot = report.snapshot();
+        assert_eq!(report_snapshot.device, snapshot.device);
+        assert!((report_snapshot.cpu_load - snapshot.cpu_load).abs() < 0.0001);
+        assert!((report_snapshot.gpu_load - snapshot.gpu_load).abs() < 0.0001);
+        assert!((report_snapshot.ram_load - snapshot.ram_load).abs() < 0.0001);
+        assert!((report_snapshot.disk_load - snapshot.disk_load).abs() < 0.0001);
+        assert_evidence(&report, "explicit_profile:discrete");
+        assert_evidence(&report, "load:NOIRON_CPU_LOAD");
         assert_eq!(snapshot.device, DeviceClass::DiscreteGpu);
         assert!((snapshot.cpu_load - 0.80).abs() < 0.0001);
     }
 
     #[test]
     fn unknown_environment_profile_falls_back_to_portable_cpu() {
-        let device = HardwareProbe::new("windows", "x86_64", 8)
+        let report = HardwareProbe::new("windows", "x86_64", 8)
             .with_env("NOIRON_DEVICE_PROFILE", "future-device-sku")
             .with_env("WGPU_ADAPTER_NAME", "NVIDIA GeForce RTX")
-            .detect_device();
+            .report();
 
-        assert_eq!(device, DeviceClass::CpuOnly);
+        assert_eq!(report.device, DeviceClass::CpuOnly);
+        assert_eq!(report.reason, "unknown-explicit-profile");
+        assert_evidence(&report, "unknown_explicit_profile:future-device-sku");
+        assert_evidence(&report, "portable_cpu_fallback");
+        assert!(!report.summary().contains("NVIDIA GeForce RTX"));
     }
 
     #[test]
     fn probe_detects_mobile_arm_and_multi_gpu_targets() {
-        let mobile = HardwareProbe::new("ios", "aarch64", 6).detect_device();
-        let vision = HardwareProbe::new("visionos", "aarch64", 8).detect_device();
+        let mobile = HardwareProbe::new("ios", "aarch64", 6).report();
+        let vision = HardwareProbe::new("visionos", "aarch64", 8).report();
         let multi_gpu = HardwareProbe::new("linux", "x86_64", 32)
             .with_env("CUDA_VISIBLE_DEVICES", "0,1")
-            .detect_device();
+            .report();
 
-        assert_eq!(mobile, DeviceClass::Mobile);
-        assert_eq!(vision, DeviceClass::Mobile);
-        assert_eq!(multi_gpu, DeviceClass::MultiGpu);
+        assert_eq!(mobile.device, DeviceClass::Mobile);
+        assert_eq!(mobile.reason, "mobile-os");
+        assert_evidence(&mobile, "mobile_os:ios");
+        assert_eq!(vision.device, DeviceClass::Mobile);
+        assert_eq!(vision.reason, "mobile-os");
+        assert_evidence(&vision, "mobile_os:visionos");
+        assert_eq!(multi_gpu.device, DeviceClass::MultiGpu);
+        assert_eq!(multi_gpu.reason, "multi-accelerator");
+        assert_eq!(multi_gpu.accelerator_count, 2);
+        assert_evidence(&multi_gpu, "accelerators:2");
     }
 
     #[test]
     fn probe_detects_unified_integrated_and_edge_targets() {
-        let uma = HardwareProbe::new("macos", "aarch64", 10).detect_device();
+        let uma = HardwareProbe::new("macos", "aarch64", 10).report();
         let integrated = HardwareProbe::new("windows", "x86_64", 8)
             .with_env("WGPU_ADAPTER_NAME", "Intel Iris Xe Graphics")
-            .detect_device();
-        let edge = HardwareProbe::new("linux", "aarch64", 8).detect_device();
+            .report();
+        let edge = HardwareProbe::new("linux", "aarch64", 8).report();
 
-        assert_eq!(uma, DeviceClass::UnifiedMemory);
-        assert_eq!(integrated, DeviceClass::IntegratedGpu);
-        assert_eq!(edge, DeviceClass::Edge);
+        assert_eq!(uma.device, DeviceClass::UnifiedMemory);
+        assert_eq!(uma.reason, "unified-memory-default");
+        assert_evidence(&uma, "apple_silicon_default");
+        assert_eq!(integrated.device, DeviceClass::IntegratedGpu);
+        assert_eq!(integrated.reason, "integrated-gpu-hint");
+        assert_evidence_prefix(&integrated, "adapter:WGPU_ADAPTER_NAME:");
+        assert_eq!(edge.device, DeviceClass::Edge);
+        assert_eq!(edge.reason, "linux-arm-edge");
+        assert_evidence(&edge, "linux_arm_edge");
     }
 
     #[test]
     fn probe_detects_discrete_edge_and_tiny_fallback_targets() {
         let discrete = HardwareProbe::new("windows", "x86_64", 16)
             .with_env("WGPU_ADAPTER_NAME", "NVIDIA GeForce RTX 4090")
-            .detect_device();
+            .report();
         let jetson = HardwareProbe::new("linux", "aarch64", 8)
             .with_env("JETSON_MODEL_NAME", "Jetson Orin")
             .with_env("CUDA_VISIBLE_DEVICES", "0")
-            .detect_device();
-        let wasm = HardwareProbe::new("wasi", "wasm32", 1).detect_device();
-        let tiny = HardwareProbe::new("espidf", "xtensa", 2).detect_device();
+            .report();
+        let wasm = HardwareProbe::new("wasi", "wasm32", 1).report();
+        let tiny = HardwareProbe::new("espidf", "xtensa", 2).report();
+        let npu = HardwareProbe::new("linux", "aarch64", 8)
+            .with_env("NOIRON_NPU", "true")
+            .report();
+        let server = HardwareProbe::new("linux", "x86_64", 64).report();
 
-        assert_eq!(discrete, DeviceClass::DiscreteGpu);
-        assert_eq!(jetson, DeviceClass::Edge);
-        assert_eq!(wasm, DeviceClass::BrowserWasm);
-        assert_eq!(tiny, DeviceClass::Microcontroller);
+        assert_eq!(discrete.device, DeviceClass::DiscreteGpu);
+        assert_eq!(discrete.reason, "discrete-gpu-hint");
+        assert_evidence_prefix(&discrete, "adapter:WGPU_ADAPTER_NAME:");
+        assert_eq!(jetson.device, DeviceClass::Edge);
+        assert_eq!(jetson.reason, "edge-hint");
+        assert_evidence(&jetson, "env:JETSON_MODEL_NAME");
+        assert_eq!(wasm.device, DeviceClass::BrowserWasm);
+        assert_eq!(wasm.reason, "wasm-target");
+        assert_evidence(&wasm, "wasm_target");
+        assert_eq!(tiny.device, DeviceClass::Microcontroller);
+        assert_eq!(tiny.reason, "microcontroller-target");
+        assert_evidence(&tiny, "microcontroller_target");
+        assert_eq!(npu.device, DeviceClass::NpuAccelerator);
+        assert_eq!(npu.reason, "npu-hint");
+        assert_evidence(&npu, "env_flag:NOIRON_NPU");
+        assert_eq!(server.device, DeviceClass::Server);
+        assert_eq!(server.reason, "high-cpu-count");
+        assert_evidence(&server, "high_cpu_count");
     }
 }

@@ -29,7 +29,8 @@ The optimized target combines five non-negotiable requirements:
   microcontroller-class tiny targets, edge/robot/vehicle devices, NPU/AI
   accelerator devices, and heterogeneous multi-GPU machines should all map into
   explicit hardware profiles that tune latency, KV budgets, routing pressure,
-  and hierarchy weights, then into execution plans with portable fallbacks
+  and hierarchy weights, then into execution plans with portable fallbacks; auto
+  probing must emit auditable reason/evidence reports instead of opaque guesses
 - frontier algorithms as owned implementations: use public papers as
   inspiration, but implement attention, memory, quantization, routing,
   reflection, and scheduling locally in Rust
@@ -38,6 +39,7 @@ The optimized target combines five non-negotiable requirements:
 - 规避卡脖子：核心引擎不绑定闭源模型服务、厂商专用运行时或不透明量化路径
 - 极致本地化部署：离线优先、轻量化、磁盘记忆、面向消费级/边缘硬件的超长上下文控制
 - 全设备适配：笔记本、台式机、工作站、服务器、手机、平板、可穿戴/XR/TV、嵌入式板卡、浏览器 WASM、微控制器级 tiny 目标、边缘/机器人/车载设备、NPU/AI 加速器设备以及异构多 GPU 机器，都应映射到明确的硬件 profile，用于调整延迟、KV budget、路由压力、层级权重，并生成带可移植降级路径的执行计划
+- 全设备探测可审计：自动识别设备时必须输出选择原因、OS/架构/CPU/加速器数量、负载 hint 和脱敏证据，而不是黑盒猜测
 - 前沿算法自主实现：公开论文只作为思想来源，注意力、记忆、量化、路由、反思和调度都在 Rust 中本地实现
 
 The project focuses on the control loop around inference:
@@ -160,7 +162,7 @@ Implemented modules:
 - `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted runtime token uncertainty metrics, persisted live memory-feedback notes, per-inference live-evolution evidence, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories by scaling actual KV update strength from reward, runtime-diagnostic, persisted live memory-feedback, structured live-evolution evidence, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable router-threshold mutation, hierarchy-weight mutation, memory-update, live-feedback consumption, live-evolution consumption, recursive call-pressure, and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
-- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles, and a runtime-manifest device gate for current-device execution contracts, adapter intersections, KV prefetch limits, and hot/cold KV precision bounds
+- `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing with auditable `HardwareProbeReport` reason/evidence, device coverage descriptors and aliases, compute allocation, execution-plan selection, a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles, and a runtime-manifest device gate for current-device execution contracts, adapter intersections, KV prefetch limits, and hot/cold KV precision bounds
 - `src/process_reward.rs`: RLVR-style process reward scoring for control decisions, including structured reflection issue penalties, Rust-only Toolsmith gate adjustments, and Agent Team collision-free coordination adjustments
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
