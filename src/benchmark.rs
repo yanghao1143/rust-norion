@@ -137,6 +137,16 @@ pub struct BenchmarkGate {
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
+    pub min_evolution_live_inference_runs: Option<u64>,
+    pub min_evolution_live_router_threshold_mutations: Option<u64>,
+    pub min_evolution_live_hierarchy_weight_mutations: Option<u64>,
+    pub min_evolution_live_router_threshold_delta: Option<f32>,
+    pub min_evolution_live_hierarchy_weight_delta: Option<f32>,
+    pub min_evolution_live_memory_updates: Option<u64>,
+    pub min_evolution_live_stored_memory_updates: Option<u64>,
+    pub min_evolution_live_reflection_issues: Option<u64>,
+    pub min_evolution_live_critical_reflection_issues: Option<u64>,
+    pub min_evolution_live_revision_actions: Option<u64>,
     pub min_evolution_replay_runs: Option<u64>,
     pub min_evolution_replay_items: Option<u64>,
     pub min_evolution_router_threshold_mutations: Option<u64>,
@@ -202,6 +212,16 @@ impl Default for BenchmarkGate {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_evolution_live_inference_runs: None,
+            min_evolution_live_router_threshold_mutations: None,
+            min_evolution_live_hierarchy_weight_mutations: None,
+            min_evolution_live_router_threshold_delta: None,
+            min_evolution_live_hierarchy_weight_delta: None,
+            min_evolution_live_memory_updates: None,
+            min_evolution_live_stored_memory_updates: None,
+            min_evolution_live_reflection_issues: None,
+            min_evolution_live_critical_reflection_issues: None,
+            min_evolution_live_revision_actions: None,
             min_evolution_replay_runs: None,
             min_evolution_replay_items: None,
             min_evolution_router_threshold_mutations: None,
@@ -1624,6 +1644,121 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_evolution_live_inference_runs) = gate.min_evolution_live_inference_runs {
+            let observed = self.evolution_ledger.live_inference_runs;
+            if observed < min_evolution_live_inference_runs {
+                failures.push(format!(
+                    "evolution_live_inference_runs {} below minimum {}",
+                    observed, min_evolution_live_inference_runs
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_router_threshold_mutations) =
+            gate.min_evolution_live_router_threshold_mutations
+        {
+            let observed = self.evolution_ledger.live_router_threshold_mutations;
+            if observed < min_evolution_live_router_threshold_mutations {
+                failures.push(format!(
+                    "evolution_live_router_threshold_mutations {} below minimum {}",
+                    observed, min_evolution_live_router_threshold_mutations
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_hierarchy_weight_mutations) =
+            gate.min_evolution_live_hierarchy_weight_mutations
+        {
+            let observed = self.evolution_ledger.live_hierarchy_weight_mutations;
+            if observed < min_evolution_live_hierarchy_weight_mutations {
+                failures.push(format!(
+                    "evolution_live_hierarchy_weight_mutations {} below minimum {}",
+                    observed, min_evolution_live_hierarchy_weight_mutations
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_router_threshold_delta) =
+            gate.min_evolution_live_router_threshold_delta
+        {
+            let observed = self.evolution_ledger.live_router_threshold_delta;
+            if observed < min_evolution_live_router_threshold_delta {
+                failures.push(format!(
+                    "evolution_live_router_threshold_delta {:.6} below minimum {:.6}",
+                    observed, min_evolution_live_router_threshold_delta
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_hierarchy_weight_delta) =
+            gate.min_evolution_live_hierarchy_weight_delta
+        {
+            let observed = self.evolution_ledger.live_hierarchy_weight_delta;
+            if observed < min_evolution_live_hierarchy_weight_delta {
+                failures.push(format!(
+                    "evolution_live_hierarchy_weight_delta {:.6} below minimum {:.6}",
+                    observed, min_evolution_live_hierarchy_weight_delta
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_memory_updates) = gate.min_evolution_live_memory_updates {
+            let observed = self.evolution_ledger.live_memory_updates();
+            if observed < min_evolution_live_memory_updates {
+                failures.push(format!(
+                    "evolution_live_memory_updates {} below minimum {}",
+                    observed, min_evolution_live_memory_updates
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_stored_memory_updates) =
+            gate.min_evolution_live_stored_memory_updates
+        {
+            let observed = self.evolution_ledger.live_stored_memory_updates();
+            if observed < min_evolution_live_stored_memory_updates {
+                failures.push(format!(
+                    "evolution_live_stored_memory_updates {} below minimum {}",
+                    observed, min_evolution_live_stored_memory_updates
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_reflection_issues) =
+            gate.min_evolution_live_reflection_issues
+        {
+            let observed = self.evolution_ledger.live_reflection_issues;
+            if observed < min_evolution_live_reflection_issues {
+                failures.push(format!(
+                    "evolution_live_reflection_issues {} below minimum {}",
+                    observed, min_evolution_live_reflection_issues
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_critical_reflection_issues) =
+            gate.min_evolution_live_critical_reflection_issues
+        {
+            let observed = self.evolution_ledger.live_critical_reflection_issues;
+            if observed < min_evolution_live_critical_reflection_issues {
+                failures.push(format!(
+                    "evolution_live_critical_reflection_issues {} below minimum {}",
+                    observed, min_evolution_live_critical_reflection_issues
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_revision_actions) = gate.min_evolution_live_revision_actions
+        {
+            let observed = self.evolution_ledger.live_revision_actions;
+            if observed < min_evolution_live_revision_actions {
+                failures.push(format!(
+                    "evolution_live_revision_actions {} below minimum {}",
+                    observed, min_evolution_live_revision_actions
+                ));
+            }
+        }
+
         if let Some(min_evolution_replay_runs) = gate.min_evolution_replay_runs {
             let observed = self.evolution_ledger.replay_runs;
             if observed < min_evolution_replay_runs {
@@ -2624,6 +2759,16 @@ mod tests {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_evolution_live_inference_runs: None,
+            min_evolution_live_router_threshold_mutations: None,
+            min_evolution_live_hierarchy_weight_mutations: None,
+            min_evolution_live_router_threshold_delta: None,
+            min_evolution_live_hierarchy_weight_delta: None,
+            min_evolution_live_memory_updates: None,
+            min_evolution_live_stored_memory_updates: None,
+            min_evolution_live_reflection_issues: None,
+            min_evolution_live_critical_reflection_issues: None,
+            min_evolution_live_revision_actions: None,
             min_evolution_replay_runs: None,
             min_evolution_replay_items: None,
             min_evolution_router_threshold_mutations: None,
@@ -3213,6 +3358,16 @@ mod tests {
             }],
         };
         let mut gate = BenchmarkGate::default();
+        gate.min_evolution_live_inference_runs = Some(1);
+        gate.min_evolution_live_router_threshold_mutations = Some(1);
+        gate.min_evolution_live_hierarchy_weight_mutations = Some(1);
+        gate.min_evolution_live_router_threshold_delta = Some(0.01);
+        gate.min_evolution_live_hierarchy_weight_delta = Some(0.01);
+        gate.min_evolution_live_memory_updates = Some(1);
+        gate.min_evolution_live_stored_memory_updates = Some(1);
+        gate.min_evolution_live_reflection_issues = Some(1);
+        gate.min_evolution_live_critical_reflection_issues = Some(1);
+        gate.min_evolution_live_revision_actions = Some(1);
         gate.min_evolution_replay_runs = Some(1);
         gate.min_evolution_replay_items = Some(2);
         gate.min_evolution_router_threshold_mutations = Some(3);
@@ -3231,6 +3386,16 @@ mod tests {
 
         assert!(!report.passed);
         for marker in [
+            "evolution_live_inference_runs",
+            "evolution_live_router_threshold_mutations",
+            "evolution_live_hierarchy_weight_mutations",
+            "evolution_live_router_threshold_delta",
+            "evolution_live_hierarchy_weight_delta",
+            "evolution_live_memory_updates",
+            "evolution_live_stored_memory_updates",
+            "evolution_live_reflection_issues",
+            "evolution_live_critical_reflection_issues",
+            "evolution_live_revision_actions",
             "evolution_replay_runs",
             "evolution_replay_items",
             "evolution_router_threshold_mutations",

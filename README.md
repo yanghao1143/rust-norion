@@ -168,7 +168,7 @@ Implemented modules:
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Infini/SpeContext-filtered KV import candidates, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
 - `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, deterministic reference/local kernel harnesses, and single-device plus all-device conformance gates for ABI validation
-- `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, persisted live memory-feedback evidence, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters including replay live-feedback consumption plus router-threshold/hierarchy-weight deltas
+- `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, persisted live memory-feedback evidence, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters including live inference runs, live router/hierarchy mutations, live KV/store/reflection updates, replay live-feedback consumption, and router-threshold/hierarchy-weight deltas
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob, Rust-only Toolsmith planning, and read-only Agent Team planning feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -228,13 +228,18 @@ another inference writes more durable state.
 Turn the same inspection into a local/CI gate by requiring persisted evidence:
 
 ```powershell
-cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-router-threshold-delta 0.001 --inspect-min-evolution-live-hierarchy-weight-delta 0.001 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 Any `--inspect-min-*` threshold implies `--inspect-state --inspect-gate` and
 exits with code `2` when persisted runtime KV, experience, router observations,
 runtime diagnostics evidence, live memory feedback, reflection diagnostics evidence, or
-self-evolution ledger counters/deltas are missing. Use
+self-evolution ledger counters/deltas are missing. Use the
+`--inspect-min-evolution-live-*` flags to prove live inference itself persisted
+online evolution evidence, including live inference runs, router/hierarchy
+mutations and deltas, memory feedback updates, stored semantic/gist/runtime-KV
+memory writes, reflection issues, critical reflection issues, and revision
+actions. Use
 `--inspect-min-evolution-replay-live-memory-feedback-updates` when replay must
 prove it consumed persisted live feedback in the cumulative ledger, use
 `--inspect-min-evolution-recursive-replay-items` when long-context replay
@@ -247,7 +252,7 @@ created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
 `memory.mobile.ndkv`, and `memory.server.ndkv`:
 
 ```powershell
-cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 All-device inspection can also require matrix-level runtime and
@@ -262,8 +267,17 @@ reflection/revision coverage. Runtime ABI evidence is gated with
 gated with `--inspect-min-reflection-issue-device-profiles`,
 `--inspect-min-critical-reflection-issue-device-profiles`, and
 `--inspect-min-revision-action-device-profiles`. Persisted live memory feedback
-is gated with `--inspect-min-live-memory-feedback-device-profiles`. Persisted self-evolution
-ledger evidence is gated with
+is gated with `--inspect-min-live-memory-feedback-device-profiles`. Persisted live-inference
+self-evolution coverage is gated with
+`--inspect-min-evolution-live-inference-device-profiles`,
+`--inspect-min-evolution-live-router-threshold-mutation-device-profiles`,
+`--inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles`,
+`--inspect-min-evolution-live-memory-update-device-profiles`,
+`--inspect-min-evolution-live-stored-memory-update-device-profiles`,
+`--inspect-min-evolution-live-reflection-issue-device-profiles`,
+`--inspect-min-evolution-live-critical-reflection-issue-device-profiles`, and
+`--inspect-min-evolution-live-revision-action-device-profiles`. Persisted replay
+self-evolution ledger evidence is gated with
 `--inspect-min-evolution-replay-run-device-profiles`,
 `--inspect-min-evolution-replay-item-device-profiles`,
 `--inspect-min-evolution-router-threshold-mutation-device-profiles`,
@@ -280,7 +294,7 @@ For a single CI smoke gate that writes fresh runtime KV state and immediately
 inspects the persisted evidence, combine roundtrip and inspection:
 
 ```powershell
-cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 查看本地持久化状态，但不执行推理：
@@ -300,19 +314,20 @@ adapter、forward energy、KV influence、KV 导入 / 导出计数、live memory
 同一条检查路径也可以作为本地 / CI 门禁：
 
 ```powershell
-cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-router-threshold-delta 0.001 --inspect-min-evolution-live-hierarchy-weight-delta 0.001 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 任意 `--inspect-min-*` 阈值都会隐式开启 `--inspect-state --inspect-gate`；如果
 持久化 runtime KV、experience、runtime diagnostics、live memory feedback、reflection diagnostics、router observation 或自进化 ledger 计数 / delta 证据不足，
 进程会用退出码 `2` 失败。
+使用 `--inspect-min-evolution-live-*` 可以要求在线推理本身已经把自进化证据持久化下来，包括 live inference 次数、router / hierarchy 变更和 delta、记忆反馈更新、semantic/gist/runtime-KV 写入、reflection issue、critical reflection issue 和 revision action。
 
 加上 `--benchmark-all-devices` 后，会检查 all-device roundtrip 门禁写出的同一组
 device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
 `memory.server.ndkv`：
 
 ```powershell
-cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 全设备 inspection 还可以要求矩阵级 runtime 与反思 / 修订覆盖。runtime ABI
@@ -326,7 +341,15 @@ cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-m
 `--inspect-min-reflection-issue-device-profiles`、
 `--inspect-min-critical-reflection-issue-device-profiles` 和
 `--inspect-min-revision-action-device-profiles` 门禁；持久化 live memory feedback
-通过 `--inspect-min-live-memory-feedback-device-profiles` 门禁；持久化自进化 ledger 证据通过
+通过 `--inspect-min-live-memory-feedback-device-profiles` 门禁；持久化在线推理自进化覆盖通过
+`--inspect-min-evolution-live-inference-device-profiles`、
+`--inspect-min-evolution-live-router-threshold-mutation-device-profiles`、
+`--inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles`、
+`--inspect-min-evolution-live-memory-update-device-profiles`、
+`--inspect-min-evolution-live-stored-memory-update-device-profiles`、
+`--inspect-min-evolution-live-reflection-issue-device-profiles`、
+`--inspect-min-evolution-live-critical-reflection-issue-device-profiles` 和
+`--inspect-min-evolution-live-revision-action-device-profiles` 门禁；持久化 replay 自进化 ledger 证据通过
 `--inspect-min-evolution-replay-run-device-profiles`、
 `--inspect-min-evolution-replay-item-device-profiles`、
 `--inspect-min-evolution-router-threshold-mutation-device-profiles`、
@@ -343,7 +366,7 @@ reflection、revision 或 self-evolution ledger 证据只存在于部分 device-
 roundtrip 和 inspection：
 
 ```powershell
-cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 Write one structured JSONL trace record for benchmark comparison:
@@ -383,19 +406,19 @@ cargo run -- --benchmark target/noiron-sparse-benchmark.jsonl --benchmark-gate -
 
 Benchmark runs also seed deterministic replay experience, so the suite can
 prove that auto-replay updates the router, hierarchy, and memory control plane
-and that the cumulative self-evolution ledger records the mutation and replay
-consumption of persisted live feedback:
+and that the cumulative self-evolution ledger records live inference evolution,
+mutation, and replay consumption of persisted live feedback:
 
 ```powershell
-cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-min-live-memory-feedback-updates 1 --benchmark-min-auto-replay-live-memory-feedback-updates 1 --benchmark-min-evolution-replay-runs 1 --benchmark-min-evolution-replay-items 1 --benchmark-min-evolution-router-threshold-mutations 1 --benchmark-min-evolution-hierarchy-weight-mutations 1 --benchmark-min-evolution-router-threshold-delta 0.001 --benchmark-min-evolution-hierarchy-weight-delta 0.001 --benchmark-min-evolution-memory-updates 1 --benchmark-min-evolution-replay-live-memory-feedback-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-min-live-memory-feedback-updates 1 --benchmark-min-auto-replay-live-memory-feedback-updates 1 --benchmark-min-evolution-live-inference-runs 1 --benchmark-min-evolution-live-memory-updates 1 --benchmark-min-evolution-live-stored-memory-updates 1 --benchmark-min-evolution-replay-runs 1 --benchmark-min-evolution-replay-items 1 --benchmark-min-evolution-router-threshold-mutations 1 --benchmark-min-evolution-hierarchy-weight-mutations 1 --benchmark-min-evolution-router-threshold-delta 0.001 --benchmark-min-evolution-hierarchy-weight-delta 0.001 --benchmark-min-evolution-memory-updates 1 --benchmark-min-evolution-replay-live-memory-feedback-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
 benchmark 也会注入确定性的 replay experience，因此可以要求 auto-replay
 真实改变 router threshold、hierarchy weights 和 memory 控制面，并要求累计 self-evolution ledger
-保留这次变化和 replay 对持久化 live feedback 的消费，而不是只记录发生过回放：
+保留在线推理自进化、这次变化和 replay 对持久化 live feedback 的消费，而不是只记录发生过回放：
 
 ```powershell
-cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-min-live-memory-feedback-updates 1 --benchmark-min-auto-replay-live-memory-feedback-updates 1 --benchmark-min-evolution-replay-runs 1 --benchmark-min-evolution-replay-items 1 --benchmark-min-evolution-router-threshold-mutations 1 --benchmark-min-evolution-hierarchy-weight-mutations 1 --benchmark-min-evolution-router-threshold-delta 0.001 --benchmark-min-evolution-hierarchy-weight-delta 0.001 --benchmark-min-evolution-memory-updates 1 --benchmark-min-evolution-replay-live-memory-feedback-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
+cargo run -- --benchmark target/noiron-replay-control.jsonl --benchmark-gate --benchmark-min-auto-replay-router-updates 1 --benchmark-min-auto-replay-hierarchy-updates 1 --benchmark-min-auto-replay-router-threshold-mutations 1 --benchmark-min-auto-replay-hierarchy-weight-mutations 1 --benchmark-min-auto-replay-router-threshold-delta 0.001 --benchmark-min-auto-replay-hierarchy-weight-delta 0.001 --benchmark-min-auto-replay-memory-updates 1 --benchmark-min-live-memory-feedback-updates 1 --benchmark-min-auto-replay-live-memory-feedback-updates 1 --benchmark-min-evolution-live-inference-runs 1 --benchmark-min-evolution-live-memory-updates 1 --benchmark-min-evolution-live-stored-memory-updates 1 --benchmark-min-evolution-replay-runs 1 --benchmark-min-evolution-replay-items 1 --benchmark-min-evolution-router-threshold-mutations 1 --benchmark-min-evolution-hierarchy-weight-mutations 1 --benchmark-min-evolution-router-threshold-delta 0.001 --benchmark-min-evolution-hierarchy-weight-delta 0.001 --benchmark-min-evolution-memory-updates 1 --benchmark-min-evolution-replay-live-memory-feedback-updates 1 --benchmark-max-drift-blocks 0 --benchmark-max-drift-rollbacks 0
 ```
 
 Run the same benchmark cases across every built-in explicit device profile
@@ -657,6 +680,13 @@ self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
 Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量和 best score、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、闭环 reflection diagnostics 或 revision 证据缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+
+Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
+online inference itself mutated control policy, updated live memory feedback,
+stored durable semantic/gist/runtime-KV memory, and recorded reflection or
+revision evidence before replay is considered.
+
+当 benchmark 必须证明在线推理本身已经改变控制策略、更新 live memory feedback、写入长期 semantic/gist/runtime-KV 记忆，并记录 reflection 或 revision 证据时，可以使用 `--benchmark-min-evolution-live-*` 门禁；这些证据独立于 replay 是否随后发生。
 
 Use the reflection-specific benchmark gates when a weak-output or repair audit
 must prove that reflection diagnostics actually fired during the benchmark:
