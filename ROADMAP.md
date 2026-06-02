@@ -512,7 +512,8 @@ These are algorithmic references, not product dependencies:
   without reconstructing the contract from expanded fields; runtime responses can now carry structured
   forward diagnostics, and trace JSONL records model id,
   selected adapter, executed layers, hidden size, local window, forward energy,
-  KV influence, runtime token uncertainty, and runtime KV import/export counts;
+  KV influence, hot/cold KV precision, runtime token uncertainty, and runtime
+  KV import/export counts;
   runtime requests, inference outcomes, traces, and benchmark summaries now
   filter adapter observations against the current device execution plan, and
   runtime responses are checked against the requested model id, architecture
@@ -601,10 +602,13 @@ These are algorithmic references, not product dependencies:
   uncertainty-bearing token totals before production runtime sweeps pass.
 - Runtime forward diagnostics are observable: local and command runtimes can
   report model id, selected adapter, executed layer count, hidden size, local
-  window, forward energy, KV influence, and runtime KV exchange counters, and
-  the trace schema gate requires the diagnostics block. Benchmark gates can
-  also require explicit forward-energy and KV-influence case coverage so a
-  runtime cannot pass by returning only generic layer metadata.
+  window, forward energy, KV influence, hot/cold KV precision, and runtime KV
+  exchange counters, and the trace schema gate requires the diagnostics block.
+  The schema gate also checks that runtime-reported KV precision is valid and
+  matches the hardware execution plan whenever device execution diagnostics are
+  present. Benchmark gates can also require explicit forward-energy,
+  KV-influence, and KV-precision case coverage so a runtime cannot pass by
+  returning only generic layer metadata.
 - Trace JSONL files have a CLI schema gate that fails when required
   control-plane fields disappear or when the hardware execution block,
   selected adapter, adapter hints, KV budgets, and `runtime_device_contract`
@@ -773,6 +777,11 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-influence-cases`, so local/CI production sweeps
   can fail when a runtime stops returning model-side forward-energy or
   imported-KV influence signals.
+- Benchmark summaries and gates expose runtime KV precision coverage through
+  `--benchmark-min-runtime-kv-precision-cases` and
+  `--benchmark-min-runtime-kv-precision-device-profiles`, so local/CI
+  production sweeps can fail when a runtime stops echoing the device-specific
+  hot/cold KV precision ABI across the supported device matrix.
 - Benchmark summaries and gates expose closed-loop reflection evidence through
   `--benchmark-min-reflection-issue-cases`,
   `--benchmark-min-reflection-issues`,
@@ -859,7 +868,8 @@ These are algorithmic references, not product dependencies:
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
-  runtime KV storage, runtime adapter contract coverage, runtime adapter observation reuse,
+  runtime KV precision, runtime KV storage, runtime adapter contract coverage,
+  runtime adapter observation reuse,
   reflection issue / critical issue coverage, revision-action coverage,
   per-device reflection/revision coverage,
   live-inference router/hierarchy mutation and memory/reflection/revision coverage,

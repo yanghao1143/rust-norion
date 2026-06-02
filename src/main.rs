@@ -1960,6 +1960,7 @@ struct Args {
     benchmark_min_runtime_forward_cases: Option<usize>,
     benchmark_min_runtime_forward_energy_cases: Option<usize>,
     benchmark_min_runtime_kv_influence_cases: Option<usize>,
+    benchmark_min_runtime_kv_precision_cases: Option<usize>,
     benchmark_min_runtime_layer_mode_cases: Option<usize>,
     benchmark_min_runtime_all_layer_mode_cases: Option<usize>,
     benchmark_min_runtime_global_layers: Option<usize>,
@@ -1982,6 +1983,7 @@ struct Args {
     benchmark_max_embedding_evidence_failures: Option<usize>,
     benchmark_min_runtime_device_execution_cases: Option<usize>,
     benchmark_min_runtime_device_execution_device_profiles: Option<usize>,
+    benchmark_min_runtime_kv_precision_device_profiles: Option<usize>,
     benchmark_max_runtime_device_execution_violations: Option<usize>,
     benchmark_max_memory_governance_failures: Option<usize>,
     benchmark_min_memory_governance_cases: Option<usize>,
@@ -2224,6 +2226,7 @@ impl Args {
         let mut benchmark_min_runtime_forward_cases = None;
         let mut benchmark_min_runtime_forward_energy_cases = None;
         let mut benchmark_min_runtime_kv_influence_cases = None;
+        let mut benchmark_min_runtime_kv_precision_cases = None;
         let mut benchmark_min_runtime_layer_mode_cases = None;
         let mut benchmark_min_runtime_all_layer_mode_cases = None;
         let mut benchmark_min_runtime_global_layers = None;
@@ -2246,6 +2249,7 @@ impl Args {
         let mut benchmark_max_embedding_evidence_failures = None;
         let mut benchmark_min_runtime_device_execution_cases = None;
         let mut benchmark_min_runtime_device_execution_device_profiles = None;
+        let mut benchmark_min_runtime_kv_precision_device_profiles = None;
         let mut benchmark_max_runtime_device_execution_violations = None;
         let mut benchmark_max_memory_governance_failures = None;
         let mut benchmark_min_memory_governance_cases = None;
@@ -2851,6 +2855,12 @@ impl Args {
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
+                "--benchmark-min-runtime-kv-precision-cases" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_kv_precision_cases =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
                 "--benchmark-min-runtime-layer-mode-cases" if index + 1 < raw.len() => {
                     benchmark_min_runtime_layer_mode_cases = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
@@ -2973,6 +2983,13 @@ impl Args {
                     if index + 1 < raw.len() =>
                 {
                     benchmark_min_runtime_device_execution_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-kv-precision-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_kv_precision_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     benchmark_all_devices = true;
@@ -4107,6 +4124,7 @@ impl Args {
             benchmark_min_runtime_forward_cases,
             benchmark_min_runtime_forward_energy_cases,
             benchmark_min_runtime_kv_influence_cases,
+            benchmark_min_runtime_kv_precision_cases,
             benchmark_min_runtime_layer_mode_cases,
             benchmark_min_runtime_all_layer_mode_cases,
             benchmark_min_runtime_global_layers,
@@ -4129,6 +4147,7 @@ impl Args {
             benchmark_max_embedding_evidence_failures,
             benchmark_min_runtime_device_execution_cases,
             benchmark_min_runtime_device_execution_device_profiles,
+            benchmark_min_runtime_kv_precision_device_profiles,
             benchmark_max_runtime_device_execution_violations,
             benchmark_max_memory_governance_failures,
             benchmark_min_memory_governance_cases,
@@ -4473,6 +4492,9 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_kv_influence_cases {
             gate.min_runtime_kv_influence_cases = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_kv_precision_cases {
+            gate.min_runtime_kv_precision_cases = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_layer_mode_cases {
             gate.min_runtime_layer_mode_cases = Some(value);
         }
@@ -4538,6 +4560,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_device_execution_device_profiles {
             gate.min_runtime_device_execution_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_precision_device_profiles {
+            gate.min_runtime_kv_precision_device_profiles = Some(value);
         }
         if let Some(value) = self.benchmark_max_runtime_device_execution_violations {
             gate.max_runtime_device_execution_violations = Some(value);
@@ -4926,7 +4951,7 @@ fn print_help_and_exit() -> ! {
         "Benchmark live evolution: --benchmark-min-evolution-live-inference-runs n --benchmark-min-evolution-live-router-threshold-mutations n --benchmark-min-evolution-live-hierarchy-weight-mutations n --benchmark-min-evolution-live-router-threshold-delta f --benchmark-min-evolution-live-hierarchy-weight-delta f --benchmark-min-evolution-live-memory-updates n --benchmark-min-evolution-live-stored-memory-updates n --benchmark-min-evolution-live-reflection-issues n --benchmark-min-evolution-live-critical-reflection-issues n --benchmark-min-evolution-live-revision-actions n\n",
         "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
         "Benchmark runtime embedding: --benchmark-min-runtime-embedding-cases n --benchmark-min-runtime-embedding-device-profiles n --benchmark-max-embedding-fallback-cases n --benchmark-max-embedding-evidence-failures n\n",
-        "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
+        "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
         "Benchmark memory governance: --benchmark-max-memory-governance-failures n --benchmark-min-memory-governance-cases n --benchmark-min-memory-governance-device-profiles n --benchmark-min-memory-retention-activity-cases n --benchmark-min-memory-compaction-activity-cases n\n",
         "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
@@ -5108,6 +5133,10 @@ mod tests {
             "4".to_owned(),
             "--benchmark-min-runtime-kv-influence-cases".to_owned(),
             "4".to_owned(),
+            "--benchmark-min-runtime-kv-precision-cases".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-runtime-kv-precision-device-profiles".to_owned(),
+            "12".to_owned(),
             "--benchmark-min-runtime-uncertainty-cases".to_owned(),
             "4".to_owned(),
             "--benchmark-min-runtime-uncertainty-tokens".to_owned(),
@@ -5809,6 +5838,11 @@ mod tests {
         assert_eq!(args.benchmark_min_runtime_forward_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_forward_energy_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_influence_cases, Some(4));
+        assert_eq!(args.benchmark_min_runtime_kv_precision_cases, Some(4));
+        assert_eq!(
+            args.benchmark_min_runtime_kv_precision_device_profiles,
+            Some(12)
+        );
         assert_eq!(args.benchmark_min_runtime_uncertainty_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_uncertainty_tokens, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_import_cases, Some(4));
@@ -5872,6 +5906,15 @@ mod tests {
         assert_eq!(
             args.benchmark_gate().min_runtime_kv_influence_cases,
             Some(4)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_runtime_kv_precision_cases,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_runtime_kv_precision_device_profiles,
+            Some(12)
         );
         assert_eq!(args.benchmark_gate().min_runtime_uncertainty_cases, Some(4));
         assert_eq!(
@@ -7906,6 +7949,10 @@ mod tests {
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-kv-influence-cases".to_owned(),
             (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-kv-precision-cases".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-kv-precision-device-profiles".to_owned(),
+            device_count.to_string(),
             "--benchmark-min-runtime-layer-mode-cases".to_owned(),
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-all-layer-mode-cases".to_owned(),
@@ -8047,6 +8094,11 @@ mod tests {
             summary.runtime_kv_influence_cases(),
             device_count * case_count
         );
+        assert_eq!(
+            summary.runtime_kv_precision_cases(),
+            device_count * case_count
+        );
+        assert_eq!(summary.runtime_kv_precision_device_profiles(), device_count);
         assert_eq!(
             summary.runtime_layer_mode_cases(),
             device_count * case_count

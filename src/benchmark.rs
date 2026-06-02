@@ -194,6 +194,7 @@ pub struct BenchmarkGate {
     pub min_runtime_forward_cases: Option<usize>,
     pub min_runtime_forward_energy_cases: Option<usize>,
     pub min_runtime_kv_influence_cases: Option<usize>,
+    pub min_runtime_kv_precision_cases: Option<usize>,
     pub min_runtime_layer_mode_cases: Option<usize>,
     pub min_runtime_all_layer_mode_cases: Option<usize>,
     pub min_runtime_global_layers: Option<usize>,
@@ -216,6 +217,7 @@ pub struct BenchmarkGate {
     pub max_embedding_evidence_failures: Option<usize>,
     pub min_runtime_device_execution_cases: Option<usize>,
     pub min_runtime_device_execution_device_profiles: Option<usize>,
+    pub min_runtime_kv_precision_device_profiles: Option<usize>,
     pub max_runtime_device_execution_violations: Option<usize>,
     pub max_memory_governance_failures: Option<usize>,
     pub max_memory_feedback_evidence_failures: Option<usize>,
@@ -301,6 +303,7 @@ impl Default for BenchmarkGate {
             min_runtime_forward_cases: None,
             min_runtime_forward_energy_cases: None,
             min_runtime_kv_influence_cases: None,
+            min_runtime_kv_precision_cases: None,
             min_runtime_layer_mode_cases: None,
             min_runtime_all_layer_mode_cases: None,
             min_runtime_global_layers: None,
@@ -323,6 +326,7 @@ impl Default for BenchmarkGate {
             max_embedding_evidence_failures: Some(0),
             min_runtime_device_execution_cases: None,
             min_runtime_device_execution_device_profiles: None,
+            min_runtime_kv_precision_device_profiles: None,
             max_runtime_device_execution_violations: Some(0),
             max_memory_governance_failures: Some(0),
             max_memory_feedback_evidence_failures: Some(0),
@@ -1312,8 +1316,10 @@ impl BenchmarkEmbeddingEvidence {
 pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub cases: usize,
     pub matched_cases: usize,
+    pub runtime_kv_precision_cases: usize,
     pub failures: Vec<String>,
     matched_devices: Vec<DeviceClass>,
+    kv_precision_devices: Vec<DeviceClass>,
 }
 
 impl BenchmarkRuntimeDeviceExecutionEvidence {
@@ -1363,6 +1369,29 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
             diagnostics.memory_mode.as_deref(),
             execution.memory_mode.as_str(),
         );
+        record_runtime_device_execution_usize_mismatch(
+            &mut mismatches,
+            "hot_kv_precision_bits",
+            diagnostics.hot_kv_precision_bits.map(usize::from),
+            usize::from(execution.hot_kv_precision_bits),
+        );
+        record_runtime_device_execution_usize_mismatch(
+            &mut mismatches,
+            "cold_kv_precision_bits",
+            diagnostics.cold_kv_precision_bits.map(usize::from),
+            usize::from(execution.cold_kv_precision_bits),
+        );
+
+        if diagnostics.has_valid_kv_precision_signal() {
+            self.runtime_kv_precision_cases += 1;
+            push_unique_device(&mut self.kv_precision_devices, device);
+        } else {
+            self.failures.push(format!(
+                "{}:{} runtime device execution is missing valid KV precision diagnostics",
+                device.as_str(),
+                case.name
+            ));
+        }
 
         if mismatches.is_empty() {
             self.matched_cases += 1;
@@ -1392,6 +1421,22 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
                 .join("+")
         }
     }
+
+    pub fn runtime_kv_precision_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_precision_devices)
+    }
+
+    pub fn runtime_kv_precision_devices_csv(&self) -> String {
+        if self.kv_precision_devices.is_empty() {
+            "none".to_owned()
+        } else {
+            self.kv_precision_devices
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        }
+    }
 }
 
 fn record_runtime_device_execution_mismatch(
@@ -1399,6 +1444,19 @@ fn record_runtime_device_execution_mismatch(
     field: &str,
     actual: Option<&str>,
     expected: &str,
+) {
+    match actual {
+        Some(actual) if actual == expected => {}
+        Some(actual) => mismatches.push(format!("{field} actual={actual} expected={expected}")),
+        None => mismatches.push(format!("{field} missing expected={expected}")),
+    }
+}
+
+fn record_runtime_device_execution_usize_mismatch(
+    mismatches: &mut Vec<String>,
+    field: &str,
+    actual: Option<usize>,
+    expected: usize,
 ) {
     match actual {
         Some(actual) if actual == expected => {}
@@ -1920,6 +1978,16 @@ impl BenchmarkSummary {
 
     pub fn runtime_device_execution_device_profiles(&self) -> usize {
         self.runtime_device_execution_evidence.device_profiles()
+    }
+
+    pub fn runtime_kv_precision_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_precision_cases
+    }
+
+    pub fn runtime_kv_precision_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_precision_device_profiles()
     }
 
     pub fn total_runtime_device_execution_violations(&self) -> usize {
@@ -2941,6 +3009,16 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_kv_precision_cases) = gate.min_runtime_kv_precision_cases {
+            let runtime_kv_precision_cases = self.runtime_kv_precision_cases();
+            if runtime_kv_precision_cases < min_runtime_kv_precision_cases {
+                failures.push(format!(
+                    "runtime_kv_precision_cases {} below minimum {}",
+                    runtime_kv_precision_cases, min_runtime_kv_precision_cases
+                ));
+            }
+        }
+
         if let Some(min_runtime_layer_mode_cases) = gate.min_runtime_layer_mode_cases {
             let runtime_layer_mode_cases = self.runtime_layer_mode_cases();
             if runtime_layer_mode_cases < min_runtime_layer_mode_cases {
@@ -3174,6 +3252,18 @@ impl BenchmarkSummary {
                     "runtime_device_execution_device_profiles {} below minimum {}",
                     runtime_device_execution_device_profiles,
                     min_runtime_device_execution_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_runtime_kv_precision_device_profiles) =
+            gate.min_runtime_kv_precision_device_profiles
+        {
+            let runtime_kv_precision_device_profiles = self.runtime_kv_precision_device_profiles();
+            if runtime_kv_precision_device_profiles < min_runtime_kv_precision_device_profiles {
+                failures.push(format!(
+                    "runtime_kv_precision_device_profiles {} below minimum {}",
+                    runtime_kv_precision_device_profiles, min_runtime_kv_precision_device_profiles
                 ));
             }
         }
@@ -3420,7 +3510,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -3528,6 +3618,10 @@ impl BenchmarkSummary {
             self.runtime_forward_cases(),
             self.runtime_forward_energy_cases(),
             self.runtime_kv_influence_cases(),
+            self.runtime_kv_precision_cases(),
+            self.runtime_kv_precision_device_profiles(),
+            self.runtime_device_execution_evidence
+                .runtime_kv_precision_devices_csv(),
             self.runtime_layer_mode_cases(),
             self.runtime_all_layer_mode_cases(),
             self.total_runtime_global_layers(),
@@ -3758,6 +3852,7 @@ mod tests {
         Matching,
         Mismatching,
         Missing,
+        MissingKvPrecision,
     }
 
     struct RuntimeDeviceExecutionBackend {
@@ -3782,6 +3877,12 @@ mod tests {
                 mode: RuntimeDeviceExecutionMode::Missing,
             }
         }
+
+        fn missing_kv_precision() -> Self {
+            Self {
+                mode: RuntimeDeviceExecutionMode::MissingKvPrecision,
+            }
+        }
     }
 
     impl InferenceBackend for RuntimeDeviceExecutionBackend {
@@ -3803,12 +3904,17 @@ mod tests {
                     local_window_tokens: 128,
                     forward_energy: Some(0.31),
                     kv_influence: Some(0.22),
-                    ..RuntimeDiagnostics::default().with_device_execution(
-                        context.hardware_plan.device.as_str(),
-                        execution.primary_lane.as_str(),
-                        execution.fallback_lane.as_str(),
-                        execution.memory_mode.as_str(),
-                    )
+                    ..RuntimeDiagnostics::default()
+                        .with_device_execution(
+                            context.hardware_plan.device.as_str(),
+                            execution.primary_lane.as_str(),
+                            execution.fallback_lane.as_str(),
+                            execution.memory_mode.as_str(),
+                        )
+                        .with_kv_precision(
+                            execution.hot_kv_precision_bits,
+                            execution.cold_kv_precision_bits,
+                        )
                 },
                 RuntimeDeviceExecutionMode::Mismatching => RuntimeDiagnostics {
                     model_id: Some("runtime-device-execution-test".to_owned()),
@@ -3816,12 +3922,12 @@ mod tests {
                     layer_count: 6,
                     forward_energy: Some(0.31),
                     kv_influence: Some(0.22),
-                    ..RuntimeDiagnostics::default().with_device_execution(
-                        "server",
-                        "cuda",
-                        "cpu-simd",
-                        "gpu-resident",
-                    )
+                    ..RuntimeDiagnostics::default()
+                        .with_device_execution("server", "cuda", "cpu-simd", "gpu-resident")
+                        .with_kv_precision(
+                            execution.hot_kv_precision_bits,
+                            execution.cold_kv_precision_bits,
+                        )
                 },
                 RuntimeDeviceExecutionMode::Missing => RuntimeDiagnostics {
                     model_id: Some("runtime-device-execution-test".to_owned()),
@@ -3830,6 +3936,19 @@ mod tests {
                     forward_energy: Some(0.31),
                     kv_influence: Some(0.22),
                     ..RuntimeDiagnostics::default()
+                },
+                RuntimeDeviceExecutionMode::MissingKvPrecision => RuntimeDiagnostics {
+                    model_id: Some("runtime-device-execution-test".to_owned()),
+                    selected_adapter,
+                    layer_count: 6,
+                    forward_energy: Some(0.31),
+                    kv_influence: Some(0.22),
+                    ..RuntimeDiagnostics::default().with_device_execution(
+                        context.hardware_plan.device.as_str(),
+                        execution.primary_lane.as_str(),
+                        execution.fallback_lane.as_str(),
+                        execution.memory_mode.as_str(),
+                    )
                 },
             };
 
@@ -3933,10 +4052,14 @@ mod tests {
         assert_eq!(summary.runtime_device_execution_cases(), 1);
         assert_eq!(summary.runtime_device_execution_matched_cases(), 1);
         assert_eq!(summary.runtime_device_execution_device_profiles(), 1);
+        assert_eq!(summary.runtime_kv_precision_cases(), 1);
+        assert_eq!(summary.runtime_kv_precision_device_profiles(), 1);
         assert_eq!(summary.total_runtime_device_execution_violations(), 0);
         let report = summary.evaluate(&BenchmarkGate {
             min_runtime_device_execution_cases: Some(1),
             min_runtime_device_execution_device_profiles: Some(1),
+            min_runtime_kv_precision_cases: Some(1),
+            min_runtime_kv_precision_device_profiles: Some(1),
             max_runtime_device_execution_violations: Some(0),
             ..BenchmarkGate::default()
         });
@@ -3950,6 +4073,21 @@ mod tests {
             summary
                 .summary_line()
                 .contains("runtime_device_execution_devices=cpu")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_kv_precision_cases=1")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_kv_precision_device_profiles=1")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_kv_precision_devices=cpu")
         );
     }
 
@@ -4020,6 +4158,56 @@ mod tests {
         assert!(report.failures.iter().any(|failure| {
             failure.contains("runtime_device_execution_violations")
                 && failure.contains("missing device execution diagnostics")
+        }));
+    }
+
+    #[test]
+    fn gate_reports_missing_runtime_kv_precision_diagnostics() {
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.35,
+            0.00,
+            0.45,
+            0.20,
+        ));
+        let mut backend = RuntimeDeviceExecutionBackend::missing_kv_precision();
+        let case = BenchmarkCase::new(
+            "runtime_kv_precision_missing",
+            TaskProfile::General,
+            "catch runtime device execution diagnostics that omit KV precision evidence",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+
+        summary.record(&case, 5, &outcome);
+        let report = summary.evaluate(&BenchmarkGate {
+            min_runtime_kv_precision_cases: Some(1),
+            min_runtime_kv_precision_device_profiles: Some(1),
+            max_runtime_device_execution_violations: Some(0),
+            ..BenchmarkGate::default()
+        });
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_device_execution_cases(), 1);
+        assert_eq!(summary.runtime_device_execution_matched_cases(), 0);
+        assert_eq!(summary.runtime_kv_precision_cases(), 0);
+        assert_eq!(summary.runtime_kv_precision_device_profiles(), 0);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_precision_cases 0 below minimum 1"))
+        );
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("runtime_kv_precision_device_profiles 0 below minimum 1")
+        }));
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("runtime_device_execution_violations")
+                && failure.contains("missing valid KV precision diagnostics")
         }));
     }
 

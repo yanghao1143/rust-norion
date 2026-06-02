@@ -224,8 +224,10 @@ impl ModelRuntime for LocalTransformerRuntime {
                 kv_influence: Some(forward.kv_influence),
                 imported_kv_blocks: self.imported_kv_blocks.len(),
                 exported_kv_blocks: self.exported_kv_blocks.len(),
-                hot_kv_precision_bits: Some(request.runtime_metadata.hot_kv_precision_bits),
-                cold_kv_precision_bits: Some(request.runtime_metadata.cold_kv_precision_bits),
+                hot_kv_precision_bits: Some(request.hardware_plan.execution.hot_kv_precision_bits),
+                cold_kv_precision_bits: Some(
+                    request.hardware_plan.execution.cold_kv_precision_bits,
+                ),
             });
         response.tokens = answer
             .split_whitespace()

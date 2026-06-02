@@ -81,6 +81,18 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"device_profile\":",
     },
     TraceRequiredField {
+        name: "runtime_hot_kv_precision_bits",
+        marker: "\"hot_kv_precision_bits\":",
+    },
+    TraceRequiredField {
+        name: "runtime_cold_kv_precision_bits",
+        marker: "\"cold_kv_precision_bits\":",
+    },
+    TraceRequiredField {
+        name: "runtime_kv_precision_signal",
+        marker: "\"has_kv_precision_signal\":",
+    },
+    TraceRequiredField {
         name: "runtime_adapter_observations",
         marker: "\"runtime_adapter_observations\":{",
     },
@@ -2141,6 +2153,12 @@ fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
     let primary_lane = extract_json_nullable_string_field(runtime_diagnostics, "primary_lane");
     let fallback_lane = extract_json_nullable_string_field(runtime_diagnostics, "fallback_lane");
     let memory_mode = extract_json_nullable_string_field(runtime_diagnostics, "memory_mode");
+    let hot_kv_precision_bits =
+        extract_json_usize_field(runtime_diagnostics, "hot_kv_precision_bits");
+    let cold_kv_precision_bits =
+        extract_json_usize_field(runtime_diagnostics, "cold_kv_precision_bits");
+    let has_kv_precision_signal =
+        extract_json_bool_field(runtime_diagnostics, "has_kv_precision_signal").unwrap_or(false);
     let has_device_execution_signal = device_profile
         .as_deref()
         .map(has_non_empty_trace_text)
@@ -2165,8 +2183,24 @@ fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
         );
     }
 
+    let has_valid_kv_precision_signal = matches!(hot_kv_precision_bits, Some(4 | 8))
+        && matches!(cold_kv_precision_bits, Some(4 | 8))
+        && cold_kv_precision_bits <= hot_kv_precision_bits;
+    if has_kv_precision_signal != has_valid_kv_precision_signal {
+        failures.push(format!(
+            "runtime_diagnostics has_kv_precision_signal={has_kv_precision_signal} does not match valid hot/cold KV precision diagnostics"
+        ));
+    }
+
     if !has_device_execution_signal {
         return failures;
+    }
+
+    if !has_valid_kv_precision_signal {
+        failures.push(
+            "runtime_diagnostics device execution is missing valid KV precision diagnostics"
+                .to_owned(),
+        );
     }
 
     require_trace_runtime_device_execution_string(
@@ -2193,6 +2227,18 @@ fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
         memory_mode.as_deref(),
         extract_json_string_field(execution, "memory_mode").as_deref(),
     );
+    require_trace_runtime_device_execution_usize(
+        &mut failures,
+        "hot_kv_precision_bits",
+        hot_kv_precision_bits,
+        extract_json_usize_field(execution, "hot_kv_bits"),
+    );
+    require_trace_runtime_device_execution_usize(
+        &mut failures,
+        "cold_kv_precision_bits",
+        cold_kv_precision_bits,
+        extract_json_usize_field(execution, "cold_kv_bits"),
+    );
 
     failures
 }
@@ -2202,6 +2248,27 @@ fn require_trace_runtime_device_execution_string(
     field: &str,
     actual: Option<&str>,
     expected: Option<&str>,
+) {
+    match (actual, expected) {
+        (Some(actual), Some(expected)) if actual == expected => {}
+        (Some(actual), Some(expected)) => failures.push(format!(
+            "runtime_diagnostics {field}={actual} does not match hardware execution {expected}"
+        )),
+        (None, Some(expected)) => failures.push(format!(
+            "runtime_diagnostics {field} missing for hardware execution {expected}"
+        )),
+        (Some(actual), None) => failures.push(format!(
+            "runtime_diagnostics {field}={actual} has no hardware execution value"
+        )),
+        (None, None) => {}
+    }
+}
+
+fn require_trace_runtime_device_execution_usize(
+    failures: &mut Vec<String>,
+    field: &str,
+    actual: Option<usize>,
+    expected: Option<usize>,
 ) {
     match (actual, expected) {
         (Some(actual), Some(expected)) if actual == expected => {}
@@ -2535,7 +2602,7 @@ pub fn trace_json_line_with_case(
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -2607,6 +2674,8 @@ pub fn trace_json_line_with_case(
         option_owned_string_json(outcome.runtime_diagnostics.primary_lane.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.fallback_lane.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.memory_mode.as_deref()),
+        option_u8_json(outcome.runtime_diagnostics.hot_kv_precision_bits),
+        option_u8_json(outcome.runtime_diagnostics.cold_kv_precision_bits),
         outcome.runtime_diagnostics.layer_count,
         outcome.runtime_diagnostics.global_layers,
         outcome.runtime_diagnostics.local_window_layers,
@@ -2619,6 +2688,7 @@ pub fn trace_json_line_with_case(
         outcome.runtime_diagnostics.exported_kv_blocks,
         outcome.runtime_diagnostics.has_forward_signal(),
         outcome.runtime_diagnostics.has_all_layer_modes(),
+        outcome.runtime_diagnostics.has_valid_kv_precision_signal(),
         outcome.runtime_adapter_observations.len(),
         option_owned_string_json(
             best_adapter_observation.map(|observation| observation.adapter.as_str())
@@ -2921,6 +2991,12 @@ fn option_u64_json(value: Option<u64>) -> String {
         .unwrap_or_else(|| "null".to_owned())
 }
 
+fn option_u8_json(value: Option<u8>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 fn option_f32_json(value: Option<f32>) -> String {
     value
         .map(|value| format!("{value:.6}"))
@@ -2976,8 +3052,42 @@ mod tests {
     use crate::engine::{
         GenerationContext, HeuristicBackend, InferenceBackend, InferenceRequest, NoironEngine,
     };
-    use crate::reflection::{InferenceDraft, ReasoningStep};
+    use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct RuntimePrecisionBackend;
+
+    impl InferenceBackend for RuntimePrecisionBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            let diagnostics = RuntimeDiagnostics {
+                model_id: Some("trace-runtime".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                forward_energy: Some(0.42),
+                kv_influence: Some(0.37),
+                ..RuntimeDiagnostics::default()
+            }
+            .with_device_execution(
+                context.hardware_plan.device.as_str(),
+                context.hardware_plan.execution.primary_lane.as_str(),
+                context.hardware_plan.execution.fallback_lane.as_str(),
+                context.hardware_plan.execution.memory_mode.as_str(),
+            )
+            .with_kv_precision(
+                context.hardware_plan.execution.hot_kv_precision_bits,
+                context.hardware_plan.execution.cold_kv_precision_bits,
+            );
+
+            InferenceDraft::new(
+                "Runtime precision diagnostics expose the self-developed ABI.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "runtime reported device execution and KV precision",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(diagnostics)
+        }
+    }
 
     #[test]
     fn trace_line_contains_core_control_decisions() {
@@ -3010,6 +3120,9 @@ mod tests {
         assert!(line.contains("\"average_neg_logprob\":"));
         assert!(line.contains("\"uncertainty_perplexity\":"));
         assert!(line.contains("\"runtime_diagnostics\":"));
+        assert!(line.contains("\"hot_kv_precision_bits\":"));
+        assert!(line.contains("\"cold_kv_precision_bits\":"));
+        assert!(line.contains("\"has_kv_precision_signal\":"));
         assert!(line.contains("\"runtime_adapter_observations\":"));
         assert!(line.contains("\"observation_count\":"));
         assert!(line.contains("\"best_adapter\":"));
@@ -3369,6 +3482,67 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| failure.contains("runtime_diagnostics device_profile=server")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_invalid_runtime_kv_precision_order() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RuntimePrecisionBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace runtime kv precision", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace runtime kv precision",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"hot_kv_precision_bits\":8,\"cold_kv_precision_bits\":4",
+            "\"hot_kv_precision_bits\":4,\"cold_kv_precision_bits\":8",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| failure
+                .contains("runtime_diagnostics device execution is missing valid KV precision")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_precision_execution_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RuntimePrecisionBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace runtime kv precision mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace runtime kv precision mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"hot_kv_precision_bits\":8",
+            "\"hot_kv_precision_bits\":4",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("runtime_diagnostics hot_kv_precision_bits=4")),
             "{failures:?}"
         );
     }
