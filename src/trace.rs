@@ -906,6 +906,7 @@ fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {
 
 fn evaluate_trace_drift(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
+    let drift = json_object_after_field(line, "drift");
     let severity = extract_json_string_field(line, "severity");
     let memory_write = extract_json_bool_field(line, "memory_write").unwrap_or(false);
     let runtime_kv_write = extract_json_bool_field(line, "runtime_kv_write").unwrap_or(false);
@@ -919,6 +920,10 @@ fn evaluate_trace_drift(line: &str) -> Vec<String> {
         extract_json_usize_field(line, "live_stored_gist_memories").unwrap_or(0);
     let live_stored_runtime_kv_memories =
         extract_json_usize_field(line, "live_stored_runtime_kv_memories").unwrap_or(0);
+    let runtime_kv_stored = extract_json_usize_field(line, "runtime_kv_stored").unwrap_or(0);
+    let drift_notes = drift
+        .and_then(|drift| extract_json_string_array_field(drift, "notes"))
+        .unwrap_or_default();
     let live_router_threshold_delta =
         extract_json_f32_field(line, "live_router_threshold_delta").unwrap_or(0.0);
     let live_hierarchy_weight_delta =
@@ -1014,6 +1019,26 @@ fn evaluate_trace_drift(line: &str) -> Vec<String> {
             "drift memory_write=false forbids live stored semantic/gist/runtime KV memory"
                 .to_owned(),
         );
+    }
+
+    if drift_notes
+        .iter()
+        .any(|note| note == "route:fast_path_watch")
+    {
+        if severity.as_deref() != Some("watch") {
+            failures.push("route:fast_path_watch requires drift severity watch".to_owned());
+        }
+        if !memory_write {
+            failures.push("route:fast_path_watch keeps memory_write=true".to_owned());
+        }
+        if runtime_kv_write {
+            failures.push("route:fast_path_watch requires runtime_kv_write=false".to_owned());
+        }
+        if runtime_kv_stored > 0 || live_stored_runtime_kv_memories > 0 {
+            failures.push(format!(
+                "route:fast_path_watch forbids runtime KV storage, got runtime_kv_stored={runtime_kv_stored} live_stored_runtime_kv_memories={live_stored_runtime_kv_memories}"
+            ));
+        }
     }
 
     if rollback_adaptive {
@@ -3431,7 +3456,9 @@ mod tests {
     use crate::engine::{
         GenerationContext, HeuristicBackend, InferenceBackend, InferenceRequest, NoironEngine,
     };
+    use crate::kv_exchange::RuntimeKvBlock;
     use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
+    use crate::router::{ProfileObservations, ProfileThresholds, RouterState};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     struct RuntimePrecisionBackend;
@@ -3465,6 +3492,29 @@ mod tests {
                 )],
             )
             .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    struct FastPathExportingBackend;
+
+    impl InferenceBackend for FastPathExportingBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust local KV cache route memory stores useful Noiron notes for replay and future routing.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "exported under fast path",
+                    0.45,
+                )],
+            )
+            .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                4,
+                2,
+                0,
+                4,
+                vec![0.2, 0.1],
+                vec![0.4, 0.3],
+            )])
         }
     }
 
@@ -4334,6 +4384,47 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_accepts_fast_path_watch_runtime_kv_hold() {
+        let line = fast_path_watch_trace_line();
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(line.contains("\"runtime_kv_exported\":1"));
+        assert!(line.contains("\"runtime_kv_stored\":0"));
+        assert!(line.contains("\"memory_write\":true"));
+        assert!(line.contains("\"runtime_kv_write\":false"));
+        assert!(line.contains("\"route:fast_path_watch\""));
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_fast_path_watch_runtime_kv_storage() {
+        let line = fast_path_watch_trace_line()
+            .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen(
+                "\"live_stored_runtime_kv_memories\":0",
+                "\"live_stored_runtime_kv_memories\":1",
+                1,
+            )
+            .replacen("\"runtime_kv_write\":false", "\"runtime_kv_write\":true", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("route:fast_path_watch requires runtime_kv_write=false")
+            }),
+            "{failures:?}"
+        );
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("route:fast_path_watch forbids runtime KV storage")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_runtime_kv_storage_without_write_permission() {
         let line = runtime_kv_trace_line()
             .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
@@ -4561,6 +4652,42 @@ mod tests {
         );
         trace_json_line(
             "trace runtime kv consistency",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
+    }
+
+    fn fast_path_watch_trace_line() -> String {
+        let mut engine = NoironEngine::new();
+        engine.router.restore_state(RouterState {
+            threshold: 0.88,
+            observations: 0,
+            profile_thresholds: ProfileThresholds::from_single(0.88),
+            profile_observations: ProfileObservations::default(),
+        });
+        let mut backend = FastPathExportingBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust local KV cache route memory", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(outcome.route_budget.attention_fraction < 0.10);
+        assert!(outcome.drift_report.allow_memory_write);
+        assert!(!outcome.drift_report.allow_runtime_kv_write);
+        assert!(outcome.stored_memory_id.is_some());
+        assert_eq!(outcome.exported_runtime_kv_blocks, 1);
+        assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
+        assert!(
+            outcome
+                .drift_report
+                .notes
+                .iter()
+                .any(|note| note == "route:fast_path_watch")
+        );
+
+        trace_json_line(
+            "trace fast path runtime kv hold",
             TaskProfile::Coding,
             5,
             &outcome,

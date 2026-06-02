@@ -63,11 +63,13 @@ impl InferenceDraft {
 
     pub fn with_exported_kv_blocks(mut self, blocks: Vec<RuntimeKvBlock>) -> Self {
         self.exported_kv_blocks = blocks;
+        self.runtime_diagnostics.exported_kv_blocks = self.exported_kv_blocks.len();
         self
     }
 
     pub fn with_runtime_diagnostics(mut self, diagnostics: RuntimeDiagnostics) -> Self {
         self.runtime_diagnostics = diagnostics;
+        self.runtime_diagnostics.exported_kv_blocks = self.exported_kv_blocks.len();
         self
     }
 }
@@ -685,6 +687,7 @@ fn compact(text: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kv_exchange::RuntimeKvBlock;
 
     #[test]
     fn empty_answer_is_rejected() {
@@ -781,5 +784,28 @@ mod tests {
                 .any(|action| action == "increase_attention_or_resample")
         );
         assert!(report.revised_answer.contains("Reflection note"));
+    }
+
+    #[test]
+    fn exported_kv_builder_syncs_runtime_diagnostics_count() {
+        let draft = InferenceDraft::new(
+            "Runtime KV blocks exported by a backend must match diagnostics for trace gates.",
+            vec![ReasoningStep::new(
+                "runtime",
+                "exported two KV blocks",
+                0.91,
+            )],
+        )
+        .with_exported_kv_blocks(vec![
+            RuntimeKvBlock::new(1, 0, 0, 1, vec![0.1], vec![0.2]),
+            RuntimeKvBlock::new(1, 1, 1, 2, vec![0.3], vec![0.4]),
+        ])
+        .with_runtime_diagnostics(RuntimeDiagnostics {
+            exported_kv_blocks: 99,
+            ..RuntimeDiagnostics::default()
+        });
+
+        assert_eq!(draft.exported_kv_blocks.len(), 2);
+        assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 2);
     }
 }
