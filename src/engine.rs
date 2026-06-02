@@ -2255,6 +2255,67 @@ mod tests {
     }
 
     #[test]
+    fn fast_path_watch_holds_exported_runtime_kv_admission() {
+        struct FastPathExportingBackend;
+
+        impl InferenceBackend for FastPathExportingBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "Rust local KV cache route memory stores useful Noiron notes for replay and future routing.",
+                    vec![ReasoningStep::new("runtime", "exported under fast path", 0.45)],
+                )
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    4,
+                    2,
+                    0,
+                    4,
+                    vec![0.2, 0.1],
+                    vec![0.4, 0.3],
+                )])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.router.restore_state(crate::router::RouterState {
+            threshold: 0.88,
+            observations: 0,
+            profile_thresholds: crate::router::ProfileThresholds::from_single(0.88),
+            profile_observations: crate::router::ProfileObservations::default(),
+        });
+        let mut backend = FastPathExportingBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust local KV cache route memory", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(outcome.route_budget.attention_fraction < 0.10);
+        assert_eq!(
+            outcome.drift_report.severity,
+            crate::drift::DriftSeverity::Watch
+        );
+        assert!(outcome.drift_report.allow_memory_write);
+        assert!(!outcome.drift_report.allow_runtime_kv_write);
+        assert!(
+            outcome
+                .drift_report
+                .notes
+                .iter()
+                .any(|note| note == "route:fast_path_watch")
+        );
+        assert!(outcome.stored_memory_id.is_some());
+        assert_eq!(outcome.exported_runtime_kv_blocks, 1);
+        assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
+        assert!(
+            engine
+                .cache
+                .entries()
+                .iter()
+                .all(|entry| !entry.key.starts_with("runtime_kv:"))
+        );
+    }
+
+    #[test]
     fn production_runtime_kernel_flows_through_engine_feedback_and_runtime_kv() {
         let (asset_dir, weights, tokenizer) = create_runtime_assets("engine-production-kernel");
         let manifest = RuntimeManifest::self_developed(

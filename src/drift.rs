@@ -160,6 +160,14 @@ impl DriftGuard {
         }
         if input.route_budget.attention_fraction < 0.10 && quality < 0.72 {
             notes.push("route:fast_path_watch".to_owned());
+            return DriftReport {
+                severity: DriftSeverity::Watch,
+                allow_memory_write: true,
+                allow_runtime_kv_write: false,
+                penalize_used_memory: false,
+                rollback_adaptive: false,
+                notes,
+            };
         }
         if input.stream_windows > 48 {
             notes.push(format!("stream:many_windows={}", input.stream_windows));
@@ -211,6 +219,26 @@ mod tests {
         assert_eq!(report.severity, DriftSeverity::Rollback);
         assert!(!report.allow_memory_write);
         assert!(report.rollback_adaptive);
+    }
+
+    #[test]
+    fn fast_path_watch_holds_runtime_kv_but_keeps_memory_write() {
+        let mut input = input(0.68, 0, 9.0, 0.70, 1);
+        input.route_budget.attention_tokens = 0;
+        input.route_budget.fast_tokens = 12;
+        input.route_budget.attention_fraction = 0.0;
+
+        let report = DriftGuard::new().evaluate(input);
+
+        assert_eq!(report.severity, DriftSeverity::Watch);
+        assert!(report.allow_memory_write);
+        assert!(!report.allow_runtime_kv_write);
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|note| note == "route:fast_path_watch")
+        );
     }
 
     fn input(
