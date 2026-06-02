@@ -1429,7 +1429,7 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} runtime_kv_hold_experiences={} runtime_kv_held_blocks={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
             device_report.runtime_kv_memories,
@@ -1441,6 +1441,8 @@ fn print_state_inspection_matrix_gate_report(
             device_report.runtime_kv_precision_mismatches,
             device_report.runtime_kv_import_experiences,
             device_report.runtime_kv_export_experiences,
+            device_report.runtime_kv_hold_experiences,
+            device_report.runtime_kv_held_blocks,
             device_report.reflection_issue_experiences,
             device_report.critical_reflection_issue_experiences,
             device_report.revision_action_experiences,
@@ -2049,6 +2051,8 @@ struct Args {
     inspect_min_runtime_convolutional_fusion_layers: Option<usize>,
     inspect_min_runtime_kv_import_experiences: Option<usize>,
     inspect_min_runtime_kv_export_experiences: Option<usize>,
+    inspect_min_runtime_kv_hold_experiences: Option<usize>,
+    inspect_min_runtime_kv_held_blocks: Option<usize>,
     inspect_min_runtime_kv_memory_device_profiles: Option<usize>,
     inspect_min_runtime_model_device_profiles: Option<usize>,
     inspect_min_runtime_adapter_device_profiles: Option<usize>,
@@ -2060,6 +2064,7 @@ struct Args {
     inspect_min_runtime_all_layer_mode_device_profiles: Option<usize>,
     inspect_min_runtime_kv_import_device_profiles: Option<usize>,
     inspect_min_runtime_kv_export_device_profiles: Option<usize>,
+    inspect_min_runtime_kv_hold_device_profiles: Option<usize>,
     inspect_min_reflection_issue_experiences: Option<usize>,
     inspect_min_critical_reflection_issue_experiences: Option<usize>,
     inspect_min_revision_action_experiences: Option<usize>,
@@ -2344,6 +2349,8 @@ impl Args {
         let mut inspect_min_runtime_convolutional_fusion_layers = None;
         let mut inspect_min_runtime_kv_import_experiences = None;
         let mut inspect_min_runtime_kv_export_experiences = None;
+        let mut inspect_min_runtime_kv_hold_experiences = None;
+        let mut inspect_min_runtime_kv_held_blocks = None;
         let mut inspect_min_runtime_kv_memory_device_profiles = None;
         let mut inspect_min_runtime_model_device_profiles = None;
         let mut inspect_min_runtime_adapter_device_profiles = None;
@@ -2355,6 +2362,7 @@ impl Args {
         let mut inspect_min_runtime_all_layer_mode_device_profiles = None;
         let mut inspect_min_runtime_kv_import_device_profiles = None;
         let mut inspect_min_runtime_kv_export_device_profiles = None;
+        let mut inspect_min_runtime_kv_hold_device_profiles = None;
         let mut inspect_min_reflection_issue_experiences = None;
         let mut inspect_min_critical_reflection_issue_experiences = None;
         let mut inspect_min_revision_action_experiences = None;
@@ -3454,6 +3462,18 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-runtime-kv-hold-experiences" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_hold_experiences = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-kv-held-blocks" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_held_blocks = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-min-runtime-kv-memory-device-profiles" if index + 1 < raw.len() => {
                     inspect_min_runtime_kv_memory_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
@@ -3538,6 +3558,14 @@ impl Args {
                 }
                 "--inspect-min-runtime-kv-export-device-profiles" if index + 1 < raw.len() => {
                     inspect_min_runtime_kv_export_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-kv-hold-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_hold_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
                     inspect_state = true;
                     inspect_gate = true;
@@ -4475,6 +4503,8 @@ impl Args {
             inspect_min_runtime_convolutional_fusion_layers,
             inspect_min_runtime_kv_import_experiences,
             inspect_min_runtime_kv_export_experiences,
+            inspect_min_runtime_kv_hold_experiences,
+            inspect_min_runtime_kv_held_blocks,
             inspect_min_runtime_kv_memory_device_profiles,
             inspect_min_runtime_model_device_profiles,
             inspect_min_runtime_adapter_device_profiles,
@@ -4486,6 +4516,7 @@ impl Args {
             inspect_min_runtime_all_layer_mode_device_profiles,
             inspect_min_runtime_kv_import_device_profiles,
             inspect_min_runtime_kv_export_device_profiles,
+            inspect_min_runtime_kv_hold_device_profiles,
             inspect_min_reflection_issue_experiences,
             inspect_min_critical_reflection_issue_experiences,
             inspect_min_revision_action_experiences,
@@ -4984,6 +5015,8 @@ impl Args {
                 .inspect_min_runtime_convolutional_fusion_layers,
             min_runtime_kv_import_experiences: self.inspect_min_runtime_kv_import_experiences,
             min_runtime_kv_export_experiences: self.inspect_min_runtime_kv_export_experiences,
+            min_runtime_kv_hold_experiences: self.inspect_min_runtime_kv_hold_experiences,
+            min_runtime_kv_held_blocks: self.inspect_min_runtime_kv_held_blocks,
             min_reflection_issue_experiences: self.inspect_min_reflection_issue_experiences,
             min_critical_reflection_issue_experiences: self
                 .inspect_min_critical_reflection_issue_experiences,
@@ -5088,6 +5121,8 @@ impl Args {
                 .inspect_min_runtime_kv_import_device_profiles,
             min_runtime_kv_export_device_profiles: self
                 .inspect_min_runtime_kv_export_device_profiles,
+            min_runtime_kv_hold_device_profiles: self
+                .inspect_min_runtime_kv_hold_device_profiles,
             min_reflection_issue_device_profiles: self.inspect_min_reflection_issue_device_profiles,
             min_critical_reflection_issue_device_profiles: self
                 .inspect_min_critical_reflection_issue_device_profiles,
@@ -5333,7 +5368,7 @@ fn print_help_and_exit() -> ! {
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
-        "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-max-runtime-adapter-selection-mismatches n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
+        "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-max-runtime-adapter-selection-mismatches n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-hold-experiences n --inspect-min-runtime-kv-held-blocks n --inspect-min-runtime-kv-hold-device-profiles n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
         "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-detail-experiences n --inspect-min-live-memory-feedback-applied n --inspect-min-live-memory-feedback-strength-delta f --inspect-min-live-memory-feedback-device-profiles n\n",
         "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-replay-live-memory-feedback-updates n --inspect-min-evolution-replay-live-memory-feedback-detail-items n --inspect-min-evolution-replay-live-memory-feedback-applied n --inspect-min-evolution-replay-live-memory-feedback-strength-delta f --inspect-min-evolution-replay-live-memory-feedback-device-profiles n --inspect-min-evolution-replay-live-memory-feedback-detail-device-profiles n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Inspect replay live evolution: --inspect-min-evolution-replay-live-evolution-items n --inspect-min-evolution-replay-live-evolution-memory-updates n --inspect-min-evolution-replay-live-evolution-stored-memory-updates n --inspect-min-evolution-replay-live-evolution-reflection-issues n --inspect-min-evolution-replay-live-evolution-critical-reflection-issues n --inspect-min-evolution-replay-live-evolution-revision-actions n --inspect-min-evolution-replay-live-evolution-device-profiles n --inspect-min-evolution-replay-live-evolution-memory-update-device-profiles n --inspect-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --inspect-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
@@ -5678,6 +5713,10 @@ mod tests {
             "2".to_owned(),
             "--inspect-min-runtime-kv-export-experiences".to_owned(),
             "2".to_owned(),
+            "--inspect-min-runtime-kv-hold-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-held-blocks".to_owned(),
+            "2".to_owned(),
             "--inspect-min-runtime-kv-memory-device-profiles".to_owned(),
             "12".to_owned(),
             "--inspect-min-runtime-model-device-profiles".to_owned(),
@@ -5700,6 +5739,8 @@ mod tests {
             "12".to_owned(),
             "--inspect-min-runtime-kv-export-device-profiles".to_owned(),
             "12".to_owned(),
+            "--inspect-min-runtime-kv-hold-device-profiles".to_owned(),
+            "6".to_owned(),
             "--inspect-min-reflection-issue-experiences".to_owned(),
             "3".to_owned(),
             "--inspect-min-critical-reflection-issue-experiences".to_owned(),
@@ -6601,6 +6642,8 @@ mod tests {
         );
         assert_eq!(args.inspect_min_runtime_kv_import_experiences, Some(2));
         assert_eq!(args.inspect_min_runtime_kv_export_experiences, Some(2));
+        assert_eq!(args.inspect_min_runtime_kv_hold_experiences, Some(1));
+        assert_eq!(args.inspect_min_runtime_kv_held_blocks, Some(2));
         assert_eq!(args.inspect_min_runtime_kv_memory_device_profiles, Some(12));
         assert_eq!(args.inspect_min_runtime_model_device_profiles, Some(12));
         assert_eq!(args.inspect_min_runtime_adapter_device_profiles, Some(12));
@@ -6630,6 +6673,7 @@ mod tests {
         );
         assert_eq!(args.inspect_min_runtime_kv_import_device_profiles, Some(12));
         assert_eq!(args.inspect_min_runtime_kv_export_device_profiles, Some(12));
+        assert_eq!(args.inspect_min_runtime_kv_hold_device_profiles, Some(6));
         assert_eq!(args.inspect_min_reflection_issue_experiences, Some(3));
         assert_eq!(
             args.inspect_min_critical_reflection_issue_experiences,
@@ -6924,6 +6968,14 @@ mod tests {
             Some(2)
         );
         assert_eq!(
+            args.state_inspection_gate().min_runtime_kv_hold_experiences,
+            Some(1)
+        );
+        assert_eq!(
+            args.state_inspection_gate().min_runtime_kv_held_blocks,
+            Some(2)
+        );
+        assert_eq!(
             args.state_inspection_gate()
                 .min_reflection_issue_experiences,
             Some(3)
@@ -7076,6 +7128,11 @@ mod tests {
             args.state_inspection_matrix_gate()
                 .min_runtime_kv_export_device_profiles,
             Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_kv_hold_device_profiles,
+            Some(6)
         );
         assert_eq!(
             args.state_inspection_matrix_gate()
