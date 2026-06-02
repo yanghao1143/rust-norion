@@ -369,6 +369,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"live_memory_feedback_strength_delta\":",
     },
     TraceRequiredField {
+        name: "auto_replay_live_evolution_items",
+        marker: "\"live_evolution_items\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_evolution_memory_updates",
+        marker: "\"live_evolution_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_evolution_stored_memory_updates",
+        marker: "\"live_evolution_stored_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_evolution_reflection_issues",
+        marker: "\"live_evolution_reflection_issues\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_recursive_runtime_calls",
         marker: "\"recursive_runtime_calls\":",
     },
@@ -535,6 +551,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     TraceRequiredField {
         name: "evolution_replay_live_memory_feedback_strength_delta",
         marker: "\"cumulative_replay_live_memory_feedback_strength_delta\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_items",
+        marker: "\"cumulative_replay_live_evolution_items\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_memory_updates",
+        marker: "\"cumulative_replay_live_evolution_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_stored_memory_updates",
+        marker: "\"cumulative_replay_live_evolution_stored_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_reflection_issues",
+        marker: "\"cumulative_replay_live_evolution_reflection_issues\":",
     },
     TraceRequiredField {
         name: "evolution_recursive_runtime_calls",
@@ -1062,6 +1094,25 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         extract_json_usize_field(line, "live_memory_feedback_missing").unwrap_or(0);
     let live_memory_feedback_strength_delta =
         extract_json_f32_field(line, "live_memory_feedback_strength_delta").unwrap_or(0.0);
+    let live_evolution_items = extract_json_usize_field(line, "live_evolution_items").unwrap_or(0);
+    let live_evolution_router_threshold_mutations =
+        extract_json_usize_field(line, "live_evolution_router_threshold_mutations").unwrap_or(0);
+    let live_evolution_hierarchy_weight_mutations =
+        extract_json_usize_field(line, "live_evolution_hierarchy_weight_mutations").unwrap_or(0);
+    let live_evolution_router_threshold_delta =
+        extract_json_f32_field(line, "live_evolution_router_threshold_delta").unwrap_or(0.0);
+    let live_evolution_hierarchy_weight_delta =
+        extract_json_f32_field(line, "live_evolution_hierarchy_weight_delta").unwrap_or(0.0);
+    let live_evolution_memory_updates =
+        extract_json_usize_field(line, "live_evolution_memory_updates").unwrap_or(0);
+    let live_evolution_stored_memory_updates =
+        extract_json_usize_field(line, "live_evolution_stored_memory_updates").unwrap_or(0);
+    let live_evolution_reflection_issues =
+        extract_json_usize_field(line, "live_evolution_reflection_issues").unwrap_or(0);
+    let live_evolution_critical_reflection_issues =
+        extract_json_usize_field(line, "live_evolution_critical_reflection_issues").unwrap_or(0);
+    let live_evolution_revision_actions =
+        extract_json_usize_field(line, "live_evolution_revision_actions").unwrap_or(0);
     let recursive_runtime_items =
         extract_json_usize_field(line, "recursive_runtime_items").unwrap_or(0);
     let recursive_runtime_calls =
@@ -1131,6 +1182,42 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
             "auto_replay live_memory_feedback_strength_delta {live_memory_feedback_strength_delta:.6} is negative"
         ));
     }
+    if live_evolution_router_threshold_mutations > live_evolution_items {
+        failures.push(format!(
+            "auto_replay live_evolution_router_threshold_mutations {live_evolution_router_threshold_mutations} exceeds live_evolution_items {live_evolution_items}"
+        ));
+    }
+    if live_evolution_hierarchy_weight_mutations > live_evolution_items {
+        failures.push(format!(
+            "auto_replay live_evolution_hierarchy_weight_mutations {live_evolution_hierarchy_weight_mutations} exceeds live_evolution_items {live_evolution_items}"
+        ));
+    }
+    if live_evolution_router_threshold_delta > TRACE_FLOAT_EPSILON
+        && live_evolution_router_threshold_mutations == 0
+    {
+        failures.push(format!(
+            "auto_replay live_evolution_router_threshold_delta {live_evolution_router_threshold_delta:.6} requires live_evolution_router_threshold_mutations > 0"
+        ));
+    }
+    if live_evolution_hierarchy_weight_delta > TRACE_FLOAT_EPSILON
+        && live_evolution_hierarchy_weight_mutations == 0
+    {
+        failures.push(format!(
+            "auto_replay live_evolution_hierarchy_weight_delta {live_evolution_hierarchy_weight_delta:.6} requires live_evolution_hierarchy_weight_mutations > 0"
+        ));
+    }
+    let live_evolution_activity = live_evolution_router_threshold_mutations
+        .saturating_add(live_evolution_hierarchy_weight_mutations)
+        .saturating_add(live_evolution_memory_updates)
+        .saturating_add(live_evolution_stored_memory_updates)
+        .saturating_add(live_evolution_reflection_issues)
+        .saturating_add(live_evolution_critical_reflection_issues)
+        .saturating_add(live_evolution_revision_actions);
+    if live_evolution_items == 0 && live_evolution_activity > 0 {
+        failures.push(format!(
+            "auto_replay live_evolution_items 0 cannot carry structured live evolution activity {live_evolution_activity}"
+        ));
+    }
 
     if applied == 0 {
         for (name, value) in [
@@ -1160,6 +1247,35 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
             ("live_memory_feedback_applied", live_memory_feedback_applied),
             ("live_memory_feedback_removed", live_memory_feedback_removed),
             ("live_memory_feedback_missing", live_memory_feedback_missing),
+            ("live_evolution_items", live_evolution_items),
+            (
+                "live_evolution_router_threshold_mutations",
+                live_evolution_router_threshold_mutations,
+            ),
+            (
+                "live_evolution_hierarchy_weight_mutations",
+                live_evolution_hierarchy_weight_mutations,
+            ),
+            (
+                "live_evolution_memory_updates",
+                live_evolution_memory_updates,
+            ),
+            (
+                "live_evolution_stored_memory_updates",
+                live_evolution_stored_memory_updates,
+            ),
+            (
+                "live_evolution_reflection_issues",
+                live_evolution_reflection_issues,
+            ),
+            (
+                "live_evolution_critical_reflection_issues",
+                live_evolution_critical_reflection_issues,
+            ),
+            (
+                "live_evolution_revision_actions",
+                live_evolution_revision_actions,
+            ),
             ("recursive_runtime_items", recursive_runtime_items),
             ("recursive_runtime_calls", recursive_runtime_calls),
         ] {
@@ -1192,6 +1308,16 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
                 "auto_replay live_memory_feedback_strength_delta {live_memory_feedback_strength_delta:.6} requires applied > 0"
             ));
         }
+        if live_evolution_router_threshold_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay live_evolution_router_threshold_delta {live_evolution_router_threshold_delta:.6} requires applied > 0"
+            ));
+        }
+        if live_evolution_hierarchy_weight_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay live_evolution_hierarchy_weight_delta {live_evolution_hierarchy_weight_delta:.6} requires applied > 0"
+            ));
+        }
     } else {
         if router_updates != applied {
             failures.push(format!(
@@ -1206,6 +1332,11 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         if live_memory_feedback_items > applied {
             failures.push(format!(
                 "auto_replay live_memory_feedback_items {live_memory_feedback_items} exceeds applied {applied}"
+            ));
+        }
+        if live_evolution_items > applied {
+            failures.push(format!(
+                "auto_replay live_evolution_items {live_evolution_items} exceeds applied {applied}"
             ));
         }
         if recursive_runtime_items > applied {
@@ -1319,6 +1450,47 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         "cumulative_replay_live_memory_feedback_strength_delta",
     )
     .unwrap_or(0.0);
+    let cumulative_replay_live_evolution_items =
+        extract_json_usize_field(line, "cumulative_replay_live_evolution_items").unwrap_or(0);
+    let cumulative_replay_live_evolution_router_threshold_mutations = extract_json_usize_field(
+        line,
+        "cumulative_replay_live_evolution_router_threshold_mutations",
+    )
+    .unwrap_or(0);
+    let cumulative_replay_live_evolution_hierarchy_weight_mutations = extract_json_usize_field(
+        line,
+        "cumulative_replay_live_evolution_hierarchy_weight_mutations",
+    )
+    .unwrap_or(0);
+    let cumulative_replay_live_evolution_router_threshold_delta = extract_json_f32_field(
+        line,
+        "cumulative_replay_live_evolution_router_threshold_delta",
+    )
+    .unwrap_or(0.0);
+    let cumulative_replay_live_evolution_hierarchy_weight_delta = extract_json_f32_field(
+        line,
+        "cumulative_replay_live_evolution_hierarchy_weight_delta",
+    )
+    .unwrap_or(0.0);
+    let cumulative_replay_live_evolution_memory_updates =
+        extract_json_usize_field(line, "cumulative_replay_live_evolution_memory_updates")
+            .unwrap_or(0);
+    let cumulative_replay_live_evolution_stored_memory_updates = extract_json_usize_field(
+        line,
+        "cumulative_replay_live_evolution_stored_memory_updates",
+    )
+    .unwrap_or(0);
+    let cumulative_replay_live_evolution_reflection_issues =
+        extract_json_usize_field(line, "cumulative_replay_live_evolution_reflection_issues")
+            .unwrap_or(0);
+    let cumulative_replay_live_evolution_critical_reflection_issues = extract_json_usize_field(
+        line,
+        "cumulative_replay_live_evolution_critical_reflection_issues",
+    )
+    .unwrap_or(0);
+    let cumulative_replay_live_evolution_revision_actions =
+        extract_json_usize_field(line, "cumulative_replay_live_evolution_revision_actions")
+            .unwrap_or(0);
     let cumulative_recursive_replay_items =
         extract_json_usize_field(line, "cumulative_recursive_replay_items").unwrap_or(0);
     let cumulative_recursive_runtime_calls =
@@ -1356,6 +1528,30 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
     if cumulative_replay_live_memory_feedback_strength_delta < -TRACE_FLOAT_EPSILON {
         failures.push(format!(
             "cumulative_replay_live_memory_feedback_strength_delta {cumulative_replay_live_memory_feedback_strength_delta:.6} is negative"
+        ));
+    }
+    if cumulative_replay_live_evolution_router_threshold_mutations
+        > cumulative_replay_live_evolution_items
+    {
+        failures.push(format!(
+            "cumulative_replay_live_evolution_router_threshold_mutations {cumulative_replay_live_evolution_router_threshold_mutations} exceeds cumulative_replay_live_evolution_items {cumulative_replay_live_evolution_items}"
+        ));
+    }
+    if cumulative_replay_live_evolution_hierarchy_weight_mutations
+        > cumulative_replay_live_evolution_items
+    {
+        failures.push(format!(
+            "cumulative_replay_live_evolution_hierarchy_weight_mutations {cumulative_replay_live_evolution_hierarchy_weight_mutations} exceeds cumulative_replay_live_evolution_items {cumulative_replay_live_evolution_items}"
+        ));
+    }
+    if cumulative_replay_live_evolution_router_threshold_delta < -TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "cumulative_replay_live_evolution_router_threshold_delta {cumulative_replay_live_evolution_router_threshold_delta:.6} is negative"
+        ));
+    }
+    if cumulative_replay_live_evolution_hierarchy_weight_delta < -TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "cumulative_replay_live_evolution_hierarchy_weight_delta {cumulative_replay_live_evolution_hierarchy_weight_delta:.6} is negative"
         ));
     }
 
@@ -1470,6 +1666,76 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         cumulative_replay_live_memory_feedback_strength_delta,
         "auto_replay live_memory_feedback_strength_delta",
         live_memory_feedback_strength_delta,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_items",
+        cumulative_replay_live_evolution_items,
+        "auto_replay live_evolution_items",
+        live_evolution_items,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_router_threshold_mutations",
+        cumulative_replay_live_evolution_router_threshold_mutations,
+        "auto_replay live_evolution_router_threshold_mutations",
+        live_evolution_router_threshold_mutations,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_hierarchy_weight_mutations",
+        cumulative_replay_live_evolution_hierarchy_weight_mutations,
+        "auto_replay live_evolution_hierarchy_weight_mutations",
+        live_evolution_hierarchy_weight_mutations,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_router_threshold_delta",
+        cumulative_replay_live_evolution_router_threshold_delta,
+        "auto_replay live_evolution_router_threshold_delta",
+        live_evolution_router_threshold_delta,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_hierarchy_weight_delta",
+        cumulative_replay_live_evolution_hierarchy_weight_delta,
+        "auto_replay live_evolution_hierarchy_weight_delta",
+        live_evolution_hierarchy_weight_delta,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_memory_updates",
+        cumulative_replay_live_evolution_memory_updates,
+        "auto_replay live_evolution_memory_updates",
+        live_evolution_memory_updates,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_stored_memory_updates",
+        cumulative_replay_live_evolution_stored_memory_updates,
+        "auto_replay live_evolution_stored_memory_updates",
+        live_evolution_stored_memory_updates,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_reflection_issues",
+        cumulative_replay_live_evolution_reflection_issues,
+        "auto_replay live_evolution_reflection_issues",
+        live_evolution_reflection_issues,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_critical_reflection_issues",
+        cumulative_replay_live_evolution_critical_reflection_issues,
+        "auto_replay live_evolution_critical_reflection_issues",
+        live_evolution_critical_reflection_issues,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_revision_actions",
+        cumulative_replay_live_evolution_revision_actions,
+        "auto_replay live_evolution_revision_actions",
+        live_evolution_revision_actions,
     );
     require_usize_at_least(
         &mut failures,
@@ -2654,9 +2920,9 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
-         \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_replay_live_memory_feedback_detail_items\":{},\"cumulative_replay_live_memory_feedback_applied\":{},\"cumulative_replay_live_memory_feedback_removed\":{},\"cumulative_replay_live_memory_feedback_missing\":{},\"cumulative_replay_live_memory_feedback_strength_delta\":{:.6},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
+         \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_replay_live_memory_feedback_detail_items\":{},\"cumulative_replay_live_memory_feedback_applied\":{},\"cumulative_replay_live_memory_feedback_removed\":{},\"cumulative_replay_live_memory_feedback_missing\":{},\"cumulative_replay_live_memory_feedback_strength_delta\":{:.6},\"cumulative_replay_live_evolution_items\":{},\"cumulative_replay_live_evolution_router_threshold_mutations\":{},\"cumulative_replay_live_evolution_hierarchy_weight_mutations\":{},\"cumulative_replay_live_evolution_router_threshold_delta\":{:.6},\"cumulative_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"cumulative_replay_live_evolution_memory_updates\":{},\"cumulative_replay_live_evolution_stored_memory_updates\":{},\"cumulative_replay_live_evolution_reflection_issues\":{},\"cumulative_replay_live_evolution_critical_reflection_issues\":{},\"cumulative_replay_live_evolution_revision_actions\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -2898,6 +3164,36 @@ pub fn trace_json_line_with_case(
             .map(|report| report.live_memory_feedback_strength_delta)
             .unwrap_or(0.0),
         auto_replay
+            .map(|report| report.live_evolution_items)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_router_threshold_mutations)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_hierarchy_weight_mutations)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_router_threshold_delta)
+            .unwrap_or(0.0),
+        auto_replay
+            .map(|report| report.live_evolution_hierarchy_weight_delta)
+            .unwrap_or(0.0),
+        auto_replay
+            .map(|report| report.live_evolution_memory_updates)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_stored_memory_updates)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_reflection_issues)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_critical_reflection_issues)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_evolution_revision_actions)
+            .unwrap_or(0),
+        auto_replay
             .map(|report| report.recursive_runtime_items)
             .unwrap_or(0),
         auto_replay
@@ -2969,6 +3265,34 @@ pub fn trace_json_line_with_case(
         outcome
             .evolution_ledger
             .replay_live_memory_feedback_strength_delta,
+        outcome.evolution_ledger.replay_live_evolution_items,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_router_threshold_mutations,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_hierarchy_weight_mutations,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_router_threshold_delta,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_hierarchy_weight_delta,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_memory_updates,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_stored_memory_updates,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_reflection_issues,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_critical_reflection_issues,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_revision_actions,
         outcome.evolution_ledger.recursive_replay_items,
         outcome.evolution_ledger.recursive_runtime_calls,
         outcome.evolution_ledger.drift_rollbacks,
@@ -3211,6 +3535,10 @@ mod tests {
         assert!(line.contains("\"live_memory_feedback_removed\":"));
         assert!(line.contains("\"live_memory_feedback_missing\":"));
         assert!(line.contains("\"live_memory_feedback_strength_delta\":"));
+        assert!(line.contains("\"live_evolution_items\":"));
+        assert!(line.contains("\"live_evolution_memory_updates\":"));
+        assert!(line.contains("\"live_evolution_stored_memory_updates\":"));
+        assert!(line.contains("\"live_evolution_reflection_issues\":"));
         assert!(line.contains("\"recursive_runtime_items\":"));
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));
@@ -3237,6 +3565,10 @@ mod tests {
         assert!(line.contains("\"cumulative_replay_live_memory_feedback_removed\":"));
         assert!(line.contains("\"cumulative_replay_live_memory_feedback_missing\":"));
         assert!(line.contains("\"cumulative_replay_live_memory_feedback_strength_delta\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_items\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_memory_updates\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_stored_memory_updates\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_reflection_issues\":"));
         assert!(line.contains("\"cumulative_recursive_runtime_calls\":"));
         assert!(line.contains("\"cumulative_drift_rollbacks\":"));
         assert!(line.contains("\"cumulative_rollback_router_threshold_delta\":"));
@@ -3817,6 +4149,35 @@ mod tests {
             failures.iter().any(|failure| {
                 failure.contains("cumulative_replay_live_memory_feedback_detail_items")
             }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_cumulative_live_evolution_mismatch() {
+        let line = auto_replay_trace_line();
+        let live_evolution_items = extract_json_usize_field(&line, "live_evolution_items").unwrap();
+        let cumulative_live_evolution_items =
+            extract_json_usize_field(&line, "cumulative_replay_live_evolution_items").unwrap();
+        assert!(live_evolution_items > 0, "{line}");
+        assert!(
+            cumulative_live_evolution_items >= live_evolution_items,
+            "{line}"
+        );
+        let line = line.replacen(
+            &format!(
+                "\"cumulative_replay_live_evolution_items\":{cumulative_live_evolution_items}"
+            ),
+            "\"cumulative_replay_live_evolution_items\":0",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| { failure.contains("cumulative_replay_live_evolution_items") }),
             "{failures:?}"
         );
     }

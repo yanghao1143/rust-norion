@@ -4731,6 +4731,10 @@ impl Args {
             min_evolution_replay_live_memory_feedback_strength_delta: self
                 .inspect_min_evolution_replay_live_memory_feedback_strength_delta
                 .map(|value| value.max(0.0)),
+            min_evolution_replay_live_evolution_items: None,
+            min_evolution_replay_live_evolution_memory_updates: None,
+            min_evolution_replay_live_evolution_stored_memory_updates: None,
+            min_evolution_replay_live_evolution_reflection_issues: None,
             min_evolution_recursive_replay_items: self.inspect_min_evolution_recursive_replay_items,
             min_evolution_recursive_runtime_calls: self
                 .inspect_min_evolution_recursive_runtime_calls,
@@ -4806,6 +4810,8 @@ impl Args {
                 .inspect_min_evolution_replay_live_memory_feedback_device_profiles,
             min_evolution_replay_live_memory_feedback_detail_device_profiles: self
                 .inspect_min_evolution_replay_live_memory_feedback_detail_device_profiles,
+            min_evolution_replay_live_evolution_device_profiles: None,
+            min_evolution_replay_live_evolution_memory_update_device_profiles: None,
             min_evolution_recursive_replay_device_profiles: self
                 .inspect_min_evolution_recursive_replay_device_profiles,
             min_evolution_recursive_runtime_call_device_profiles: self
