@@ -291,6 +291,62 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"max_recursive_call_pressure\":",
     },
     TraceRequiredField {
+        name: "live_evolution",
+        marker: "\"live_evolution\":{",
+    },
+    TraceRequiredField {
+        name: "live_inference_recorded",
+        marker: "\"live_inference_recorded\":",
+    },
+    TraceRequiredField {
+        name: "live_router_threshold_delta",
+        marker: "\"live_router_threshold_delta\":",
+    },
+    TraceRequiredField {
+        name: "live_hierarchy_weight_delta",
+        marker: "\"live_hierarchy_weight_delta\":",
+    },
+    TraceRequiredField {
+        name: "live_memory_updates",
+        marker: "\"live_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "live_memory_reinforcements",
+        marker: "\"live_memory_reinforcements\":",
+    },
+    TraceRequiredField {
+        name: "live_memory_penalties",
+        marker: "\"live_memory_penalties\":",
+    },
+    TraceRequiredField {
+        name: "live_stored_memory_updates",
+        marker: "\"live_stored_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "live_stored_memory",
+        marker: "\"live_stored_memory\":",
+    },
+    TraceRequiredField {
+        name: "live_stored_gist_memories",
+        marker: "\"live_stored_gist_memories\":",
+    },
+    TraceRequiredField {
+        name: "live_stored_runtime_kv_memories",
+        marker: "\"live_stored_runtime_kv_memories\":",
+    },
+    TraceRequiredField {
+        name: "live_reflection_issues",
+        marker: "\"live_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "live_critical_reflection_issues",
+        marker: "\"live_critical_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "live_revision_actions",
+        marker: "\"live_revision_actions\":",
+    },
+    TraceRequiredField {
         name: "evolution_ledger",
         marker: "\"evolution_ledger\":{",
     },
@@ -419,6 +475,101 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_device_contract(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
+    failures.extend(evaluate_trace_live_evolution(line));
+
+    failures
+}
+
+fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let live_inference_recorded =
+        extract_json_bool_field(line, "live_inference_recorded").unwrap_or(false);
+    if !live_inference_recorded {
+        failures.push("live_evolution requires live_inference_recorded=true".to_owned());
+    }
+
+    let live_reinforcements =
+        extract_json_usize_field(line, "live_memory_reinforcements").unwrap_or(0);
+    let live_penalties = extract_json_usize_field(line, "live_memory_penalties").unwrap_or(0);
+    let live_memory_updates = extract_json_usize_field(line, "live_memory_updates").unwrap_or(0);
+    let expected_memory_updates = live_reinforcements.saturating_add(live_penalties);
+    if live_memory_updates != expected_memory_updates {
+        failures.push(format!(
+            "live_memory_updates {live_memory_updates} does not match live_memory_reinforcements+live_memory_penalties {expected_memory_updates}"
+        ));
+    }
+
+    let feedback_reinforced = extract_json_usize_field(line, "feedback_reinforced").unwrap_or(0);
+    if live_reinforcements != feedback_reinforced {
+        failures.push(format!(
+            "live_memory_reinforcements {live_reinforcements} does not match memory feedback_reinforced {feedback_reinforced}"
+        ));
+    }
+    let feedback_penalized = extract_json_usize_field(line, "feedback_penalized").unwrap_or(0);
+    if live_penalties != feedback_penalized {
+        failures.push(format!(
+            "live_memory_penalties {live_penalties} does not match memory feedback_penalized {feedback_penalized}"
+        ));
+    }
+
+    let live_stored_memory =
+        usize::from(extract_json_bool_field(line, "live_stored_memory").unwrap_or(false));
+    let live_stored_gist_memories =
+        extract_json_usize_field(line, "live_stored_gist_memories").unwrap_or(0);
+    let live_stored_runtime_kv_memories =
+        extract_json_usize_field(line, "live_stored_runtime_kv_memories").unwrap_or(0);
+    let live_stored_memory_updates =
+        extract_json_usize_field(line, "live_stored_memory_updates").unwrap_or(0);
+    let expected_stored_memory_updates = live_stored_memory
+        .saturating_add(live_stored_gist_memories)
+        .saturating_add(live_stored_runtime_kv_memories);
+    if live_stored_memory_updates != expected_stored_memory_updates {
+        failures.push(format!(
+            "live_stored_memory_updates {live_stored_memory_updates} does not match live stored memory components {expected_stored_memory_updates}"
+        ));
+    }
+
+    let gist_stored = extract_json_usize_field(line, "gist_stored").unwrap_or(0);
+    if live_stored_gist_memories != gist_stored {
+        failures.push(format!(
+            "live_stored_gist_memories {live_stored_gist_memories} does not match memory gist_stored {gist_stored}"
+        ));
+    }
+    let runtime_kv_stored = extract_json_usize_field(line, "runtime_kv_stored").unwrap_or(0);
+    if live_stored_runtime_kv_memories != runtime_kv_stored {
+        failures.push(format!(
+            "live_stored_runtime_kv_memories {live_stored_runtime_kv_memories} does not match memory runtime_kv_stored {runtime_kv_stored}"
+        ));
+    }
+
+    let reflection_issues = extract_json_usize_field(line, "issues").unwrap_or(0);
+    let live_reflection_issues =
+        extract_json_usize_field(line, "live_reflection_issues").unwrap_or(0);
+    if live_reflection_issues != reflection_issues {
+        failures.push(format!(
+            "live_reflection_issues {live_reflection_issues} does not match reflection issues {reflection_issues}"
+        ));
+    }
+
+    let critical_reflection_issues = extract_json_usize_field(line, "critical_issues").unwrap_or(0);
+    let live_critical_reflection_issues =
+        extract_json_usize_field(line, "live_critical_reflection_issues").unwrap_or(0);
+    if live_critical_reflection_issues != critical_reflection_issues {
+        failures.push(format!(
+            "live_critical_reflection_issues {live_critical_reflection_issues} does not match reflection critical_issues {critical_reflection_issues}"
+        ));
+    }
+
+    let revision_actions = extract_json_string_array_field(line, "revision_actions")
+        .map(|actions| actions.len())
+        .unwrap_or(0);
+    let live_revision_actions =
+        extract_json_usize_field(line, "live_revision_actions").unwrap_or(0);
+    if live_revision_actions != revision_actions {
+        failures.push(format!(
+            "live_revision_actions {live_revision_actions} does not match reflection revision_actions {revision_actions}"
+        ));
+    }
 
     failures
 }
@@ -914,6 +1065,7 @@ pub fn trace_json_line_with_case(
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
          \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
@@ -1114,6 +1266,23 @@ pub fn trace_json_line_with_case(
         auto_replay
             .map(|report| report.max_recursive_call_pressure)
             .unwrap_or(0.0),
+        outcome.live_evolution.router_threshold_delta,
+        outcome.live_evolution.hierarchy_weight_delta,
+        outcome.live_evolution.memory_reinforcements,
+        outcome.live_evolution.memory_penalties,
+        outcome
+            .live_evolution
+            .memory_reinforcements
+            .saturating_add(outcome.live_evolution.memory_penalties),
+        outcome.live_evolution.stored_memory,
+        outcome.live_evolution.stored_gist_memories,
+        outcome.live_evolution.stored_runtime_kv_memories,
+        usize::from(outcome.live_evolution.stored_memory)
+            .saturating_add(outcome.live_evolution.stored_gist_memories)
+            .saturating_add(outcome.live_evolution.stored_runtime_kv_memories),
+        outcome.live_evolution.reflection_issues,
+        outcome.live_evolution.critical_reflection_issues,
+        outcome.live_evolution.revision_actions,
         outcome.evolution_ledger.live_inference_runs,
         outcome.evolution_ledger.live_router_threshold_mutations,
         outcome.evolution_ledger.live_hierarchy_weight_mutations,
@@ -1337,6 +1506,15 @@ mod tests {
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));
         assert!(line.contains("\"max_recursive_call_pressure\":"));
+        assert!(line.contains("\"live_evolution\":"));
+        assert!(line.contains("\"live_inference_recorded\":true"));
+        assert!(line.contains("\"live_router_threshold_delta\":"));
+        assert!(line.contains("\"live_hierarchy_weight_delta\":"));
+        assert!(line.contains("\"live_memory_updates\":"));
+        assert!(line.contains("\"live_stored_memory_updates\":"));
+        assert!(line.contains("\"live_reflection_issues\":"));
+        assert!(line.contains("\"live_critical_reflection_issues\":"));
+        assert!(line.contains("\"live_revision_actions\":"));
         assert!(line.contains("\"evolution_ledger\":"));
         assert!(line.contains("\"live_inference_runs\":"));
         assert!(line.contains("\"cumulative_live_memory_updates\":"));
@@ -1403,11 +1581,47 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_live_evolution_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace live evolution mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace live evolution mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        )
+        .replacen("\"live_memory_updates\":0", "\"live_memory_updates\":99", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("live_memory_updates 99")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_accepts_runtime_kv_storage_consistency() {
         let line = runtime_kv_trace_line()
             .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
             .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
             .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen(
+                "\"live_stored_runtime_kv_memories\":0",
+                "\"live_stored_runtime_kv_memories\":1",
+                1,
+            )
+            .replacen(
+                "\"live_stored_memory_updates\":2",
+                "\"live_stored_memory_updates\":3",
+                1,
+            )
             .replacen("\"memory_write\":false", "\"memory_write\":true", 1)
             .replacen("\"runtime_kv_write\":false", "\"runtime_kv_write\":true", 1)
             .replacen("\"revision_passes\":1", "\"revision_passes\":0", 1);
