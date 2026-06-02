@@ -165,6 +165,9 @@ pub struct BenchmarkGate {
     pub min_evolution_live_online_reward_feedbacks: Option<u64>,
     pub min_evolution_live_online_reward_reinforcements: Option<u64>,
     pub min_evolution_live_online_reward_penalties: Option<u64>,
+    pub min_evolution_live_online_reward_strength: Option<f32>,
+    pub min_evolution_live_online_reward_reinforcement_strength: Option<f32>,
+    pub min_evolution_live_online_reward_penalty_strength: Option<f32>,
     pub min_evolution_live_memory_updates: Option<u64>,
     pub min_evolution_live_stored_memory_updates: Option<u64>,
     pub min_evolution_live_reflection_issues: Option<u64>,
@@ -194,6 +197,9 @@ pub struct BenchmarkGate {
     pub min_evolution_replay_live_evolution_online_reward_feedbacks: Option<u64>,
     pub min_evolution_replay_live_evolution_online_reward_reinforcements: Option<u64>,
     pub min_evolution_replay_live_evolution_online_reward_penalties: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_strength: Option<f32>,
+    pub min_evolution_replay_live_evolution_online_reward_reinforcement_strength: Option<f32>,
+    pub min_evolution_replay_live_evolution_online_reward_penalty_strength: Option<f32>,
     pub min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
@@ -302,6 +308,9 @@ impl Default for BenchmarkGate {
             min_evolution_live_online_reward_feedbacks: None,
             min_evolution_live_online_reward_reinforcements: None,
             min_evolution_live_online_reward_penalties: None,
+            min_evolution_live_online_reward_strength: None,
+            min_evolution_live_online_reward_reinforcement_strength: None,
+            min_evolution_live_online_reward_penalty_strength: None,
             min_evolution_live_memory_updates: None,
             min_evolution_live_stored_memory_updates: None,
             min_evolution_live_reflection_issues: None,
@@ -331,6 +340,9 @@ impl Default for BenchmarkGate {
             min_evolution_replay_live_evolution_online_reward_feedbacks: None,
             min_evolution_replay_live_evolution_online_reward_reinforcements: None,
             min_evolution_replay_live_evolution_online_reward_penalties: None,
+            min_evolution_replay_live_evolution_online_reward_strength: None,
+            min_evolution_replay_live_evolution_online_reward_reinforcement_strength: None,
+            min_evolution_replay_live_evolution_online_reward_penalty_strength: None,
             min_evolution_replay_live_evolution_memory_updates: None,
             min_evolution_replay_live_evolution_stored_memory_updates: None,
             min_evolution_replay_live_evolution_reflection_issues: None,
@@ -2955,6 +2967,44 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_evolution_live_online_reward_strength) =
+            gate.min_evolution_live_online_reward_strength
+        {
+            let observed = self.evolution_ledger.live_online_reward_strength;
+            if observed < min_evolution_live_online_reward_strength {
+                failures.push(format!(
+                    "evolution_live_online_reward_strength {:.6} below minimum {:.6}",
+                    observed, min_evolution_live_online_reward_strength
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_online_reward_reinforcement_strength) =
+            gate.min_evolution_live_online_reward_reinforcement_strength
+        {
+            let observed = self
+                .evolution_ledger
+                .live_online_reward_reinforcement_strength;
+            if observed < min_evolution_live_online_reward_reinforcement_strength {
+                failures.push(format!(
+                    "evolution_live_online_reward_reinforcement_strength {:.6} below minimum {:.6}",
+                    observed, min_evolution_live_online_reward_reinforcement_strength
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_online_reward_penalty_strength) =
+            gate.min_evolution_live_online_reward_penalty_strength
+        {
+            let observed = self.evolution_ledger.live_online_reward_penalty_strength;
+            if observed < min_evolution_live_online_reward_penalty_strength {
+                failures.push(format!(
+                    "evolution_live_online_reward_penalty_strength {:.6} below minimum {:.6}",
+                    observed, min_evolution_live_online_reward_penalty_strength
+                ));
+            }
+        }
+
         if let Some(min_evolution_live_memory_updates) = gate.min_evolution_live_memory_updates {
             let observed = self.evolution_ledger.live_memory_updates();
             if observed < min_evolution_live_memory_updates {
@@ -3312,6 +3362,49 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "evolution_replay_live_evolution_online_reward_penalties {} below minimum {}",
                     observed, min_evolution_replay_live_evolution_online_reward_penalties
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_online_reward_strength) =
+            gate.min_evolution_replay_live_evolution_online_reward_strength
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_online_reward_strength;
+            if observed < min_evolution_replay_live_evolution_online_reward_strength {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_strength {:.6} below minimum {:.6}",
+                    observed, min_evolution_replay_live_evolution_online_reward_strength
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_online_reward_reinforcement_strength) =
+            gate.min_evolution_replay_live_evolution_online_reward_reinforcement_strength
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_online_reward_reinforcement_strength;
+            if observed < min_evolution_replay_live_evolution_online_reward_reinforcement_strength {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_reinforcement_strength {:.6} below minimum {:.6}",
+                    observed,
+                    min_evolution_replay_live_evolution_online_reward_reinforcement_strength
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_online_reward_penalty_strength) =
+            gate.min_evolution_replay_live_evolution_online_reward_penalty_strength
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_online_reward_penalty_strength;
+            if observed < min_evolution_replay_live_evolution_online_reward_penalty_strength {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_penalty_strength {:.6} below minimum {:.6}",
+                    observed, min_evolution_replay_live_evolution_online_reward_penalty_strength
                 ));
             }
         }
@@ -4185,7 +4278,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_online_reward_feedbacks={} evolution_live_online_reward_reinforcements={} evolution_live_online_reward_penalties={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_online_reward_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_online_reward_feedbacks={} evolution_replay_live_evolution_online_reward_reinforcements={} evolution_replay_live_evolution_online_reward_penalties={} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_online_reward_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_uncertainty_device_profiles={} runtime_uncertainty_devices={} runtime_uncertainty_token_device_profiles={} runtime_uncertainty_token_devices={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_import_device_profiles={} runtime_kv_import_devices={} runtime_kv_exported={} runtime_kv_export_device_profiles={} runtime_kv_export_devices={} runtime_kv_stored={} runtime_kv_stored_device_profiles={} runtime_kv_stored_devices={} runtime_kv_hold_cases={} runtime_kv_held={} runtime_kv_hold_device_profiles={} runtime_kv_hold_devices={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_online_reward_feedbacks={} evolution_live_online_reward_reinforcements={} evolution_live_online_reward_penalties={} evolution_live_online_reward_strength={:.6} evolution_live_online_reward_reinforcement_strength={:.6} evolution_live_online_reward_penalty_strength={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_online_reward_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_online_reward_feedbacks={} evolution_replay_live_evolution_online_reward_reinforcements={} evolution_replay_live_evolution_online_reward_penalties={} evolution_replay_live_evolution_online_reward_strength={:.6} evolution_replay_live_evolution_online_reward_reinforcement_strength={:.6} evolution_replay_live_evolution_online_reward_penalty_strength={:.6} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_online_reward_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_uncertainty_device_profiles={} runtime_uncertainty_devices={} runtime_uncertainty_token_device_profiles={} runtime_uncertainty_token_devices={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_import_device_profiles={} runtime_kv_import_devices={} runtime_kv_exported={} runtime_kv_export_device_profiles={} runtime_kv_export_devices={} runtime_kv_stored={} runtime_kv_stored_device_profiles={} runtime_kv_stored_devices={} runtime_kv_hold_cases={} runtime_kv_held={} runtime_kv_hold_device_profiles={} runtime_kv_hold_devices={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -4236,6 +4329,10 @@ impl BenchmarkSummary {
             self.evolution_ledger.live_online_reward_feedbacks,
             self.evolution_ledger.live_online_reward_reinforcements,
             self.evolution_ledger.live_online_reward_penalties,
+            self.evolution_ledger.live_online_reward_strength,
+            self.evolution_ledger
+                .live_online_reward_reinforcement_strength,
+            self.evolution_ledger.live_online_reward_penalty_strength,
             self.evolution_ledger.live_memory_updates(),
             self.evolution_ledger.live_stored_memory_updates(),
             self.evolution_ledger.live_reflection_issues,
@@ -4290,6 +4387,12 @@ impl BenchmarkSummary {
                 .replay_live_evolution_online_reward_reinforcements,
             self.evolution_ledger
                 .replay_live_evolution_online_reward_penalties,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_strength,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_reinforcement_strength,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_penalty_strength,
             self.evolution_ledger.replay_live_evolution_memory_updates,
             self.evolution_ledger
                 .replay_live_evolution_stored_memory_updates,
@@ -6621,6 +6724,9 @@ mod tests {
         gate.min_evolution_live_online_reward_feedbacks = Some(1);
         gate.min_evolution_live_online_reward_reinforcements = Some(1);
         gate.min_evolution_live_online_reward_penalties = Some(1);
+        gate.min_evolution_live_online_reward_strength = Some(1.0);
+        gate.min_evolution_live_online_reward_reinforcement_strength = Some(0.6);
+        gate.min_evolution_live_online_reward_penalty_strength = Some(0.4);
         gate.min_evolution_live_memory_updates = Some(1);
         gate.min_evolution_live_stored_memory_updates = Some(1);
         gate.min_evolution_live_reflection_issues = Some(1);
@@ -6641,6 +6747,9 @@ mod tests {
         gate.min_evolution_replay_live_evolution_online_reward_feedbacks = Some(2);
         gate.min_evolution_replay_live_evolution_online_reward_reinforcements = Some(1);
         gate.min_evolution_replay_live_evolution_online_reward_penalties = Some(1);
+        gate.min_evolution_replay_live_evolution_online_reward_strength = Some(1.0);
+        gate.min_evolution_replay_live_evolution_online_reward_reinforcement_strength = Some(0.6);
+        gate.min_evolution_replay_live_evolution_online_reward_penalty_strength = Some(0.4);
         gate.min_evolution_replay_live_evolution_memory_updates = Some(3);
         gate.min_evolution_replay_live_evolution_stored_memory_updates = Some(2);
         gate.min_evolution_replay_live_evolution_reflection_issues = Some(2);
@@ -6664,6 +6773,9 @@ mod tests {
             "evolution_live_online_reward_feedbacks",
             "evolution_live_online_reward_reinforcements",
             "evolution_live_online_reward_penalties",
+            "evolution_live_online_reward_strength",
+            "evolution_live_online_reward_reinforcement_strength",
+            "evolution_live_online_reward_penalty_strength",
             "evolution_live_memory_updates",
             "evolution_live_stored_memory_updates",
             "evolution_live_reflection_issues",
@@ -6684,6 +6796,9 @@ mod tests {
             "evolution_replay_live_evolution_online_reward_feedbacks",
             "evolution_replay_live_evolution_online_reward_reinforcements",
             "evolution_replay_live_evolution_online_reward_penalties",
+            "evolution_replay_live_evolution_online_reward_strength",
+            "evolution_replay_live_evolution_online_reward_reinforcement_strength",
+            "evolution_replay_live_evolution_online_reward_penalty_strength",
             "evolution_replay_live_evolution_memory_updates",
             "evolution_replay_live_evolution_stored_memory_updates",
             "evolution_replay_live_evolution_reflection_issues",
@@ -6772,6 +6887,24 @@ mod tests {
         let passing_report = passing.evaluate(&gate);
 
         assert!(passing_report.passed, "{:?}", passing_report.failures);
+        let summary_line = passing.summary_line();
+        assert!(summary_line.contains("evolution_live_online_reward_strength=1.800000"));
+        assert!(
+            summary_line.contains("evolution_live_online_reward_reinforcement_strength=1.200000")
+        );
+        assert!(summary_line.contains("evolution_live_online_reward_penalty_strength=0.600000"));
+        assert!(
+            summary_line
+                .contains("evolution_replay_live_evolution_online_reward_strength=1.300000")
+        );
+        assert!(summary_line.contains(
+            "evolution_replay_live_evolution_online_reward_reinforcement_strength=0.800000"
+        ));
+        assert!(
+            summary_line.contains(
+                "evolution_replay_live_evolution_online_reward_penalty_strength=0.500000"
+            )
+        );
         assert_eq!(passing.evolution_ledger().replay_runs, 1);
         assert_eq!(passing.evolution_ledger().live_inference_runs, 8);
         assert_eq!(passing.evolution_ledger().live_online_reward_feedbacks, 3);
