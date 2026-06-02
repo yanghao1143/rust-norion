@@ -325,6 +325,26 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"live_memory_feedback_penalties\":",
     },
     TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_detail_items",
+        marker: "\"live_memory_feedback_detail_items\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_applied",
+        marker: "\"live_memory_feedback_applied\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_removed",
+        marker: "\"live_memory_feedback_removed\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_missing",
+        marker: "\"live_memory_feedback_missing\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_memory_feedback_strength_delta",
+        marker: "\"live_memory_feedback_strength_delta\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_recursive_runtime_calls",
         marker: "\"recursive_runtime_calls\":",
     },
@@ -988,6 +1008,16 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         extract_json_usize_field(line, "live_memory_feedback_reinforcements").unwrap_or(0);
     let live_memory_feedback_penalties =
         extract_json_usize_field(line, "live_memory_feedback_penalties").unwrap_or(0);
+    let live_memory_feedback_detail_items =
+        extract_json_usize_field(line, "live_memory_feedback_detail_items").unwrap_or(0);
+    let live_memory_feedback_applied =
+        extract_json_usize_field(line, "live_memory_feedback_applied").unwrap_or(0);
+    let live_memory_feedback_removed =
+        extract_json_usize_field(line, "live_memory_feedback_removed").unwrap_or(0);
+    let live_memory_feedback_missing =
+        extract_json_usize_field(line, "live_memory_feedback_missing").unwrap_or(0);
+    let live_memory_feedback_strength_delta =
+        extract_json_f32_field(line, "live_memory_feedback_strength_delta").unwrap_or(0.0);
     let recursive_runtime_items =
         extract_json_usize_field(line, "recursive_runtime_items").unwrap_or(0);
     let recursive_runtime_calls =
@@ -1018,6 +1048,45 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
             reinforced.saturating_add(penalized)
         ));
     }
+    if live_memory_feedback_detail_items > live_memory_feedback_items {
+        failures.push(format!(
+            "auto_replay live_memory_feedback_detail_items {live_memory_feedback_detail_items} exceeds live_memory_feedback_items {live_memory_feedback_items}"
+        ));
+    }
+    if live_memory_feedback_removed > live_memory_feedback_applied {
+        failures.push(format!(
+            "auto_replay live_memory_feedback_removed {live_memory_feedback_removed} exceeds live_memory_feedback_applied {live_memory_feedback_applied}"
+        ));
+    }
+    if live_memory_feedback_detail_items == 0 {
+        let detail_activity = live_memory_feedback_applied
+            .saturating_add(live_memory_feedback_removed)
+            .saturating_add(live_memory_feedback_missing);
+        if detail_activity > 0 {
+            failures.push(format!(
+                "auto_replay live_memory_feedback_detail_items 0 cannot carry detailed feedback activity {detail_activity}"
+            ));
+        }
+        if live_memory_feedback_strength_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay live_memory_feedback_strength_delta {live_memory_feedback_strength_delta:.6} requires live_memory_feedback_detail_items > 0"
+            ));
+        }
+    }
+    if live_memory_feedback_detail_items > 0 {
+        let detailed_updates =
+            live_memory_feedback_applied.saturating_add(live_memory_feedback_missing);
+        if detailed_updates > live_memory_feedback_updates {
+            failures.push(format!(
+                "auto_replay live_memory_feedback_applied+missing {detailed_updates} exceeds live_memory_feedback_updates {live_memory_feedback_updates}"
+            ));
+        }
+    }
+    if live_memory_feedback_strength_delta < -TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "auto_replay live_memory_feedback_strength_delta {live_memory_feedback_strength_delta:.6} is negative"
+        ));
+    }
 
     if applied == 0 {
         for (name, value) in [
@@ -1040,6 +1109,13 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
                 "live_memory_feedback_penalties",
                 live_memory_feedback_penalties,
             ),
+            (
+                "live_memory_feedback_detail_items",
+                live_memory_feedback_detail_items,
+            ),
+            ("live_memory_feedback_applied", live_memory_feedback_applied),
+            ("live_memory_feedback_removed", live_memory_feedback_removed),
+            ("live_memory_feedback_missing", live_memory_feedback_missing),
             ("recursive_runtime_items", recursive_runtime_items),
             ("recursive_runtime_calls", recursive_runtime_calls),
         ] {
@@ -1065,6 +1141,11 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         if max_recursive_call_pressure > TRACE_FLOAT_EPSILON {
             failures.push(format!(
                 "auto_replay max_recursive_call_pressure {max_recursive_call_pressure:.6} requires applied > 0"
+            ));
+        }
+        if live_memory_feedback_strength_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay live_memory_feedback_strength_delta {live_memory_feedback_strength_delta:.6} requires applied > 0"
             ));
         }
     } else {
@@ -2349,7 +2430,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
          \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
@@ -2573,6 +2654,21 @@ pub fn trace_json_line_with_case(
         auto_replay
             .map(|report| report.live_memory_feedback_penalties)
             .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_detail_items)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_applied)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_removed)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_missing)
+            .unwrap_or(0),
+        auto_replay
+            .map(|report| report.live_memory_feedback_strength_delta)
+            .unwrap_or(0.0),
         auto_replay
             .map(|report| report.recursive_runtime_items)
             .unwrap_or(0),
@@ -2829,6 +2925,11 @@ mod tests {
         assert!(line.contains("\"live_memory_feedback_updates\":"));
         assert!(line.contains("\"live_memory_feedback_reinforcements\":"));
         assert!(line.contains("\"live_memory_feedback_penalties\":"));
+        assert!(line.contains("\"live_memory_feedback_detail_items\":"));
+        assert!(line.contains("\"live_memory_feedback_applied\":"));
+        assert!(line.contains("\"live_memory_feedback_removed\":"));
+        assert!(line.contains("\"live_memory_feedback_missing\":"));
+        assert!(line.contains("\"live_memory_feedback_strength_delta\":"));
         assert!(line.contains("\"recursive_runtime_items\":"));
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));
@@ -3327,6 +3428,24 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| failure.contains("auto_replay touched_memories 99")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_live_feedback_detail_mismatch() {
+        let line = auto_replay_trace_line().replacen(
+            "\"live_memory_feedback_detail_items\":0,\"live_memory_feedback_applied\":0",
+            "\"live_memory_feedback_detail_items\":1,\"live_memory_feedback_applied\":99",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("live_memory_feedback_applied+missing")),
             "{failures:?}"
         );
     }

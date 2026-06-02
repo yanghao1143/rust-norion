@@ -1164,7 +1164,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
             result.name,
             result.profile,
             result.device.as_str(),
@@ -1189,6 +1189,11 @@ fn print_benchmark_summary(
             result.auto_replay_live_memory_feedback_updates,
             result.auto_replay_live_memory_feedback_reinforcements,
             result.auto_replay_live_memory_feedback_penalties,
+            result.auto_replay_live_memory_feedback_detail_items,
+            result.auto_replay_live_memory_feedback_applied,
+            result.auto_replay_live_memory_feedback_removed,
+            result.auto_replay_live_memory_feedback_missing,
+            result.auto_replay_live_memory_feedback_strength_delta,
             result.auto_replay_recursive_runtime_items,
             result.auto_replay_recursive_runtime_calls,
             result.auto_replay_avg_recursive_call_pressure,
@@ -1880,6 +1885,9 @@ struct Args {
     benchmark_min_auto_replay_memory_updates: Option<usize>,
     benchmark_min_live_memory_feedback_updates: Option<usize>,
     benchmark_min_auto_replay_live_memory_feedback_updates: Option<usize>,
+    benchmark_min_auto_replay_live_memory_feedback_detail_items: Option<usize>,
+    benchmark_min_auto_replay_live_memory_feedback_applied: Option<usize>,
+    benchmark_min_auto_replay_live_memory_feedback_strength_delta: Option<f32>,
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
     benchmark_max_auto_replay_recursive_call_pressure: Option<f32>,
@@ -2132,6 +2140,9 @@ impl Args {
         let mut benchmark_min_auto_replay_memory_updates = None;
         let mut benchmark_min_live_memory_feedback_updates = None;
         let mut benchmark_min_auto_replay_live_memory_feedback_updates = None;
+        let mut benchmark_min_auto_replay_live_memory_feedback_detail_items = None;
+        let mut benchmark_min_auto_replay_live_memory_feedback_applied = None;
+        let mut benchmark_min_auto_replay_live_memory_feedback_strength_delta = None;
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
         let mut benchmark_max_auto_replay_recursive_call_pressure = None;
@@ -2473,6 +2484,30 @@ impl Args {
                 {
                     benchmark_min_auto_replay_live_memory_feedback_updates =
                         Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-live-memory-feedback-detail-items"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_auto_replay_live_memory_feedback_detail_items =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-live-memory-feedback-applied"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_auto_replay_live_memory_feedback_applied =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-auto-replay-live-memory-feedback-strength-delta"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_auto_replay_live_memory_feedback_strength_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -3903,6 +3938,9 @@ impl Args {
             benchmark_min_auto_replay_memory_updates,
             benchmark_min_live_memory_feedback_updates,
             benchmark_min_auto_replay_live_memory_feedback_updates,
+            benchmark_min_auto_replay_live_memory_feedback_detail_items,
+            benchmark_min_auto_replay_live_memory_feedback_applied,
+            benchmark_min_auto_replay_live_memory_feedback_strength_delta,
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure,
@@ -4158,6 +4196,15 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_auto_replay_live_memory_feedback_updates {
             gate.min_auto_replay_live_memory_feedback_updates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_live_memory_feedback_detail_items {
+            gate.min_auto_replay_live_memory_feedback_detail_items = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_live_memory_feedback_applied {
+            gate.min_auto_replay_live_memory_feedback_applied = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_live_memory_feedback_strength_delta {
+            gate.min_auto_replay_live_memory_feedback_strength_delta = Some(value.max(0.0));
         }
         if let Some(value) = self.benchmark_min_auto_replay_recursive_items {
             gate.min_auto_replay_recursive_items = Some(value);
@@ -4720,7 +4767,7 @@ fn print_help_and_exit() -> ! {
         "Usage: rust-norion [options] <prompt>\n",
         "\n",
         "Core: --profile coding|writing|long|general --memory path --experience path --adaptive path\n",
-        "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-evolution-replay-live-memory-feedback-updates n\n",
+        "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-detail-items n --benchmark-min-auto-replay-live-memory-feedback-applied n --benchmark-min-auto-replay-live-memory-feedback-strength-delta f --benchmark-min-evolution-replay-live-memory-feedback-updates n\n",
         "Benchmark live evolution: --benchmark-min-evolution-live-inference-runs n --benchmark-min-evolution-live-router-threshold-mutations n --benchmark-min-evolution-live-hierarchy-weight-mutations n --benchmark-min-evolution-live-router-threshold-delta f --benchmark-min-evolution-live-hierarchy-weight-delta f --benchmark-min-evolution-live-memory-updates n --benchmark-min-evolution-live-stored-memory-updates n --benchmark-min-evolution-live-reflection-issues n --benchmark-min-evolution-live-critical-reflection-issues n --benchmark-min-evolution-live-revision-actions n\n",
         "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
         "Benchmark runtime embedding: --benchmark-min-runtime-embedding-cases n --benchmark-min-runtime-embedding-device-profiles n --benchmark-max-embedding-fallback-cases n --benchmark-max-embedding-evidence-failures n\n",
@@ -4816,6 +4863,12 @@ mod tests {
             "2".to_owned(),
             "--benchmark-min-auto-replay-live-memory-feedback-updates".to_owned(),
             "3".to_owned(),
+            "--benchmark-min-auto-replay-live-memory-feedback-detail-items".to_owned(),
+            "2".to_owned(),
+            "--benchmark-min-auto-replay-live-memory-feedback-applied".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-auto-replay-live-memory-feedback-strength-delta".to_owned(),
+            "0.15".to_owned(),
             "--benchmark-min-auto-replay-recursive-items".to_owned(),
             "1".to_owned(),
             "--benchmark-min-auto-replay-recursive-call-pressure".to_owned(),
@@ -5233,6 +5286,18 @@ mod tests {
             Some(3)
         );
         assert_eq!(
+            args.benchmark_min_auto_replay_live_memory_feedback_detail_items,
+            Some(2)
+        );
+        assert_eq!(
+            args.benchmark_min_auto_replay_live_memory_feedback_applied,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_min_auto_replay_live_memory_feedback_strength_delta,
+            Some(0.15)
+        );
+        assert_eq!(
             args.benchmark_gate().min_auto_replay_router_updates,
             Some(1)
         );
@@ -5270,6 +5335,21 @@ mod tests {
             args.benchmark_gate()
                 .min_auto_replay_live_memory_feedback_updates,
             Some(3)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_auto_replay_live_memory_feedback_detail_items,
+            Some(2)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_auto_replay_live_memory_feedback_applied,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_auto_replay_live_memory_feedback_strength_delta,
+            Some(0.15)
         );
         assert_eq!(args.benchmark_min_auto_replay_recursive_items, Some(1));
         assert_eq!(
