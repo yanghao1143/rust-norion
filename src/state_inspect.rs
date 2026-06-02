@@ -998,7 +998,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -1029,6 +1029,16 @@ impl StateInspectionReport {
             self.tier_counts.hot_gpu,
             self.tier_counts.warm_ram,
             self.tier_counts.cold_disk,
+            self.evolution_ledger.live_inference_runs,
+            self.evolution_ledger.live_router_threshold_mutations,
+            self.evolution_ledger.live_hierarchy_weight_mutations,
+            self.evolution_ledger.live_router_threshold_delta,
+            self.evolution_ledger.live_hierarchy_weight_delta,
+            self.evolution_ledger.live_memory_updates(),
+            self.evolution_ledger.live_stored_memory_updates(),
+            self.evolution_ledger.live_reflection_issues,
+            self.evolution_ledger.live_critical_reflection_issues,
+            self.evolution_ledger.live_revision_actions,
             self.evolution_ledger.replay_runs,
             self.evolution_ledger.replay_items,
             self.evolution_ledger.router_threshold_mutations,
@@ -1400,6 +1410,19 @@ mod tests {
         engine.cache.reinforce(memory_id, 0.8);
         engine.cache.reinforce(runtime_kv_memory_id, 0.9);
         engine.evolution_ledger = EvolutionLedger {
+            live_inference_runs: 3,
+            live_router_threshold_mutations: 2,
+            live_hierarchy_weight_mutations: 1,
+            live_router_threshold_delta: 0.05,
+            live_hierarchy_weight_delta: 0.04,
+            live_memory_reinforcements: 4,
+            live_memory_penalties: 1,
+            live_stored_memories: 2,
+            live_stored_gist_memories: 3,
+            live_stored_runtime_kv_memories: 1,
+            live_reflection_issues: 5,
+            live_critical_reflection_issues: 1,
+            live_revision_actions: 6,
             replay_runs: 2,
             replay_items: 5,
             router_threshold_mutations: 3,
@@ -1577,6 +1600,10 @@ mod tests {
         assert_eq!(report.memory_retention_policy.stale_after, 12);
         assert_eq!(report.memory_compaction_policy.max_merges, 4);
         assert_eq!(report.evolution_ledger.replay_runs, 2);
+        assert_eq!(report.evolution_ledger.live_inference_runs, 3);
+        assert_eq!(report.evolution_ledger.live_memory_updates(), 5);
+        assert_eq!(report.evolution_ledger.live_stored_memory_updates(), 6);
+        assert_eq!(report.evolution_ledger.live_revision_actions, 6);
         assert_eq!(report.evolution_ledger.memory_updates(), 7);
         assert_eq!(report.evolution_ledger.recursive_replay_items, 8);
         assert_eq!(report.evolution_ledger.recursive_runtime_calls, 9);
@@ -1696,6 +1723,21 @@ mod tests {
                 .contains("evolution_hierarchy_weight_delta=0.080000")
         );
         assert!(report.summary_line().contains("evolution_memory_updates=7"));
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_live_inference_runs=3")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_live_memory_updates=5")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_live_stored_memory_updates=6")
+        );
         assert!(
             report
                 .summary_line()

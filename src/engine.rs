@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::adaptive_state::{AdaptiveState, EvolutionLedger};
+use crate::adaptive_state::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
 use crate::agent_team::{AgentTeamInput, AgentTeamPlan, AgentTeamPlanner};
 use crate::drift::{DriftGuard, DriftInput, DriftReport};
 use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
@@ -661,6 +661,19 @@ impl NoironEngine {
 
         self.router.observe_with_profile(request.profile, metrics);
         let mut hierarchy = self.hierarchy.observe(request.profile, metrics);
+        let live_router_threshold_delta = (self.router.threshold_for(request.profile)
+            - adaptive_before_inference
+                .router
+                .profile_thresholds
+                .get(request.profile))
+        .abs();
+        let live_hierarchy_weight_delta = hierarchy_weight_delta(
+            adaptive_before_inference
+                .hierarchy
+                .profile_weights
+                .get(request.profile),
+            self.hierarchy.state().profile_weights.get(request.profile),
+        );
         if drift_report.rollback_adaptive {
             let rollback_router_threshold_delta = (self.router.threshold_for(request.profile)
                 - adaptive_before_inference
@@ -683,6 +696,16 @@ impl NoironEngine {
             hierarchy = self.hierarchy.current();
         }
         let router_threshold_after = self.router.threshold();
+        let live_router_threshold_delta = if drift_report.rollback_adaptive {
+            0.0
+        } else {
+            live_router_threshold_delta
+        };
+        let live_hierarchy_weight_delta = if drift_report.rollback_adaptive {
+            0.0
+        } else {
+            live_hierarchy_weight_delta
+        };
         let process_reward = self.process_rewarder.score(ProcessRewardInput {
             profile: request.profile,
             route_budget,
@@ -731,6 +754,19 @@ impl NoironEngine {
             runtime_diagnostics: runtime_diagnostics.clone(),
             process_reward: experience_process_reward,
         });
+        self.evolution_ledger
+            .record_live_inference(LiveInferenceEvolution {
+                router_threshold_delta: live_router_threshold_delta,
+                hierarchy_weight_delta: live_hierarchy_weight_delta,
+                memory_reinforcements: memory_feedback.reinforced,
+                memory_penalties: memory_feedback.penalized,
+                stored_memory: stored_memory_id.is_some(),
+                stored_gist_memories: stored_gist_memory_ids.len(),
+                stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+                reflection_issues: report.issues.len(),
+                critical_reflection_issues: report.critical_issue_count(),
+                revision_actions: report.revision_actions.len(),
+            });
         let retention_report = self.cache.apply_retention(self.memory_retention_policy);
         let protected_memory_ids = protected_memory_ids(
             &used_memories,
@@ -1796,6 +1832,10 @@ mod tests {
             engine.experience.records()[0].gist_memory_ids,
             outcome.stored_gist_memory_ids
         );
+        assert_eq!(outcome.evolution_ledger.live_inference_runs, 1);
+        assert!(outcome.evolution_ledger.live_stored_memories >= 1);
+        assert!(outcome.evolution_ledger.live_stored_gist_memories >= 1);
+        assert!(outcome.evolution_ledger.live_stored_memory_updates() >= 2);
     }
 
     #[test]
@@ -2868,6 +2908,14 @@ mod tests {
         assert_eq!(
             restored.evolution_ledger.replay_runs,
             engine.evolution_ledger.replay_runs
+        );
+        assert_eq!(
+            restored.evolution_ledger.live_inference_runs,
+            engine.evolution_ledger.live_inference_runs
+        );
+        assert_eq!(
+            restored.evolution_ledger.live_stored_memory_updates(),
+            engine.evolution_ledger.live_stored_memory_updates()
         );
         let restored_runtime_kv_entry = restored
             .cache

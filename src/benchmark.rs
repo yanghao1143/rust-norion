@@ -2091,7 +2091,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -2124,6 +2124,16 @@ impl BenchmarkSummary {
             self.total_auto_replay_recursive_items(),
             self.total_auto_replay_recursive_runtime_calls(),
             self.max_auto_replay_recursive_call_pressure(),
+            self.evolution_ledger.live_inference_runs,
+            self.evolution_ledger.live_router_threshold_mutations,
+            self.evolution_ledger.live_hierarchy_weight_mutations,
+            self.evolution_ledger.live_router_threshold_delta,
+            self.evolution_ledger.live_hierarchy_weight_delta,
+            self.evolution_ledger.live_memory_updates(),
+            self.evolution_ledger.live_stored_memory_updates(),
+            self.evolution_ledger.live_reflection_issues,
+            self.evolution_ledger.live_critical_reflection_issues,
+            self.evolution_ledger.live_revision_actions,
             self.evolution_ledger.replay_runs,
             self.evolution_ledger.replay_items,
             self.evolution_ledger.router_threshold_mutations,
@@ -2191,6 +2201,37 @@ fn option_str_display(value: Option<&str>) -> &str {
 
 fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> EvolutionLedger {
     EvolutionLedger {
+        live_inference_runs: left.live_inference_runs.max(right.live_inference_runs),
+        live_router_threshold_mutations: left
+            .live_router_threshold_mutations
+            .max(right.live_router_threshold_mutations),
+        live_hierarchy_weight_mutations: left
+            .live_hierarchy_weight_mutations
+            .max(right.live_hierarchy_weight_mutations),
+        live_router_threshold_delta: left
+            .live_router_threshold_delta
+            .max(right.live_router_threshold_delta),
+        live_hierarchy_weight_delta: left
+            .live_hierarchy_weight_delta
+            .max(right.live_hierarchy_weight_delta),
+        live_memory_reinforcements: left
+            .live_memory_reinforcements
+            .max(right.live_memory_reinforcements),
+        live_memory_penalties: left.live_memory_penalties.max(right.live_memory_penalties),
+        live_stored_memories: left.live_stored_memories.max(right.live_stored_memories),
+        live_stored_gist_memories: left
+            .live_stored_gist_memories
+            .max(right.live_stored_gist_memories),
+        live_stored_runtime_kv_memories: left
+            .live_stored_runtime_kv_memories
+            .max(right.live_stored_runtime_kv_memories),
+        live_reflection_issues: left
+            .live_reflection_issues
+            .max(right.live_reflection_issues),
+        live_critical_reflection_issues: left
+            .live_critical_reflection_issues
+            .max(right.live_critical_reflection_issues),
+        live_revision_actions: left.live_revision_actions.max(right.live_revision_actions),
         replay_runs: left.replay_runs.max(right.replay_runs),
         replay_items: left.replay_items.max(right.replay_items),
         router_threshold_mutations: left
@@ -3214,6 +3255,19 @@ mod tests {
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger {
+                live_inference_runs: 8,
+                live_router_threshold_mutations: 2,
+                live_hierarchy_weight_mutations: 1,
+                live_router_threshold_delta: 0.07,
+                live_hierarchy_weight_delta: 0.04,
+                live_memory_reinforcements: 3,
+                live_memory_penalties: 2,
+                live_stored_memories: 1,
+                live_stored_gist_memories: 2,
+                live_stored_runtime_kv_memories: 1,
+                live_reflection_issues: 4,
+                live_critical_reflection_issues: 1,
+                live_revision_actions: 5,
                 replay_runs: 1,
                 replay_items: 2,
                 router_threshold_mutations: 3,
@@ -3237,6 +3291,9 @@ mod tests {
 
         assert!(passing_report.passed, "{:?}", passing_report.failures);
         assert_eq!(passing.evolution_ledger().replay_runs, 1);
+        assert_eq!(passing.evolution_ledger().live_inference_runs, 8);
+        assert_eq!(passing.evolution_ledger().live_memory_updates(), 5);
+        assert_eq!(passing.evolution_ledger().live_stored_memory_updates(), 4);
         assert_eq!(passing.evolution_ledger().memory_updates(), 5);
         assert_eq!(
             passing
@@ -3245,6 +3302,21 @@ mod tests {
             3
         );
         assert!(passing.summary_line().contains("evolution_replay_runs=1"));
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_live_inference_runs=8")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_live_memory_updates=5")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_live_stored_memory_updates=4")
+        );
         assert!(
             passing
                 .summary_line()

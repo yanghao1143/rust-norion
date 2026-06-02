@@ -28,7 +28,7 @@ pub mod toolsmith;
 pub mod trace;
 pub mod transformer;
 
-pub use adaptive_state::{AdaptiveState, EvolutionLedger};
+pub use adaptive_state::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
 pub use agent_team::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
     AgentNode, AgentRole, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,

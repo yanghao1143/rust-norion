@@ -21,7 +21,34 @@ pub struct AdaptiveState {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct LiveInferenceEvolution {
+    pub router_threshold_delta: f32,
+    pub hierarchy_weight_delta: f32,
+    pub memory_reinforcements: usize,
+    pub memory_penalties: usize,
+    pub stored_memory: bool,
+    pub stored_gist_memories: usize,
+    pub stored_runtime_kv_memories: usize,
+    pub reflection_issues: usize,
+    pub critical_reflection_issues: usize,
+    pub revision_actions: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct EvolutionLedger {
+    pub live_inference_runs: u64,
+    pub live_router_threshold_mutations: u64,
+    pub live_hierarchy_weight_mutations: u64,
+    pub live_router_threshold_delta: f32,
+    pub live_hierarchy_weight_delta: f32,
+    pub live_memory_reinforcements: u64,
+    pub live_memory_penalties: u64,
+    pub live_stored_memories: u64,
+    pub live_stored_gist_memories: u64,
+    pub live_stored_runtime_kv_memories: u64,
+    pub live_reflection_issues: u64,
+    pub live_critical_reflection_issues: u64,
+    pub live_revision_actions: u64,
     pub replay_runs: u64,
     pub replay_items: u64,
     pub router_threshold_mutations: u64,
@@ -41,6 +68,44 @@ pub struct EvolutionLedger {
 }
 
 impl EvolutionLedger {
+    pub fn record_live_inference(&mut self, report: LiveInferenceEvolution) {
+        self.live_inference_runs = self.live_inference_runs.saturating_add(1);
+        if report.router_threshold_delta > 0.000001 {
+            self.live_router_threshold_mutations =
+                self.live_router_threshold_mutations.saturating_add(1);
+            self.live_router_threshold_delta += report.router_threshold_delta;
+        }
+        if report.hierarchy_weight_delta > 0.000001 {
+            self.live_hierarchy_weight_mutations =
+                self.live_hierarchy_weight_mutations.saturating_add(1);
+            self.live_hierarchy_weight_delta += report.hierarchy_weight_delta;
+        }
+        self.live_memory_reinforcements = self
+            .live_memory_reinforcements
+            .saturating_add(report.memory_reinforcements as u64);
+        self.live_memory_penalties = self
+            .live_memory_penalties
+            .saturating_add(report.memory_penalties as u64);
+        self.live_stored_memories = self
+            .live_stored_memories
+            .saturating_add(u64::from(report.stored_memory));
+        self.live_stored_gist_memories = self
+            .live_stored_gist_memories
+            .saturating_add(report.stored_gist_memories as u64);
+        self.live_stored_runtime_kv_memories = self
+            .live_stored_runtime_kv_memories
+            .saturating_add(report.stored_runtime_kv_memories as u64);
+        self.live_reflection_issues = self
+            .live_reflection_issues
+            .saturating_add(report.reflection_issues as u64);
+        self.live_critical_reflection_issues = self
+            .live_critical_reflection_issues
+            .saturating_add(report.critical_reflection_issues as u64);
+        self.live_revision_actions = self
+            .live_revision_actions
+            .saturating_add(report.revision_actions as u64);
+    }
+
     pub fn record_replay(&mut self, report: &ExperienceReplayReport) {
         if report.applied == 0 {
             return;
@@ -84,6 +149,17 @@ impl EvolutionLedger {
             .saturating_add(self.memory_penalties)
     }
 
+    pub fn live_memory_updates(self) -> u64 {
+        self.live_memory_reinforcements
+            .saturating_add(self.live_memory_penalties)
+    }
+
+    pub fn live_stored_memory_updates(self) -> u64 {
+        self.live_stored_memories
+            .saturating_add(self.live_stored_gist_memories)
+            .saturating_add(self.live_stored_runtime_kv_memories)
+    }
+
     pub fn replay_live_memory_feedback_updates(self) -> u64 {
         self.replay_live_memory_feedback_reinforcements
             .saturating_add(self.replay_live_memory_feedback_penalties)
@@ -101,7 +177,17 @@ impl EvolutionLedger {
 
     pub fn summary_line(self) -> String {
         format!(
-            "evolution: replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} replay_live_memory_feedback_items={} replay_live_memory_feedback_updates={} replay_live_memory_feedback_reinforcements={} replay_live_memory_feedback_penalties={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
+            "evolution: live_inference_runs={} live_router_threshold_mutations={} live_hierarchy_weight_mutations={} live_router_threshold_delta={:.6} live_hierarchy_weight_delta={:.6} live_memory_updates={} live_stored_memory_updates={} live_reflection_issues={} live_critical_reflection_issues={} live_revision_actions={} replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} replay_live_memory_feedback_items={} replay_live_memory_feedback_updates={} replay_live_memory_feedback_reinforcements={} replay_live_memory_feedback_penalties={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
+            self.live_inference_runs,
+            self.live_router_threshold_mutations,
+            self.live_hierarchy_weight_mutations,
+            self.live_router_threshold_delta,
+            self.live_hierarchy_weight_delta,
+            self.live_memory_updates(),
+            self.live_stored_memory_updates(),
+            self.live_reflection_issues,
+            self.live_critical_reflection_issues,
+            self.live_revision_actions,
             self.replay_runs,
             self.replay_items,
             self.router_threshold_mutations,
@@ -404,7 +490,20 @@ fn parse_memory_compaction_policy(value: &str) -> Option<MemoryCompactionPolicy>
 
 fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
     format!(
-        "{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}",
+        "{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}",
+        ledger.live_inference_runs,
+        ledger.live_router_threshold_mutations,
+        ledger.live_hierarchy_weight_mutations,
+        ledger.live_router_threshold_delta,
+        ledger.live_hierarchy_weight_delta,
+        ledger.live_memory_reinforcements,
+        ledger.live_memory_penalties,
+        ledger.live_stored_memories,
+        ledger.live_stored_gist_memories,
+        ledger.live_stored_runtime_kv_memories,
+        ledger.live_reflection_issues,
+        ledger.live_critical_reflection_issues,
+        ledger.live_revision_actions,
         ledger.replay_runs,
         ledger.replay_items,
         ledger.router_threshold_mutations,
@@ -426,8 +525,42 @@ fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
 
 fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
     let fields = value.split('\t').collect::<Vec<_>>();
-    if fields.len() != 10 && fields.len() != 13 && fields.len() != 16 {
+    if fields.len() != 10 && fields.len() != 13 && fields.len() != 16 && fields.len() != 29 {
         return None;
+    }
+
+    if fields.len() == 29 {
+        return Some(EvolutionLedger {
+            live_inference_runs: fields[0].parse::<u64>().ok()?,
+            live_router_threshold_mutations: fields[1].parse::<u64>().ok()?,
+            live_hierarchy_weight_mutations: fields[2].parse::<u64>().ok()?,
+            live_router_threshold_delta: fields[3].parse::<f32>().ok()?.max(0.0),
+            live_hierarchy_weight_delta: fields[4].parse::<f32>().ok()?.max(0.0),
+            live_memory_reinforcements: fields[5].parse::<u64>().ok()?,
+            live_memory_penalties: fields[6].parse::<u64>().ok()?,
+            live_stored_memories: fields[7].parse::<u64>().ok()?,
+            live_stored_gist_memories: fields[8].parse::<u64>().ok()?,
+            live_stored_runtime_kv_memories: fields[9].parse::<u64>().ok()?,
+            live_reflection_issues: fields[10].parse::<u64>().ok()?,
+            live_critical_reflection_issues: fields[11].parse::<u64>().ok()?,
+            live_revision_actions: fields[12].parse::<u64>().ok()?,
+            replay_runs: fields[13].parse::<u64>().ok()?,
+            replay_items: fields[14].parse::<u64>().ok()?,
+            router_threshold_mutations: fields[15].parse::<u64>().ok()?,
+            hierarchy_weight_mutations: fields[16].parse::<u64>().ok()?,
+            router_threshold_delta: fields[17].parse::<f32>().ok()?.max(0.0),
+            hierarchy_weight_delta: fields[18].parse::<f32>().ok()?.max(0.0),
+            memory_reinforcements: fields[19].parse::<u64>().ok()?,
+            memory_penalties: fields[20].parse::<u64>().ok()?,
+            replay_live_memory_feedback_items: fields[21].parse::<u64>().ok()?,
+            replay_live_memory_feedback_reinforcements: fields[22].parse::<u64>().ok()?,
+            replay_live_memory_feedback_penalties: fields[23].parse::<u64>().ok()?,
+            recursive_replay_items: fields[24].parse::<u64>().ok()?,
+            recursive_runtime_calls: fields[25].parse::<u64>().ok()?,
+            drift_rollbacks: fields[26].parse::<u64>().ok()?,
+            rollback_router_threshold_delta: fields[27].parse::<f32>().ok()?.max(0.0),
+            rollback_hierarchy_weight_delta: fields[28].parse::<f32>().ok()?.max(0.0),
+        });
     }
 
     let (
@@ -449,6 +582,19 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
     let rollback_index = recursive_replay_index + 2;
 
     Some(EvolutionLedger {
+        live_inference_runs: 0,
+        live_router_threshold_mutations: 0,
+        live_hierarchy_weight_mutations: 0,
+        live_router_threshold_delta: 0.0,
+        live_hierarchy_weight_delta: 0.0,
+        live_memory_reinforcements: 0,
+        live_memory_penalties: 0,
+        live_stored_memories: 0,
+        live_stored_gist_memories: 0,
+        live_stored_runtime_kv_memories: 0,
+        live_reflection_issues: 0,
+        live_critical_reflection_issues: 0,
+        live_revision_actions: 0,
         replay_runs: fields[0].parse::<u64>().ok()?,
         replay_items: fields[1].parse::<u64>().ok()?,
         router_threshold_mutations: fields[2].parse::<u64>().ok()?,
@@ -586,6 +732,19 @@ mod tests {
                 max_merges: 4,
             },
             evolution_ledger: EvolutionLedger {
+                live_inference_runs: 11,
+                live_router_threshold_mutations: 8,
+                live_hierarchy_weight_mutations: 6,
+                live_router_threshold_delta: 0.19,
+                live_hierarchy_weight_delta: 0.13,
+                live_memory_reinforcements: 9,
+                live_memory_penalties: 4,
+                live_stored_memories: 3,
+                live_stored_gist_memories: 5,
+                live_stored_runtime_kv_memories: 2,
+                live_reflection_issues: 7,
+                live_critical_reflection_issues: 1,
+                live_revision_actions: 10,
                 replay_runs: 3,
                 replay_items: 9,
                 router_threshold_mutations: 5,
@@ -626,6 +785,16 @@ mod tests {
         assert_eq!(loaded.memory_compaction_policy.max_candidates, 64);
         assert_eq!(loaded.memory_compaction_policy.max_merges, 4);
         assert_eq!(loaded.evolution_ledger.replay_runs, 3);
+        assert_eq!(loaded.evolution_ledger.live_inference_runs, 11);
+        assert_eq!(loaded.evolution_ledger.live_router_threshold_mutations, 8);
+        assert_eq!(loaded.evolution_ledger.live_hierarchy_weight_mutations, 6);
+        assert!((loaded.evolution_ledger.live_router_threshold_delta - 0.19).abs() < 0.0001);
+        assert!((loaded.evolution_ledger.live_hierarchy_weight_delta - 0.13).abs() < 0.0001);
+        assert_eq!(loaded.evolution_ledger.live_memory_updates(), 13);
+        assert_eq!(loaded.evolution_ledger.live_stored_memory_updates(), 10);
+        assert_eq!(loaded.evolution_ledger.live_reflection_issues, 7);
+        assert_eq!(loaded.evolution_ledger.live_critical_reflection_issues, 1);
+        assert_eq!(loaded.evolution_ledger.live_revision_actions, 10);
         assert_eq!(loaded.evolution_ledger.replay_items, 9);
         assert_eq!(loaded.evolution_ledger.router_threshold_mutations, 5);
         assert_eq!(loaded.evolution_ledger.hierarchy_weight_mutations, 7);
