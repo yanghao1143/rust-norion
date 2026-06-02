@@ -189,6 +189,7 @@ pub struct RuntimeRequest {
     pub transformer_plan: TransformerRefactorPlan,
     pub recursive_schedule: RecursiveSchedule,
     pub hardware_plan: HardwarePlan,
+    pub imported_kv_blocks: Vec<RuntimeKvBlock>,
     pub max_tokens: usize,
 }
 
@@ -264,8 +265,14 @@ impl RuntimeRequest {
             transformer_plan: context.transformer_plan.clone(),
             recursive_schedule: context.recursive_schedule.clone(),
             hardware_plan: context.hardware_plan.clone(),
+            imported_kv_blocks: Vec::new(),
             max_tokens,
         }
+    }
+
+    pub fn with_imported_kv_blocks(mut self, blocks: Vec<RuntimeKvBlock>) -> Self {
+        self.imported_kv_blocks = blocks;
+        self
     }
 }
 
@@ -526,6 +533,7 @@ pub struct CommandRuntime {
     wire_format: CommandWireFormat,
     metadata: RuntimeMetadata,
     architecture: Option<TransformerRuntimeArchitecture>,
+    imported_kv_blocks: Vec<RuntimeKvBlock>,
     exported_kv_blocks: Vec<RuntimeKvBlock>,
 }
 
@@ -538,6 +546,7 @@ impl CommandRuntime {
             wire_format: CommandWireFormat::Text,
             metadata: RuntimeMetadata::default(),
             architecture: None,
+            imported_kv_blocks: Vec::new(),
             exported_kv_blocks: Vec::new(),
         }
     }
@@ -615,6 +624,10 @@ impl CommandRuntime {
                         &request.agent_team_plan.message_summaries(8).join("\n"),
                     )
                     .replace(
+                        "{imported_kv_blocks}",
+                        &runtime_kv_blocks_summary(&request.imported_kv_blocks),
+                    )
+                    .replace(
                         "{runtime_adapter_observations}",
                         &request
                             .runtime_adapter_observations
@@ -655,12 +668,23 @@ impl ModelRuntime for CommandRuntime {
         })
     }
 
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        self.imported_kv_blocks.clear();
+        self.imported_kv_blocks.extend(blocks.iter().cloned());
+        Ok(self.imported_kv_blocks.len())
+    }
+
     fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
         Ok(self.exported_kv_blocks.clone())
     }
 
-    fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+    fn generate(&mut self, mut request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         self.exported_kv_blocks.clear();
+        if request.imported_kv_blocks.is_empty() && !self.imported_kv_blocks.is_empty() {
+            request.imported_kv_blocks = std::mem::take(&mut self.imported_kv_blocks);
+        } else {
+            self.imported_kv_blocks.clear();
+        }
         let payload = format_runtime_payload(&request, self.wire_format);
         let mut command = Command::new(&self.program);
         command.args(self.expanded_args(&request, &payload));
@@ -740,6 +764,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
          tool_blueprints:\n{}\n\
          agent_team: {}\n\
          agent_team_messages:\n{}\n\
+         imported_kv_blocks:\n{}\n\
          runtime_adapter_observations:\n{}\n\
          prompt:\n{}",
         request.runtime_metadata.summary(),
@@ -767,6 +792,7 @@ fn format_runtime_prompt(request: &RuntimeRequest) -> String {
         bullet_tool_blueprints(&request.toolsmith_plan.blueprints),
         request.agent_team_plan.summary(),
         bullet_list(&request.agent_team_plan.message_summaries(8)),
+        bullet_runtime_kv_blocks(&request.imported_kv_blocks),
         bullet_runtime_adapter_observations(&request.runtime_adapter_observations),
         request.prompt
     )
@@ -853,6 +879,12 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
     let agent_team_messages = request.agent_team_plan.message_summaries(16);
     let agent_team_conflicts = request.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = request.agent_team_plan.evolution_summaries(8);
+    let imported_kv_blocks = request
+        .imported_kv_blocks
+        .iter()
+        .map(runtime_kv_block_json)
+        .collect::<Vec<_>>()
+        .join(",");
 
     format!(
         "{{\
@@ -933,6 +965,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"memory_hints\":{},\
          \"infini_memory_hints\":{},\
          \"experience_hints\":{},\
+         \"imported_kv_blocks\":[{}],\
          \"toolsmith\":{{\
          \"rust_only\":{},\
          \"exploration_required\":{},\
@@ -1030,6 +1063,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         json_str_array(request.memory_hints.iter().map(String::as_str)),
         json_str_array(request.infini_memory_hints.iter().map(String::as_str)),
         json_str_array(request.experience_hints.iter().map(String::as_str)),
+        imported_kv_blocks,
         request.toolsmith_plan.rust_only,
         request.toolsmith_plan.exploration_required,
         request.toolsmith_plan.blueprint_count(),
@@ -1256,6 +1290,28 @@ fn runtime_adapter_observation_json(observation: &RuntimeAdapterObservation) -> 
         option_f32_json(observation.kv_influence),
         observation.experience_id
     )
+}
+
+fn runtime_kv_block_json(block: &RuntimeKvBlock) -> String {
+    format!(
+        "{{\"layer\":{},\"head\":{},\"token_start\":{},\"token_end\":{},\"key\":{},\"value\":{}}}",
+        block.layer,
+        block.head,
+        block.token_start,
+        block.token_end,
+        json_f32_array(&block.key),
+        json_f32_array(&block.value)
+    )
+}
+
+fn json_f32_array(values: &[f32]) -> String {
+    let values = values
+        .iter()
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{value:.6}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
 }
 
 fn tool_blueprint_json(blueprint: &ToolBlueprint) -> String {
@@ -1571,6 +1627,43 @@ fn bullet_runtime_adapter_observations(items: &[RuntimeAdapterObservation]) -> S
         .join("\n")
 }
 
+fn bullet_runtime_kv_blocks(items: &[RuntimeKvBlock]) -> String {
+    if items.is_empty() {
+        return "- none".to_owned();
+    }
+
+    items
+        .iter()
+        .map(runtime_kv_block_summary)
+        .map(|item| format!("- {item}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn runtime_kv_blocks_summary(items: &[RuntimeKvBlock]) -> String {
+    if items.is_empty() {
+        return "none".to_owned();
+    }
+
+    items
+        .iter()
+        .map(runtime_kv_block_summary)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn runtime_kv_block_summary(block: &RuntimeKvBlock) -> String {
+    format!(
+        "layer={} head={} tokens={}..{} key_dims={} value_dims={}",
+        block.layer,
+        block.head,
+        block.token_start,
+        block.token_end,
+        block.key.len(),
+        block.value.len()
+    )
+}
+
 fn bullet_tool_blueprints(items: &[ToolBlueprint]) -> String {
     if items.is_empty() {
         return "- none".to_owned();
@@ -1731,7 +1824,8 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
             self.max_tokens,
             runtime_metadata.clone(),
             runtime_architecture,
-        );
+        )
+        .with_imported_kv_blocks(import_blocks);
 
         match self.runtime.generate(request) {
             Ok(response) => {
@@ -3156,6 +3250,8 @@ mod tests {
             .arg("{runtime_architecture}")
             .arg("--device-contract")
             .arg("{runtime_device_contract}")
+            .arg("--imported")
+            .arg("{imported_kv_blocks}")
             .prompt_mode(CommandPromptMode::Args);
         let request = sample_request();
         let prompt = format_runtime_prompt(&request);
@@ -3176,6 +3272,8 @@ mod tests {
         assert!(prompt.contains("recursive:"));
         assert!(prompt.contains("hardware:"));
         assert!(prompt.contains("runtime_device_contract:"));
+        assert!(prompt.contains("imported_kv_blocks:"));
+        assert!(prompt.contains("layer=1 head=0 tokens=0..1 key_dims=2 value_dims=2"));
         assert!(prompt.contains("primary=cpu-vector"));
         assert!(prompt.contains("fallback=cpu-portable"));
         assert!(prompt.contains("kv_prefetch="));
@@ -3187,6 +3285,7 @@ mod tests {
         assert!(args[9].contains("primary=cpu-vector"));
         assert!(args[9].contains("adapters="));
         assert!(args[9].contains("portable-rust"));
+        assert!(args[11].contains("layer=1 head=0"));
     }
 
     #[test]
@@ -3259,6 +3358,9 @@ mod tests {
         assert!(payload.contains("\"max_parallel_chunks\""));
         assert!(payload.contains("\"template\":\"none\""));
         assert!(payload.contains("\"memory_hints\":[\"memory hint\"]"));
+        assert!(payload.contains("\"imported_kv_blocks\":["));
+        assert!(payload.contains("\"layer\":1"));
+        assert!(payload.contains("\"key\":[0.100000,0.200000]"));
         assert_eq!(extract_json_array_field(&payload, "layers").unwrap(), "[]");
         assert!(payload.contains("\"runtime_adapter_observations\":["));
         assert!(payload.contains("\"adapter\":\"cpu-simd\""));
@@ -3382,6 +3484,21 @@ mod tests {
         assert_eq!(exported[0].value, vec![0.2]);
     }
 
+    #[test]
+    fn command_runtime_json_stdin_receives_imported_kv_blocks() {
+        let (program, args) = json_stdin_import_probe_command();
+        let mut runtime = CommandRuntime::new(program)
+            .args(args)
+            .wire_format(CommandWireFormat::Json)
+            .prompt_mode(CommandPromptMode::Stdin);
+
+        let response = runtime.generate(sample_request()).unwrap();
+
+        assert_eq!(response.answer, "imported kv visible");
+        assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+        assert_eq!(runtime.export_kv().unwrap().len(), 1);
+    }
+
     #[cfg(windows)]
     fn json_echo_command(payload: &str) -> (String, Vec<String>) {
         let escaped = payload.replace('\'', "''");
@@ -3403,6 +3520,40 @@ mod tests {
             "sh".to_owned(),
             vec!["-c".to_owned(), format!("printf '%s' '{escaped}'")],
         )
+    }
+
+    #[cfg(windows)]
+    fn json_stdin_import_probe_command() -> (String, Vec<String>) {
+        let response = imported_kv_probe_response().replace('\'', "''");
+        (
+            "powershell.exe".to_owned(),
+            vec![
+                "-NoProfile".to_owned(),
+                "-NonInteractive".to_owned(),
+                "-Command".to_owned(),
+                format!(
+                    "$payload = [Console]::In.ReadToEnd(); if (-not $payload.Contains('\"imported_kv_blocks\":[') -or -not $payload.Contains('\"layer\":1')) {{ exit 7 }}; Write-Output '{response}'"
+                ),
+            ],
+        )
+    }
+
+    #[cfg(not(windows))]
+    fn json_stdin_import_probe_command() -> (String, Vec<String>) {
+        let response = imported_kv_probe_response().replace('\'', "'\\''");
+        (
+            "sh".to_owned(),
+            vec![
+                "-c".to_owned(),
+                format!(
+                    "payload=$(cat); case \"$payload\" in *'\"imported_kv_blocks\":['*'\"layer\":1'*) printf '%s' '{response}' ;; *) exit 7 ;; esac"
+                ),
+            ],
+        )
+    }
+
+    fn imported_kv_probe_response() -> &'static str {
+        "{\"schema\":\"rust-norion-runtime-response-v1\",\"answer\":\"imported kv visible\",\"tokens\":[{\"text\":\"imported\",\"entropy\":0.2}],\"trace\":[{\"label\":\"import_probe\",\"content\":\"saw imported KV blocks in JSON request\",\"confidence\":0.93}],\"exported_kv_blocks\":[{\"layer\":0,\"head\":0,\"token_start\":0,\"token_end\":1,\"key\":[0.5],\"value\":[0.6]}],\"diagnostics\":{\"model_id\":\"sample-transformer\",\"selected_adapter\":\"portable-rust\",\"global_layers\":1,\"local_window_layers\":1,\"convolutional_fusion_layers\":1,\"forward_energy\":0.4,\"kv_influence\":0.2,\"imported_kv_blocks\":1}}"
     }
 
     fn sample_request() -> RuntimeRequest {
@@ -3441,6 +3592,14 @@ mod tests {
             transformer_plan: TransformerRefactorPlan::default(),
             recursive_schedule: RecursiveSchedule::default(),
             hardware_plan: HardwarePlan::default(),
+            imported_kv_blocks: vec![RuntimeKvBlock::new(
+                1,
+                0,
+                0,
+                1,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )],
             max_tokens: 64,
         }
     }

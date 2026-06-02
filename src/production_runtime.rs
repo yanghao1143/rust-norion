@@ -546,6 +546,7 @@ where
         let mut request = context.request.clone();
         request.runtime_metadata = context.manifest.runtime_metadata();
         request.runtime_architecture = context.manifest.architecture;
+        request.imported_kv_blocks = context.imported_kv_blocks.to_vec();
 
         let response = runtime.generate(request)?;
         let exported_kv_blocks = runtime.export_kv()?;
@@ -1219,6 +1220,7 @@ fn conformance_request(
         transformer_plan: TransformerRefactorPlan::default(),
         recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
         hardware_plan,
+        imported_kv_blocks: Vec::new(),
         max_tokens: 32,
     }
 }
@@ -2597,6 +2599,7 @@ mod tests {
             transformer_plan: crate::transformer::TransformerRefactorPlan::default(),
             recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
             hardware_plan: cpu_plan(),
+            imported_kv_blocks: Vec::new(),
             max_tokens: 32,
         }
     }

@@ -7039,15 +7039,15 @@ mod tests {
         let tokenizer = asset_dir.join("tokenizer.noiron");
         File::create(&weights).unwrap();
         File::create(&tokenizer).unwrap();
-        let (program, runtime_args) = command_runtime_json_echo_args(
-            "{\"schema\":\"rust-norion-runtime-response-v1\",\"answer\":\"command runtime production answer\",\"tokens\":[{\"text\":\"command\",\"logprob\":-0.1,\"entropy\":0.2}],\"trace\":[{\"label\":\"command_kernel\",\"content\":\"external self-developed runtime executed through production ABI\",\"confidence\":0.92}],\"exported_kv_blocks\":[{\"layer\":1,\"head\":0,\"token_start\":0,\"token_end\":1,\"key\":[0.1,0.2],\"value\":[0.3,0.4]}],\"diagnostics\":{\"model_id\":\"self-owned-transformer\",\"selected_adapter\":\"portable-rust\",\"global_layers\":2,\"local_window_layers\":3,\"convolutional_fusion_layers\":1,\"forward_energy\":0.42,\"kv_influence\":0.25,\"hot_kv_precision_bits\":8,\"cold_kv_precision_bits\":4}}",
-        );
+        let (program, runtime_args) = command_runtime_json_import_probe_args();
         let mut raw = vec![
             "--production-runtime".to_owned(),
             "--production-kernel-conformance-gate".to_owned(),
             "--runtime-command".to_owned(),
             program,
             "--runtime-json".to_owned(),
+            "--runtime-prompt-mode".to_owned(),
+            "stdin".to_owned(),
             "--runtime-model-id".to_owned(),
             "self-owned-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
@@ -8643,26 +8643,37 @@ mod tests {
     }
 
     #[cfg(windows)]
-    fn command_runtime_json_echo_args(payload: &str) -> (String, Vec<String>) {
-        let escaped = payload.replace('\'', "''");
+    fn command_runtime_json_import_probe_args() -> (String, Vec<String>) {
+        let escaped = command_runtime_json_import_probe_response().replace('\'', "''");
         (
             "powershell.exe".to_owned(),
             vec![
                 "-NoProfile".to_owned(),
                 "-NonInteractive".to_owned(),
                 "-Command".to_owned(),
-                format!("Write-Output '{escaped}'"),
+                format!(
+                    "$payload = [Console]::In.ReadToEnd(); if (-not $payload.Contains('\"imported_kv_blocks\":[') -or -not $payload.Contains('\"layer\":0')) {{ exit 7 }}; Write-Output '{escaped}'"
+                ),
             ],
         )
     }
 
     #[cfg(not(windows))]
-    fn command_runtime_json_echo_args(payload: &str) -> (String, Vec<String>) {
-        let escaped = payload.replace('\'', "'\\''");
+    fn command_runtime_json_import_probe_args() -> (String, Vec<String>) {
+        let escaped = command_runtime_json_import_probe_response().replace('\'', "'\\''");
         (
             "sh".to_owned(),
-            vec!["-c".to_owned(), format!("printf '%s' '{escaped}'")],
+            vec![
+                "-c".to_owned(),
+                format!(
+                    "payload=$(cat); case \"$payload\" in *'\"imported_kv_blocks\":['*'\"layer\":0'*) printf '%s' '{escaped}' ;; *) exit 7 ;; esac"
+                ),
+            ],
         )
+    }
+
+    fn command_runtime_json_import_probe_response() -> &'static str {
+        "{\"schema\":\"rust-norion-runtime-response-v1\",\"answer\":\"command runtime production answer\",\"tokens\":[{\"text\":\"command\",\"logprob\":-0.1,\"entropy\":0.2}],\"trace\":[{\"label\":\"command_kernel\",\"content\":\"external self-developed runtime received imported KV through production ABI\",\"confidence\":0.92}],\"exported_kv_blocks\":[{\"layer\":1,\"head\":0,\"token_start\":0,\"token_end\":1,\"key\":[0.1,0.2],\"value\":[0.3,0.4]}],\"diagnostics\":{\"model_id\":\"self-owned-transformer\",\"selected_adapter\":\"portable-rust\",\"global_layers\":2,\"local_window_layers\":3,\"convolutional_fusion_layers\":1,\"forward_energy\":0.42,\"kv_influence\":0.25,\"hot_kv_precision_bits\":8,\"cold_kv_precision_bits\":4,\"imported_kv_blocks\":1}}"
     }
 
     fn assert_trace_selected_adapter_allowed(line: &str, allowed: &[&str]) {

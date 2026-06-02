@@ -752,6 +752,7 @@ mod tests {
             ),
             recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
             hardware_plan: crate::hardware::HardwarePlan::default(),
+            imported_kv_blocks: Vec::new(),
             max_tokens: 64,
         };
         let response = runtime.generate(request).unwrap();
@@ -806,6 +807,7 @@ mod tests {
             ),
             recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
             hardware_plan: crate::hardware::HardwarePlan::default(),
+            imported_kv_blocks: Vec::new(),
             max_tokens: 64,
         };
 
@@ -870,6 +872,7 @@ mod tests {
             ),
             recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
             hardware_plan,
+            imported_kv_blocks: Vec::new(),
             max_tokens: 64,
         };
 
@@ -913,6 +916,7 @@ mod tests {
             ),
             recursive_schedule: crate::recursive_scheduler::RecursiveSchedule::default(),
             hardware_plan: crate::hardware::HardwarePlan::default(),
+            imported_kv_blocks: Vec::new(),
             max_tokens: 64,
         };
         let tokens = local_tokenize(&request.prompt)

@@ -165,7 +165,7 @@ Implemented modules:
 - `src/transformer.rs`: Rust-native Transformer layer refactor planner with explicit general, coding, writing, and long-context templates
 - `src/hierarchy.rs`: task-profile hierarchy controller with profile-specific learned weights
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
-- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Infini/SpeContext-filtered KV import candidates, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
+- `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Infini/SpeContext-filtered KV import candidates, imported KV request delivery for command runtimes, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
 - `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, deterministic reference/local kernel harnesses, and single-device plus all-device conformance gates for ABI validation
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, persisted live memory-feedback evidence, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters including live inference runs, live router/hierarchy mutations, live KV/store/reflection updates, replay live-feedback consumption, and router-threshold/hierarchy-weight deltas
@@ -1256,13 +1256,17 @@ templates. They also receive the device execution contract through
 `{runtime_device_contract}` so an external self-developed runtime can select
 CUDA, ROCm, Metal, WGPU, WebGPU, DirectML, CoreML, NNAPI, QNN, OpenVINO, CANN,
 MLU, RKNN, portable Rust, or custom adapters without a vendor-specific control
-path.
+path. Imported KV blocks are delivered through the `imported_kv_blocks` JSON
+array, the text payload's `imported_kv_blocks` section, and the
+`{imported_kv_blocks}` argument template. In production mode, an external
+command runtime receives the same manifest-validated imported KV blocks that a
+Rust `ProductionForwardKernel` receives.
 
 CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-window`、`--runtime-embedding-dims`、`--runtime-kv-import`、`--runtime-kv-export` 和 `--runtime-kv-exchange` 暴露这些元数据。
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
 `--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界；如果同时使用 `--runtime-command ... --runtime-json`，外部自研可执行文件会被 `ModelRuntimeForwardKernel` 包装到 production kernel slot 后面，并接受同一条 production conformance 门禁。`--production-reference-kernel` 会同时启用这条边界并挂载内置 reference kernel，用于本地验证生产 ABI。
 同一组显式架构参数也会配置内置 local runtime prototype。
-runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。
+runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。导入 KV blocks 会同时出现在 JSON 根字段 `imported_kv_blocks`、文本 payload 的 `imported_kv_blocks` 区段以及 `{imported_kv_blocks}` 参数模板中；生产模式下，外部命令 runtime 收到的是同一批已经通过 manifest 校验的导入 KV blocks，和 Rust `ProductionForwardKernel` 走同一份 ABI。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
 vectors as runtime KV blocks before generation. After generation, exported KV
