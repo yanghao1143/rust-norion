@@ -223,6 +223,16 @@ influence, and KV import/export counts, so runtime embedding-space changes or
 fallback/runtime mixing can be audited before another inference writes more
 durable state.
 
+Turn the same inspection into a local/CI gate by requiring persisted evidence:
+
+```powershell
+cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
+```
+
+Any `--inspect-min-*` threshold implies `--inspect-state --inspect-gate` and
+exits with code `2` when persisted runtime KV, experience, router observations,
+or self-evolution ledger counters are missing.
+
 查看本地持久化状态，但不执行推理：
 
 ```powershell
@@ -234,6 +244,16 @@ cargo run -- --inspect-state --inspect-limit 5
 runtime KV 长期记忆。高价值 experience 行也会展示已持久化的 runtime model id、
 adapter、forward energy、KV influence 和 KV 导入 / 导出计数，便于在继续写入长期
 状态前检查自研 runtime embedding 空间变化或 fallback/runtime 混用。
+
+同一条检查路径也可以作为本地 / CI 门禁：
+
+```powershell
+cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
+```
+
+任意 `--inspect-min-*` 阈值都会隐式开启 `--inspect-state --inspect-gate`；如果
+持久化 runtime KV、experience、router observation 或自进化 ledger 证据不足，
+进程会用退出码 `2` 失败。
 
 Write one structured JSONL trace record for benchmark comparison:
 

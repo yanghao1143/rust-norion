@@ -15,9 +15,9 @@ use rust_norion::{
     RecursiveScheduler, ReferenceProductionForwardKernel, RewardAction, RouteBudget,
     RuntimeAssetPaths, RuntimeBackend, RuntimeDiagnostics, RuntimeError, RuntimeManifest,
     RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
-    StateInspectionReport, TaskProfile, TierMigrationAction, TraceSchemaGateReport,
-    TransformerRuntimeArchitecture, append_trace_jsonl, append_trace_jsonl_with_case,
-    default_benchmark_cases, evaluate_trace_schema_jsonl,
+    StateInspectionGate, StateInspectionGateReport, StateInspectionReport, TaskProfile,
+    TierMigrationAction, TraceSchemaGateReport, TransformerRuntimeArchitecture, append_trace_jsonl,
+    append_trace_jsonl_with_case, default_benchmark_cases, evaluate_trace_schema_jsonl,
 };
 
 fn main() -> std::io::Result<()> {
@@ -102,6 +102,13 @@ fn main() -> std::io::Result<()> {
         configure_engine(&mut engine, &args);
         let report = StateInspectionReport::from_engine(&engine, args.inspect_limit);
         print_state_inspection_report(&args, &report);
+        if args.inspect_gate {
+            let gate_report = report.evaluate(&args.state_inspection_gate());
+            print_state_inspection_gate_report(&gate_report);
+            if !gate_report.passed() {
+                std::process::exit(2);
+            }
+        }
         return Ok(());
     }
 
@@ -1172,6 +1179,13 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
     }
 }
 
+fn print_state_inspection_gate_report(report: &StateInspectionGateReport) {
+    println!("{}", report.summary_line());
+    for failure in &report.failures {
+        println!("state_inspection_gate_failure: {failure}");
+    }
+}
+
 fn option_text(value: Option<&str>) -> &str {
     value.filter(|item| !item.is_empty()).unwrap_or("none")
 }
@@ -1598,6 +1612,19 @@ struct Args {
     runtime_local_window_tokens: Option<usize>,
     inspect_state: bool,
     inspect_limit: usize,
+    inspect_gate: bool,
+    inspect_min_memories: Option<usize>,
+    inspect_min_runtime_kv_memories: Option<usize>,
+    inspect_min_experiences: Option<usize>,
+    inspect_min_router_observations: Option<u64>,
+    inspect_min_evolution_replay_runs: Option<u64>,
+    inspect_min_evolution_replay_items: Option<u64>,
+    inspect_min_evolution_router_threshold_mutations: Option<u64>,
+    inspect_min_evolution_hierarchy_weight_mutations: Option<u64>,
+    inspect_min_evolution_memory_updates: Option<u64>,
+    inspect_min_evolution_recursive_runtime_calls: Option<u64>,
+    inspect_max_evolution_drift_rollbacks: Option<u64>,
+    inspect_require_runtime_kv_dimensions: bool,
     local_runtime: bool,
     production_runtime: bool,
     production_reference_kernel: bool,
@@ -1714,6 +1741,19 @@ impl Args {
         let mut runtime_local_window_tokens = None;
         let mut inspect_state = false;
         let mut inspect_limit = 5;
+        let mut inspect_gate = false;
+        let mut inspect_min_memories = None;
+        let mut inspect_min_runtime_kv_memories = None;
+        let mut inspect_min_experiences = None;
+        let mut inspect_min_router_observations = None;
+        let mut inspect_min_evolution_replay_runs = None;
+        let mut inspect_min_evolution_replay_items = None;
+        let mut inspect_min_evolution_router_threshold_mutations = None;
+        let mut inspect_min_evolution_hierarchy_weight_mutations = None;
+        let mut inspect_min_evolution_memory_updates = None;
+        let mut inspect_min_evolution_recursive_runtime_calls = None;
+        let mut inspect_max_evolution_drift_rollbacks = None;
+        let mut inspect_require_runtime_kv_dimensions = false;
         let mut local_runtime = false;
         let mut production_runtime = false;
         let mut production_reference_kernel = false;
@@ -2128,10 +2168,91 @@ impl Args {
                     inspect_state = true;
                     index += 1;
                 }
+                "--inspect-gate" => {
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 1;
+                }
                 "--inspect-limit" if index + 1 < raw.len() => {
                     inspect_limit = parse_usize(&raw[index + 1], inspect_limit).max(1);
                     inspect_state = true;
                     index += 2;
+                }
+                "--inspect-min-memories" if index + 1 < raw.len() => {
+                    inspect_min_memories = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-kv-memories" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_memories = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-experiences" if index + 1 < raw.len() => {
+                    inspect_min_experiences = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-router-observations" if index + 1 < raw.len() => {
+                    inspect_min_router_observations = Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-runs" if index + 1 < raw.len() => {
+                    inspect_min_evolution_replay_runs = Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-items" if index + 1 < raw.len() => {
+                    inspect_min_evolution_replay_items = Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-router-threshold-mutations" if index + 1 < raw.len() => {
+                    inspect_min_evolution_router_threshold_mutations =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-hierarchy-weight-mutations" if index + 1 < raw.len() => {
+                    inspect_min_evolution_hierarchy_weight_mutations =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-memory-updates" if index + 1 < raw.len() => {
+                    inspect_min_evolution_memory_updates = Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-recursive-runtime-calls" if index + 1 < raw.len() => {
+                    inspect_min_evolution_recursive_runtime_calls =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-max-evolution-drift-rollbacks" if index + 1 < raw.len() => {
+                    inspect_max_evolution_drift_rollbacks =
+                        Some(parse_u64(&raw[index + 1], u64::MAX));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-require-runtime-kv-dimensions" => {
+                    inspect_require_runtime_kv_dimensions = true;
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 1;
                 }
                 "--local-runtime" => {
                     local_runtime = true;
@@ -2410,6 +2531,19 @@ impl Args {
             runtime_local_window_tokens,
             inspect_state,
             inspect_limit,
+            inspect_gate,
+            inspect_min_memories,
+            inspect_min_runtime_kv_memories,
+            inspect_min_experiences,
+            inspect_min_router_observations,
+            inspect_min_evolution_replay_runs,
+            inspect_min_evolution_replay_items,
+            inspect_min_evolution_router_threshold_mutations,
+            inspect_min_evolution_hierarchy_weight_mutations,
+            inspect_min_evolution_memory_updates,
+            inspect_min_evolution_recursive_runtime_calls,
+            inspect_max_evolution_drift_rollbacks,
+            inspect_require_runtime_kv_dimensions,
             local_runtime,
             production_runtime,
             production_reference_kernel,
@@ -2592,6 +2726,26 @@ impl Args {
         gate
     }
 
+    fn state_inspection_gate(&self) -> StateInspectionGate {
+        StateInspectionGate {
+            min_memories: self.inspect_min_memories,
+            min_runtime_kv_memories: self.inspect_min_runtime_kv_memories,
+            min_experiences: self.inspect_min_experiences,
+            min_router_observations: self.inspect_min_router_observations,
+            min_evolution_replay_runs: self.inspect_min_evolution_replay_runs,
+            min_evolution_replay_items: self.inspect_min_evolution_replay_items,
+            min_evolution_router_threshold_mutations: self
+                .inspect_min_evolution_router_threshold_mutations,
+            min_evolution_hierarchy_weight_mutations: self
+                .inspect_min_evolution_hierarchy_weight_mutations,
+            min_evolution_memory_updates: self.inspect_min_evolution_memory_updates,
+            min_evolution_recursive_runtime_calls: self
+                .inspect_min_evolution_recursive_runtime_calls,
+            max_evolution_drift_rollbacks: self.inspect_max_evolution_drift_rollbacks,
+            require_runtime_kv_dimensions: self.inspect_require_runtime_kv_dimensions,
+        }
+    }
+
     fn runtime_manifest(&self) -> RuntimeManifest {
         let mut assets = RuntimeAssetPaths::new();
         if let Some(path) = &self.runtime_weights_path {
@@ -2756,7 +2910,7 @@ fn detect_profile(prompt: &str) -> TaskProfile {
 }
 
 fn print_help_and_exit() -> ! {
-    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-evolution-replay-runs n] [--benchmark-min-evolution-replay-items n] [--benchmark-min-evolution-router-threshold-mutations n] [--benchmark-min-evolution-hierarchy-weight-mutations n] [--benchmark-min-evolution-router-threshold-delta f] [--benchmark-min-evolution-hierarchy-weight-delta f] [--benchmark-min-evolution-memory-updates n] [--benchmark-min-evolution-recursive-replay-items n] [--benchmark-min-evolution-recursive-runtime-calls n] [--benchmark-max-evolution-drift-rollbacks n] [--benchmark-max-evolution-rollback-router-threshold-delta f] [--benchmark-max-evolution-rollback-hierarchy-weight-delta f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-kv-stored n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-min-runtime-adapter-kinds n] [--benchmark-min-runtime-adapter-observations n] [--benchmark-min-runtime-adapter-best-score f] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
+    let usage = "Usage: rust-norion [--profile coding|writing|long|general] [--memory path] [--experience path] [--adaptive path] [--trace path] [--trace-schema-gate path] [--benchmark path] [--benchmark-gate] [--benchmark-all-devices] [--benchmark-roundtrip] [--benchmark-min-quality f] [--benchmark-min-reward f] [--benchmark-max-total-ms n] [--benchmark-max-recursive-chunks n] [--benchmark-min-recursive-cases n] [--benchmark-min-recursive-runtime-calls n] [--benchmark-min-auto-replay-router-updates n] [--benchmark-min-auto-replay-hierarchy-updates n] [--benchmark-min-auto-replay-router-threshold-mutations n] [--benchmark-min-auto-replay-hierarchy-weight-mutations n] [--benchmark-min-auto-replay-router-threshold-delta f] [--benchmark-min-auto-replay-hierarchy-weight-delta f] [--benchmark-min-auto-replay-memory-updates n] [--benchmark-min-auto-replay-recursive-items n] [--benchmark-min-auto-replay-recursive-call-pressure f] [--benchmark-max-auto-replay-recursive-call-pressure f] [--benchmark-min-evolution-replay-runs n] [--benchmark-min-evolution-replay-items n] [--benchmark-min-evolution-router-threshold-mutations n] [--benchmark-min-evolution-hierarchy-weight-mutations n] [--benchmark-min-evolution-router-threshold-delta f] [--benchmark-min-evolution-hierarchy-weight-delta f] [--benchmark-min-evolution-memory-updates n] [--benchmark-min-evolution-recursive-replay-items n] [--benchmark-min-evolution-recursive-runtime-calls n] [--benchmark-max-evolution-drift-rollbacks n] [--benchmark-max-evolution-rollback-router-threshold-delta f] [--benchmark-max-evolution-rollback-hierarchy-weight-delta f] [--benchmark-min-sparse-skipped-cases n] [--benchmark-min-sparse-skipped-tokens n] [--benchmark-min-runtime-forward-cases n] [--benchmark-min-runtime-forward-energy-cases n] [--benchmark-min-runtime-kv-influence-cases n] [--benchmark-min-runtime-uncertainty-cases n] [--benchmark-min-runtime-uncertainty-tokens n] [--benchmark-min-runtime-kv-import-cases n] [--benchmark-min-runtime-kv-imported n] [--benchmark-min-runtime-kv-exported n] [--benchmark-min-runtime-kv-stored n] [--benchmark-min-runtime-adapter-contract-cases n] [--benchmark-min-runtime-adapter-kinds n] [--benchmark-min-runtime-adapter-observations n] [--benchmark-min-runtime-adapter-best-score f] [--benchmark-max-runtime-adapter-contract-violations n] [--benchmark-min-device-profiles n] [--benchmark-min-recursive-device-profiles n] [--benchmark-max-drift-blocks n] [--benchmark-max-drift-rollbacks n] [--list-devices] [--device-gate] [--kv-quant-gate] [--kv-quant-max-total-us n] [--runtime-manifest-gate] [--runtime-manifest-all-devices-gate] [--runtime-weights path] [--runtime-tokenizer-path path] [--runtime-config path] [--runtime-layers n] [--runtime-hidden-size n] [--runtime-attention-heads n] [--runtime-kv-heads n] [--runtime-local-window n] [--inspect-state] [--inspect-limit n] [--inspect-gate] [--inspect-min-memories n] [--inspect-min-runtime-kv-memories n] [--inspect-min-experiences n] [--inspect-min-router-observations n] [--inspect-min-evolution-memory-updates n] [--inspect-require-runtime-kv-dimensions] [--local-runtime] [--production-runtime] [--production-reference-kernel] [--production-local-kernel] [--production-kernel-conformance-gate] [--runtime-command path] [--runtime-arg arg] [--runtime-prompt-mode stdin|args] [--runtime-wire-format text|json] [--runtime-json] [--runtime-model-id id] [--runtime-tokenizer name] [--runtime-native-window n] [--runtime-embedding-dims n] [--runtime-kv-import] [--runtime-kv-export] [--runtime-kv-exchange] [--native-window n] [--chunk-tokens n] [--chunk-overlap n] [--merge-fan-in n] [--replay n] [--auto-replay n] [--retention-stale-after n] [--retention-decay-rate f] [--retention-remove-below f] [--retention-remove-after-failures n] [--compaction-threshold f] [--compaction-max-candidates n] [--compaction-max-merges n] [--device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server] [--cpu-load f] [--gpu-load f] [--ram-load f] [--disk-load f] <prompt>";
     println!("{usage}");
     std::process::exit(0);
 }
@@ -2927,6 +3081,30 @@ mod tests {
             "--inspect-state".to_owned(),
             "--inspect-limit".to_owned(),
             "2".to_owned(),
+            "--inspect-gate".to_owned(),
+            "--inspect-min-memories".to_owned(),
+            "3".to_owned(),
+            "--inspect-min-runtime-kv-memories".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-experiences".to_owned(),
+            "2".to_owned(),
+            "--inspect-min-router-observations".to_owned(),
+            "4".to_owned(),
+            "--inspect-min-evolution-replay-runs".to_owned(),
+            "5".to_owned(),
+            "--inspect-min-evolution-replay-items".to_owned(),
+            "6".to_owned(),
+            "--inspect-min-evolution-router-threshold-mutations".to_owned(),
+            "7".to_owned(),
+            "--inspect-min-evolution-hierarchy-weight-mutations".to_owned(),
+            "8".to_owned(),
+            "--inspect-min-evolution-memory-updates".to_owned(),
+            "9".to_owned(),
+            "--inspect-min-evolution-recursive-runtime-calls".to_owned(),
+            "10".to_owned(),
+            "--inspect-max-evolution-drift-rollbacks".to_owned(),
+            "0".to_owned(),
+            "--inspect-require-runtime-kv-dimensions".to_owned(),
             "--local-runtime".to_owned(),
             "--production-runtime".to_owned(),
             "--production-reference-kernel".to_owned(),
@@ -3223,6 +3401,36 @@ mod tests {
         assert_eq!(args.runtime_local_window_tokens, Some(2048));
         assert!(args.inspect_state);
         assert_eq!(args.inspect_limit, 2);
+        assert!(args.inspect_gate);
+        assert_eq!(args.inspect_min_memories, Some(3));
+        assert_eq!(args.inspect_min_runtime_kv_memories, Some(1));
+        assert_eq!(args.inspect_min_experiences, Some(2));
+        assert_eq!(args.inspect_min_router_observations, Some(4));
+        assert_eq!(args.inspect_min_evolution_replay_runs, Some(5));
+        assert_eq!(args.inspect_min_evolution_replay_items, Some(6));
+        assert_eq!(
+            args.inspect_min_evolution_router_threshold_mutations,
+            Some(7)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_hierarchy_weight_mutations,
+            Some(8)
+        );
+        assert_eq!(args.inspect_min_evolution_memory_updates, Some(9));
+        assert_eq!(args.inspect_min_evolution_recursive_runtime_calls, Some(10));
+        assert_eq!(args.inspect_max_evolution_drift_rollbacks, Some(0));
+        assert!(args.inspect_require_runtime_kv_dimensions);
+        assert_eq!(args.state_inspection_gate().min_memories, Some(3));
+        assert_eq!(
+            args.state_inspection_gate().min_runtime_kv_memories,
+            Some(1)
+        );
+        assert_eq!(args.state_inspection_gate().min_experiences, Some(2));
+        assert_eq!(
+            args.state_inspection_gate().min_evolution_memory_updates,
+            Some(9)
+        );
+        assert!(args.state_inspection_gate().require_runtime_kv_dimensions);
         assert!(args.local_runtime);
         assert!(args.production_runtime);
         assert!(args.production_reference_kernel);
@@ -3251,6 +3459,21 @@ mod tests {
         assert_eq!(args.cpu_load, 75.0);
         assert_eq!(args.ram_load, 0.5);
         assert!(args.prompt.contains("nine"));
+    }
+
+    #[test]
+    fn inspect_threshold_flags_imply_state_gate() {
+        let args = Args::parse(vec![
+            "--inspect-min-runtime-kv-memories".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-experiences".to_owned(),
+            "1".to_owned(),
+        ]);
+
+        assert!(args.inspect_state);
+        assert!(args.inspect_gate);
+        assert_eq!(args.inspect_min_runtime_kv_memories, Some(1));
+        assert_eq!(args.inspect_min_experiences, Some(1));
     }
 
     #[test]

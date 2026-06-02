@@ -52,6 +52,42 @@ pub struct StateExperienceSummary {
     pub lesson: String,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct StateInspectionGate {
+    pub min_memories: Option<usize>,
+    pub min_runtime_kv_memories: Option<usize>,
+    pub min_experiences: Option<usize>,
+    pub min_router_observations: Option<u64>,
+    pub min_evolution_replay_runs: Option<u64>,
+    pub min_evolution_replay_items: Option<u64>,
+    pub min_evolution_router_threshold_mutations: Option<u64>,
+    pub min_evolution_hierarchy_weight_mutations: Option<u64>,
+    pub min_evolution_memory_updates: Option<u64>,
+    pub min_evolution_recursive_runtime_calls: Option<u64>,
+    pub max_evolution_drift_rollbacks: Option<u64>,
+    pub require_runtime_kv_dimensions: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateInspectionGateReport {
+    pub passed: bool,
+    pub failures: Vec<String>,
+}
+
+impl StateInspectionGateReport {
+    pub fn passed(&self) -> bool {
+        self.passed
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "state_inspection_gate: passed={} failures={}",
+            self.passed,
+            self.failures.len()
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StateInspectionReport {
     pub memory_count: usize,
@@ -195,6 +231,115 @@ impl StateInspectionReport {
             format_memory_vector_dimensions(&self.memory_vector_dimensions),
             format_memory_vector_dimensions(&self.runtime_kv_vector_dimensions)
         )
+    }
+
+    pub fn evaluate(&self, gate: &StateInspectionGate) -> StateInspectionGateReport {
+        let mut failures = Vec::new();
+
+        require_min_usize(
+            &mut failures,
+            "memory_count",
+            self.memory_count,
+            gate.min_memories,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_kv_memory_count",
+            self.runtime_kv_memory_count,
+            gate.min_runtime_kv_memories,
+        );
+        require_min_usize(
+            &mut failures,
+            "experience_count",
+            self.experience_count,
+            gate.min_experiences,
+        );
+        require_min_u64(
+            &mut failures,
+            "router_observations",
+            self.router_observations,
+            gate.min_router_observations,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_runs",
+            self.evolution_ledger.replay_runs,
+            gate.min_evolution_replay_runs,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_items",
+            self.evolution_ledger.replay_items,
+            gate.min_evolution_replay_items,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_router_threshold_mutations",
+            self.evolution_ledger.router_threshold_mutations,
+            gate.min_evolution_router_threshold_mutations,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_hierarchy_weight_mutations",
+            self.evolution_ledger.hierarchy_weight_mutations,
+            gate.min_evolution_hierarchy_weight_mutations,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_memory_updates",
+            self.evolution_ledger.memory_updates(),
+            gate.min_evolution_memory_updates,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_recursive_runtime_calls",
+            self.evolution_ledger.recursive_runtime_calls,
+            gate.min_evolution_recursive_runtime_calls,
+        );
+        require_max_u64(
+            &mut failures,
+            "evolution_drift_rollbacks",
+            self.evolution_ledger.drift_rollbacks,
+            gate.max_evolution_drift_rollbacks,
+        );
+
+        if gate.require_runtime_kv_dimensions && self.runtime_kv_vector_dimensions.is_empty() {
+            failures.push("runtime_kv_vector_dimensions missing required buckets".to_owned());
+        }
+
+        StateInspectionGateReport {
+            passed: failures.is_empty(),
+            failures,
+        }
+    }
+}
+
+fn require_min_usize(
+    failures: &mut Vec<String>,
+    name: &str,
+    actual: usize,
+    required: Option<usize>,
+) {
+    if let Some(required) = required {
+        if actual < required {
+            failures.push(format!("{name} {actual} below required {required}"));
+        }
+    }
+}
+
+fn require_min_u64(failures: &mut Vec<String>, name: &str, actual: u64, required: Option<u64>) {
+    if let Some(required) = required {
+        if actual < required {
+            failures.push(format!("{name} {actual} below required {required}"));
+        }
+    }
+}
+
+fn require_max_u64(failures: &mut Vec<String>, name: &str, actual: u64, maximum: Option<u64>) {
+    if let Some(maximum) = maximum {
+        if actual > maximum {
+            failures.push(format!("{name} {actual} above maximum {maximum}"));
+        }
     }
 }
 
@@ -491,6 +636,64 @@ mod tests {
             report
                 .summary_line()
                 .contains("evolution_drift_rollbacks=2")
+        );
+
+        let passing_gate = StateInspectionGate {
+            min_memories: Some(3),
+            min_runtime_kv_memories: Some(1),
+            min_experiences: Some(1),
+            min_router_observations: Some(0),
+            min_evolution_replay_runs: Some(2),
+            min_evolution_replay_items: Some(5),
+            min_evolution_router_threshold_mutations: Some(3),
+            min_evolution_hierarchy_weight_mutations: Some(4),
+            min_evolution_memory_updates: Some(7),
+            min_evolution_recursive_runtime_calls: Some(9),
+            max_evolution_drift_rollbacks: Some(2),
+            require_runtime_kv_dimensions: true,
+        };
+        let passing_report = report.evaluate(&passing_gate);
+        assert!(passing_report.passed());
+        assert_eq!(
+            passing_report.summary_line(),
+            "state_inspection_gate: passed=true failures=0"
+        );
+
+        let failing_gate = StateInspectionGate {
+            min_memories: Some(4),
+            min_runtime_kv_memories: Some(2),
+            min_experiences: Some(2),
+            min_router_observations: Some(1),
+            min_evolution_replay_runs: Some(3),
+            min_evolution_replay_items: Some(6),
+            min_evolution_router_threshold_mutations: Some(4),
+            min_evolution_hierarchy_weight_mutations: Some(5),
+            min_evolution_memory_updates: Some(8),
+            min_evolution_recursive_runtime_calls: Some(10),
+            max_evolution_drift_rollbacks: Some(1),
+            require_runtime_kv_dimensions: true,
+        };
+        let failing_report = report.evaluate(&failing_gate);
+        assert!(!failing_report.passed());
+        assert!(
+            failing_report
+                .failures
+                .contains(&"memory_count 3 below required 4".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"runtime_kv_memory_count 1 below required 2".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"evolution_memory_updates 7 below required 8".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"evolution_drift_rollbacks 2 above maximum 1".to_owned())
         );
     }
 }

@@ -257,7 +257,10 @@ modules, not external product dependencies:
   persisted memory, experience, global/profile router thresholds, hierarchy
   weights, tier counts, effective memory policies, and persisted memory vector
   dimension buckets should be inspectable from the CLI without running a new
-  inference.
+  inference. The same inspection path should also provide threshold gates for
+  persisted runtime KV, experience, router observations, and evolution-ledger
+  evidence so local/CI checks can fail when durable self-evolution state is
+  missing.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -582,7 +585,10 @@ These are algorithmic references, not product dependencies:
   cumulative replay mutation counters, memory-vector dimension buckets,
   `runtime_kv:` memory counts, runtime KV vector dimensions, top runtime KV
   memories, and top memories/lessons from persisted local files without
-  invoking a model runtime.
+  invoking a model runtime. The same CLI path can enforce state-inspection
+  gates for minimum memory, runtime-KV, experience, router-observation, and
+  self-evolution ledger counts, failing with a non-zero exit code when persisted
+  evidence is incomplete.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with

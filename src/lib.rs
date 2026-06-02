@@ -101,7 +101,8 @@ pub use runtime_manifest::{
     default_transformer_runtime_architecture,
 };
 pub use state_inspect::{
-    StateExperienceSummary, StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
+    StateExperienceSummary, StateInspectionGate, StateInspectionGateReport, StateInspectionReport,
+    StateMemorySummary, StateMemoryVectorDimensions,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
