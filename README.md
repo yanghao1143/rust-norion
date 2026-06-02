@@ -255,7 +255,9 @@ diagnostics must prove their hot/cold KV precision still matches the current
 device execution plan. Use `--inspect-min-runtime-uncertainty-experiences`
 when reloaded experience records must prove runtime token entropy/logprob or
 perplexity evidence reached durable memory rather than only trace or benchmark
-output. Use `--inspect-min-runtime-kv-hold-experiences` and
+output, and add `--inspect-min-runtime-uncertainty-tokens` when the gate must
+also prove a minimum volume of persisted entropy/logprob token evidence. Use
+`--inspect-min-runtime-kv-hold-experiences` and
 `--inspect-min-runtime-kv-held-blocks` when fast-path watch cases must prove the
 runtime exported KV but the control plane held part of it out of durable
 `runtime_kv:` memory. In all-device mode both mismatch caps are applied to the
@@ -279,6 +281,7 @@ reflection/revision coverage. Runtime ABI evidence is gated with
 `--inspect-min-runtime-forward-energy-device-profiles`,
 `--inspect-min-runtime-kv-influence-device-profiles`,
 `--inspect-min-runtime-uncertainty-device-profiles`,
+`--inspect-min-runtime-uncertainty-token-device-profiles`,
 `--inspect-min-runtime-kv-precision-device-profiles`,
 `--inspect-min-runtime-kv-import-device-profiles`,
 `--inspect-min-runtime-kv-export-device-profiles`, and
@@ -348,7 +351,9 @@ cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-ex
 `--inspect-max-runtime-kv-precision-mismatches 0`。
 需要证明 runtime token entropy/logprob/perplexity 已经写入持久化 experience，
 而不是只出现在 trace 或 benchmark 输出时，使用
-`--inspect-min-runtime-uncertainty-experiences`。
+`--inspect-min-runtime-uncertainty-experiences`；如果还必须证明持久化的
+entropy/logprob token 证据数量达到最低值，继续加
+`--inspect-min-runtime-uncertainty-tokens`。
 需要证明 fast-path watch 场景里 runtime 已导出 KV、但控制层把其中一部分拦截在长期
 `runtime_kv:` 记忆之外时，使用 `--inspect-min-runtime-kv-hold-experiences`
 和 `--inspect-min-runtime-kv-held-blocks`。
@@ -369,6 +374,7 @@ cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-m
 `--inspect-min-runtime-forward-energy-device-profiles`、
 `--inspect-min-runtime-kv-influence-device-profiles`、
 `--inspect-min-runtime-uncertainty-device-profiles`、
+`--inspect-min-runtime-uncertainty-token-device-profiles`、
 `--inspect-min-runtime-kv-import-device-profiles` 和
 `--inspect-min-runtime-kv-export-device-profiles`、
 `--inspect-min-runtime-kv-hold-device-profiles` 门禁；runtime KV precision

@@ -1433,7 +1433,7 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} runtime_kv_hold_experiences={} runtime_kv_held_blocks={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_uncertainty_experiences={} runtime_uncertainty_tokens={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} runtime_kv_hold_experiences={} runtime_kv_held_blocks={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
             device_report.runtime_kv_memories,
@@ -1441,6 +1441,8 @@ fn print_state_inspection_matrix_gate_report(
             device_report.runtime_adapter_experiences,
             device_report.runtime_forward_energy_experiences,
             device_report.runtime_kv_influence_experiences,
+            device_report.runtime_uncertainty_experiences,
+            device_report.runtime_uncertainty_tokens,
             device_report.runtime_kv_precision_experiences,
             device_report.runtime_kv_precision_mismatches,
             device_report.runtime_kv_import_experiences,
@@ -2051,6 +2053,7 @@ struct Args {
     inspect_min_runtime_forward_energy_experiences: Option<usize>,
     inspect_min_runtime_kv_influence_experiences: Option<usize>,
     inspect_min_runtime_uncertainty_experiences: Option<usize>,
+    inspect_min_runtime_uncertainty_tokens: Option<usize>,
     inspect_min_runtime_kv_precision_experiences: Option<usize>,
     inspect_max_runtime_kv_precision_mismatches: Option<usize>,
     inspect_min_runtime_device_execution_experiences: Option<usize>,
@@ -2069,6 +2072,7 @@ struct Args {
     inspect_min_runtime_forward_energy_device_profiles: Option<usize>,
     inspect_min_runtime_kv_influence_device_profiles: Option<usize>,
     inspect_min_runtime_uncertainty_device_profiles: Option<usize>,
+    inspect_min_runtime_uncertainty_token_device_profiles: Option<usize>,
     inspect_min_runtime_kv_precision_device_profiles: Option<usize>,
     inspect_min_runtime_device_execution_device_profiles: Option<usize>,
     inspect_min_runtime_layer_mode_device_profiles: Option<usize>,
@@ -2356,6 +2360,7 @@ impl Args {
         let mut inspect_min_runtime_forward_energy_experiences = None;
         let mut inspect_min_runtime_kv_influence_experiences = None;
         let mut inspect_min_runtime_uncertainty_experiences = None;
+        let mut inspect_min_runtime_uncertainty_tokens = None;
         let mut inspect_min_runtime_kv_precision_experiences = None;
         let mut inspect_max_runtime_kv_precision_mismatches = None;
         let mut inspect_min_runtime_device_execution_experiences = None;
@@ -2374,6 +2379,7 @@ impl Args {
         let mut inspect_min_runtime_forward_energy_device_profiles = None;
         let mut inspect_min_runtime_kv_influence_device_profiles = None;
         let mut inspect_min_runtime_uncertainty_device_profiles = None;
+        let mut inspect_min_runtime_uncertainty_token_device_profiles = None;
         let mut inspect_min_runtime_kv_precision_device_profiles = None;
         let mut inspect_min_runtime_device_execution_device_profiles = None;
         let mut inspect_min_runtime_layer_mode_device_profiles = None;
@@ -3454,6 +3460,12 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-runtime-uncertainty-tokens" if index + 1 < raw.len() => {
+                    inspect_min_runtime_uncertainty_tokens = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-min-runtime-kv-precision-experiences" if index + 1 < raw.len() => {
                     inspect_min_runtime_kv_precision_experiences =
                         Some(parse_usize(&raw[index + 1], 0));
@@ -3576,6 +3588,16 @@ impl Args {
                 }
                 "--inspect-min-runtime-uncertainty-device-profiles" if index + 1 < raw.len() => {
                     inspect_min_runtime_uncertainty_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-uncertainty-token-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_runtime_uncertainty_token_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
                     inspect_state = true;
                     inspect_gate = true;
@@ -4567,6 +4589,7 @@ impl Args {
             inspect_min_runtime_forward_energy_experiences,
             inspect_min_runtime_kv_influence_experiences,
             inspect_min_runtime_uncertainty_experiences,
+            inspect_min_runtime_uncertainty_tokens,
             inspect_min_runtime_kv_precision_experiences,
             inspect_max_runtime_kv_precision_mismatches,
             inspect_min_runtime_device_execution_experiences,
@@ -4585,6 +4608,7 @@ impl Args {
             inspect_min_runtime_forward_energy_device_profiles,
             inspect_min_runtime_kv_influence_device_profiles,
             inspect_min_runtime_uncertainty_device_profiles,
+            inspect_min_runtime_uncertainty_token_device_profiles,
             inspect_min_runtime_kv_precision_device_profiles,
             inspect_min_runtime_device_execution_device_profiles,
             inspect_min_runtime_layer_mode_device_profiles,
@@ -5093,6 +5117,7 @@ impl Args {
                 .inspect_min_runtime_forward_energy_experiences,
             min_runtime_kv_influence_experiences: self.inspect_min_runtime_kv_influence_experiences,
             min_runtime_uncertainty_experiences: self.inspect_min_runtime_uncertainty_experiences,
+            min_runtime_uncertainty_tokens: self.inspect_min_runtime_uncertainty_tokens,
             min_runtime_kv_precision_experiences: self.inspect_min_runtime_kv_precision_experiences,
             max_runtime_kv_precision_mismatches: self.inspect_max_runtime_kv_precision_mismatches,
             min_runtime_device_execution_experiences: self
@@ -5201,6 +5226,8 @@ impl Args {
                 .inspect_min_runtime_kv_influence_device_profiles,
             min_runtime_uncertainty_device_profiles: self
                 .inspect_min_runtime_uncertainty_device_profiles,
+            min_runtime_uncertainty_token_device_profiles: self
+                .inspect_min_runtime_uncertainty_token_device_profiles,
             min_runtime_kv_precision_device_profiles: self
                 .inspect_min_runtime_kv_precision_device_profiles,
             max_runtime_kv_precision_mismatches: self.inspect_max_runtime_kv_precision_mismatches,
@@ -5461,7 +5488,7 @@ fn print_help_and_exit() -> ! {
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
-        "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-max-runtime-adapter-selection-mismatches n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-uncertainty-experiences n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-hold-experiences n --inspect-min-runtime-kv-held-blocks n --inspect-min-runtime-uncertainty-device-profiles n --inspect-min-runtime-kv-hold-device-profiles n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
+        "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-max-runtime-adapter-selection-mismatches n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-uncertainty-experiences n --inspect-min-runtime-uncertainty-tokens n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-hold-experiences n --inspect-min-runtime-kv-held-blocks n --inspect-min-runtime-uncertainty-device-profiles n --inspect-min-runtime-uncertainty-token-device-profiles n --inspect-min-runtime-kv-hold-device-profiles n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
         "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-detail-experiences n --inspect-min-live-memory-feedback-applied n --inspect-min-live-memory-feedback-strength-delta f --inspect-min-live-memory-feedback-device-profiles n\n",
         "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-replay-live-memory-feedback-updates n --inspect-min-evolution-replay-live-memory-feedback-detail-items n --inspect-min-evolution-replay-live-memory-feedback-applied n --inspect-min-evolution-replay-live-memory-feedback-strength-delta f --inspect-min-evolution-replay-live-memory-feedback-device-profiles n --inspect-min-evolution-replay-live-memory-feedback-detail-device-profiles n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Inspect replay live evolution: --inspect-min-evolution-replay-live-evolution-items n --inspect-min-evolution-replay-live-evolution-memory-updates n --inspect-min-evolution-replay-live-evolution-stored-memory-updates n --inspect-min-evolution-replay-live-evolution-reflection-issues n --inspect-min-evolution-replay-live-evolution-critical-reflection-issues n --inspect-min-evolution-replay-live-evolution-revision-actions n --inspect-min-evolution-replay-live-evolution-device-profiles n --inspect-min-evolution-replay-live-evolution-memory-update-device-profiles n --inspect-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --inspect-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
@@ -5798,6 +5825,8 @@ mod tests {
             "2".to_owned(),
             "--inspect-min-runtime-uncertainty-experiences".to_owned(),
             "2".to_owned(),
+            "--inspect-min-runtime-uncertainty-tokens".to_owned(),
+            "8".to_owned(),
             "--inspect-min-runtime-kv-precision-experiences".to_owned(),
             "2".to_owned(),
             "--inspect-max-runtime-kv-precision-mismatches".to_owned(),
@@ -5833,6 +5862,8 @@ mod tests {
             "--inspect-min-runtime-kv-influence-device-profiles".to_owned(),
             "12".to_owned(),
             "--inspect-min-runtime-uncertainty-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-uncertainty-token-device-profiles".to_owned(),
             "12".to_owned(),
             "--inspect-min-runtime-kv-precision-device-profiles".to_owned(),
             "12".to_owned(),
@@ -7074,6 +7105,10 @@ mod tests {
             Some(2)
         );
         assert_eq!(
+            args.state_inspection_gate().min_runtime_uncertainty_tokens,
+            Some(8)
+        );
+        assert_eq!(
             args.state_inspection_gate()
                 .min_runtime_kv_precision_experiences,
             Some(2)
@@ -7252,6 +7287,11 @@ mod tests {
         assert_eq!(
             args.state_inspection_matrix_gate()
                 .min_runtime_uncertainty_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_uncertainty_token_device_profiles,
             Some(12)
         );
         assert_eq!(
@@ -7542,12 +7582,18 @@ mod tests {
             "1".to_owned(),
             "--inspect-min-experiences".to_owned(),
             "1".to_owned(),
+            "--inspect-min-runtime-uncertainty-tokens".to_owned(),
+            "4".to_owned(),
         ]);
 
         assert!(args.inspect_state);
         assert!(args.inspect_gate);
         assert_eq!(args.inspect_min_runtime_kv_memories, Some(1));
         assert_eq!(args.inspect_min_experiences, Some(1));
+        assert_eq!(
+            args.state_inspection_gate().min_runtime_uncertainty_tokens,
+            Some(4)
+        );
     }
 
     #[test]
@@ -7555,11 +7601,18 @@ mod tests {
         let args = Args::parse(vec![
             "--inspect-state".to_owned(),
             "--benchmark-all-devices".to_owned(),
+            "--inspect-min-runtime-uncertainty-token-device-profiles".to_owned(),
+            "2".to_owned(),
         ]);
 
         assert!(args.inspect_state);
         assert!(args.inspect_gate);
         assert!(args.benchmark_all_devices);
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_uncertainty_token_device_profiles,
+            Some(2)
+        );
     }
 
     #[test]
