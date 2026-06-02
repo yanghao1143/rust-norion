@@ -2166,6 +2166,9 @@ struct Args {
     inspect_min_evolution_live_online_reward_feedbacks: Option<u64>,
     inspect_min_evolution_live_online_reward_reinforcements: Option<u64>,
     inspect_min_evolution_live_online_reward_penalties: Option<u64>,
+    inspect_min_evolution_live_online_reward_strength: Option<f32>,
+    inspect_min_evolution_live_online_reward_reinforcement_strength: Option<f32>,
+    inspect_min_evolution_live_online_reward_penalty_strength: Option<f32>,
     inspect_min_evolution_live_memory_updates: Option<u64>,
     inspect_min_evolution_live_stored_memory_updates: Option<u64>,
     inspect_min_evolution_live_reflection_issues: Option<u64>,
@@ -2186,6 +2189,9 @@ struct Args {
     inspect_min_evolution_replay_live_evolution_online_reward_feedbacks: Option<u64>,
     inspect_min_evolution_replay_live_evolution_online_reward_reinforcements: Option<u64>,
     inspect_min_evolution_replay_live_evolution_online_reward_penalties: Option<u64>,
+    inspect_min_evolution_replay_live_evolution_online_reward_strength: Option<f32>,
+    inspect_min_evolution_replay_live_evolution_online_reward_reinforcement_strength: Option<f32>,
+    inspect_min_evolution_replay_live_evolution_online_reward_penalty_strength: Option<f32>,
     inspect_min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     inspect_min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     inspect_min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
@@ -2579,6 +2585,9 @@ impl Args {
         let mut inspect_min_evolution_live_online_reward_feedbacks = None;
         let mut inspect_min_evolution_live_online_reward_reinforcements = None;
         let mut inspect_min_evolution_live_online_reward_penalties = None;
+        let mut inspect_min_evolution_live_online_reward_strength = None;
+        let mut inspect_min_evolution_live_online_reward_reinforcement_strength = None;
+        let mut inspect_min_evolution_live_online_reward_penalty_strength = None;
         let mut inspect_min_evolution_live_memory_updates = None;
         let mut inspect_min_evolution_live_stored_memory_updates = None;
         let mut inspect_min_evolution_live_reflection_issues = None;
@@ -2599,6 +2608,10 @@ impl Args {
         let mut inspect_min_evolution_replay_live_evolution_online_reward_feedbacks = None;
         let mut inspect_min_evolution_replay_live_evolution_online_reward_reinforcements = None;
         let mut inspect_min_evolution_replay_live_evolution_online_reward_penalties = None;
+        let mut inspect_min_evolution_replay_live_evolution_online_reward_strength = None;
+        let mut inspect_min_evolution_replay_live_evolution_online_reward_reinforcement_strength =
+            None;
+        let mut inspect_min_evolution_replay_live_evolution_online_reward_penalty_strength = None;
         let mut inspect_min_evolution_replay_live_evolution_memory_updates = None;
         let mut inspect_min_evolution_replay_live_evolution_stored_memory_updates = None;
         let mut inspect_min_evolution_replay_live_evolution_reflection_issues = None;
@@ -4329,6 +4342,31 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-evolution-live-online-reward-strength" if index + 1 < raw.len() => {
+                    inspect_min_evolution_live_online_reward_strength =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-live-online-reward-reinforcement-strength"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_live_online_reward_reinforcement_strength =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-live-online-reward-penalty-strength"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_live_online_reward_penalty_strength =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-min-evolution-live-memory-updates" if index + 1 < raw.len() => {
                     inspect_min_evolution_live_memory_updates = Some(parse_u64(&raw[index + 1], 0));
                     inspect_state = true;
@@ -4477,6 +4515,33 @@ impl Args {
                 {
                     inspect_min_evolution_replay_live_evolution_online_reward_penalties =
                         Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-live-evolution-online-reward-strength"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_replay_live_evolution_online_reward_strength =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-live-evolution-online-reward-reinforcement-strength"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_replay_live_evolution_online_reward_reinforcement_strength =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-live-evolution-online-reward-penalty-strength"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_replay_live_evolution_online_reward_penalty_strength =
+                        Some(parse_f32(&raw[index + 1], 0.0));
                     inspect_state = true;
                     inspect_gate = true;
                     index += 2;
@@ -5031,6 +5096,9 @@ impl Args {
             inspect_min_evolution_live_online_reward_feedbacks,
             inspect_min_evolution_live_online_reward_reinforcements,
             inspect_min_evolution_live_online_reward_penalties,
+            inspect_min_evolution_live_online_reward_strength,
+            inspect_min_evolution_live_online_reward_reinforcement_strength,
+            inspect_min_evolution_live_online_reward_penalty_strength,
             inspect_min_evolution_live_memory_updates,
             inspect_min_evolution_live_stored_memory_updates,
             inspect_min_evolution_live_reflection_issues,
@@ -5051,6 +5119,9 @@ impl Args {
             inspect_min_evolution_replay_live_evolution_online_reward_feedbacks,
             inspect_min_evolution_replay_live_evolution_online_reward_reinforcements,
             inspect_min_evolution_replay_live_evolution_online_reward_penalties,
+            inspect_min_evolution_replay_live_evolution_online_reward_strength,
+            inspect_min_evolution_replay_live_evolution_online_reward_reinforcement_strength,
+            inspect_min_evolution_replay_live_evolution_online_reward_penalty_strength,
             inspect_min_evolution_replay_live_evolution_memory_updates,
             inspect_min_evolution_replay_live_evolution_stored_memory_updates,
             inspect_min_evolution_replay_live_evolution_reflection_issues,
@@ -5610,6 +5681,15 @@ impl Args {
                 .inspect_min_evolution_live_online_reward_reinforcements,
             min_evolution_live_online_reward_penalties: self
                 .inspect_min_evolution_live_online_reward_penalties,
+            min_evolution_live_online_reward_strength: self
+                .inspect_min_evolution_live_online_reward_strength
+                .map(|value| value.max(0.0)),
+            min_evolution_live_online_reward_reinforcement_strength: self
+                .inspect_min_evolution_live_online_reward_reinforcement_strength
+                .map(|value| value.max(0.0)),
+            min_evolution_live_online_reward_penalty_strength: self
+                .inspect_min_evolution_live_online_reward_penalty_strength
+                .map(|value| value.max(0.0)),
             min_evolution_live_memory_updates: self.inspect_min_evolution_live_memory_updates,
             min_evolution_live_stored_memory_updates: self
                 .inspect_min_evolution_live_stored_memory_updates,
@@ -5647,6 +5727,15 @@ impl Args {
                 .inspect_min_evolution_replay_live_evolution_online_reward_reinforcements,
             min_evolution_replay_live_evolution_online_reward_penalties: self
                 .inspect_min_evolution_replay_live_evolution_online_reward_penalties,
+            min_evolution_replay_live_evolution_online_reward_strength: self
+                .inspect_min_evolution_replay_live_evolution_online_reward_strength
+                .map(|value| value.max(0.0)),
+            min_evolution_replay_live_evolution_online_reward_reinforcement_strength: self
+                .inspect_min_evolution_replay_live_evolution_online_reward_reinforcement_strength
+                .map(|value| value.max(0.0)),
+            min_evolution_replay_live_evolution_online_reward_penalty_strength: self
+                .inspect_min_evolution_replay_live_evolution_online_reward_penalty_strength
+                .map(|value| value.max(0.0)),
             min_evolution_replay_live_evolution_memory_updates: self
                 .inspect_min_evolution_replay_live_evolution_memory_updates,
             min_evolution_replay_live_evolution_stored_memory_updates: self
@@ -5954,8 +6043,8 @@ fn print_help_and_exit() -> ! {
         "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-max-runtime-adapter-selection-mismatches n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-uncertainty-experiences n --inspect-min-runtime-uncertainty-tokens n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-hold-experiences n --inspect-min-runtime-kv-held-blocks n --inspect-min-runtime-uncertainty-device-profiles n --inspect-min-runtime-uncertainty-token-device-profiles n --inspect-min-runtime-kv-hold-device-profiles n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
         "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-detail-experiences n --inspect-min-live-memory-feedback-applied n --inspect-min-live-memory-feedback-strength-delta f --inspect-min-live-memory-feedback-device-profiles n\n",
         "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-replay-live-memory-feedback-updates n --inspect-min-evolution-replay-live-memory-feedback-detail-items n --inspect-min-evolution-replay-live-memory-feedback-applied n --inspect-min-evolution-replay-live-memory-feedback-strength-delta f --inspect-min-evolution-replay-live-memory-feedback-device-profiles n --inspect-min-evolution-replay-live-memory-feedback-detail-device-profiles n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
-        "Inspect replay live evolution: --inspect-min-evolution-replay-live-evolution-items n --inspect-min-evolution-replay-live-evolution-online-reward-feedbacks n --inspect-min-evolution-replay-live-evolution-online-reward-reinforcements n --inspect-min-evolution-replay-live-evolution-online-reward-penalties n --inspect-min-evolution-replay-live-evolution-memory-updates n --inspect-min-evolution-replay-live-evolution-stored-memory-updates n --inspect-min-evolution-replay-live-evolution-reflection-issues n --inspect-min-evolution-replay-live-evolution-critical-reflection-issues n --inspect-min-evolution-replay-live-evolution-revision-actions n --inspect-min-evolution-replay-live-evolution-device-profiles n --inspect-min-evolution-replay-live-evolution-online-reward-device-profiles n --inspect-min-evolution-replay-live-evolution-memory-update-device-profiles n --inspect-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --inspect-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
-        "Inspect live evolution: --inspect-min-evolution-live-inference-runs n --inspect-min-evolution-live-router-threshold-mutations n --inspect-min-evolution-live-hierarchy-weight-mutations n --inspect-min-evolution-live-router-threshold-delta f --inspect-min-evolution-live-hierarchy-weight-delta f --inspect-min-evolution-live-online-reward-feedbacks n --inspect-min-evolution-live-online-reward-reinforcements n --inspect-min-evolution-live-online-reward-penalties n --inspect-min-evolution-live-memory-updates n --inspect-min-evolution-live-stored-memory-updates n --inspect-min-evolution-live-reflection-issues n --inspect-min-evolution-live-critical-reflection-issues n --inspect-min-evolution-live-revision-actions n\n",
+        "Inspect replay live evolution: --inspect-min-evolution-replay-live-evolution-items n --inspect-min-evolution-replay-live-evolution-online-reward-feedbacks n --inspect-min-evolution-replay-live-evolution-online-reward-reinforcements n --inspect-min-evolution-replay-live-evolution-online-reward-penalties n --inspect-min-evolution-replay-live-evolution-online-reward-strength f --inspect-min-evolution-replay-live-evolution-online-reward-reinforcement-strength f --inspect-min-evolution-replay-live-evolution-online-reward-penalty-strength f --inspect-min-evolution-replay-live-evolution-memory-updates n --inspect-min-evolution-replay-live-evolution-stored-memory-updates n --inspect-min-evolution-replay-live-evolution-reflection-issues n --inspect-min-evolution-replay-live-evolution-critical-reflection-issues n --inspect-min-evolution-replay-live-evolution-revision-actions n --inspect-min-evolution-replay-live-evolution-device-profiles n --inspect-min-evolution-replay-live-evolution-online-reward-device-profiles n --inspect-min-evolution-replay-live-evolution-memory-update-device-profiles n --inspect-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --inspect-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
+        "Inspect live evolution: --inspect-min-evolution-live-inference-runs n --inspect-min-evolution-live-router-threshold-mutations n --inspect-min-evolution-live-hierarchy-weight-mutations n --inspect-min-evolution-live-router-threshold-delta f --inspect-min-evolution-live-hierarchy-weight-delta f --inspect-min-evolution-live-online-reward-feedbacks n --inspect-min-evolution-live-online-reward-reinforcements n --inspect-min-evolution-live-online-reward-penalties n --inspect-min-evolution-live-online-reward-strength f --inspect-min-evolution-live-online-reward-reinforcement-strength f --inspect-min-evolution-live-online-reward-penalty-strength f --inspect-min-evolution-live-memory-updates n --inspect-min-evolution-live-stored-memory-updates n --inspect-min-evolution-live-reflection-issues n --inspect-min-evolution-live-critical-reflection-issues n --inspect-min-evolution-live-revision-actions n\n",
         "Inspect all-device live evolution: --inspect-min-evolution-live-inference-device-profiles n --inspect-min-evolution-live-router-threshold-mutation-device-profiles n --inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles n --inspect-min-evolution-live-online-reward-device-profiles n --inspect-min-evolution-live-memory-update-device-profiles n --inspect-min-evolution-live-stored-memory-update-device-profiles n --inspect-min-evolution-live-reflection-issue-device-profiles n --inspect-min-evolution-live-critical-reflection-issue-device-profiles n --inspect-min-evolution-live-revision-action-device-profiles n\n",
         "Device: --list-devices --probe-device --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
     );
@@ -6469,6 +6558,12 @@ mod tests {
             "3".to_owned(),
             "--inspect-min-evolution-live-online-reward-penalties".to_owned(),
             "1".to_owned(),
+            "--inspect-min-evolution-live-online-reward-strength".to_owned(),
+            "1.9".to_owned(),
+            "--inspect-min-evolution-live-online-reward-reinforcement-strength".to_owned(),
+            "1.2".to_owned(),
+            "--inspect-min-evolution-live-online-reward-penalty-strength".to_owned(),
+            "0.7".to_owned(),
             "--inspect-min-evolution-live-memory-updates".to_owned(),
             "8".to_owned(),
             "--inspect-min-evolution-live-stored-memory-updates".to_owned(),
@@ -6510,6 +6605,14 @@ mod tests {
             "3".to_owned(),
             "--inspect-min-evolution-replay-live-evolution-online-reward-penalties".to_owned(),
             "1".to_owned(),
+            "--inspect-min-evolution-replay-live-evolution-online-reward-strength".to_owned(),
+            "1.3".to_owned(),
+            "--inspect-min-evolution-replay-live-evolution-online-reward-reinforcement-strength"
+                .to_owned(),
+            "0.8".to_owned(),
+            "--inspect-min-evolution-replay-live-evolution-online-reward-penalty-strength"
+                .to_owned(),
+            "0.5".to_owned(),
             "--inspect-min-evolution-replay-live-evolution-memory-updates".to_owned(),
             "14".to_owned(),
             "--inspect-min-evolution-replay-live-evolution-stored-memory-updates".to_owned(),
@@ -7656,6 +7759,18 @@ mod tests {
             args.inspect_min_evolution_live_online_reward_penalties,
             Some(1)
         );
+        assert_eq!(
+            args.inspect_min_evolution_live_online_reward_strength,
+            Some(1.9)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_live_online_reward_reinforcement_strength,
+            Some(1.2)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_live_online_reward_penalty_strength,
+            Some(0.7)
+        );
         assert_eq!(args.inspect_min_evolution_live_memory_updates, Some(8));
         assert_eq!(
             args.inspect_min_evolution_live_stored_memory_updates,
@@ -7717,6 +7832,18 @@ mod tests {
         assert_eq!(
             args.inspect_min_evolution_replay_live_evolution_online_reward_penalties,
             Some(1)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_replay_live_evolution_online_reward_strength,
+            Some(1.3)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_replay_live_evolution_online_reward_reinforcement_strength,
+            Some(0.8)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_replay_live_evolution_online_reward_penalty_strength,
+            Some(0.5)
         );
         assert_eq!(
             args.inspect_min_evolution_replay_live_evolution_memory_updates,
@@ -7927,6 +8054,21 @@ mod tests {
             args.state_inspection_gate()
                 .min_evolution_live_online_reward_penalties,
             Some(1)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_live_online_reward_strength,
+            Some(1.9)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_live_online_reward_reinforcement_strength,
+            Some(1.2)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_live_online_reward_penalty_strength,
+            Some(0.7)
         );
         assert_eq!(
             args.state_inspection_gate()
@@ -8221,6 +8363,21 @@ mod tests {
             args.state_inspection_gate()
                 .min_evolution_replay_live_evolution_online_reward_penalties,
             Some(1)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_replay_live_evolution_online_reward_strength,
+            Some(1.3)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_replay_live_evolution_online_reward_reinforcement_strength,
+            Some(0.8)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_replay_live_evolution_online_reward_penalty_strength,
+            Some(0.5)
         );
         assert_eq!(
             args.state_inspection_gate()
