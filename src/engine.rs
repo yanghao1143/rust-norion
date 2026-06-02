@@ -1428,6 +1428,9 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
             merged.selected_adapter = diagnostic.selected_adapter.clone();
         }
         merged.layer_count += diagnostic.layer_count;
+        merged.global_layers += diagnostic.global_layers;
+        merged.local_window_layers += diagnostic.local_window_layers;
+        merged.convolutional_fusion_layers += diagnostic.convolutional_fusion_layers;
         merged.hidden_size = merged.hidden_size.max(diagnostic.hidden_size);
         merged.local_window_tokens = merged
             .local_window_tokens
@@ -2300,6 +2303,7 @@ mod tests {
                     kv_influence: Some(0.46),
                     imported_kv_blocks: 1,
                     exported_kv_blocks: 1,
+                    ..RuntimeDiagnostics::default()
                 })
             }
         }
@@ -2337,6 +2341,7 @@ mod tests {
                 kv_influence: Some(0.50),
                 imported_kv_blocks: 1,
                 exported_kv_blocks: 2,
+                ..RuntimeDiagnostics::default()
             },
             process_reward: ProcessRewardReport {
                 total: 0.90,
@@ -2384,6 +2389,7 @@ mod tests {
                     kv_influence: Some(0.46),
                     imported_kv_blocks: 1,
                     exported_kv_blocks: 1,
+                    ..RuntimeDiagnostics::default()
                 })
             }
         }
@@ -2428,6 +2434,7 @@ mod tests {
                 kv_influence: Some(0.90),
                 imported_kv_blocks: 2,
                 exported_kv_blocks: 2,
+                ..RuntimeDiagnostics::default()
             },
             process_reward: ProcessRewardReport {
                 total: 0.99,
@@ -2468,6 +2475,7 @@ mod tests {
                 kv_influence: Some(0.40),
                 imported_kv_blocks: 1,
                 exported_kv_blocks: 1,
+                ..RuntimeDiagnostics::default()
             },
             process_reward: ProcessRewardReport {
                 total: 0.86,
@@ -3146,6 +3154,7 @@ mod tests {
             kv_influence: Some(kv_influence),
             imported_kv_blocks: 1,
             exported_kv_blocks: 1,
+            ..RuntimeDiagnostics::default()
         }
     }
 
@@ -3310,7 +3319,9 @@ mod tests {
                 kv_influence: Some(0.22),
                 imported_kv_blocks: context.imported_kv_blocks.len(),
                 exported_kv_blocks: 1,
-            })
+                ..RuntimeDiagnostics::default()
+            }
+            .with_layer_modes(2, 3, 1))
             .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
                 3,
                 1,

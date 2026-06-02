@@ -1951,7 +1951,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"layer_count\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -2000,6 +2000,9 @@ pub fn trace_json_line_with_case(
         option_owned_string_json(outcome.runtime_diagnostics.model_id.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.selected_adapter.as_deref()),
         outcome.runtime_diagnostics.layer_count,
+        outcome.runtime_diagnostics.global_layers,
+        outcome.runtime_diagnostics.local_window_layers,
+        outcome.runtime_diagnostics.convolutional_fusion_layers,
         outcome.runtime_diagnostics.hidden_size,
         outcome.runtime_diagnostics.local_window_tokens,
         option_f32_json(outcome.runtime_diagnostics.forward_energy),
@@ -2007,6 +2010,7 @@ pub fn trace_json_line_with_case(
         outcome.runtime_diagnostics.imported_kv_blocks,
         outcome.runtime_diagnostics.exported_kv_blocks,
         outcome.runtime_diagnostics.has_forward_signal(),
+        outcome.runtime_diagnostics.has_all_layer_modes(),
         outcome.runtime_adapter_observations.len(),
         option_owned_string_json(
             best_adapter_observation.map(|observation| observation.adapter.as_str())

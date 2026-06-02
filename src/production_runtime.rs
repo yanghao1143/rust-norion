@@ -96,6 +96,7 @@ pub struct ProductionKernelConformanceGate {
     pub require_trace: bool,
     pub require_forward_energy: bool,
     pub require_kv_influence: bool,
+    pub require_layer_mode_coverage: bool,
     pub require_kv_export_when_enabled: bool,
 }
 
@@ -106,6 +107,7 @@ impl Default for ProductionKernelConformanceGate {
             require_trace: true,
             require_forward_energy: true,
             require_kv_influence: true,
+            require_layer_mode_coverage: true,
             require_kv_export_when_enabled: true,
         }
     }
@@ -123,6 +125,9 @@ pub struct ProductionKernelConformanceReport {
     pub exported_kv_blocks: usize,
     pub forward_energy: Option<f32>,
     pub kv_influence: Option<f32>,
+    pub global_layers: usize,
+    pub local_window_layers: usize,
+    pub convolutional_fusion_layers: usize,
     pub failures: Vec<String>,
 }
 
@@ -139,6 +144,9 @@ impl ProductionKernelConformanceReport {
             exported_kv_blocks: 0,
             forward_energy: None,
             kv_influence: None,
+            global_layers: 0,
+            local_window_layers: 0,
+            convolutional_fusion_layers: 0,
             failures: Vec::new(),
         }
     }
@@ -160,6 +168,9 @@ impl ProductionKernelConformanceReport {
             exported_kv_blocks: 0,
             forward_energy: None,
             kv_influence: None,
+            global_layers: 0,
+            local_window_layers: 0,
+            convolutional_fusion_layers: 0,
             failures: Vec::new(),
         };
         report.failures.push(failure.into());
@@ -168,7 +179,7 @@ impl ProductionKernelConformanceReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} failures={}",
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
             self.passed,
             self.model_id,
             self.selected_adapter,
@@ -179,6 +190,9 @@ impl ProductionKernelConformanceReport {
             self.exported_kv_blocks,
             option_f32_display(self.forward_energy),
             option_f32_display(self.kv_influence),
+            self.global_layers,
+            self.local_window_layers,
+            self.convolutional_fusion_layers,
             self.failures.len()
         )
     }
@@ -410,6 +424,9 @@ impl ProductionForwardKernel for ReferenceProductionForwardKernel {
                 .runtime_adapter
                 .map(|adapter| adapter.as_str().to_owned()),
             layer_count: forward.layer_summaries.len(),
+            global_layers: counts.global,
+            local_window_layers: counts.local,
+            convolutional_fusion_layers: counts.convolution,
             hidden_size: context.manifest.architecture.hidden_size,
             local_window_tokens: context.manifest.architecture.local_window_tokens,
             forward_energy: Some(forward.energy),
@@ -629,6 +646,9 @@ impl ProductionTransformerRuntime {
         report.trace_steps = response.trace.len();
         report.forward_energy = response.diagnostics.forward_energy;
         report.kv_influence = response.diagnostics.kv_influence;
+        report.global_layers = response.diagnostics.global_layers;
+        report.local_window_layers = response.diagnostics.local_window_layers;
+        report.convolutional_fusion_layers = response.diagnostics.convolutional_fusion_layers;
         report.exported_kv_blocks = runtime.exported_kv_blocks().len();
         report.imported_kv_blocks = response.diagnostics.imported_kv_blocks;
 
@@ -896,6 +916,8 @@ fn normalize_kernel_diagnostics(
     imported_kv_blocks: usize,
     exported_kv_blocks: usize,
 ) -> RuntimeDiagnostics {
+    let kernel_has_forward_signal = diagnostics.has_forward_signal();
+
     if diagnostics.model_id.is_none() {
         diagnostics.model_id = Some(manifest.metadata.model_id.clone());
     }
@@ -906,6 +928,26 @@ fn normalize_kernel_diagnostics(
     }
     if diagnostics.layer_count == 0 {
         diagnostics.layer_count = manifest.architecture.layer_count;
+    }
+    if diagnostics.layer_mode_count() == 0 && kernel_has_forward_signal {
+        let fallback_counts = TransformerPlanner::new(
+            manifest.architecture.layer_count,
+            manifest.architecture.local_window_tokens.max(16),
+        )
+        .plan(
+            TaskProfile::Coding,
+            HierarchyWeights::default(),
+            RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 2,
+                fast_tokens: 1,
+                attention_fraction: 2.0 / 3.0,
+            },
+        )
+        .counts();
+        diagnostics.global_layers = fallback_counts.global;
+        diagnostics.local_window_layers = fallback_counts.local;
+        diagnostics.convolutional_fusion_layers = fallback_counts.convolution;
     }
     if diagnostics.hidden_size == 0 {
         diagnostics.hidden_size = manifest.architecture.hidden_size;
@@ -1040,6 +1082,21 @@ fn evaluate_conformance_response(
         report.failures.push(format!(
             "diagnostics layer_count {} does not match manifest layer_count {}",
             diagnostics.layer_count, manifest.architecture.layer_count
+        ));
+    }
+    if diagnostics.layer_mode_count() != diagnostics.layer_count {
+        report.failures.push(format!(
+            "diagnostics layer mode count {} does not match layer_count {}",
+            diagnostics.layer_mode_count(),
+            diagnostics.layer_count
+        ));
+    }
+    if gate.require_layer_mode_coverage && !diagnostics.has_all_layer_modes() {
+        report.failures.push(format!(
+            "kernel did not cover all Transformer layer modes: global={} local_window={} convolutional_fusion={}",
+            diagnostics.global_layers,
+            diagnostics.local_window_layers,
+            diagnostics.convolutional_fusion_layers
         ));
     }
     if diagnostics.hidden_size != manifest.architecture.hidden_size {
@@ -1936,6 +1993,9 @@ mod tests {
             exported_kv_blocks: 1,
             forward_energy: Some(1.0),
             kv_influence: Some(0.0),
+            global_layers: 1,
+            local_window_layers: 1,
+            convolutional_fusion_layers: 1,
             failures: Vec::new(),
         };
         let failing = ProductionKernelConformanceReport::failed(
@@ -2021,6 +2081,9 @@ mod tests {
         }));
         assert!(report.failures.iter().any(|failure| {
             failure.contains("kernel did not report finite non-negative kv_influence")
+        }));
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("kernel did not cover all Transformer layer modes")
         }));
         assert!(
             report

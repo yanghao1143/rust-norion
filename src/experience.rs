@@ -589,6 +589,9 @@ fn serialize_runtime_diagnostics(diagnostics: &RuntimeDiagnostics) -> String {
             .map(sanitize_control_part)
             .unwrap_or_default(),
         diagnostics.layer_count.to_string(),
+        diagnostics.global_layers.to_string(),
+        diagnostics.local_window_layers.to_string(),
+        diagnostics.convolutional_fusion_layers.to_string(),
         diagnostics.hidden_size.to_string(),
         diagnostics.local_window_tokens.to_string(),
         option_f32_to_field(diagnostics.forward_energy),
@@ -605,21 +608,37 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
     }
 
     let fields = value.split('\u{1f}').collect::<Vec<_>>();
-    if fields.len() != 9 {
-        return None;
+    match fields.len() {
+        9 => Some(RuntimeDiagnostics {
+            model_id: non_empty_string(fields[0]),
+            selected_adapter: non_empty_string(fields[1]),
+            layer_count: fields[2].parse::<usize>().ok()?,
+            global_layers: 0,
+            local_window_layers: 0,
+            convolutional_fusion_layers: 0,
+            hidden_size: fields[3].parse::<usize>().ok()?,
+            local_window_tokens: fields[4].parse::<usize>().ok()?,
+            forward_energy: field_to_finite_f32(fields[5]),
+            kv_influence: field_to_finite_f32(fields[6]),
+            imported_kv_blocks: fields[7].parse::<usize>().ok()?,
+            exported_kv_blocks: fields[8].parse::<usize>().ok()?,
+        }),
+        12 => Some(RuntimeDiagnostics {
+            model_id: non_empty_string(fields[0]),
+            selected_adapter: non_empty_string(fields[1]),
+            layer_count: fields[2].parse::<usize>().ok()?,
+            global_layers: fields[3].parse::<usize>().ok()?,
+            local_window_layers: fields[4].parse::<usize>().ok()?,
+            convolutional_fusion_layers: fields[5].parse::<usize>().ok()?,
+            hidden_size: fields[6].parse::<usize>().ok()?,
+            local_window_tokens: fields[7].parse::<usize>().ok()?,
+            forward_energy: field_to_finite_f32(fields[8]),
+            kv_influence: field_to_finite_f32(fields[9]),
+            imported_kv_blocks: fields[10].parse::<usize>().ok()?,
+            exported_kv_blocks: fields[11].parse::<usize>().ok()?,
+        }),
+        _ => None,
     }
-
-    Some(RuntimeDiagnostics {
-        model_id: non_empty_string(fields[0]),
-        selected_adapter: non_empty_string(fields[1]),
-        layer_count: fields[2].parse::<usize>().ok()?,
-        hidden_size: fields[3].parse::<usize>().ok()?,
-        local_window_tokens: fields[4].parse::<usize>().ok()?,
-        forward_energy: field_to_finite_f32(fields[5]),
-        kv_influence: field_to_finite_f32(fields[6]),
-        imported_kv_blocks: fields[7].parse::<usize>().ok()?,
-        exported_kv_blocks: fields[8].parse::<usize>().ok()?,
-    })
 }
 
 fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
@@ -976,6 +995,9 @@ mod tests {
                 model_id: Some("noiron-runtime-v2".to_owned()),
                 selected_adapter: Some("portable-rust".to_owned()),
                 layer_count: 16,
+                global_layers: 4,
+                local_window_layers: 8,
+                convolutional_fusion_layers: 4,
                 hidden_size: 128,
                 local_window_tokens: 4096,
                 forward_energy: Some(0.33),
@@ -1057,6 +1079,9 @@ mod tests {
                 model_id: Some("noiron-test-runtime".to_owned()),
                 selected_adapter: Some("portable-rust".to_owned()),
                 layer_count: 8,
+                global_layers: 2,
+                local_window_layers: 4,
+                convolutional_fusion_layers: 2,
                 hidden_size: 64,
                 local_window_tokens: 2048,
                 forward_energy: Some(0.25),

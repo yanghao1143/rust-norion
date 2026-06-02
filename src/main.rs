@@ -793,6 +793,7 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
             kv_influence: Some(0.72),
             imported_kv_blocks: 2,
             exported_kv_blocks: 1,
+            ..RuntimeDiagnostics::default()
         },
         process_reward: ProcessRewardReport {
             total: 0.90,
@@ -1908,6 +1909,11 @@ struct Args {
     benchmark_min_runtime_forward_cases: Option<usize>,
     benchmark_min_runtime_forward_energy_cases: Option<usize>,
     benchmark_min_runtime_kv_influence_cases: Option<usize>,
+    benchmark_min_runtime_layer_mode_cases: Option<usize>,
+    benchmark_min_runtime_all_layer_mode_cases: Option<usize>,
+    benchmark_min_runtime_global_layers: Option<usize>,
+    benchmark_min_runtime_local_window_layers: Option<usize>,
+    benchmark_min_runtime_convolutional_fusion_layers: Option<usize>,
     benchmark_min_runtime_uncertainty_cases: Option<usize>,
     benchmark_min_runtime_uncertainty_tokens: Option<usize>,
     benchmark_min_runtime_kv_import_cases: Option<usize>,
@@ -2136,6 +2142,11 @@ impl Args {
         let mut benchmark_min_runtime_forward_cases = None;
         let mut benchmark_min_runtime_forward_energy_cases = None;
         let mut benchmark_min_runtime_kv_influence_cases = None;
+        let mut benchmark_min_runtime_layer_mode_cases = None;
+        let mut benchmark_min_runtime_all_layer_mode_cases = None;
+        let mut benchmark_min_runtime_global_layers = None;
+        let mut benchmark_min_runtime_local_window_layers = None;
+        let mut benchmark_min_runtime_convolutional_fusion_layers = None;
         let mut benchmark_min_runtime_uncertainty_cases = None;
         let mut benchmark_min_runtime_uncertainty_tokens = None;
         let mut benchmark_min_runtime_kv_import_cases = None;
@@ -2681,6 +2692,34 @@ impl Args {
                 }
                 "--benchmark-min-runtime-kv-influence-cases" if index + 1 < raw.len() => {
                     benchmark_min_runtime_kv_influence_cases =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-layer-mode-cases" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_layer_mode_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-all-layer-mode-cases" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_all_layer_mode_cases =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-global-layers" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_global_layers = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-local-window-layers" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_local_window_layers =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-convolutional-fusion-layers" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_convolutional_fusion_layers =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
@@ -3721,6 +3760,11 @@ impl Args {
             benchmark_min_runtime_forward_cases,
             benchmark_min_runtime_forward_energy_cases,
             benchmark_min_runtime_kv_influence_cases,
+            benchmark_min_runtime_layer_mode_cases,
+            benchmark_min_runtime_all_layer_mode_cases,
+            benchmark_min_runtime_global_layers,
+            benchmark_min_runtime_local_window_layers,
+            benchmark_min_runtime_convolutional_fusion_layers,
             benchmark_min_runtime_uncertainty_cases,
             benchmark_min_runtime_uncertainty_tokens,
             benchmark_min_runtime_kv_import_cases,
@@ -4037,6 +4081,21 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_kv_influence_cases {
             gate.min_runtime_kv_influence_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_layer_mode_cases {
+            gate.min_runtime_layer_mode_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_all_layer_mode_cases {
+            gate.min_runtime_all_layer_mode_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_global_layers {
+            gate.min_runtime_global_layers = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_local_window_layers {
+            gate.min_runtime_local_window_layers = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_convolutional_fusion_layers {
+            gate.min_runtime_convolutional_fusion_layers = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_uncertainty_cases {
             gate.min_runtime_uncertainty_cases = Some(value);
@@ -7052,6 +7111,16 @@ mod tests {
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-kv-influence-cases".to_owned(),
             (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-layer-mode-cases".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-all-layer-mode-cases".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-global-layers".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-local-window-layers".to_owned(),
+            (device_count * case_count).to_string(),
+            "--benchmark-min-runtime-convolutional-fusion-layers".to_owned(),
+            (device_count * case_count).to_string(),
             "--benchmark-min-runtime-uncertainty-cases".to_owned(),
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-uncertainty-tokens".to_owned(),
@@ -7170,6 +7239,17 @@ mod tests {
             device_count * case_count
         );
         assert_eq!(
+            summary.runtime_layer_mode_cases(),
+            device_count * case_count
+        );
+        assert_eq!(
+            summary.runtime_all_layer_mode_cases(),
+            device_count * case_count
+        );
+        assert!(summary.total_runtime_global_layers() >= device_count * case_count);
+        assert!(summary.total_runtime_local_window_layers() >= device_count * case_count);
+        assert!(summary.total_runtime_convolutional_fusion_layers() >= device_count * case_count);
+        assert_eq!(
             summary.runtime_uncertainty_cases(),
             device_count * case_count
         );
@@ -7281,6 +7361,27 @@ mod tests {
             summary
                 .summary_line()
                 .contains("runtime_kv_influence_cases=48")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_layer_mode_cases=48")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_all_layer_mode_cases=48")
+        );
+        assert!(summary.summary_line().contains("runtime_global_layers="));
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_local_window_layers=")
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_convolutional_fusion_layers=")
         );
         assert!(
             summary

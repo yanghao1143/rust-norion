@@ -77,6 +77,9 @@ pub struct RuntimeDiagnostics {
     pub model_id: Option<String>,
     pub selected_adapter: Option<String>,
     pub layer_count: usize,
+    pub global_layers: usize,
+    pub local_window_layers: usize,
+    pub convolutional_fusion_layers: usize,
     pub hidden_size: usize,
     pub local_window_tokens: usize,
     pub forward_energy: Option<f32>,
@@ -91,7 +94,38 @@ impl RuntimeDiagnostics {
     }
 
     pub fn has_forward_signal(&self) -> bool {
-        self.layer_count > 0 || self.forward_energy.is_some() || self.kv_influence.is_some()
+        self.layer_count > 0
+            || self.has_layer_mode_signal()
+            || self.forward_energy.is_some()
+            || self.kv_influence.is_some()
+    }
+
+    pub fn layer_mode_count(&self) -> usize {
+        self.global_layers
+            .saturating_add(self.local_window_layers)
+            .saturating_add(self.convolutional_fusion_layers)
+    }
+
+    pub fn has_layer_mode_signal(&self) -> bool {
+        self.layer_mode_count() > 0
+    }
+
+    pub fn has_all_layer_modes(&self) -> bool {
+        self.global_layers > 0
+            && self.local_window_layers > 0
+            && self.convolutional_fusion_layers > 0
+    }
+
+    pub fn with_layer_modes(
+        mut self,
+        global: usize,
+        local_window: usize,
+        convolutional_fusion: usize,
+    ) -> Self {
+        self.global_layers = global;
+        self.local_window_layers = local_window;
+        self.convolutional_fusion_layers = convolutional_fusion;
+        self
     }
 }
 
@@ -101,6 +135,9 @@ impl Default for RuntimeDiagnostics {
             model_id: None,
             selected_adapter: None,
             layer_count: 0,
+            global_layers: 0,
+            local_window_layers: 0,
+            convolutional_fusion_layers: 0,
             hidden_size: 0,
             local_window_tokens: 0,
             forward_energy: None,

@@ -1112,6 +1112,13 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         model_id: extract_json_string_field(payload, "model_id"),
         selected_adapter: extract_json_string_field(payload, "selected_adapter"),
         layer_count: extract_json_usize_field(payload, "layer_count").unwrap_or(0),
+        global_layers: extract_json_usize_field(payload, "global_layers").unwrap_or(0),
+        local_window_layers: extract_json_usize_field(payload, "local_window_layers").unwrap_or(0),
+        convolutional_fusion_layers: extract_json_usize_field(
+            payload,
+            "convolutional_fusion_layers",
+        )
+        .unwrap_or(0),
         hidden_size: extract_json_usize_field(payload, "hidden_size").unwrap_or(0),
         local_window_tokens: extract_json_usize_field(payload, "local_window_tokens").unwrap_or(0),
         forward_energy: extract_json_finite_number_field(payload, "forward_energy"),
@@ -2192,6 +2199,7 @@ mod tests {
                         kv_influence: Some(0.1),
                         imported_kv_blocks: 0,
                         exported_kv_blocks: 1,
+                        ..RuntimeDiagnostics::default()
                     },
                 ),
             )

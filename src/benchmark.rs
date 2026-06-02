@@ -103,6 +103,11 @@ pub struct BenchmarkCaseResult {
     pub runtime_forward_signal: bool,
     pub runtime_forward_energy_signal: bool,
     pub runtime_kv_influence_signal: bool,
+    pub runtime_global_layers: usize,
+    pub runtime_local_window_layers: usize,
+    pub runtime_convolutional_fusion_layers: usize,
+    pub runtime_layer_mode_signal: bool,
+    pub runtime_all_layer_modes_signal: bool,
     pub runtime_token_count: usize,
     pub runtime_uncertainty_token_count: usize,
     pub runtime_uncertainty_signal: bool,
@@ -173,6 +178,11 @@ pub struct BenchmarkGate {
     pub min_runtime_forward_cases: Option<usize>,
     pub min_runtime_forward_energy_cases: Option<usize>,
     pub min_runtime_kv_influence_cases: Option<usize>,
+    pub min_runtime_layer_mode_cases: Option<usize>,
+    pub min_runtime_all_layer_mode_cases: Option<usize>,
+    pub min_runtime_global_layers: Option<usize>,
+    pub min_runtime_local_window_layers: Option<usize>,
+    pub min_runtime_convolutional_fusion_layers: Option<usize>,
     pub min_runtime_uncertainty_cases: Option<usize>,
     pub min_runtime_uncertainty_tokens: Option<usize>,
     pub min_runtime_kv_import_cases: Option<usize>,
@@ -261,6 +271,11 @@ impl Default for BenchmarkGate {
             min_runtime_forward_cases: None,
             min_runtime_forward_energy_cases: None,
             min_runtime_kv_influence_cases: None,
+            min_runtime_layer_mode_cases: None,
+            min_runtime_all_layer_mode_cases: None,
+            min_runtime_global_layers: None,
+            min_runtime_local_window_layers: None,
+            min_runtime_convolutional_fusion_layers: None,
             min_runtime_uncertainty_cases: None,
             min_runtime_uncertainty_tokens: None,
             min_runtime_kv_import_cases: None,
@@ -1251,6 +1266,13 @@ impl BenchmarkSummary {
             runtime_forward_signal: runtime_has_forward_signal,
             runtime_forward_energy_signal: outcome.runtime_diagnostics.forward_energy.is_some(),
             runtime_kv_influence_signal: outcome.runtime_diagnostics.kv_influence.is_some(),
+            runtime_global_layers: outcome.runtime_diagnostics.global_layers,
+            runtime_local_window_layers: outcome.runtime_diagnostics.local_window_layers,
+            runtime_convolutional_fusion_layers: outcome
+                .runtime_diagnostics
+                .convolutional_fusion_layers,
+            runtime_layer_mode_signal: outcome.runtime_diagnostics.has_layer_mode_signal(),
+            runtime_all_layer_modes_signal: outcome.runtime_diagnostics.has_all_layer_modes(),
             runtime_token_count: outcome.runtime_token_metrics.token_count,
             runtime_uncertainty_token_count,
             runtime_uncertainty_signal: outcome.runtime_token_metrics.has_uncertainty_signal(),
@@ -1498,6 +1520,41 @@ impl BenchmarkSummary {
             .iter()
             .filter(|result| result.runtime_kv_influence_signal)
             .count()
+    }
+
+    pub fn runtime_layer_mode_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_layer_mode_signal)
+            .count()
+    }
+
+    pub fn runtime_all_layer_mode_cases(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_all_layer_modes_signal)
+            .count()
+    }
+
+    pub fn total_runtime_global_layers(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_global_layers)
+            .sum()
+    }
+
+    pub fn total_runtime_local_window_layers(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_local_window_layers)
+            .sum()
+    }
+
+    pub fn total_runtime_convolutional_fusion_layers(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_convolutional_fusion_layers)
+            .sum()
     }
 
     pub fn total_runtime_adapter_observations(&self) -> usize {
@@ -2398,6 +2455,59 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_layer_mode_cases) = gate.min_runtime_layer_mode_cases {
+            let runtime_layer_mode_cases = self.runtime_layer_mode_cases();
+            if runtime_layer_mode_cases < min_runtime_layer_mode_cases {
+                failures.push(format!(
+                    "runtime_layer_mode_cases {} below minimum {}",
+                    runtime_layer_mode_cases, min_runtime_layer_mode_cases
+                ));
+            }
+        }
+
+        if let Some(min_runtime_all_layer_mode_cases) = gate.min_runtime_all_layer_mode_cases {
+            let runtime_all_layer_mode_cases = self.runtime_all_layer_mode_cases();
+            if runtime_all_layer_mode_cases < min_runtime_all_layer_mode_cases {
+                failures.push(format!(
+                    "runtime_all_layer_mode_cases {} below minimum {}",
+                    runtime_all_layer_mode_cases, min_runtime_all_layer_mode_cases
+                ));
+            }
+        }
+
+        if let Some(min_runtime_global_layers) = gate.min_runtime_global_layers {
+            let runtime_global_layers = self.total_runtime_global_layers();
+            if runtime_global_layers < min_runtime_global_layers {
+                failures.push(format!(
+                    "runtime_global_layers {} below minimum {}",
+                    runtime_global_layers, min_runtime_global_layers
+                ));
+            }
+        }
+
+        if let Some(min_runtime_local_window_layers) = gate.min_runtime_local_window_layers {
+            let runtime_local_window_layers = self.total_runtime_local_window_layers();
+            if runtime_local_window_layers < min_runtime_local_window_layers {
+                failures.push(format!(
+                    "runtime_local_window_layers {} below minimum {}",
+                    runtime_local_window_layers, min_runtime_local_window_layers
+                ));
+            }
+        }
+
+        if let Some(min_runtime_convolutional_fusion_layers) =
+            gate.min_runtime_convolutional_fusion_layers
+        {
+            let runtime_convolutional_fusion_layers =
+                self.total_runtime_convolutional_fusion_layers();
+            if runtime_convolutional_fusion_layers < min_runtime_convolutional_fusion_layers {
+                failures.push(format!(
+                    "runtime_convolutional_fusion_layers {} below minimum {}",
+                    runtime_convolutional_fusion_layers, min_runtime_convolutional_fusion_layers
+                ));
+            }
+        }
+
         if let Some(min_runtime_uncertainty_cases) = gate.min_runtime_uncertainty_cases {
             let runtime_uncertainty_cases = self.runtime_uncertainty_cases();
             if runtime_uncertainty_cases < min_runtime_uncertainty_cases {
@@ -2724,7 +2834,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -2815,6 +2925,11 @@ impl BenchmarkSummary {
             self.runtime_forward_cases(),
             self.runtime_forward_energy_cases(),
             self.runtime_kv_influence_cases(),
+            self.runtime_layer_mode_cases(),
+            self.runtime_all_layer_mode_cases(),
+            self.total_runtime_global_layers(),
+            self.total_runtime_local_window_layers(),
+            self.total_runtime_convolutional_fusion_layers(),
             self.runtime_token_cases(),
             self.total_runtime_tokens(),
             self.runtime_uncertainty_cases(),
@@ -3244,6 +3359,11 @@ mod tests {
             runtime_forward_signal: false,
             runtime_forward_energy_signal: false,
             runtime_kv_influence_signal: false,
+            runtime_global_layers: 0,
+            runtime_local_window_layers: 0,
+            runtime_convolutional_fusion_layers: 0,
+            runtime_layer_mode_signal: false,
+            runtime_all_layer_modes_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -3476,6 +3596,11 @@ mod tests {
             runtime_forward_signal: false,
             runtime_forward_energy_signal: false,
             runtime_kv_influence_signal: false,
+            runtime_global_layers: 0,
+            runtime_local_window_layers: 0,
+            runtime_convolutional_fusion_layers: 0,
+            runtime_layer_mode_signal: false,
+            runtime_all_layer_modes_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -3687,6 +3812,11 @@ mod tests {
             runtime_forward_signal: false,
             runtime_forward_energy_signal: false,
             runtime_kv_influence_signal: false,
+            runtime_global_layers: 0,
+            runtime_local_window_layers: 0,
+            runtime_convolutional_fusion_layers: 0,
+            runtime_layer_mode_signal: false,
+            runtime_all_layer_modes_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -3945,6 +4075,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4026,6 +4161,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4106,6 +4246,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4274,6 +4419,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4483,6 +4633,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4563,6 +4718,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4667,6 +4827,11 @@ mod tests {
                 runtime_forward_signal: true,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4711,6 +4876,11 @@ mod tests {
             results: vec![BenchmarkCaseResult {
                 runtime_forward_energy_signal: true,
                 runtime_kv_influence_signal: true,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 ..summary.results[0].clone()
             }],
         };
@@ -4728,6 +4898,164 @@ mod tests {
             passing
                 .summary_line()
                 .contains("runtime_kv_influence_cases=1")
+        );
+    }
+
+    #[test]
+    fn gate_reports_missing_runtime_transformer_layer_modes() {
+        let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+            memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_layer_modes".to_owned(),
+                profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: true,
+                runtime_forward_energy_signal: true,
+                runtime_kv_influence_signal: true,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
+                runtime_token_count: 1,
+                runtime_uncertainty_token_count: 1,
+                runtime_uncertainty_signal: true,
+                runtime_kv_imported: 1,
+                runtime_kv_exported: 1,
+                runtime_kv_stored: 1,
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_contract_ok: true,
+                runtime_adapter_contract_violations: 0,
+                runtime_adapter_observations: 0,
+                runtime_adapter_best_score: None,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let gate = BenchmarkGate {
+            min_runtime_layer_mode_cases: Some(1),
+            min_runtime_all_layer_mode_cases: Some(1),
+            min_runtime_global_layers: Some(2),
+            min_runtime_local_window_layers: Some(3),
+            min_runtime_convolutional_fusion_layers: Some(1),
+            ..BenchmarkGate::default()
+        };
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_layer_mode_cases(), 0);
+        assert_eq!(summary.runtime_all_layer_mode_cases(), 0);
+        assert_eq!(summary.total_runtime_global_layers(), 0);
+        assert_eq!(summary.total_runtime_local_window_layers(), 0);
+        assert_eq!(summary.total_runtime_convolutional_fusion_layers(), 0);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| { failure.contains("runtime_layer_mode_cases") })
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| { failure.contains("runtime_all_layer_mode_cases") })
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| { failure.contains("runtime_global_layers") })
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| { failure.contains("runtime_local_window_layers") })
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| { failure.contains("runtime_convolutional_fusion_layers") })
+        );
+
+        let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+            memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                runtime_global_layers: 2,
+                runtime_local_window_layers: 3,
+                runtime_convolutional_fusion_layers: 1,
+                runtime_layer_mode_signal: true,
+                runtime_all_layer_modes_signal: true,
+                ..summary.results[0].clone()
+            }],
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.runtime_layer_mode_cases(), 1);
+        assert_eq!(passing.runtime_all_layer_mode_cases(), 1);
+        assert_eq!(passing.total_runtime_global_layers(), 2);
+        assert_eq!(passing.total_runtime_local_window_layers(), 3);
+        assert_eq!(passing.total_runtime_convolutional_fusion_layers(), 1);
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_layer_mode_cases=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_all_layer_mode_cases=1")
+        );
+        assert!(passing.summary_line().contains("runtime_global_layers=2"));
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_local_window_layers=3")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_convolutional_fusion_layers=1")
         );
     }
 
@@ -4777,6 +5105,11 @@ mod tests {
                 runtime_forward_signal: true,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 3,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4889,6 +5222,11 @@ mod tests {
                 runtime_forward_signal: true,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -4990,6 +5328,11 @@ mod tests {
                 runtime_forward_signal: true,
                 runtime_forward_energy_signal: true,
                 runtime_kv_influence_signal: true,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 1,
                 runtime_uncertainty_token_count: 1,
                 runtime_uncertainty_signal: true,
@@ -5082,6 +5425,11 @@ mod tests {
                     runtime_forward_signal: true,
                     runtime_forward_energy_signal: false,
                     runtime_kv_influence_signal: false,
+                    runtime_global_layers: 0,
+                    runtime_local_window_layers: 0,
+                    runtime_convolutional_fusion_layers: 0,
+                    runtime_layer_mode_signal: false,
+                    runtime_all_layer_modes_signal: false,
                     runtime_token_count: 0,
                     runtime_uncertainty_token_count: 0,
                     runtime_uncertainty_signal: false,
@@ -5134,6 +5482,11 @@ mod tests {
                     runtime_forward_signal: true,
                     runtime_forward_energy_signal: false,
                     runtime_kv_influence_signal: false,
+                    runtime_global_layers: 0,
+                    runtime_local_window_layers: 0,
+                    runtime_convolutional_fusion_layers: 0,
+                    runtime_layer_mode_signal: false,
+                    runtime_all_layer_modes_signal: false,
                     runtime_token_count: 0,
                     runtime_uncertainty_token_count: 0,
                     runtime_uncertainty_signal: false,
@@ -5238,6 +5591,11 @@ mod tests {
                     runtime_forward_signal: true,
                     runtime_forward_energy_signal: false,
                     runtime_kv_influence_signal: false,
+                    runtime_global_layers: 0,
+                    runtime_local_window_layers: 0,
+                    runtime_convolutional_fusion_layers: 0,
+                    runtime_layer_mode_signal: false,
+                    runtime_all_layer_modes_signal: false,
                     runtime_token_count: 0,
                     runtime_uncertainty_token_count: 0,
                     runtime_uncertainty_signal: false,
@@ -5293,6 +5651,11 @@ mod tests {
                         runtime_forward_signal: true,
                         runtime_forward_energy_signal: false,
                         runtime_kv_influence_signal: false,
+                        runtime_global_layers: 0,
+                        runtime_local_window_layers: 0,
+                        runtime_convolutional_fusion_layers: 0,
+                        runtime_layer_mode_signal: false,
+                        runtime_all_layer_modes_signal: false,
                         runtime_token_count: 0,
                         runtime_uncertainty_token_count: 0,
                         runtime_uncertainty_signal: false,
@@ -5387,6 +5750,11 @@ mod tests {
                 runtime_forward_signal: true,
                 runtime_forward_energy_signal: true,
                 runtime_kv_influence_signal: true,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 1,
                 runtime_uncertainty_token_count: 1,
                 runtime_uncertainty_signal: true,
@@ -5497,6 +5865,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
@@ -5592,6 +5965,11 @@ mod tests {
             runtime_forward_signal: false,
             runtime_forward_energy_signal: false,
             runtime_kv_influence_signal: false,
+            runtime_global_layers: 0,
+            runtime_local_window_layers: 0,
+            runtime_convolutional_fusion_layers: 0,
+            runtime_layer_mode_signal: false,
+            runtime_all_layer_modes_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -5695,6 +6073,11 @@ mod tests {
             runtime_forward_signal: false,
             runtime_forward_energy_signal: false,
             runtime_kv_influence_signal: false,
+            runtime_global_layers: 0,
+            runtime_local_window_layers: 0,
+            runtime_convolutional_fusion_layers: 0,
+            runtime_layer_mode_signal: false,
+            runtime_all_layer_modes_signal: false,
             runtime_token_count: 0,
             runtime_uncertainty_token_count: 0,
             runtime_uncertainty_signal: false,
@@ -5815,6 +6198,11 @@ mod tests {
                 runtime_forward_signal: false,
                 runtime_forward_energy_signal: false,
                 runtime_kv_influence_signal: false,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
                 runtime_token_count: 0,
                 runtime_uncertainty_token_count: 0,
                 runtime_uncertainty_signal: false,
