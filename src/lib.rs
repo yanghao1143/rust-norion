@@ -83,7 +83,8 @@ pub use recursive_scheduler::{
     RecursiveScheduler,
 };
 pub use reflection::{
-    DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, Reflector, RuntimeDiagnostics,
+    DraftToken, InferenceDraft, ReasoningStep, ReflectionIssue, ReflectionReport,
+    ReflectionSeverity, Reflector, RuntimeDiagnostics,
 };
 pub use router::{
     GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds, Route, RouteBudget,
@@ -102,8 +103,8 @@ pub use runtime_manifest::{
 };
 pub use state_inspect::{
     StateExperienceSummary, StateInspectionDeviceGateReport, StateInspectionGate,
-    StateInspectionGateReport, StateInspectionMatrixGateReport, StateInspectionReport,
-    StateMemorySummary, StateMemoryVectorDimensions,
+    StateInspectionGateReport, StateInspectionMatrixGate, StateInspectionMatrixGateReport,
+    StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,

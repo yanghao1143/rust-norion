@@ -83,6 +83,13 @@ pub struct StateInspectionGate {
     pub require_runtime_kv_dimensions: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StateInspectionMatrixGate {
+    pub min_reflection_issue_device_profiles: Option<usize>,
+    pub min_critical_reflection_issue_device_profiles: Option<usize>,
+    pub min_revision_action_device_profiles: Option<usize>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateInspectionGateReport {
     pub passed: bool,
@@ -107,6 +114,48 @@ impl StateInspectionGateReport {
 pub struct StateInspectionDeviceGateReport {
     pub device: DeviceClass,
     pub report: StateInspectionGateReport,
+    pub reflection_issue_experiences: usize,
+    pub critical_reflection_issue_experiences: usize,
+    pub revision_action_experiences: usize,
+}
+
+impl StateInspectionDeviceGateReport {
+    pub fn new(device: DeviceClass, report: StateInspectionGateReport) -> Self {
+        Self {
+            device,
+            report,
+            reflection_issue_experiences: 0,
+            critical_reflection_issue_experiences: 0,
+            revision_action_experiences: 0,
+        }
+    }
+
+    pub fn from_report(
+        device: DeviceClass,
+        inspection: &StateInspectionReport,
+        report: StateInspectionGateReport,
+    ) -> Self {
+        Self {
+            device,
+            report,
+            reflection_issue_experiences: inspection.reflection_issue_experience_count,
+            critical_reflection_issue_experiences: inspection
+                .critical_reflection_issue_experience_count,
+            revision_action_experiences: inspection.revision_action_experience_count,
+        }
+    }
+
+    pub fn with_reflection_evidence(
+        mut self,
+        reflection_issue_experiences: usize,
+        critical_reflection_issue_experiences: usize,
+        revision_action_experiences: usize,
+    ) -> Self {
+        self.reflection_issue_experiences = reflection_issue_experiences;
+        self.critical_reflection_issue_experiences = critical_reflection_issue_experiences;
+        self.revision_action_experiences = revision_action_experiences;
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +167,13 @@ pub struct StateInspectionMatrixGateReport {
 
 impl StateInspectionMatrixGateReport {
     pub fn evaluate(device_reports: Vec<StateInspectionDeviceGateReport>) -> Self {
+        Self::evaluate_with_gate(device_reports, &StateInspectionMatrixGate::default())
+    }
+
+    pub fn evaluate_with_gate(
+        device_reports: Vec<StateInspectionDeviceGateReport>,
+        gate: &StateInspectionMatrixGate,
+    ) -> Self {
         let mut failures = Vec::new();
 
         if device_reports.is_empty() {
@@ -148,6 +204,25 @@ impl StateInspectionMatrixGateReport {
             }
         }
 
+        require_min_device_profiles(
+            &mut failures,
+            "reflection_issue_device_profiles",
+            reflection_issue_device_profiles(&device_reports),
+            gate.min_reflection_issue_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "critical_reflection_issue_device_profiles",
+            critical_reflection_issue_device_profiles(&device_reports),
+            gate.min_critical_reflection_issue_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "revision_action_device_profiles",
+            revision_action_device_profiles(&device_reports),
+            gate.min_revision_action_device_profiles,
+        );
+
         Self {
             passed: failures.is_empty(),
             device_reports,
@@ -175,15 +250,80 @@ impl StateInspectionMatrixGateReport {
             .collect()
     }
 
+    pub fn reflection_issue_device_profiles(&self) -> usize {
+        reflection_issue_device_profiles(&self.device_reports)
+    }
+
+    pub fn critical_reflection_issue_device_profiles(&self) -> usize {
+        critical_reflection_issue_device_profiles(&self.device_reports)
+    }
+
+    pub fn revision_action_device_profiles(&self) -> usize {
+        revision_action_device_profiles(&self.device_reports)
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
             self.failed_devices().len(),
+            self.reflection_issue_device_profiles(),
+            self.critical_reflection_issue_device_profiles(),
+            self.revision_action_device_profiles(),
             self.failures.len()
         )
+    }
+}
+
+fn reflection_issue_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.reflection_issue_experiences > 0
+    })
+}
+
+fn critical_reflection_issue_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.critical_reflection_issue_experiences > 0
+    })
+}
+
+fn revision_action_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.revision_action_experiences > 0
+    })
+}
+
+fn explicit_state_inspection_evidence_devices<F>(
+    device_reports: &[StateInspectionDeviceGateReport],
+    has_evidence: F,
+) -> usize
+where
+    F: Fn(&StateInspectionDeviceGateReport) -> bool,
+{
+    DeviceClass::explicit_profiles()
+        .iter()
+        .filter(|device| {
+            device_reports.iter().any(|device_report| {
+                device_report.device == **device && has_evidence(device_report)
+            })
+        })
+        .count()
+}
+
+fn require_min_device_profiles(
+    failures: &mut Vec<String>,
+    name: &str,
+    actual: usize,
+    required: Option<usize>,
+) {
+    if let Some(required) = required {
+        if actual < required {
+            failures.push(format!("{name} {actual} below required {required}"));
+        }
     }
 }
 
@@ -1221,9 +1361,9 @@ mod tests {
             DeviceClass::explicit_profiles()
                 .iter()
                 .copied()
-                .map(|device| StateInspectionDeviceGateReport {
-                    device,
-                    report: passing.clone(),
+                .map(|device| {
+                    StateInspectionDeviceGateReport::new(device, passing.clone())
+                        .with_reflection_evidence(1, 1, 1)
                 })
                 .collect(),
         );
@@ -1242,14 +1382,9 @@ mod tests {
         );
 
         let incomplete = StateInspectionMatrixGateReport::evaluate(vec![
-            StateInspectionDeviceGateReport {
-                device: DeviceClass::CpuOnly,
-                report: passing,
-            },
-            StateInspectionDeviceGateReport {
-                device: DeviceClass::IntegratedGpu,
-                report: failing,
-            },
+            StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
+                .with_reflection_evidence(1, 1, 1),
+            StateInspectionDeviceGateReport::new(DeviceClass::IntegratedGpu, failing),
         ]);
 
         assert!(!incomplete.passed());
@@ -1273,6 +1408,75 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("device integrated state inspection failed"))
+        );
+    }
+
+    #[test]
+    fn state_inspection_matrix_gate_can_require_reflection_evidence_per_device() {
+        let passing = StateInspectionGateReport {
+            passed: true,
+            failures: Vec::new(),
+        };
+        let gate = StateInspectionMatrixGate {
+            min_reflection_issue_device_profiles: Some(2),
+            min_critical_reflection_issue_device_profiles: Some(1),
+            min_revision_action_device_profiles: Some(2),
+        };
+
+        let report = StateInspectionMatrixGateReport::evaluate_with_gate(
+            DeviceClass::explicit_profiles()
+                .iter()
+                .copied()
+                .map(|device| {
+                    let mut device_report =
+                        StateInspectionDeviceGateReport::new(device, passing.clone());
+                    match device {
+                        DeviceClass::CpuOnly => {
+                            device_report = device_report.with_reflection_evidence(1, 1, 1);
+                        }
+                        DeviceClass::IntegratedGpu => {
+                            device_report = device_report.with_reflection_evidence(1, 0, 1);
+                        }
+                        _ => {}
+                    }
+                    device_report
+                })
+                .collect(),
+            &gate,
+        );
+
+        assert!(report.passed(), "{:?}", report.failures);
+        assert_eq!(report.reflection_issue_device_profiles(), 2);
+        assert_eq!(report.critical_reflection_issue_device_profiles(), 1);
+        assert_eq!(report.revision_action_device_profiles(), 2);
+        assert!(
+            report
+                .summary_line()
+                .contains("reflection_issue_device_profiles=2")
+        );
+
+        let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
+            vec![
+                StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
+                    .with_reflection_evidence(1, 0, 0),
+            ],
+            &gate,
+        );
+
+        assert!(!failing.passed());
+        assert!(
+            failing.failures.iter().any(|failure| {
+                failure == "reflection_issue_device_profiles 1 below required 2"
+            })
+        );
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "critical_reflection_issue_device_profiles 0 below required 1"
+        }));
+        assert!(
+            failing
+                .failures
+                .iter()
+                .any(|failure| { failure == "revision_action_device_profiles 0 below required 2" })
         );
     }
 

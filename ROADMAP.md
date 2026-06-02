@@ -271,7 +271,10 @@ modules, not external product dependencies:
   With all-device mode, the inspection gate should evaluate the
   device-scoped state files emitted by persistence roundtrip runs so CPU,
   mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
-  and multi-GPU profiles all prove durable local state independently.
+  and multi-GPU profiles all prove durable local state independently. Matrix
+  thresholds should also be able to require reflection-issue, critical
+  reflection-issue, and revision-action evidence across a minimum number of
+  explicit device profiles, not only inside individual state files.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -610,7 +613,10 @@ These are algorithmic references, not product dependencies:
   replay evidence is missing, or when persisted rollback magnitude exceeds the
   configured safety cap. In all-device mode, the gate loads every explicit
   device profile's scoped state files and fails if any device is missing state
-  or lacks the required persisted evidence.
+  or lacks the required persisted evidence. Matrix-level thresholds can also
+  require reflection-issue, critical-reflection-issue, and revision-action
+  evidence to appear across enough device profiles before the all-device state
+  inspection passes.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -689,6 +695,12 @@ These are algorithmic references, not product dependencies:
   minimum runtime-KV, experience, runtime-diagnostics, reflection-diagnostics,
   router-observation, and self-evolution ledger count/delta/recursive-replay
   evidence plus rollback delta safety caps per explicit device profile.
+  `--inspect-min-reflection-issue-device-profiles`,
+  `--inspect-min-critical-reflection-issue-device-profiles`, and
+  `--inspect-min-revision-action-device-profiles` lift those reflection and
+  revision checks to the matrix level, so all-device inspection can fail when
+  durable self-evolution evidence is present only on a subset of supported
+  hardware classes.
 - With `--benchmark-roundtrip --inspect-state`, the CLI now chains the write/
   reload runtime-KV roundtrip and persisted-state inspection in one run. Adding
   `--benchmark-all-devices` applies the same chain to every explicit device
