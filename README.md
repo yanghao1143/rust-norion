@@ -241,6 +241,13 @@ created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
 cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
 ```
 
+For a single CI smoke gate that writes fresh runtime KV state and immediately
+inspects the persisted evidence, combine roundtrip and inspection:
+
+```powershell
+cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
+```
+
 查看本地持久化状态，但不执行推理：
 
 ```powershell
@@ -269,6 +276,13 @@ device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
 
 ```powershell
 cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
+```
+
+如果希望一条 CI 命令先写入新的 runtime KV 状态，再立刻检查持久化证据，可以组合
+roundtrip 和 inspection：
+
+```powershell
+cargo run -- --benchmark-roundtrip --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --runtime-kv-exchange --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
 ```
 
 Write one structured JSONL trace record for benchmark comparison:

@@ -94,6 +94,34 @@ fn main() -> std::io::Result<()> {
         return Ok(());
     }
 
+    if args.benchmark_roundtrip && args.inspect_state {
+        if args.benchmark_all_devices {
+            let roundtrip_report = run_persistent_roundtrip_all_devices(&args)?;
+            print_persistent_roundtrip_matrix_report(&args, &roundtrip_report);
+            let inspect_report = run_state_inspection_all_devices(&args)?;
+            print_state_inspection_matrix_gate_report(&args, &inspect_report);
+            if !roundtrip_report.passed || !inspect_report.passed() {
+                std::process::exit(2);
+            }
+        } else {
+            let roundtrip_report = run_persistent_roundtrip(&args)?;
+            print_persistent_roundtrip_report(&args, &roundtrip_report);
+            let inspect_report = run_state_inspection(&args)?;
+            print_state_inspection_report(&args, &inspect_report);
+            let inspect_passed = if args.inspect_gate {
+                let gate_report = inspect_report.evaluate(&args.state_inspection_gate());
+                print_state_inspection_gate_report(&gate_report);
+                gate_report.passed()
+            } else {
+                true
+            };
+            if !roundtrip_report.passed || !inspect_passed {
+                std::process::exit(2);
+            }
+        }
+        return Ok(());
+    }
+
     if args.inspect_state {
         if args.benchmark_all_devices {
             let report = run_state_inspection_all_devices(&args)?;
@@ -102,13 +130,7 @@ fn main() -> std::io::Result<()> {
                 std::process::exit(2);
             }
         } else {
-            let mut engine = NoironEngine::load_full_state(
-                &args.memory_path,
-                &args.experience_path,
-                &args.adaptive_path,
-            )?;
-            configure_engine(&mut engine, &args);
-            let report = StateInspectionReport::from_engine(&engine, args.inspect_limit);
+            let report = run_state_inspection(&args)?;
             print_state_inspection_report(&args, &report);
             if args.inspect_gate {
                 let gate_report = report.evaluate(&args.state_inspection_gate());
@@ -850,6 +872,19 @@ fn run_persistent_roundtrip_all_devices(
     }
 
     Ok(PersistentRoundtripMatrixReport::evaluate(device_reports))
+}
+
+fn run_state_inspection(args: &Args) -> std::io::Result<StateInspectionReport> {
+    let mut engine = NoironEngine::load_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    configure_engine(&mut engine, args);
+    Ok(StateInspectionReport::from_engine(
+        &engine,
+        args.inspect_limit,
+    ))
 }
 
 fn run_state_inspection_all_devices(
@@ -2591,6 +2626,9 @@ impl Args {
         };
         runtime_metadata = normalize_runtime_metadata(runtime_metadata);
         let profile = profile.unwrap_or_else(|| detect_profile(&prompt));
+        if inspect_state && benchmark_all_devices {
+            inspect_gate = true;
+        }
         if device == DeviceClass::Auto {
             let detected = HardwareSnapshot::auto_detect();
             device = detected.device;
@@ -4494,6 +4532,139 @@ mod tests {
                 && device_report.report.summary_line().contains("passed=true")
         }));
         assert!(device_scoped_path(&inspect_args.memory_path, DeviceClass::Server).exists());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
+        let asset_dir = temp_asset_dir("roundtrip-inspect-single");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let args = Args::parse(vec![
+            "--benchmark-roundtrip".to_owned(),
+            "--inspect-state".to_owned(),
+            "--inspect-gate".to_owned(),
+            "--memory".to_owned(),
+            asset_dir.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            asset_dir.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            asset_dir.join("adaptive.ndkv").display().to_string(),
+            "--profile".to_owned(),
+            "coding".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "32".to_owned(),
+            "--inspect-min-runtime-kv-memories".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-model-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-adapter-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-forward-energy-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-influence-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-import-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-export-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-evolution-memory-updates".to_owned(),
+            "1".to_owned(),
+            "--inspect-require-runtime-kv-dimensions".to_owned(),
+            "Chain roundtrip into inspect gate for self-owned runtime state".to_owned(),
+        ]);
+
+        let roundtrip = run_persistent_roundtrip(&args).unwrap();
+        let inspect = run_state_inspection(&args).unwrap();
+        let gate = inspect.evaluate(&args.state_inspection_gate());
+
+        assert!(args.benchmark_roundtrip);
+        assert!(args.inspect_state);
+        assert!(args.inspect_gate);
+        assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+        assert!(gate.passed(), "{:?}", gate.failures);
+        assert!(args.memory_path.exists());
+        assert!(args.experience_path.exists());
+        assert!(args.adaptive_path.exists());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn roundtrip_and_inspect_state_can_chain_all_device_gate() {
+        let asset_dir = temp_asset_dir("roundtrip-inspect-all-devices");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let args = Args::parse(vec![
+            "--benchmark-roundtrip".to_owned(),
+            "--inspect-state".to_owned(),
+            "--benchmark-all-devices".to_owned(),
+            "--memory".to_owned(),
+            asset_dir.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            asset_dir.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            asset_dir.join("adaptive.ndkv").display().to_string(),
+            "--profile".to_owned(),
+            "coding".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "32".to_owned(),
+            "--inspect-min-runtime-kv-memories".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-model-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-adapter-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-forward-energy-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-influence-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-import-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-export-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-evolution-memory-updates".to_owned(),
+            "1".to_owned(),
+            "--inspect-require-runtime-kv-dimensions".to_owned(),
+            "Chain all-device roundtrip into inspect gate".to_owned(),
+        ]);
+
+        let roundtrip = run_persistent_roundtrip_all_devices(&args).unwrap();
+        let inspect = run_state_inspection_all_devices(&args).unwrap();
+
+        assert!(args.benchmark_roundtrip);
+        assert!(args.inspect_state);
+        assert!(args.inspect_gate);
+        assert!(args.benchmark_all_devices);
+        assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+        assert!(inspect.passed(), "{:?}", inspect.failures);
+        assert_eq!(
+            inspect.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(device_scoped_path(&args.memory_path, DeviceClass::CpuOnly).exists());
+        assert!(device_scoped_path(&args.memory_path, DeviceClass::Server).exists());
 
         fs::remove_dir_all(asset_dir).unwrap();
     }

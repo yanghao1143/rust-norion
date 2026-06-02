@@ -672,6 +672,12 @@ These are algorithmic references, not product dependencies:
   device-scoped state files can now be checked after the roundtrip run for
   minimum runtime-KV, experience, runtime-diagnostics, router-observation, and
   self-evolution ledger evidence per explicit device profile.
+- With `--benchmark-roundtrip --inspect-state`, the CLI now chains the write/
+  reload runtime-KV roundtrip and persisted-state inspection in one run. Adding
+  `--benchmark-all-devices` applies the same chain to every explicit device
+  profile with scoped state files, giving CI a single command that proves
+  runtime KV can be written, reloaded, reused, imported, exported, and audited
+  from durable local state.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps
