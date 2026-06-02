@@ -965,6 +965,13 @@ mod tests {
         );
 
         assert!(outcome.stored_memory_id.is_some());
+        assert_eq!(
+            outcome.embedding_diagnostics.query.source,
+            crate::engine::EmbeddingSource::Runtime
+        );
+        assert_eq!(outcome.embedding_diagnostics.query.dimensions, 24);
+        assert!(outcome.embedding_diagnostics.runtime_embedding_available());
+        assert!(!outcome.embedding_diagnostics.fallback_embedding_used());
         assert!(
             engine
                 .cache

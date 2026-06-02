@@ -98,6 +98,102 @@ pub trait InferenceBackend {
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmbeddingSource {
+    Runtime,
+    Fallback,
+}
+
+impl EmbeddingSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Runtime => "runtime",
+            Self::Fallback => "fallback",
+        }
+    }
+}
+
+impl Default for EmbeddingSource {
+    fn default() -> Self {
+        Self::Fallback
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EmbeddingCallDiagnostics {
+    pub source: EmbeddingSource,
+    pub dimensions: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EmbeddingDiagnostics {
+    pub query: EmbeddingCallDiagnostics,
+    pub memory_write: Option<EmbeddingCallDiagnostics>,
+    pub gist_writes: Vec<EmbeddingCallDiagnostics>,
+    pub runtime_calls: usize,
+    pub fallback_calls: usize,
+}
+
+impl EmbeddingDiagnostics {
+    fn from_query(query: EmbeddingCallDiagnostics) -> Self {
+        let mut diagnostics = Self {
+            query,
+            ..Self::default()
+        };
+        diagnostics.record_call(query);
+        diagnostics
+    }
+
+    fn record_memory_write(&mut self, call: EmbeddingCallDiagnostics) {
+        self.memory_write = Some(call);
+        self.record_call(call);
+    }
+
+    fn record_gist_write(&mut self, call: EmbeddingCallDiagnostics) {
+        self.gist_writes.push(call);
+        self.record_call(call);
+    }
+
+    fn record_call(&mut self, call: EmbeddingCallDiagnostics) {
+        match call.source {
+            EmbeddingSource::Runtime => self.runtime_calls += 1,
+            EmbeddingSource::Fallback => self.fallback_calls += 1,
+        }
+    }
+
+    pub fn runtime_embedding_available(&self) -> bool {
+        self.runtime_calls > 0
+    }
+
+    pub fn fallback_embedding_used(&self) -> bool {
+        self.fallback_calls > 0
+    }
+
+    pub fn total_calls(&self) -> usize {
+        1 + usize::from(self.memory_write.is_some()) + self.gist_writes.len()
+    }
+
+    pub fn gist_write_runtime_calls(&self) -> usize {
+        self.gist_writes
+            .iter()
+            .filter(|call| call.source == EmbeddingSource::Runtime)
+            .count()
+    }
+
+    pub fn gist_write_fallback_calls(&self) -> usize {
+        self.gist_writes
+            .iter()
+            .filter(|call| call.source == EmbeddingSource::Fallback)
+            .count()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct EmbeddingCall {
+    diagnostics: EmbeddingCallDiagnostics,
+    vector: Vec<f32>,
+}
+
 #[derive(Debug, Clone)]
 pub struct InferenceOutcome {
     pub answer: String,
@@ -105,6 +201,7 @@ pub struct InferenceOutcome {
     pub auto_replay_report: Option<ExperienceReplayReport>,
     pub metrics: GenerationMetrics,
     pub runtime_token_metrics: RuntimeTokenMetrics,
+    pub embedding_diagnostics: EmbeddingDiagnostics,
     pub runtime_diagnostics: RuntimeDiagnostics,
     pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
     pub recursive_runtime_calls: usize,
@@ -484,8 +581,10 @@ impl NoironEngine {
     ) -> InferenceOutcome {
         let auto_replay_report = self.maybe_auto_replay();
         let adaptive_before_inference = self.adaptive_state();
-        let query_vector = self.embed_for_backend(backend, &request.prompt);
-        let used_memories = self.cache.lookup(&query_vector, 4);
+        let query_embedding = self.embed_for_backend(backend, &request.prompt);
+        let mut embedding_diagnostics =
+            EmbeddingDiagnostics::from_query(query_embedding.diagnostics);
+        let used_memories = self.cache.lookup(&query_embedding.vector, 4);
         let used_experiences =
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
@@ -598,10 +697,11 @@ impl NoironEngine {
                 report.revised_answer,
                 report.lesson
             );
-            let memory_vector = self.embed_for_backend(backend, &memory_text);
+            let memory_embedding = self.embed_for_backend(backend, &memory_text);
+            embedding_diagnostics.record_memory_write(memory_embedding.diagnostics);
             Some(self.cache.store_or_fuse(
                 summarize_key(&request.prompt, &report.lesson),
-                memory_vector,
+                memory_embedding.vector,
                 report.quality,
             ))
         } else {
@@ -614,9 +714,11 @@ impl NoironEngine {
                 .filter(|gist| gist.importance >= 0.54)
                 .map(|gist| {
                     let memory_text = gist.hint();
+                    let gist_embedding = self.embed_for_backend(backend, &memory_text);
+                    embedding_diagnostics.record_gist_write(gist_embedding.diagnostics);
                     self.cache.store_or_fuse(
                         format_gist_key(&request.prompt, gist),
-                        self.embed_for_backend(backend, &memory_text),
+                        gist_embedding.vector,
                         (report.quality * gist.importance).clamp(0.0, 1.0),
                     )
                 })
@@ -789,6 +891,7 @@ impl NoironEngine {
             auto_replay_report,
             metrics,
             runtime_token_metrics,
+            embedding_diagnostics,
             runtime_diagnostics,
             runtime_adapter_observations,
             recursive_runtime_calls,
@@ -824,11 +927,25 @@ impl NoironEngine {
         }
     }
 
-    fn embed_for_backend<B: InferenceBackend>(&self, backend: &mut B, text: &str) -> Vec<f32> {
-        backend
-            .embed_text(text)
-            .filter(|vector| !vector.is_empty())
-            .unwrap_or_else(|| self.embedder.embed(text))
+    fn embed_for_backend<B: InferenceBackend>(&self, backend: &mut B, text: &str) -> EmbeddingCall {
+        if let Some(vector) = backend.embed_text(text).filter(|vector| !vector.is_empty()) {
+            return EmbeddingCall {
+                diagnostics: EmbeddingCallDiagnostics {
+                    source: EmbeddingSource::Runtime,
+                    dimensions: vector.len(),
+                },
+                vector,
+            };
+        }
+
+        let vector = self.embedder.embed(text);
+        EmbeddingCall {
+            diagnostics: EmbeddingCallDiagnostics {
+                source: EmbeddingSource::Fallback,
+                dimensions: vector.len(),
+            },
+            vector,
+        }
     }
 
     fn scheduler_for_backend_window(
@@ -1549,6 +1666,86 @@ mod tests {
         );
         assert!(!outcome.transformer_plan.is_empty());
         assert!(!engine.cache.is_empty());
+    }
+
+    #[derive(Debug, Clone)]
+    struct RuntimeEmbeddingBackend;
+
+    impl InferenceBackend for RuntimeEmbeddingBackend {
+        fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {
+            Some(vec![
+                1.0,
+                text.len() as f32,
+                text.bytes().fold(0_u32, |sum, byte| sum + u32::from(byte)) as f32,
+            ])
+        }
+
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Build a Rust Noiron runtime embedding audit path that stores model-side vectors.",
+                vec![ReasoningStep::new(
+                    "embedding",
+                    "runtime supplied model-side memory vector",
+                    0.92,
+                )],
+            )
+        }
+    }
+
+    #[test]
+    fn inference_records_runtime_embedding_source_for_query_and_memory() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RuntimeEmbeddingBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("audit runtime embedding source", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(
+            outcome.embedding_diagnostics.query.source,
+            EmbeddingSource::Runtime
+        );
+        assert_eq!(outcome.embedding_diagnostics.query.dimensions, 3);
+        assert!(outcome.embedding_diagnostics.runtime_embedding_available());
+        assert!(!outcome.embedding_diagnostics.fallback_embedding_used());
+        assert_eq!(outcome.embedding_diagnostics.fallback_calls, 0);
+        assert_eq!(
+            outcome.embedding_diagnostics.runtime_calls,
+            outcome.embedding_diagnostics.total_calls()
+        );
+        assert!(outcome.stored_memory_id.is_some());
+        assert!(
+            engine
+                .cache
+                .entries()
+                .iter()
+                .any(|entry| entry.vector.len() == 3)
+        );
+    }
+
+    #[test]
+    fn inference_records_fallback_embedding_source_for_heuristic_backend() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("audit fallback embedding source", TaskProfile::General),
+            &mut backend,
+        );
+
+        assert_eq!(
+            outcome.embedding_diagnostics.query.source,
+            EmbeddingSource::Fallback
+        );
+        assert_eq!(outcome.embedding_diagnostics.query.dimensions, 64);
+        assert!(!outcome.embedding_diagnostics.runtime_embedding_available());
+        assert!(outcome.embedding_diagnostics.fallback_embedding_used());
+        assert_eq!(outcome.embedding_diagnostics.runtime_calls, 0);
+        assert_eq!(
+            outcome.embedding_diagnostics.fallback_calls,
+            outcome.embedding_diagnostics.total_calls()
+        );
     }
 
     #[derive(Debug, Clone)]

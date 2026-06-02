@@ -119,6 +119,11 @@ pub struct BenchmarkCaseResult {
     pub runtime_adapter_contract_violations: usize,
     pub runtime_adapter_observations: usize,
     pub runtime_adapter_best_score: Option<f32>,
+    pub query_embedding_source: String,
+    pub query_embedding_dimensions: usize,
+    pub runtime_embedding_calls: usize,
+    pub fallback_embedding_calls: usize,
+    pub embedding_fallback_used: bool,
     pub drift_severity: DriftSeverity,
 }
 
@@ -194,6 +199,10 @@ pub struct BenchmarkGate {
     pub min_runtime_adapter_observations: Option<usize>,
     pub min_runtime_adapter_best_score: Option<f32>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
+    pub min_runtime_embedding_cases: Option<usize>,
+    pub min_runtime_embedding_device_profiles: Option<usize>,
+    pub max_embedding_fallback_cases: Option<usize>,
+    pub max_embedding_evidence_failures: Option<usize>,
     pub min_runtime_device_execution_cases: Option<usize>,
     pub min_runtime_device_execution_device_profiles: Option<usize>,
     pub max_runtime_device_execution_violations: Option<usize>,
@@ -290,6 +299,10 @@ impl Default for BenchmarkGate {
             min_runtime_adapter_observations: None,
             min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
+            min_runtime_embedding_cases: None,
+            min_runtime_embedding_device_profiles: None,
+            max_embedding_fallback_cases: None,
+            max_embedding_evidence_failures: Some(0),
             min_runtime_device_execution_cases: None,
             min_runtime_device_execution_device_profiles: None,
             max_runtime_device_execution_violations: Some(0),
@@ -1148,6 +1161,73 @@ impl BenchmarkMemoryGovernanceEvidence {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BenchmarkEmbeddingEvidence {
+    pub cases: usize,
+    pub runtime_cases: usize,
+    pub fallback_cases: usize,
+    pub runtime_calls: usize,
+    pub fallback_calls: usize,
+    pub failures: Vec<String>,
+    runtime_devices: Vec<DeviceClass>,
+}
+
+impl BenchmarkEmbeddingEvidence {
+    fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
+        let diagnostics = &outcome.embedding_diagnostics;
+        let device = outcome.hardware_plan.device;
+        self.cases += 1;
+
+        if diagnostics.query.dimensions == 0 {
+            self.failures.push(format!(
+                "{}:{} embedding query dimensions are missing",
+                device.as_str(),
+                case.name
+            ));
+        }
+
+        let expected_calls = diagnostics.total_calls();
+        let observed_calls = diagnostics
+            .runtime_calls
+            .saturating_add(diagnostics.fallback_calls);
+        if observed_calls != expected_calls {
+            self.failures.push(format!(
+                "{}:{} embedding calls {} do not match expected {}",
+                device.as_str(),
+                case.name,
+                observed_calls,
+                expected_calls
+            ));
+        }
+
+        if diagnostics.runtime_embedding_available() {
+            self.runtime_cases += 1;
+            push_unique_device(&mut self.runtime_devices, device);
+        }
+        if diagnostics.fallback_embedding_used() {
+            self.fallback_cases += 1;
+        }
+        self.runtime_calls += diagnostics.runtime_calls;
+        self.fallback_calls += diagnostics.fallback_calls;
+    }
+
+    pub fn runtime_device_profiles(&self) -> usize {
+        explicit_device_count(&self.runtime_devices)
+    }
+
+    pub fn runtime_devices_csv(&self) -> String {
+        if self.runtime_devices.is_empty() {
+            "none".to_owned()
+        } else {
+            self.runtime_devices
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub cases: usize,
     pub matched_cases: usize,
@@ -1266,6 +1346,7 @@ pub struct BenchmarkSummary {
     reflection_evidence: BenchmarkReflectionEvidence,
     live_evolution_evidence: BenchmarkLiveEvolutionEvidence,
     memory_governance_evidence: BenchmarkMemoryGovernanceEvidence,
+    embedding_evidence: BenchmarkEmbeddingEvidence,
     runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence,
 }
 
@@ -1396,6 +1477,16 @@ impl BenchmarkSummary {
                 .runtime_adapter_observations
                 .first()
                 .map(|observation| observation.score),
+            query_embedding_source: outcome
+                .embedding_diagnostics
+                .query
+                .source
+                .as_str()
+                .to_owned(),
+            query_embedding_dimensions: outcome.embedding_diagnostics.query.dimensions,
+            runtime_embedding_calls: outcome.embedding_diagnostics.runtime_calls,
+            fallback_embedding_calls: outcome.embedding_diagnostics.fallback_calls,
+            embedding_fallback_used: outcome.embedding_diagnostics.fallback_embedding_used(),
             drift_severity: outcome.drift_report.severity,
         });
         self.evolution_ledger =
@@ -1403,6 +1494,7 @@ impl BenchmarkSummary {
         self.reflection_evidence.record(outcome);
         self.live_evolution_evidence.record(outcome);
         self.memory_governance_evidence.record(case, outcome);
+        self.embedding_evidence.record(case, outcome);
         self.runtime_device_execution_evidence.record(case, outcome);
     }
 
@@ -1688,6 +1780,34 @@ impl BenchmarkSummary {
 
     pub fn memory_governance_evidence(&self) -> BenchmarkMemoryGovernanceEvidence {
         self.memory_governance_evidence.clone()
+    }
+
+    pub fn embedding_evidence(&self) -> BenchmarkEmbeddingEvidence {
+        self.embedding_evidence.clone()
+    }
+
+    pub fn runtime_embedding_cases(&self) -> usize {
+        self.embedding_evidence.runtime_cases
+    }
+
+    pub fn embedding_fallback_cases(&self) -> usize {
+        self.embedding_evidence.fallback_cases
+    }
+
+    pub fn runtime_embedding_device_profiles(&self) -> usize {
+        self.embedding_evidence.runtime_device_profiles()
+    }
+
+    pub fn total_runtime_embedding_calls(&self) -> usize {
+        self.embedding_evidence.runtime_calls
+    }
+
+    pub fn total_fallback_embedding_calls(&self) -> usize {
+        self.embedding_evidence.fallback_calls
+    }
+
+    pub fn total_embedding_evidence_failures(&self) -> usize {
+        self.embedding_evidence.failures.len()
     }
 
     pub fn runtime_device_execution_evidence(&self) -> BenchmarkRuntimeDeviceExecutionEvidence {
@@ -2748,6 +2868,50 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_embedding_cases) = gate.min_runtime_embedding_cases {
+            let runtime_embedding_cases = self.runtime_embedding_cases();
+            if runtime_embedding_cases < min_runtime_embedding_cases {
+                failures.push(format!(
+                    "runtime_embedding_cases {} below minimum {}",
+                    runtime_embedding_cases, min_runtime_embedding_cases
+                ));
+            }
+        }
+
+        if let Some(min_runtime_embedding_device_profiles) =
+            gate.min_runtime_embedding_device_profiles
+        {
+            let runtime_embedding_device_profiles = self.runtime_embedding_device_profiles();
+            if runtime_embedding_device_profiles < min_runtime_embedding_device_profiles {
+                failures.push(format!(
+                    "runtime_embedding_device_profiles {} below minimum {}",
+                    runtime_embedding_device_profiles, min_runtime_embedding_device_profiles
+                ));
+            }
+        }
+
+        if let Some(max_embedding_fallback_cases) = gate.max_embedding_fallback_cases {
+            let embedding_fallback_cases = self.embedding_fallback_cases();
+            if embedding_fallback_cases > max_embedding_fallback_cases {
+                failures.push(format!(
+                    "embedding_fallback_cases {} above maximum {}",
+                    embedding_fallback_cases, max_embedding_fallback_cases
+                ));
+            }
+        }
+
+        if let Some(max_embedding_evidence_failures) = gate.max_embedding_evidence_failures {
+            let embedding_evidence_failures = self.total_embedding_evidence_failures();
+            if embedding_evidence_failures > max_embedding_evidence_failures {
+                failures.push(format!(
+                    "embedding_evidence_failures {} above maximum {}: {}",
+                    embedding_evidence_failures,
+                    max_embedding_evidence_failures,
+                    self.embedding_evidence.failures.join("; ")
+                ));
+            }
+        }
+
         if let Some(min_runtime_device_execution_cases) = gate.min_runtime_device_execution_cases {
             let runtime_device_execution_matched_cases =
                 self.runtime_device_execution_matched_cases();
@@ -3003,7 +3167,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -3112,6 +3276,13 @@ impl BenchmarkSummary {
             self.total_runtime_adapter_contract_violations(),
             self.total_runtime_adapter_observations(),
             option_f32_display(self.max_runtime_adapter_score()),
+            self.runtime_embedding_cases(),
+            self.runtime_embedding_device_profiles(),
+            self.embedding_evidence.runtime_devices_csv(),
+            self.total_runtime_embedding_calls(),
+            self.embedding_fallback_cases(),
+            self.total_fallback_embedding_calls(),
+            self.total_embedding_evidence_failures(),
             self.runtime_device_execution_cases(),
             self.runtime_device_execution_matched_cases(),
             self.runtime_device_execution_device_profiles(),
@@ -3761,6 +3932,11 @@ mod tests {
             runtime_adapter_contract_violations: 0,
             runtime_adapter_observations: 0,
             runtime_adapter_best_score: None,
+            query_embedding_source: "fallback".to_owned(),
+            query_embedding_dimensions: 64,
+            runtime_embedding_calls: 0,
+            fallback_embedding_calls: 1,
+            embedding_fallback_used: true,
             drift_severity: DriftSeverity::Stable,
         };
         let summary = BenchmarkSummary {
@@ -3998,6 +4174,11 @@ mod tests {
             runtime_adapter_contract_violations: 0,
             runtime_adapter_observations: 0,
             runtime_adapter_best_score: None,
+            query_embedding_source: "fallback".to_owned(),
+            query_embedding_dimensions: 64,
+            runtime_embedding_calls: 0,
+            fallback_embedding_calls: 1,
+            embedding_fallback_used: true,
             drift_severity: DriftSeverity::Stable,
         };
         let summary = BenchmarkSummary {
@@ -4013,6 +4194,8 @@ mod tests {
                 revision_action_devices: vec![DeviceClass::CpuOnly],
             },
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![base_result],
@@ -4215,6 +4398,11 @@ mod tests {
             runtime_adapter_contract_violations: 0,
             runtime_adapter_observations: 0,
             runtime_adapter_best_score: None,
+            query_embedding_source: "fallback".to_owned(),
+            query_embedding_dimensions: 64,
+            runtime_embedding_calls: 0,
+            fallback_embedding_calls: 1,
+            embedding_fallback_used: true,
             drift_severity: DriftSeverity::Stable,
         });
         let passing_report = summary.evaluate(&gate);
@@ -4422,6 +4610,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -4479,6 +4669,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -4509,6 +4704,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -4566,6 +4763,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -4595,6 +4797,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -4652,6 +4856,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -4714,6 +4923,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -4770,6 +4981,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -4827,6 +5040,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -4894,6 +5112,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger {
                 live_inference_runs: 8,
@@ -4981,6 +5201,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger {
                 drift_rollbacks: 2,
@@ -5043,6 +5265,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5072,6 +5299,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5129,6 +5358,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5156,6 +5390,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5183,6 +5419,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5240,6 +5478,11 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5269,6 +5512,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5305,6 +5550,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5362,6 +5609,11 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5417,6 +5669,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5465,6 +5719,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5522,6 +5778,11 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5553,6 +5814,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5584,6 +5847,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5641,6 +5906,11 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5670,6 +5940,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5692,6 +5964,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5749,6 +6023,11 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -5770,6 +6049,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -5790,6 +6071,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![
@@ -5848,6 +6131,11 @@ mod tests {
                     runtime_adapter_contract_violations: 0,
                     runtime_adapter_observations: 0,
                     runtime_adapter_best_score: None,
+                    query_embedding_source: "fallback".to_owned(),
+                    query_embedding_dimensions: 64,
+                    runtime_embedding_calls: 0,
+                    fallback_embedding_calls: 1,
+                    embedding_fallback_used: true,
                     drift_severity: DriftSeverity::Stable,
                 },
                 BenchmarkCaseResult {
@@ -5905,6 +6193,11 @@ mod tests {
                     runtime_adapter_contract_violations: 1,
                     runtime_adapter_observations: 0,
                     runtime_adapter_best_score: None,
+                    query_embedding_source: "fallback".to_owned(),
+                    query_embedding_dimensions: 64,
+                    runtime_embedding_calls: 0,
+                    fallback_embedding_calls: 1,
+                    embedding_fallback_used: true,
                     drift_severity: DriftSeverity::Stable,
                 },
             ],
@@ -5952,11 +6245,108 @@ mod tests {
     }
 
     #[test]
+    fn runtime_embedding_evidence_records_model_side_vectors() {
+        struct EmbeddingBackend;
+
+        impl InferenceBackend for EmbeddingBackend {
+            fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {
+                Some(vec![1.0, text.len() as f32, 0.25, 0.75])
+            }
+
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "A stable Rust Noiron embedding benchmark answer stores runtime model-side vectors.",
+                    vec![ReasoningStep::new(
+                        "embedding",
+                        "runtime embedding path is available",
+                        0.91,
+                    )],
+                )
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.20,
+            0.0,
+            0.30,
+            0.10,
+        ));
+        let mut backend = EmbeddingBackend;
+        let case = BenchmarkCase::new(
+            "runtime_embedding",
+            TaskProfile::Coding,
+            "Benchmark runtime embedding evidence.",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+
+        summary.record(&case, 1, &outcome);
+
+        assert_eq!(summary.runtime_embedding_cases(), 1);
+        assert_eq!(summary.runtime_embedding_device_profiles(), 1);
+        assert_eq!(summary.embedding_fallback_cases(), 0);
+        assert!(summary.total_runtime_embedding_calls() >= 1);
+        assert_eq!(summary.total_fallback_embedding_calls(), 0);
+        assert_eq!(summary.total_embedding_evidence_failures(), 0);
+        assert!(summary.summary_line().contains("runtime_embedding_cases=1"));
+
+        let gate = BenchmarkGate {
+            min_runtime_embedding_cases: Some(1),
+            min_runtime_embedding_device_profiles: Some(1),
+            max_embedding_fallback_cases: Some(0),
+            ..BenchmarkGate::default()
+        };
+        let report = summary.evaluate(&gate);
+
+        assert!(report.passed, "{:?}", report.failures);
+    }
+
+    #[test]
+    fn embedding_gate_reports_fallback_over_limit() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new(
+            "fallback_embedding",
+            TaskProfile::General,
+            "Benchmark fallback embedding evidence.",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+        summary.record(&case, 1, &outcome);
+        let gate = BenchmarkGate {
+            max_embedding_fallback_cases: Some(0),
+            ..BenchmarkGate::default()
+        };
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("embedding_fallback_cases")),
+            "{:?}",
+            report.failures
+        );
+    }
+
+    #[test]
     fn gate_reports_runtime_adapter_kind_collapse() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![
@@ -6015,6 +6405,11 @@ mod tests {
                     runtime_adapter_contract_violations: 0,
                     runtime_adapter_observations: 0,
                     runtime_adapter_best_score: None,
+                    query_embedding_source: "fallback".to_owned(),
+                    query_embedding_dimensions: 64,
+                    runtime_embedding_calls: 0,
+                    fallback_embedding_calls: 1,
+                    embedding_fallback_used: true,
                     drift_severity: DriftSeverity::Stable,
                 },
                 BenchmarkCaseResult {
@@ -6075,6 +6470,11 @@ mod tests {
                         runtime_adapter_contract_violations: 0,
                         runtime_adapter_observations: 0,
                         runtime_adapter_best_score: None,
+                        query_embedding_source: "fallback".to_owned(),
+                        query_embedding_dimensions: 64,
+                        runtime_embedding_calls: 0,
+                        fallback_embedding_calls: 1,
+                        embedding_fallback_used: true,
                         drift_severity: DriftSeverity::Stable,
                     }
                 },
@@ -6098,6 +6498,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             results: vec![
                 summary.results[0].clone(),
@@ -6119,6 +6521,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -6176,6 +6580,11 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -6205,6 +6614,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -6236,6 +6647,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -6293,6 +6706,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Stable,
             }],
         };
@@ -6320,6 +6738,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -6394,12 +6814,19 @@ mod tests {
             runtime_adapter_contract_ok: false,
             runtime_adapter_contract_violations: 0,
             runtime_adapter_best_score: None,
+            query_embedding_source: "fallback".to_owned(),
+            query_embedding_dimensions: 64,
+            runtime_embedding_calls: 0,
+            fallback_embedding_calls: 1,
+            embedding_fallback_used: true,
             drift_severity: DriftSeverity::Stable,
         };
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![base.clone()],
@@ -6426,6 +6853,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
@@ -6504,6 +6933,11 @@ mod tests {
             runtime_adapter_contract_ok: false,
             runtime_adapter_contract_violations: 0,
             runtime_adapter_best_score: None,
+            query_embedding_source: "fallback".to_owned(),
+            query_embedding_dimensions: 64,
+            runtime_embedding_calls: 0,
+            fallback_embedding_calls: 1,
+            embedding_fallback_used: true,
             drift_severity: DriftSeverity::Stable,
         };
         let mut gate = BenchmarkGate::default();
@@ -6512,6 +6946,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
@@ -6539,6 +6975,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
@@ -6575,6 +7013,8 @@ mod tests {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
             live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
             runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
@@ -6632,6 +7072,11 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
                 drift_severity: DriftSeverity::Rollback,
             }],
         };
