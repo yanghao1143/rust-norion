@@ -1427,6 +1427,10 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
         if merged.selected_adapter.is_none() {
             merged.selected_adapter = diagnostic.selected_adapter.clone();
         }
+        merge_runtime_diagnostic_text(&mut merged.device_profile, &diagnostic.device_profile);
+        merge_runtime_diagnostic_text(&mut merged.primary_lane, &diagnostic.primary_lane);
+        merge_runtime_diagnostic_text(&mut merged.fallback_lane, &diagnostic.fallback_lane);
+        merge_runtime_diagnostic_text(&mut merged.memory_mode, &diagnostic.memory_mode);
         merged.layer_count += diagnostic.layer_count;
         merged.global_layers += diagnostic.global_layers;
         merged.local_window_layers += diagnostic.local_window_layers;
@@ -1451,6 +1455,18 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
     merged.forward_energy = average(forward_energy_total, forward_energy_count);
     merged.kv_influence = average(kv_influence_total, kv_influence_count);
     merged
+}
+
+fn merge_runtime_diagnostic_text(merged: &mut Option<String>, next: &Option<String>) {
+    let Some(next) = next.as_deref().filter(|value| !value.trim().is_empty()) else {
+        return;
+    };
+
+    match merged.as_deref() {
+        None => *merged = Some(next.to_owned()),
+        Some(current) if current == next => {}
+        Some(_) => *merged = None,
+    }
 }
 
 fn compact(text: &str, max_chars: usize) -> String {
@@ -1812,6 +1828,83 @@ mod tests {
         assert_eq!(outcome.recursive_schedule.native_window_tokens, 4);
         assert!(outcome.recursive_schedule.chunk_count() > 1);
         assert!(outcome.answer.contains("native window 4"));
+    }
+
+    #[test]
+    fn recursive_inference_preserves_runtime_device_execution_diagnostics() {
+        struct DeviceDiagnosedBackend;
+
+        impl InferenceBackend for DeviceDiagnosedBackend {
+            fn runtime_native_context_window(&self) -> Option<usize> {
+                Some(4)
+            }
+
+            fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+                let execution = &context.hardware_plan.execution;
+                InferenceDraft::new(
+                    "recursive runtime device execution diagnostics",
+                    vec![ReasoningStep::new(
+                        "runtime",
+                        "preserved device execution diagnostics",
+                        0.91,
+                    )],
+                )
+                .with_runtime_diagnostics(RuntimeDiagnostics {
+                    model_id: Some("recursive-device-diagnostics-test".to_owned()),
+                    selected_adapter: execution
+                        .adapter_hints
+                        .first()
+                        .map(|adapter| adapter.as_str().to_owned()),
+                    layer_count: 6,
+                    global_layers: 2,
+                    local_window_layers: 2,
+                    convolutional_fusion_layers: 2,
+                    hidden_size: 64,
+                    local_window_tokens: 4,
+                    forward_energy: Some(0.25),
+                    kv_influence: Some(0.33),
+                    ..RuntimeDiagnostics::default().with_device_execution(
+                        context.hardware_plan.device.as_str(),
+                        execution.primary_lane.as_str(),
+                        execution.fallback_lane.as_str(),
+                        execution.memory_mode.as_str(),
+                    )
+                })
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::Microcontroller,
+            0.62,
+            0.0,
+            0.72,
+            0.55,
+        ));
+        let mut backend = DeviceDiagnosedBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new("one two three four five six", TaskProfile::LongDocument),
+            &mut backend,
+        );
+
+        assert!(outcome.recursive_schedule.requires_recursion);
+        assert_eq!(
+            outcome.runtime_diagnostics.device_profile.as_deref(),
+            Some(outcome.hardware_plan.device.as_str())
+        );
+        assert_eq!(
+            outcome.runtime_diagnostics.primary_lane.as_deref(),
+            Some(outcome.hardware_plan.execution.primary_lane.as_str())
+        );
+        assert_eq!(
+            outcome.runtime_diagnostics.fallback_lane.as_deref(),
+            Some(outcome.hardware_plan.execution.fallback_lane.as_str())
+        );
+        assert_eq!(
+            outcome.runtime_diagnostics.memory_mode.as_deref(),
+            Some(outcome.hardware_plan.execution.memory_mode.as_str())
+        );
     }
 
     #[test]

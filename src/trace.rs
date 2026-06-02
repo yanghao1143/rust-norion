@@ -65,6 +65,10 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"runtime_diagnostics\":{",
     },
     TraceRequiredField {
+        name: "runtime_device_profile",
+        marker: "\"device_profile\":",
+    },
+    TraceRequiredField {
         name: "runtime_adapter_observations",
         marker: "\"runtime_adapter_observations\":{",
     },
@@ -523,6 +527,7 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
 
     failures.extend(evaluate_trace_device_contract(line));
+    failures.extend(evaluate_trace_runtime_device_execution(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
     failures.extend(evaluate_trace_memory_governance(line));
@@ -1550,56 +1555,58 @@ fn evaluate_trace_device_contract(line: &str) -> Vec<String> {
     let Some(contract) = extract_json_string_field(line, "runtime_device_contract") else {
         return failures;
     };
+    let hardware = json_object_after_field(line, "hardware").unwrap_or(line);
+    let execution = json_object_after_field(hardware, "execution").unwrap_or(hardware);
 
     require_contract_string(
         &mut failures,
         &contract,
         "device",
-        extract_json_string_field(line, "device"),
+        extract_json_string_field(hardware, "device"),
     );
     require_contract_string(
         &mut failures,
         &contract,
         "tier",
-        extract_json_string_field(line, "tier"),
+        extract_json_string_field(hardware, "tier"),
     );
     require_contract_string(
         &mut failures,
         &contract,
         "primary",
-        extract_json_string_field(line, "primary_lane"),
+        extract_json_string_field(execution, "primary_lane"),
     );
     require_contract_string(
         &mut failures,
         &contract,
         "fallback",
-        extract_json_string_field(line, "fallback_lane"),
+        extract_json_string_field(execution, "fallback_lane"),
     );
     require_contract_string(
         &mut failures,
         &contract,
         "memory",
-        extract_json_string_field(line, "memory_mode"),
+        extract_json_string_field(execution, "memory_mode"),
     );
     require_contract_usize(
         &mut failures,
         &contract,
         "parallel_chunks",
-        extract_json_usize_field(line, "max_parallel_chunks"),
+        extract_json_usize_field(execution, "max_parallel_chunks"),
     );
     require_contract_usize(
         &mut failures,
         &contract,
         "kv_prefetch",
-        extract_json_usize_field(line, "kv_prefetch_blocks"),
+        extract_json_usize_field(execution, "kv_prefetch_blocks"),
     );
     require_contract_string(
         &mut failures,
         &contract,
         "kv_bits",
         match (
-            extract_json_usize_field(line, "hot_kv_bits"),
-            extract_json_usize_field(line, "cold_kv_bits"),
+            extract_json_usize_field(execution, "hot_kv_bits"),
+            extract_json_usize_field(execution, "cold_kv_bits"),
         ) {
             (Some(hot), Some(cold)) => Some(format!("{hot}/{cold}")),
             _ => None,
@@ -1609,22 +1616,23 @@ fn evaluate_trace_device_contract(line: &str) -> Vec<String> {
         &mut failures,
         &contract,
         "disk_spill",
-        extract_json_bool_field(line, "disk_spill").map(|value| value.to_string()),
+        extract_json_bool_field(execution, "disk_spill").map(|value| value.to_string()),
     );
     require_contract_usize(
         &mut failures,
         &contract,
         "local_kv_tokens",
-        extract_json_usize_field(line, "local_kv_token_budget"),
+        extract_json_usize_field(hardware, "local_kv_token_budget"),
     );
     require_contract_usize(
         &mut failures,
         &contract,
         "global_kv_tokens",
-        extract_json_usize_field(line, "global_kv_token_budget"),
+        extract_json_usize_field(hardware, "global_kv_token_budget"),
     );
 
-    let adapter_hints = extract_json_string_array_field(line, "adapter_hints").unwrap_or_default();
+    let adapter_hints =
+        extract_json_string_array_field(execution, "adapter_hints").unwrap_or_default();
     if adapter_hints.is_empty() {
         failures.push("adapter_hints must not be empty".to_owned());
     }
@@ -1665,6 +1673,105 @@ fn evaluate_trace_device_contract(line: &str) -> Vec<String> {
     }
 
     failures
+}
+
+fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(runtime_diagnostics) = json_object_after_field(line, "runtime_diagnostics") else {
+        return failures;
+    };
+    let Some(hardware) = json_object_after_field(line, "hardware") else {
+        return failures;
+    };
+    let Some(execution) = json_object_after_field(hardware, "execution") else {
+        return failures;
+    };
+
+    let has_forward_signal =
+        extract_json_bool_field(runtime_diagnostics, "has_forward_signal").unwrap_or(false);
+    let device_profile = extract_json_nullable_string_field(runtime_diagnostics, "device_profile");
+    let primary_lane = extract_json_nullable_string_field(runtime_diagnostics, "primary_lane");
+    let fallback_lane = extract_json_nullable_string_field(runtime_diagnostics, "fallback_lane");
+    let memory_mode = extract_json_nullable_string_field(runtime_diagnostics, "memory_mode");
+    let has_device_execution_signal = device_profile
+        .as_deref()
+        .map(has_non_empty_trace_text)
+        .unwrap_or(false)
+        && primary_lane
+            .as_deref()
+            .map(has_non_empty_trace_text)
+            .unwrap_or(false)
+        && fallback_lane
+            .as_deref()
+            .map(has_non_empty_trace_text)
+            .unwrap_or(false)
+        && memory_mode
+            .as_deref()
+            .map(has_non_empty_trace_text)
+            .unwrap_or(false);
+
+    if has_forward_signal && !has_device_execution_signal {
+        failures.push(
+            "runtime_diagnostics has_forward_signal=true but device execution diagnostics are incomplete"
+                .to_owned(),
+        );
+    }
+
+    if !has_device_execution_signal {
+        return failures;
+    }
+
+    require_trace_runtime_device_execution_string(
+        &mut failures,
+        "device_profile",
+        device_profile.as_deref(),
+        extract_json_string_field(hardware, "device").as_deref(),
+    );
+    require_trace_runtime_device_execution_string(
+        &mut failures,
+        "primary_lane",
+        primary_lane.as_deref(),
+        extract_json_string_field(execution, "primary_lane").as_deref(),
+    );
+    require_trace_runtime_device_execution_string(
+        &mut failures,
+        "fallback_lane",
+        fallback_lane.as_deref(),
+        extract_json_string_field(execution, "fallback_lane").as_deref(),
+    );
+    require_trace_runtime_device_execution_string(
+        &mut failures,
+        "memory_mode",
+        memory_mode.as_deref(),
+        extract_json_string_field(execution, "memory_mode").as_deref(),
+    );
+
+    failures
+}
+
+fn require_trace_runtime_device_execution_string(
+    failures: &mut Vec<String>,
+    field: &str,
+    actual: Option<&str>,
+    expected: Option<&str>,
+) {
+    match (actual, expected) {
+        (Some(actual), Some(expected)) if actual == expected => {}
+        (Some(actual), Some(expected)) => failures.push(format!(
+            "runtime_diagnostics {field}={actual} does not match hardware execution {expected}"
+        )),
+        (None, Some(expected)) => failures.push(format!(
+            "runtime_diagnostics {field} missing for hardware execution {expected}"
+        )),
+        (Some(actual), None) => failures.push(format!(
+            "runtime_diagnostics {field}={actual} has no hardware execution value"
+        )),
+        (None, None) => {}
+    }
+}
+
+fn has_non_empty_trace_text(value: &str) -> bool {
+    !value.trim().is_empty()
 }
 
 fn require_contract_string(
@@ -1951,7 +2058,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -1999,6 +2106,10 @@ pub fn trace_json_line_with_case(
         outcome.runtime_token_metrics.has_uncertainty_signal(),
         option_owned_string_json(outcome.runtime_diagnostics.model_id.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.selected_adapter.as_deref()),
+        option_owned_string_json(outcome.runtime_diagnostics.device_profile.as_deref()),
+        option_owned_string_json(outcome.runtime_diagnostics.primary_lane.as_deref()),
+        option_owned_string_json(outcome.runtime_diagnostics.fallback_lane.as_deref()),
+        option_owned_string_json(outcome.runtime_diagnostics.memory_mode.as_deref()),
         outcome.runtime_diagnostics.layer_count,
         outcome.runtime_diagnostics.global_layers,
         outcome.runtime_diagnostics.local_window_layers,
@@ -2376,6 +2487,7 @@ mod tests {
         assert!(line.contains("\"kv_influence\":"));
         assert!(line.contains("\"has_forward_signal\":"));
         assert!(line.contains("\"hierarchy\":"));
+        assert!(line.contains("\"device_profile\":"));
         assert!(line.contains("\"primary_lane\":"));
         assert!(line.contains("\"runtime_device_contract\":"));
         assert!(line.contains("\"adapter_hints\":"));
@@ -2506,6 +2618,97 @@ mod tests {
         let failures = evaluate_trace_schema_line(&line);
 
         assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_incomplete_runtime_device_execution() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace incomplete runtime device execution",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = replace_in_trace_object(
+            &trace_json_line(
+                "trace incomplete runtime device execution",
+                TaskProfile::General,
+                5,
+                &outcome,
+            ),
+            "runtime_diagnostics",
+            "\"has_forward_signal\":false",
+            "\"has_forward_signal\":true",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("device execution diagnostics are incomplete")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_device_execution_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace runtime device execution mismatch",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace runtime device execution mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"device_profile\":null",
+            "\"device_profile\":\"server\"",
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"primary_lane\":null",
+            "\"primary_lane\":\"cuda\"",
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"fallback_lane\":null",
+            "\"fallback_lane\":\"cpu-simd\"",
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"memory_mode\":null",
+            "\"memory_mode\":\"gpu-resident\"",
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"has_forward_signal\":false",
+            "\"has_forward_signal\":true",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("runtime_diagnostics device_profile=server")),
+            "{failures:?}"
+        );
     }
 
     #[test]
