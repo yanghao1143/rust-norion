@@ -588,18 +588,37 @@ coverage, compacted memory counts, runtime forward-signal case counts, runtime
 forward-energy and KV-influence coverage, runtime KV import/export counts,
 runtime adapter contract coverage, adapter-kind diversity, runtime KV storage, runtime adapter
 observation counts and best scores,
+reflection issue/critical issue coverage, revision action coverage,
 auto-replay router/hierarchy/memory update counts, recursive pressure, covered
 device profiles, cumulative evolution-ledger replay/mutation/memory/recursive
 cost counters, drift rollback safety counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
 diagnostics, missing KV exchange, missing runtime KV storage, missing runtime adapter observation reuse,
+missing closed-loop reflection diagnostics or revision evidence,
 missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
 recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量和 best score、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence 覆盖数、runtime KV import/export 计数、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量和 best score、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、KV 交换缺失、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、闭环 reflection diagnostics 或 revision 证据缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+
+Use the reflection-specific benchmark gates when a weak-output or repair audit
+must prove that reflection diagnostics actually fired during the benchmark:
+`--benchmark-min-reflection-issue-cases`,
+`--benchmark-min-reflection-issues`,
+`--benchmark-min-critical-reflection-issue-cases`,
+`--benchmark-min-critical-reflection-issues`,
+`--benchmark-min-revision-action-cases`, and
+`--benchmark-min-revision-actions`.
+
+当弱输出 / 修复审计必须证明 benchmark 中真实触发了反思诊断时，可以使用
+`--benchmark-min-reflection-issue-cases`、
+`--benchmark-min-reflection-issues`、
+`--benchmark-min-critical-reflection-issue-cases`、
+`--benchmark-min-critical-reflection-issues`、
+`--benchmark-min-revision-action-cases` 和
+`--benchmark-min-revision-actions`。
 
 The default benchmark gate also caps cumulative evolution-ledger drift
 rollbacks and rollback deltas at zero. Use

@@ -159,6 +159,12 @@ pub struct BenchmarkGate {
     pub min_runtime_adapter_observations: Option<usize>,
     pub min_runtime_adapter_best_score: Option<f32>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
+    pub min_reflection_issue_cases: Option<usize>,
+    pub min_reflection_issues: Option<usize>,
+    pub min_critical_reflection_issue_cases: Option<usize>,
+    pub min_critical_reflection_issues: Option<usize>,
+    pub min_revision_action_cases: Option<usize>,
+    pub min_revision_actions: Option<usize>,
     pub min_device_profiles: Option<usize>,
     pub min_recursive_device_profiles: Option<usize>,
     pub max_drift_blocks: Option<usize>,
@@ -212,6 +218,12 @@ impl Default for BenchmarkGate {
             min_runtime_adapter_observations: None,
             min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
+            min_reflection_issue_cases: None,
+            min_reflection_issues: None,
+            min_critical_reflection_issue_cases: None,
+            min_critical_reflection_issues: None,
+            min_revision_action_cases: None,
+            min_revision_actions: None,
             min_device_profiles: None,
             min_recursive_device_profiles: None,
             max_drift_blocks: Some(0),
@@ -722,10 +734,36 @@ fn missing_persistent_roundtrip_devices(
         .collect()
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BenchmarkReflectionEvidence {
+    pub issue_cases: usize,
+    pub total_issues: usize,
+    pub critical_issue_cases: usize,
+    pub total_critical_issues: usize,
+    pub revision_action_cases: usize,
+    pub total_revision_actions: usize,
+}
+
+impl BenchmarkReflectionEvidence {
+    fn record(&mut self, outcome: &InferenceOutcome) {
+        let issues = outcome.report.issues.len();
+        let critical_issues = outcome.report.critical_issue_count();
+        let revision_actions = outcome.report.revision_actions.len();
+
+        self.issue_cases += usize::from(issues > 0);
+        self.total_issues += issues;
+        self.critical_issue_cases += usize::from(critical_issues > 0);
+        self.total_critical_issues += critical_issues;
+        self.revision_action_cases += usize::from(revision_actions > 0);
+        self.total_revision_actions += revision_actions;
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct BenchmarkSummary {
     results: Vec<BenchmarkCaseResult>,
     evolution_ledger: EvolutionLedger,
+    reflection_evidence: BenchmarkReflectionEvidence,
 }
 
 impl BenchmarkSummary {
@@ -840,6 +878,7 @@ impl BenchmarkSummary {
         });
         self.evolution_ledger =
             max_evolution_ledger(self.evolution_ledger, outcome.evolution_ledger);
+        self.reflection_evidence.record(outcome);
     }
 
     pub fn results(&self) -> &[BenchmarkCaseResult] {
@@ -1077,6 +1116,10 @@ impl BenchmarkSummary {
             .iter()
             .filter_map(|result| result.runtime_adapter_best_score)
             .reduce(f32::max)
+    }
+
+    pub fn reflection_evidence(&self) -> BenchmarkReflectionEvidence {
+        self.reflection_evidence
     }
 
     pub fn total_stored_memories(&self) -> usize {
@@ -1739,6 +1782,67 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_reflection_issue_cases) = gate.min_reflection_issue_cases {
+            let observed = self.reflection_evidence.issue_cases;
+            if observed < min_reflection_issue_cases {
+                failures.push(format!(
+                    "reflection_issue_cases {} below minimum {}",
+                    observed, min_reflection_issue_cases
+                ));
+            }
+        }
+
+        if let Some(min_reflection_issues) = gate.min_reflection_issues {
+            let observed = self.reflection_evidence.total_issues;
+            if observed < min_reflection_issues {
+                failures.push(format!(
+                    "reflection_issues {} below minimum {}",
+                    observed, min_reflection_issues
+                ));
+            }
+        }
+
+        if let Some(min_critical_reflection_issue_cases) = gate.min_critical_reflection_issue_cases
+        {
+            let observed = self.reflection_evidence.critical_issue_cases;
+            if observed < min_critical_reflection_issue_cases {
+                failures.push(format!(
+                    "critical_reflection_issue_cases {} below minimum {}",
+                    observed, min_critical_reflection_issue_cases
+                ));
+            }
+        }
+
+        if let Some(min_critical_reflection_issues) = gate.min_critical_reflection_issues {
+            let observed = self.reflection_evidence.total_critical_issues;
+            if observed < min_critical_reflection_issues {
+                failures.push(format!(
+                    "critical_reflection_issues {} below minimum {}",
+                    observed, min_critical_reflection_issues
+                ));
+            }
+        }
+
+        if let Some(min_revision_action_cases) = gate.min_revision_action_cases {
+            let observed = self.reflection_evidence.revision_action_cases;
+            if observed < min_revision_action_cases {
+                failures.push(format!(
+                    "revision_action_cases {} below minimum {}",
+                    observed, min_revision_action_cases
+                ));
+            }
+        }
+
+        if let Some(min_revision_actions) = gate.min_revision_actions {
+            let observed = self.reflection_evidence.total_revision_actions;
+            if observed < min_revision_actions {
+                failures.push(format!(
+                    "revision_actions {} below minimum {}",
+                    observed, min_revision_actions
+                ));
+            }
+        }
+
         if let Some(min_device_profiles) = gate.min_device_profiles {
             let device_profiles = self.explicit_device_profiles_covered();
             if device_profiles < min_device_profiles {
@@ -1799,7 +1903,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} critical_reflection_issue_cases={} critical_reflection_issues={} revision_action_cases={} revision_actions={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1858,6 +1962,12 @@ impl BenchmarkSummary {
             self.total_runtime_adapter_contract_violations(),
             self.total_runtime_adapter_observations(),
             option_f32_display(self.max_runtime_adapter_score()),
+            self.reflection_evidence.issue_cases,
+            self.reflection_evidence.total_issues,
+            self.reflection_evidence.critical_issue_cases,
+            self.reflection_evidence.total_critical_issues,
+            self.reflection_evidence.revision_action_cases,
+            self.reflection_evidence.total_revision_actions,
             self.drift_watches(),
             self.drift_blocks(),
             self.drift_rollbacks()
@@ -2153,6 +2263,12 @@ mod tests {
             min_runtime_adapter_observations: None,
             min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
+            min_reflection_issue_cases: None,
+            min_reflection_issues: None,
+            min_critical_reflection_issue_cases: None,
+            min_critical_reflection_issues: None,
+            min_revision_action_cases: None,
+            min_revision_actions: None,
             min_device_profiles: None,
             min_recursive_device_profiles: None,
             max_drift_blocks: Some(0),
@@ -2216,8 +2332,95 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_reflection_diagnostics_coverage() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new(
+            "reflection_gate",
+            TaskProfile::General,
+            "Explain how reflection gates prove closed-loop control evidence.",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+        summary.record(&case, 1, &outcome);
+        summary.reflection_evidence = BenchmarkReflectionEvidence::default();
+        let mut gate = BenchmarkGate::default();
+        gate.min_reflection_issue_cases = Some(2);
+        gate.min_reflection_issues = Some(3);
+        gate.min_critical_reflection_issue_cases = Some(1);
+        gate.min_critical_reflection_issues = Some(1);
+        gate.min_revision_action_cases = Some(1);
+        gate.min_revision_actions = Some(2);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("reflection_issue_cases"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("critical_reflection_issues"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("revision_actions"))
+        );
+
+        let mut passing = summary.clone();
+        passing.reflection_evidence = BenchmarkReflectionEvidence {
+            issue_cases: 2,
+            total_issues: 3,
+            critical_issue_cases: 1,
+            total_critical_issues: 1,
+            revision_action_cases: 1,
+            total_revision_actions: 2,
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert!(
+            !passing_report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("reflection"))
+        );
+        assert!(
+            !passing_report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("revision"))
+        );
+        assert!(passing.summary_line().contains("reflection_issue_cases=2"));
+        assert!(passing.summary_line().contains("reflection_issues=3"));
+        assert!(
+            passing
+                .summary_line()
+                .contains("critical_reflection_issue_cases=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("critical_reflection_issues=1")
+        );
+        assert!(passing.summary_line().contains("revision_action_cases=1"));
+        assert!(passing.summary_line().contains("revision_actions=2"));
+    }
+
+    #[test]
     fn gate_reports_auto_replay_recursive_pressure_failures() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "replay_pressure".to_owned(),
@@ -2292,6 +2495,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_auto_replay_recursive_pressure() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "missing_replay_pressure".to_owned(),
@@ -2365,6 +2569,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_auto_replay_control_plane_coverage() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "auto_replay_control_plane".to_owned(),
@@ -2471,6 +2676,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 auto_replay_router_updates: 1,
@@ -2523,6 +2729,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_evolution_ledger_coverage() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "evolution_ledger".to_owned(),
@@ -2612,6 +2819,7 @@ mod tests {
         }
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger {
                 replay_runs: 1,
                 replay_items: 2,
@@ -2650,6 +2858,7 @@ mod tests {
     #[test]
     fn gate_reports_evolution_ledger_drift_rollback_failures() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger {
                 drift_rollbacks: 2,
                 rollback_router_threshold_delta: 0.03,
@@ -2728,6 +2937,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_runtime_forward_and_kv_export() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_boundary".to_owned(),
@@ -2799,6 +3009,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_forward_signal: true,
@@ -2822,6 +3033,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_runtime_forward_diagnostics() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_diagnostics".to_owned(),
@@ -2895,6 +3107,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_forward_energy_signal: true,
@@ -2922,6 +3135,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_runtime_uncertainty_signal() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_uncertainty".to_owned(),
@@ -2997,6 +3211,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_uncertainty_token_count: 3,
@@ -3024,6 +3239,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_runtime_kv_import() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_import".to_owned(),
@@ -3097,6 +3313,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_kv_imported: 3,
@@ -3115,6 +3332,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_runtime_kv_storage() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_storage".to_owned(),
@@ -3180,6 +3398,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_kv_stored: 2,
@@ -3196,6 +3415,7 @@ mod tests {
     #[test]
     fn gate_reports_runtime_adapter_contract_failures() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![
                 BenchmarkCaseResult {
@@ -3341,6 +3561,7 @@ mod tests {
     #[test]
     fn gate_reports_runtime_adapter_kind_collapse() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![
                 BenchmarkCaseResult {
@@ -3460,6 +3681,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             results: vec![
                 summary.results[0].clone(),
                 BenchmarkCaseResult {
@@ -3477,6 +3699,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_runtime_adapter_observations() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_adapter_observation".to_owned(),
@@ -3550,6 +3773,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_adapter_observations: 2,
@@ -3577,6 +3801,7 @@ mod tests {
     #[test]
     fn gate_reports_missing_sparse_filtering_coverage() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "sparse_filter".to_owned(),
@@ -3648,6 +3873,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 sparse_skipped: 2,
@@ -3715,6 +3941,7 @@ mod tests {
             drift_severity: DriftSeverity::Stable,
         };
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![base.clone()],
         };
@@ -3737,6 +3964,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
                 .iter()
@@ -3810,6 +4038,7 @@ mod tests {
         let mut gate = BenchmarkGate::default();
         gate.min_recursive_device_profiles = Some(DeviceClass::explicit_profiles().len());
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
                 .iter()
@@ -3833,6 +4062,7 @@ mod tests {
         );
 
         let passing = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
                 .iter()
@@ -3865,6 +4095,7 @@ mod tests {
     #[test]
     fn gate_reports_drift_failures() {
         let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "drift".to_owned(),

@@ -704,6 +704,15 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-influence-cases`, so local/CI production sweeps
   can fail when a runtime stops returning model-side forward-energy or
   imported-KV influence signals.
+- Benchmark summaries and gates expose closed-loop reflection evidence through
+  `--benchmark-min-reflection-issue-cases`,
+  `--benchmark-min-reflection-issues`,
+  `--benchmark-min-critical-reflection-issue-cases`,
+  `--benchmark-min-critical-reflection-issues`,
+  `--benchmark-min-revision-action-cases`, and
+  `--benchmark-min-revision-actions`, so weak-output or repair audits can fail
+  when reflection diagnostics or revision actions stop firing during benchmark
+  execution.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -763,6 +772,7 @@ These are algorithmic references, not product dependencies:
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
   runtime KV storage, runtime adapter contract coverage, runtime adapter observation reuse,
+  reflection issue / critical issue coverage, revision-action coverage,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
