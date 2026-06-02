@@ -1093,12 +1093,41 @@ fn print_state_inspection_report(args: &Args, report: &StateInspectionReport) {
             .join(" ");
         println!("memory_vector_dimensions: {dimensions}");
     }
+    if report.runtime_kv_vector_dimensions.is_empty() {
+        println!("runtime_kv_vector_dimensions: none");
+    } else {
+        let dimensions = report
+            .runtime_kv_vector_dimensions
+            .iter()
+            .map(|bucket| format!("{}:{}", bucket.dimensions, bucket.count))
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("runtime_kv_vector_dimensions: {dimensions}");
+    }
 
     println!("top_memories:");
     if report.top_memories.is_empty() {
         println!("  none");
     } else {
         for memory in &report.top_memories {
+            println!(
+                "  id={} dims={} strength={:.3} hits={} failures={} last_score={:.3} key={}",
+                memory.id,
+                memory.vector_dimensions,
+                memory.strength,
+                memory.hits,
+                memory.failures,
+                memory.last_score,
+                memory.key
+            );
+        }
+    }
+
+    println!("top_runtime_kv_memories:");
+    if report.top_runtime_kv_memories.is_empty() {
+        println!("  none");
+    } else {
+        for memory in &report.top_runtime_kv_memories {
             println!(
                 "  id={} dims={} strength={:.3} hits={} failures={} last_score={:.3} key={}",
                 memory.id,

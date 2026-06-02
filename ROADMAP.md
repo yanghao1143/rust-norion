@@ -579,8 +579,10 @@ These are algorithmic references, not product dependencies:
   inspectable local state with a persisted evolution ledger.
 - The CLI can inspect memory count, experience count, adaptive global/profile
   router state, hierarchy weights, tier counts, effective memory policies,
-  cumulative replay mutation counters, memory-vector dimension buckets, and top
-  memories/lessons from persisted local files without invoking a model runtime.
+  cumulative replay mutation counters, memory-vector dimension buckets,
+  `runtime_kv:` memory counts, runtime KV vector dimensions, top runtime KV
+  memories, and top memories/lessons from persisted local files without
+  invoking a model runtime.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with

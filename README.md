@@ -216,10 +216,12 @@ cargo run -- --inspect-state --inspect-limit 5
 ```
 
 The report includes effective memory retention/compaction policy values and a
-memory-vector dimension histogram. Top experience rows also expose persisted
-runtime model id, adapter, forward energy, KV influence, and KV import/export
-counts, so runtime embedding-space changes or fallback/runtime mixing can be
-audited before another inference writes more durable state.
+memory-vector dimension histogram, plus `runtime_kv:` memory counts, runtime
+KV vector dimensions, and top persisted runtime KV memories. Top experience
+rows also expose persisted runtime model id, adapter, forward energy, KV
+influence, and KV import/export counts, so runtime embedding-space changes or
+fallback/runtime mixing can be audited before another inference writes more
+durable state.
 
 查看本地持久化状态，但不执行推理：
 
@@ -228,9 +230,10 @@ cargo run -- --inspect-state --inspect-limit 5
 ```
 
 报告会包含实际生效的记忆保留 / 压缩策略，以及持久化 memory vector
-维度直方图。高价值 experience 行也会展示已持久化的 runtime model id、
-adapter、forward energy、KV influence 和 KV 导入 / 导出计数，便于在继续写入
-长期状态前检查自研 runtime embedding 空间变化或 fallback/runtime 混用。
+维度直方图，同时单独展示 `runtime_kv:` 记忆数量、runtime KV 维度桶和高价值
+runtime KV 长期记忆。高价值 experience 行也会展示已持久化的 runtime model id、
+adapter、forward energy、KV influence 和 KV 导入 / 导出计数，便于在继续写入长期
+状态前检查自研 runtime embedding 空间变化或 fallback/runtime 混用。
 
 Write one structured JSONL trace record for benchmark comparison:
 

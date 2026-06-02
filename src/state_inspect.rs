@@ -55,6 +55,7 @@ pub struct StateExperienceSummary {
 #[derive(Debug, Clone)]
 pub struct StateInspectionReport {
     pub memory_count: usize,
+    pub runtime_kv_memory_count: usize,
     pub experience_count: usize,
     pub router_threshold: f32,
     pub router_observations: u64,
@@ -68,7 +69,9 @@ pub struct StateInspectionReport {
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub evolution_ledger: EvolutionLedger,
     pub memory_vector_dimensions: Vec<StateMemoryVectorDimensions>,
+    pub runtime_kv_vector_dimensions: Vec<StateMemoryVectorDimensions>,
     pub top_memories: Vec<StateMemorySummary>,
+    pub top_runtime_kv_memories: Vec<StateMemorySummary>,
     pub top_experiences: Vec<StateExperienceSummary>,
 }
 
@@ -76,37 +79,9 @@ impl StateInspectionReport {
     pub fn from_engine(engine: &NoironEngine, limit: usize) -> Self {
         let limit = limit.max(1);
         let adaptive_state = engine.adaptive_state();
-        let mut top_memories = engine
-            .cache
-            .entries()
-            .iter()
-            .map(|entry| {
-                let value_score =
-                    entry.strength + entry.hits as f32 * 0.04 - entry.failures as f32 * 0.10;
-                (value_score, entry)
-            })
-            .collect::<Vec<_>>();
-        top_memories.sort_by(|left, right| {
-            right
-                .0
-                .partial_cmp(&left.0)
-                .unwrap_or(Ordering::Equal)
-                .then_with(|| left.1.id.cmp(&right.1.id))
-        });
-
-        let top_memories = top_memories
-            .into_iter()
-            .take(limit)
-            .map(|(_, entry)| StateMemorySummary {
-                id: entry.id,
-                key: compact(&entry.key, 120),
-                vector_dimensions: entry.vector.len(),
-                strength: entry.strength,
-                hits: entry.hits,
-                failures: entry.failures,
-                last_score: entry.last_score,
-            })
-            .collect::<Vec<_>>();
+        let top_memories = top_memory_summaries(engine, limit, |_| true);
+        let top_runtime_kv_memories =
+            top_memory_summaries(engine, limit, |key| key.starts_with("runtime_kv:"));
 
         let mut top_experiences = engine.experience.records().iter().collect::<Vec<_>>();
         top_experiences.sort_by(|left, right| {
@@ -160,6 +135,12 @@ impl StateInspectionReport {
 
         Self {
             memory_count: engine.cache.len(),
+            runtime_kv_memory_count: engine
+                .cache
+                .entries()
+                .iter()
+                .filter(|entry| entry.key.starts_with("runtime_kv:"))
+                .count(),
             experience_count: engine.experience.len(),
             router_threshold: adaptive_state.router.threshold,
             router_observations: adaptive_state.router.observations,
@@ -173,15 +154,18 @@ impl StateInspectionReport {
             memory_compaction_policy: engine.memory_compaction_policy.clone(),
             evolution_ledger: adaptive_state.evolution_ledger,
             memory_vector_dimensions: memory_vector_dimensions(engine),
+            runtime_kv_vector_dimensions: runtime_kv_vector_dimensions(engine),
             top_memories,
+            top_runtime_kv_memories,
             top_experiences,
         }
     }
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
+            self.runtime_kv_memory_count,
             self.experience_count,
             self.router_threshold,
             self.router_observations,
@@ -208,14 +192,71 @@ impl StateInspectionReport {
             self.evolution_ledger.drift_rollbacks,
             self.evolution_ledger.rollback_router_threshold_delta,
             self.evolution_ledger.rollback_hierarchy_weight_delta,
-            format_memory_vector_dimensions(&self.memory_vector_dimensions)
+            format_memory_vector_dimensions(&self.memory_vector_dimensions),
+            format_memory_vector_dimensions(&self.runtime_kv_vector_dimensions)
         )
     }
+}
+
+fn top_memory_summaries(
+    engine: &NoironEngine,
+    limit: usize,
+    include: impl Fn(&str) -> bool,
+) -> Vec<StateMemorySummary> {
+    let mut top_memories = engine
+        .cache
+        .entries()
+        .iter()
+        .filter(|entry| include(&entry.key))
+        .map(|entry| {
+            let value_score =
+                entry.strength + entry.hits as f32 * 0.04 - entry.failures as f32 * 0.10;
+            (value_score, entry)
+        })
+        .collect::<Vec<_>>();
+    top_memories.sort_by(|left, right| {
+        right
+            .0
+            .partial_cmp(&left.0)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.1.id.cmp(&right.1.id))
+    });
+
+    top_memories
+        .into_iter()
+        .take(limit)
+        .map(|(_, entry)| StateMemorySummary {
+            id: entry.id,
+            key: compact(&entry.key, 120),
+            vector_dimensions: entry.vector.len(),
+            strength: entry.strength,
+            hits: entry.hits,
+            failures: entry.failures,
+            last_score: entry.last_score,
+        })
+        .collect()
 }
 
 fn memory_vector_dimensions(engine: &NoironEngine) -> Vec<StateMemoryVectorDimensions> {
     let mut buckets = BTreeMap::<usize, usize>::new();
     for entry in engine.cache.entries() {
+        *buckets.entry(entry.vector.len()).or_insert(0) += 1;
+    }
+
+    buckets
+        .into_iter()
+        .map(|(dimensions, count)| StateMemoryVectorDimensions { dimensions, count })
+        .collect()
+}
+
+fn runtime_kv_vector_dimensions(engine: &NoironEngine) -> Vec<StateMemoryVectorDimensions> {
+    let mut buckets = BTreeMap::<usize, usize>::new();
+    for entry in engine
+        .cache
+        .entries()
+        .iter()
+        .filter(|entry| entry.key.starts_with("runtime_kv:"))
+    {
         *buckets.entry(entry.vector.len()).or_insert(0) += 1;
     }
 
@@ -266,7 +307,13 @@ mod tests {
             engine
                 .cache
                 .store_or_fuse("fallback embedding memory", vec![0.0, 1.0, 0.0, 0.0], 0.7);
+        let runtime_kv_memory_id = engine.cache.store_or_fuse(
+            "runtime_kv:l2h1:0-1 :: inspect runtime KV",
+            vec![0.1, 0.2, 0.3, 0.4, 0.5],
+            0.95,
+        );
         engine.cache.reinforce(memory_id, 0.8);
+        engine.cache.reinforce(runtime_kv_memory_id, 0.9);
         engine.evolution_ledger = EvolutionLedger {
             replay_runs: 2,
             replay_items: 5,
@@ -343,11 +390,25 @@ mod tests {
 
         let report = StateInspectionReport::from_engine(&engine, 3);
 
-        assert_eq!(report.memory_count, 2);
+        assert_eq!(report.memory_count, 3);
+        assert_eq!(report.runtime_kv_memory_count, 1);
         assert_eq!(report.experience_count, 1);
-        assert_eq!(report.top_memories[0].id, memory_id);
-        assert!(report.top_memories[0].key.contains("inspectable"));
-        assert_eq!(report.top_memories[0].vector_dimensions, 3);
+        assert!(
+            report
+                .top_memories
+                .iter()
+                .any(|memory| memory.id == memory_id
+                    && memory.key.contains("inspectable")
+                    && memory.vector_dimensions == 3)
+        );
+        assert_eq!(report.top_runtime_kv_memories.len(), 1);
+        assert_eq!(report.top_runtime_kv_memories[0].id, runtime_kv_memory_id);
+        assert!(
+            report.top_runtime_kv_memories[0]
+                .key
+                .starts_with("runtime_kv:")
+        );
+        assert_eq!(report.top_runtime_kv_memories[0].vector_dimensions, 5);
         assert!(
             report
                 .top_memories
@@ -364,8 +425,19 @@ mod tests {
                 StateMemoryVectorDimensions {
                     dimensions: 4,
                     count: 1
+                },
+                StateMemoryVectorDimensions {
+                    dimensions: 5,
+                    count: 1
                 }
             ]
+        );
+        assert_eq!(
+            report.runtime_kv_vector_dimensions,
+            vec![StateMemoryVectorDimensions {
+                dimensions: 5,
+                count: 1
+            }]
         );
         assert_eq!(report.memory_retention_policy.stale_after, 12);
         assert_eq!(report.memory_compaction_policy.max_merges, 4);
@@ -397,11 +469,17 @@ mod tests {
         assert_eq!(report.top_experiences[0].recursive_runtime_calls, Some(9));
         assert_eq!(report.top_experiences[0].reflection_issues, 1);
         assert_eq!(report.top_experiences[0].revision_actions, 1);
-        assert!(report.summary_line().contains("memories=2"));
+        assert!(report.summary_line().contains("memories=3"));
+        assert!(report.summary_line().contains("runtime_kv_memories=1"));
         assert!(
             report
                 .summary_line()
-                .contains("memory_vector_dimensions=3:1|4:1")
+                .contains("memory_vector_dimensions=3:1|4:1|5:1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_vector_dimensions=5:1")
         );
         assert!(
             report
