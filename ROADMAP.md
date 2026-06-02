@@ -574,10 +574,12 @@ These are algorithmic references, not product dependencies:
   behavior is gated through the production ABI rather than only through local
   unit tests; benchmark summaries and gates now count runtime adapter contract
   cases, violations, adapter-kind diversity, runtime adapter observation counts,
-  and best observation scores, so production all-device sweeps must prove every
-  selected adapter is inside that device's allowed adapter hints, historical
-  runtime/adapter experience is being surfaced back into later runtime requests,
-  and every target is not silently collapsing to the same fallback; benchmark
+  best observation scores, and best-adapter selection mismatches, so production
+  all-device sweeps must prove every selected adapter is inside that device's
+  allowed adapter hints, historical runtime/adapter experience is being
+  surfaced back into later runtime requests, every target is not silently
+  collapsing to the same fallback, and the runtime actually chooses the best
+  compatible adapter observation; benchmark
   summaries and gates also count runtime KV import cases, imported block totals,
   and stored runtime KV memory writes, so production sweeps must prove persisted
   Noiron memory is actually fed back into the runtime and useful exported
@@ -883,6 +885,10 @@ These are algorithmic references, not product dependencies:
   positive scored best observation through
   `--benchmark-min-runtime-adapter-best-score`, so production sweeps fail when
   runtime/adapter history is not entering the next control-plane request.
+- Benchmark execution can cap live best-adapter selection mismatches through
+  `--benchmark-max-runtime-adapter-selection-mismatches`, so local/CI sweeps
+  fail when the runtime receives a stronger compatible adapter observation but
+  selects a different adapter for the current device plan.
 - Trace schema validation rejects incomplete or out-of-device runtime adapter
   observations, so the same observation evidence cannot bypass the current
   device contract even when it exists in persisted experience.
@@ -893,7 +899,7 @@ These are algorithmic references, not product dependencies:
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
   runtime KV precision, runtime KV storage, runtime adapter contract coverage,
-  runtime adapter observation reuse,
+  runtime adapter observation reuse, runtime adapter selection consistency,
   reflection issue / critical issue coverage, revision-action coverage,
   per-device reflection/revision coverage,
   live-inference router/hierarchy mutation and memory/reflection/revision coverage,

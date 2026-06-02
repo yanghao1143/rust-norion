@@ -1164,7 +1164,7 @@ fn print_benchmark_summary(
 
     for result in summary.results() {
         println!(
-            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} drift={}",
+            "case={} profile={:?} device={} elapsed_ms={} quality={:.3} reward={:.3} attention_fraction={:.2} requires_recursion={} chunks={} waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure={:.3} auto_replay_max_recursive_call_pressure={:.3} used_memories={} infini_local_window={} infini_global_memory={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_signal={} runtime_forward_energy_signal={} runtime_kv_influence_signal={} runtime_token_count={} runtime_uncertainty_tokens={} runtime_uncertainty_signal={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_selected_adapter={} runtime_adapter_contract_ok={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_adapter_best_adapter={} runtime_adapter_selection_mismatches={} drift={}",
             result.name,
             result.profile,
             result.device.as_str(),
@@ -1219,6 +1219,8 @@ fn print_benchmark_summary(
             result.runtime_adapter_contract_violations,
             result.runtime_adapter_observations,
             option_f32_text(result.runtime_adapter_best_score),
+            option_text(result.runtime_adapter_best_adapter.as_deref()),
+            result.runtime_adapter_selection_mismatches,
             result.drift_severity.as_str()
         );
     }
@@ -1979,6 +1981,7 @@ struct Args {
     benchmark_min_runtime_adapter_observations: Option<usize>,
     benchmark_min_runtime_adapter_best_score: Option<f32>,
     benchmark_max_runtime_adapter_contract_violations: Option<usize>,
+    benchmark_max_runtime_adapter_selection_mismatches: Option<usize>,
     benchmark_min_runtime_embedding_cases: Option<usize>,
     benchmark_min_runtime_embedding_device_profiles: Option<usize>,
     benchmark_max_embedding_fallback_cases: Option<usize>,
@@ -2247,6 +2250,7 @@ impl Args {
         let mut benchmark_min_runtime_adapter_observations = None;
         let mut benchmark_min_runtime_adapter_best_score = None;
         let mut benchmark_max_runtime_adapter_contract_violations = None;
+        let mut benchmark_max_runtime_adapter_selection_mismatches = None;
         let mut benchmark_min_runtime_embedding_cases = None;
         let mut benchmark_min_runtime_embedding_device_profiles = None;
         let mut benchmark_max_embedding_fallback_cases = None;
@@ -2951,6 +2955,12 @@ impl Args {
                 }
                 "--benchmark-max-runtime-adapter-contract-violations" if index + 1 < raw.len() => {
                     benchmark_max_runtime_adapter_contract_violations =
+                        Some(parse_usize(&raw[index + 1], usize::MAX));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-max-runtime-adapter-selection-mismatches" if index + 1 < raw.len() => {
+                    benchmark_max_runtime_adapter_selection_mismatches =
                         Some(parse_usize(&raw[index + 1], usize::MAX));
                     benchmark_gate_enabled = true;
                     index += 2;
@@ -4161,6 +4171,7 @@ impl Args {
             benchmark_min_runtime_adapter_observations,
             benchmark_min_runtime_adapter_best_score,
             benchmark_max_runtime_adapter_contract_violations,
+            benchmark_max_runtime_adapter_selection_mismatches,
             benchmark_min_runtime_embedding_cases,
             benchmark_min_runtime_embedding_device_profiles,
             benchmark_max_embedding_fallback_cases,
@@ -4564,6 +4575,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_max_runtime_adapter_contract_violations {
             gate.max_runtime_adapter_contract_violations = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_runtime_adapter_selection_mismatches {
+            gate.max_runtime_adapter_selection_mismatches = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_embedding_cases {
             gate.min_runtime_embedding_cases = Some(value);
@@ -4978,6 +4992,7 @@ fn print_help_and_exit() -> ! {
         "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-detail-items n --benchmark-min-auto-replay-live-memory-feedback-applied n --benchmark-min-auto-replay-live-memory-feedback-strength-delta f --benchmark-min-evolution-replay-live-memory-feedback-updates n --benchmark-min-evolution-replay-live-memory-feedback-detail-items n --benchmark-min-evolution-replay-live-memory-feedback-applied n --benchmark-min-evolution-replay-live-memory-feedback-strength-delta f\n",
         "Benchmark live evolution: --benchmark-min-evolution-live-inference-runs n --benchmark-min-evolution-live-router-threshold-mutations n --benchmark-min-evolution-live-hierarchy-weight-mutations n --benchmark-min-evolution-live-router-threshold-delta f --benchmark-min-evolution-live-hierarchy-weight-delta f --benchmark-min-evolution-live-memory-updates n --benchmark-min-evolution-live-stored-memory-updates n --benchmark-min-evolution-live-reflection-issues n --benchmark-min-evolution-live-critical-reflection-issues n --benchmark-min-evolution-live-revision-actions n\n",
         "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
+        "Benchmark runtime adapter: --benchmark-min-runtime-adapter-contract-cases n --benchmark-min-runtime-adapter-kinds n --benchmark-min-runtime-adapter-observations n --benchmark-min-runtime-adapter-best-score f --benchmark-max-runtime-adapter-contract-violations n --benchmark-max-runtime-adapter-selection-mismatches n\n",
         "Benchmark runtime embedding: --benchmark-min-runtime-embedding-cases n --benchmark-min-runtime-embedding-device-profiles n --benchmark-max-embedding-fallback-cases n --benchmark-max-embedding-evidence-failures n\n",
         "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
         "Benchmark memory governance: --benchmark-max-memory-governance-failures n --benchmark-min-memory-governance-cases n --benchmark-min-memory-governance-device-profiles n --benchmark-min-memory-retention-activity-cases n --benchmark-min-memory-compaction-activity-cases n\n",
@@ -5186,6 +5201,8 @@ mod tests {
             "--benchmark-min-runtime-adapter-best-score".to_owned(),
             "0.25".to_owned(),
             "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
+            "0".to_owned(),
+            "--benchmark-max-runtime-adapter-selection-mismatches".to_owned(),
             "0".to_owned(),
             "--benchmark-min-runtime-embedding-cases".to_owned(),
             "4".to_owned(),
@@ -5889,6 +5906,10 @@ mod tests {
             args.benchmark_max_runtime_adapter_contract_violations,
             Some(0)
         );
+        assert_eq!(
+            args.benchmark_max_runtime_adapter_selection_mismatches,
+            Some(0)
+        );
         assert_eq!(args.benchmark_min_runtime_embedding_cases, Some(4));
         assert_eq!(
             args.benchmark_min_runtime_embedding_device_profiles,
@@ -5973,6 +5994,11 @@ mod tests {
         assert_eq!(
             args.benchmark_gate()
                 .max_runtime_adapter_contract_violations,
+            Some(0)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .max_runtime_adapter_selection_mismatches,
             Some(0)
         );
         assert_eq!(args.benchmark_gate().min_runtime_embedding_cases, Some(4));
@@ -7996,7 +8022,7 @@ mod tests {
         } else {
             1
         };
-        let args = Args::parse(vec![
+        let mut raw_args = vec![
             kernel_flag.to_owned(),
             "--benchmark".to_owned(),
             trace_path.display().to_string(),
@@ -8135,7 +8161,14 @@ mod tests {
             "8".to_owned(),
             "--device".to_owned(),
             "cpu".to_owned(),
-        ]);
+        ];
+        if kernel_flag == "--production-local-kernel" {
+            raw_args.extend([
+                "--benchmark-max-runtime-adapter-selection-mismatches".to_owned(),
+                "0".to_owned(),
+            ]);
+        }
+        let args = Args::parse(raw_args);
         let mut engine = NoironEngine::new();
         configure_engine(&mut engine, &args);
 
@@ -8194,6 +8227,20 @@ mod tests {
         assert!(summary.total_runtime_adapter_observations() >= 1);
         assert!(summary.max_runtime_adapter_score().unwrap_or(0.0) >= 0.05);
         assert_eq!(summary.total_runtime_adapter_contract_violations(), 0);
+        if kernel_flag == "--production-local-kernel" {
+            assert_eq!(
+                args.benchmark_gate()
+                    .max_runtime_adapter_selection_mismatches,
+                Some(0)
+            );
+            assert_eq!(summary.total_runtime_adapter_selection_mismatches(), 0);
+        } else {
+            assert_eq!(
+                args.benchmark_gate()
+                    .max_runtime_adapter_selection_mismatches,
+                None
+            );
+        }
         assert_eq!(summary.runtime_embedding_cases(), device_count * case_count);
         assert_eq!(summary.runtime_embedding_device_profiles(), device_count);
         assert!(summary.total_runtime_embedding_calls() >= device_count * case_count);

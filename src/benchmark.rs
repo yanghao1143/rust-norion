@@ -124,6 +124,8 @@ pub struct BenchmarkCaseResult {
     pub runtime_adapter_contract_violations: usize,
     pub runtime_adapter_observations: usize,
     pub runtime_adapter_best_score: Option<f32>,
+    pub runtime_adapter_best_adapter: Option<String>,
+    pub runtime_adapter_selection_mismatches: usize,
     pub query_embedding_source: String,
     pub query_embedding_dimensions: usize,
     pub runtime_embedding_calls: usize,
@@ -211,6 +213,7 @@ pub struct BenchmarkGate {
     pub min_runtime_adapter_observations: Option<usize>,
     pub min_runtime_adapter_best_score: Option<f32>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
+    pub max_runtime_adapter_selection_mismatches: Option<usize>,
     pub min_runtime_embedding_cases: Option<usize>,
     pub min_runtime_embedding_device_profiles: Option<usize>,
     pub max_embedding_fallback_cases: Option<usize>,
@@ -320,6 +323,7 @@ impl Default for BenchmarkGate {
             min_runtime_adapter_observations: None,
             min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
+            max_runtime_adapter_selection_mismatches: None,
             min_runtime_embedding_cases: None,
             min_runtime_embedding_device_profiles: None,
             max_embedding_fallback_cases: None,
@@ -1505,6 +1509,16 @@ impl BenchmarkSummary {
             .selected_adapter
             .as_deref()
             .filter(|adapter| !adapter.is_empty());
+        let runtime_adapter_best_adapter = outcome
+            .runtime_adapter_observations
+            .first()
+            .map(|observation| observation.adapter.as_str())
+            .filter(|adapter| !adapter.is_empty());
+        let runtime_adapter_selection_mismatches =
+            usize::from(match (runtime_adapter_best_adapter, selected_adapter) {
+                (Some(best), Some(selected)) => best != selected,
+                _ => false,
+            });
         let runtime_adapter_contract_ok = selected_adapter
             .map(|adapter| {
                 outcome
@@ -1631,6 +1645,8 @@ impl BenchmarkSummary {
                 .runtime_adapter_observations
                 .first()
                 .map(|observation| observation.score),
+            runtime_adapter_best_adapter: runtime_adapter_best_adapter.map(str::to_owned),
+            runtime_adapter_selection_mismatches,
             query_embedding_source: outcome
                 .embedding_diagnostics
                 .query
@@ -1851,6 +1867,13 @@ impl BenchmarkSummary {
         self.results
             .iter()
             .map(|result| result.runtime_adapter_contract_violations)
+            .sum()
+    }
+
+    pub fn total_runtime_adapter_selection_mismatches(&self) -> usize {
+        self.results
+            .iter()
+            .map(|result| result.runtime_adapter_selection_mismatches)
             .sum()
     }
 
@@ -3185,6 +3208,19 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(max_runtime_adapter_selection_mismatches) =
+            gate.max_runtime_adapter_selection_mismatches
+        {
+            let runtime_adapter_selection_mismatches =
+                self.total_runtime_adapter_selection_mismatches();
+            if runtime_adapter_selection_mismatches > max_runtime_adapter_selection_mismatches {
+                failures.push(format!(
+                    "runtime_adapter_selection_mismatches {} above maximum {}",
+                    runtime_adapter_selection_mismatches, max_runtime_adapter_selection_mismatches
+                ));
+            }
+        }
+
         if let Some(min_runtime_embedding_cases) = gate.min_runtime_embedding_cases {
             let runtime_embedding_cases = self.runtime_embedding_cases();
             if runtime_embedding_cases < min_runtime_embedding_cases {
@@ -3510,7 +3546,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -3638,6 +3674,7 @@ impl BenchmarkSummary {
             self.runtime_adapter_contract_cases(),
             self.runtime_adapter_kinds(),
             self.total_runtime_adapter_contract_violations(),
+            self.total_runtime_adapter_selection_mismatches(),
             self.total_runtime_adapter_observations(),
             option_f32_display(self.max_runtime_adapter_score()),
             self.runtime_embedding_cases(),
@@ -4410,6 +4447,8 @@ mod tests {
             runtime_adapter_contract_violations: 0,
             runtime_adapter_observations: 0,
             runtime_adapter_best_score: None,
+            runtime_adapter_best_adapter: None,
+            runtime_adapter_selection_mismatches: 0,
             query_embedding_source: "fallback".to_owned(),
             query_embedding_dimensions: 64,
             runtime_embedding_calls: 0,
@@ -4657,6 +4696,8 @@ mod tests {
             runtime_adapter_contract_violations: 0,
             runtime_adapter_observations: 0,
             runtime_adapter_best_score: None,
+            runtime_adapter_best_adapter: None,
+            runtime_adapter_selection_mismatches: 0,
             query_embedding_source: "fallback".to_owned(),
             query_embedding_dimensions: 64,
             runtime_embedding_calls: 0,
@@ -4928,6 +4969,8 @@ mod tests {
             runtime_adapter_contract_violations: 0,
             runtime_adapter_observations: 0,
             runtime_adapter_best_score: None,
+            runtime_adapter_best_adapter: None,
+            runtime_adapter_selection_mismatches: 0,
             query_embedding_source: "fallback".to_owned(),
             query_embedding_dimensions: 64,
             runtime_embedding_calls: 0,
@@ -5219,6 +5262,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -5318,6 +5363,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -5416,6 +5463,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -5605,6 +5654,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -5861,6 +5912,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -5959,6 +6012,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -6084,6 +6139,8 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -6220,6 +6277,8 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -6394,6 +6453,8 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -6527,6 +6588,8 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -6649,6 +6712,8 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -6762,6 +6827,8 @@ mod tests {
                     runtime_adapter_contract_violations: 0,
                     runtime_adapter_observations: 0,
                     runtime_adapter_best_score: None,
+                    runtime_adapter_best_adapter: None,
+                    runtime_adapter_selection_mismatches: 0,
                     query_embedding_source: "fallback".to_owned(),
                     query_embedding_dimensions: 64,
                     runtime_embedding_calls: 0,
@@ -6829,6 +6896,8 @@ mod tests {
                     runtime_adapter_contract_violations: 1,
                     runtime_adapter_observations: 0,
                     runtime_adapter_best_score: None,
+                    runtime_adapter_best_adapter: None,
+                    runtime_adapter_selection_mismatches: 0,
                     query_embedding_source: "fallback".to_owned(),
                     query_embedding_dimensions: 64,
                     runtime_embedding_calls: 0,
@@ -7046,6 +7115,8 @@ mod tests {
                     runtime_adapter_contract_violations: 0,
                     runtime_adapter_observations: 0,
                     runtime_adapter_best_score: None,
+                    runtime_adapter_best_adapter: None,
+                    runtime_adapter_selection_mismatches: 0,
                     query_embedding_source: "fallback".to_owned(),
                     query_embedding_dimensions: 64,
                     runtime_embedding_calls: 0,
@@ -7116,6 +7187,8 @@ mod tests {
                         runtime_adapter_contract_violations: 0,
                         runtime_adapter_observations: 0,
                         runtime_adapter_best_score: None,
+                        runtime_adapter_best_adapter: None,
+                        runtime_adapter_selection_mismatches: 0,
                         query_embedding_source: "fallback".to_owned(),
                         query_embedding_dimensions: 64,
                         runtime_embedding_calls: 0,
@@ -7231,6 +7304,8 @@ mod tests {
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_observations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -7290,6 +7365,119 @@ mod tests {
                 .summary_line()
                 .contains("runtime_adapter_best_score=0.510")
         );
+    }
+
+    #[test]
+    fn gate_reports_runtime_adapter_selection_mismatches() {
+        let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+            memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
+            embedding_evidence: BenchmarkEmbeddingEvidence::default(),
+
+            runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence::default(),
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![BenchmarkCaseResult {
+                name: "runtime_adapter_selection".to_owned(),
+                profile: TaskProfile::Coding,
+                device: DeviceClass::CpuOnly,
+                elapsed_ms: 1,
+                quality: 0.9,
+                process_reward: 0.9,
+                attention_fraction: 0.5,
+                requires_recursion: false,
+                recursive_chunks: 1,
+                recursive_waves: 1,
+                recursive_runtime_calls: 1,
+                auto_replay_applied: 0,
+                auto_replay_router_updates: 0,
+                auto_replay_hierarchy_updates: 0,
+                auto_replay_router_threshold_mutations: 0,
+                auto_replay_hierarchy_weight_mutations: 0,
+                auto_replay_router_threshold_delta: 0.0,
+                auto_replay_hierarchy_weight_delta: 0.0,
+                auto_replay_memory_reinforcements: 0,
+                auto_replay_memory_penalties: 0,
+                auto_replay_live_memory_feedback_items: 0,
+                auto_replay_live_memory_feedback_updates: 0,
+                auto_replay_live_memory_feedback_reinforcements: 0,
+                auto_replay_live_memory_feedback_penalties: 0,
+                auto_replay_live_memory_feedback_detail_items: 0,
+                auto_replay_live_memory_feedback_applied: 0,
+                auto_replay_live_memory_feedback_removed: 0,
+                auto_replay_live_memory_feedback_missing: 0,
+                auto_replay_live_memory_feedback_strength_delta: 0.0,
+                auto_replay_recursive_runtime_items: 0,
+                auto_replay_recursive_runtime_calls: 0,
+                auto_replay_avg_recursive_call_pressure: 0.0,
+                auto_replay_max_recursive_call_pressure: 0.0,
+                used_memories: 0,
+                infini_local_window: 0,
+                infini_global_memory: 0,
+                sparse_skipped: 0,
+                sparse_skipped_tokens: 0,
+                stored_memories: 0,
+                compacted_memories: 0,
+                runtime_forward_signal: true,
+                runtime_forward_energy_signal: true,
+                runtime_kv_influence_signal: true,
+                runtime_global_layers: 0,
+                runtime_local_window_layers: 0,
+                runtime_convolutional_fusion_layers: 0,
+                runtime_layer_mode_signal: false,
+                runtime_all_layer_modes_signal: false,
+                runtime_token_count: 1,
+                runtime_uncertainty_token_count: 1,
+                runtime_uncertainty_signal: true,
+                runtime_kv_imported: 1,
+                runtime_kv_exported: 1,
+                runtime_kv_stored: 1,
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_contract_ok: true,
+                runtime_adapter_contract_violations: 0,
+                runtime_adapter_observations: 1,
+                runtime_adapter_best_score: Some(0.80),
+                runtime_adapter_best_adapter: Some("cpu-simd".to_owned()),
+                runtime_adapter_selection_mismatches: 1,
+                query_embedding_source: "fallback".to_owned(),
+                query_embedding_dimensions: 64,
+                runtime_embedding_calls: 0,
+                fallback_embedding_calls: 1,
+                embedding_fallback_used: true,
+                drift_severity: DriftSeverity::Stable,
+            }],
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.max_runtime_adapter_selection_mismatches = Some(0);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.total_runtime_adapter_selection_mismatches(), 1);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_adapter_selection_mismatches"))
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("runtime_adapter_selection_mismatches=1")
+        );
+
+        let passing = BenchmarkSummary {
+            results: vec![BenchmarkCaseResult {
+                runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+                runtime_adapter_selection_mismatches: 0,
+                ..summary.results[0].clone()
+            }],
+            ..summary
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.total_runtime_adapter_selection_mismatches(), 0);
     }
 
     #[test]
@@ -7362,6 +7550,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
@@ -7475,6 +7665,8 @@ mod tests {
             runtime_adapter_contract_ok: false,
             runtime_adapter_contract_violations: 0,
             runtime_adapter_best_score: None,
+            runtime_adapter_best_adapter: None,
+            runtime_adapter_selection_mismatches: 0,
             query_embedding_source: "fallback".to_owned(),
             query_embedding_dimensions: 64,
             runtime_embedding_calls: 0,
@@ -7599,6 +7791,8 @@ mod tests {
             runtime_adapter_contract_ok: false,
             runtime_adapter_contract_violations: 0,
             runtime_adapter_best_score: None,
+            runtime_adapter_best_adapter: None,
+            runtime_adapter_selection_mismatches: 0,
             query_embedding_source: "fallback".to_owned(),
             query_embedding_dimensions: 64,
             runtime_embedding_calls: 0,
@@ -7743,6 +7937,8 @@ mod tests {
                 runtime_adapter_contract_ok: false,
                 runtime_adapter_contract_violations: 0,
                 runtime_adapter_best_score: None,
+                runtime_adapter_best_adapter: None,
+                runtime_adapter_selection_mismatches: 0,
                 query_embedding_source: "fallback".to_owned(),
                 query_embedding_dimensions: 64,
                 runtime_embedding_calls: 0,
