@@ -1979,6 +1979,8 @@ struct Args {
     benchmark_min_runtime_kv_imported: Option<usize>,
     benchmark_min_runtime_kv_exported: Option<usize>,
     benchmark_min_runtime_kv_stored: Option<usize>,
+    benchmark_min_runtime_kv_hold_cases: Option<usize>,
+    benchmark_min_runtime_kv_held: Option<usize>,
     benchmark_min_runtime_adapter_contract_cases: Option<usize>,
     benchmark_min_runtime_adapter_kinds: Option<usize>,
     benchmark_min_runtime_adapter_observations: Option<usize>,
@@ -2272,6 +2274,8 @@ impl Args {
         let mut benchmark_min_runtime_kv_imported = None;
         let mut benchmark_min_runtime_kv_exported = None;
         let mut benchmark_min_runtime_kv_stored = None;
+        let mut benchmark_min_runtime_kv_hold_cases = None;
+        let mut benchmark_min_runtime_kv_held = None;
         let mut benchmark_min_runtime_adapter_contract_cases = None;
         let mut benchmark_min_runtime_adapter_kinds = None;
         let mut benchmark_min_runtime_adapter_observations = None;
@@ -3050,6 +3054,16 @@ impl Args {
                 }
                 "--benchmark-min-runtime-kv-stored" if index + 1 < raw.len() => {
                     benchmark_min_runtime_kv_stored = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-kv-hold-cases" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_kv_hold_cases = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-kv-held" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_kv_held = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -4391,6 +4405,8 @@ impl Args {
             benchmark_min_runtime_kv_imported,
             benchmark_min_runtime_kv_exported,
             benchmark_min_runtime_kv_stored,
+            benchmark_min_runtime_kv_hold_cases,
+            benchmark_min_runtime_kv_held,
             benchmark_min_runtime_adapter_contract_cases,
             benchmark_min_runtime_adapter_kinds,
             benchmark_min_runtime_adapter_observations,
@@ -4836,6 +4852,12 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_kv_stored {
             gate.min_runtime_kv_stored = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_hold_cases {
+            gate.min_runtime_kv_hold_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_held {
+            gate.min_runtime_kv_held = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_adapter_contract_cases {
             gate.min_runtime_adapter_contract_cases = Some(value);
@@ -5526,6 +5548,10 @@ mod tests {
             "--benchmark-min-runtime-kv-exported".to_owned(),
             "4".to_owned(),
             "--benchmark-min-runtime-kv-stored".to_owned(),
+            "2".to_owned(),
+            "--benchmark-min-runtime-kv-hold-cases".to_owned(),
+            "1".to_owned(),
+            "--benchmark-min-runtime-kv-held".to_owned(),
             "2".to_owned(),
             "--benchmark-min-runtime-adapter-contract-cases".to_owned(),
             "4".to_owned(),
@@ -6346,6 +6372,8 @@ mod tests {
         assert_eq!(args.benchmark_min_runtime_kv_imported, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_stored, Some(2));
+        assert_eq!(args.benchmark_min_runtime_kv_hold_cases, Some(1));
+        assert_eq!(args.benchmark_min_runtime_kv_held, Some(2));
         assert_eq!(args.benchmark_min_runtime_adapter_contract_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_adapter_kinds, Some(3));
         assert_eq!(args.benchmark_min_runtime_adapter_observations, Some(2));
@@ -6426,6 +6454,8 @@ mod tests {
         assert_eq!(args.benchmark_gate().min_runtime_kv_imported, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_kv_exported, Some(4));
         assert_eq!(args.benchmark_gate().min_runtime_kv_stored, Some(2));
+        assert_eq!(args.benchmark_gate().min_runtime_kv_hold_cases, Some(1));
+        assert_eq!(args.benchmark_gate().min_runtime_kv_held, Some(2));
         assert_eq!(
             args.benchmark_gate().min_runtime_adapter_contract_cases,
             Some(4)
