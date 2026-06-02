@@ -29,6 +29,7 @@ pub struct ExperienceInput {
     pub gist_memory_ids: Vec<u64>,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
+    pub runtime_token_metrics: ExperienceRuntimeTokenMetrics,
     pub process_reward: ProcessRewardReport,
     pub live_evolution: LiveInferenceEvolution,
 }
@@ -53,6 +54,7 @@ pub struct ExperienceRecord {
     pub gist_memory_ids: Vec<u64>,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
+    pub runtime_token_metrics: ExperienceRuntimeTokenMetrics,
     pub process_reward: ProcessRewardReport,
     pub live_evolution: LiveInferenceEvolution,
 }
@@ -77,7 +79,28 @@ pub struct ExperienceMatch {
     pub runtime_memory_mode: Option<String>,
     pub runtime_forward_energy: Option<f32>,
     pub runtime_kv_influence: Option<f32>,
+    pub runtime_uncertainty_perplexity: Option<f32>,
     pub recursive_runtime_calls: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ExperienceRuntimeTokenMetrics {
+    pub token_count: usize,
+    pub entropy_count: usize,
+    pub logprob_count: usize,
+    pub average_entropy: Option<f32>,
+    pub average_neg_logprob: Option<f32>,
+    pub uncertainty_perplexity: Option<f32>,
+}
+
+impl ExperienceRuntimeTokenMetrics {
+    pub fn has_uncertainty_signal(&self) -> bool {
+        self.average_entropy.is_some()
+            || self.average_neg_logprob.is_some()
+            || self.uncertainty_perplexity.is_some()
+            || self.entropy_count > 0
+            || self.logprob_count > 0
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +157,7 @@ impl ExperienceStore {
             gist_memory_ids: input.gist_memory_ids,
             stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
             runtime_diagnostics: input.runtime_diagnostics,
+            runtime_token_metrics: input.runtime_token_metrics,
             process_reward: input.process_reward,
             live_evolution: input.live_evolution,
         });
@@ -252,6 +276,9 @@ impl ExperienceStore {
                     runtime_memory_mode: record.runtime_diagnostics.memory_mode.clone(),
                     runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                     runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                    runtime_uncertainty_perplexity: record
+                        .runtime_token_metrics
+                        .uncertainty_perplexity,
                     recursive_runtime_calls,
                 })
             })
@@ -339,10 +366,11 @@ fn serialize_record(record: &ExperienceRecord) -> String {
     let reflection_issues = serialize_reflection_issues(&record.reflection_issues);
     let revision_actions = serialize_revision_actions(&record.revision_actions);
     let runtime_diagnostics = serialize_runtime_diagnostics(&record.runtime_diagnostics);
+    let runtime_token_metrics = serialize_runtime_token_metrics(record.runtime_token_metrics);
     let live_evolution = serialize_live_evolution(record.live_evolution);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -364,7 +392,8 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         escape_field(&reflection_issues),
         escape_field(&revision_actions),
         escape_field(&runtime_diagnostics),
-        escape_field(&live_evolution)
+        escape_field(&live_evolution),
+        escape_field(&runtime_token_metrics)
     )
 }
 
@@ -441,6 +470,10 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(21)
         .and_then(|value| deserialize_live_evolution(&unescape_field(value)))
         .unwrap_or_default();
+    let runtime_token_metrics = fields
+        .get(22)
+        .and_then(|value| deserialize_runtime_token_metrics(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -461,8 +494,41 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         gist_memory_ids,
         stored_runtime_kv_memory_ids,
         runtime_diagnostics,
+        runtime_token_metrics,
         process_reward,
         live_evolution,
+    })
+}
+
+fn serialize_runtime_token_metrics(metrics: ExperienceRuntimeTokenMetrics) -> String {
+    [
+        metrics.token_count.to_string(),
+        metrics.entropy_count.to_string(),
+        metrics.logprob_count.to_string(),
+        option_f32_to_field(metrics.average_entropy),
+        option_f32_to_field(metrics.average_neg_logprob),
+        option_f32_to_field(metrics.uncertainty_perplexity),
+    ]
+    .join(",")
+}
+
+fn deserialize_runtime_token_metrics(value: &str) -> Option<ExperienceRuntimeTokenMetrics> {
+    if value.is_empty() {
+        return Some(ExperienceRuntimeTokenMetrics::default());
+    }
+
+    let fields = value.split(',').collect::<Vec<_>>();
+    if fields.len() != 6 {
+        return None;
+    }
+
+    Some(ExperienceRuntimeTokenMetrics {
+        token_count: fields[0].parse::<usize>().ok()?,
+        entropy_count: fields[1].parse::<usize>().ok()?,
+        logprob_count: fields[2].parse::<usize>().ok()?,
+        average_entropy: field_to_finite_f32(fields[3]),
+        average_neg_logprob: field_to_finite_f32(fields[4]),
+        uncertainty_perplexity: field_to_finite_f32(fields[5]),
     })
 }
 
@@ -1113,6 +1179,25 @@ mod tests {
             loaded.records()[0].runtime_diagnostics.kv_influence,
             Some(0.75)
         );
+        assert_eq!(loaded.records()[0].runtime_token_metrics.token_count, 3);
+        assert_eq!(loaded.records()[0].runtime_token_metrics.entropy_count, 3);
+        assert_eq!(loaded.records()[0].runtime_token_metrics.logprob_count, 2);
+        assert_eq!(
+            loaded.records()[0].runtime_token_metrics.average_entropy,
+            Some(0.42)
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_token_metrics
+                .average_neg_logprob,
+            Some(0.70)
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_token_metrics
+                .uncertainty_perplexity,
+            Some(4.38)
+        );
         assert_eq!(
             loaded.records()[0]
                 .runtime_diagnostics
@@ -1166,6 +1251,26 @@ mod tests {
         );
         assert_eq!(loaded.records()[0].live_evolution.revision_actions, 1);
         cleanup(path);
+    }
+
+    #[test]
+    fn legacy_experience_records_without_runtime_token_metrics_load_defaults() {
+        let mut store = ExperienceStore::new();
+        store.record(input("legacy", 0.82));
+        let current = serialize_record(&store.records()[0]);
+        let legacy = current
+            .rsplit_once('\t')
+            .map(|(legacy, _)| legacy)
+            .unwrap_or(&current);
+
+        let loaded = deserialize_record(legacy).unwrap();
+
+        assert_eq!(loaded.lesson, "legacy");
+        assert_eq!(
+            loaded.runtime_token_metrics,
+            ExperienceRuntimeTokenMetrics::default()
+        );
+        assert!(!loaded.runtime_token_metrics.has_uncertainty_signal());
     }
 
     #[test]
@@ -1275,6 +1380,7 @@ mod tests {
         );
         assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
         assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
+        assert_eq!(matches[0].runtime_uncertainty_perplexity, Some(4.38));
     }
 
     #[test]
@@ -1359,6 +1465,14 @@ mod tests {
             gist_records: Vec::new(),
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: vec![11],
+            runtime_token_metrics: ExperienceRuntimeTokenMetrics {
+                token_count: 3,
+                entropy_count: 3,
+                logprob_count: 2,
+                average_entropy: Some(0.42),
+                average_neg_logprob: Some(0.70),
+                uncertainty_perplexity: Some(4.38),
+            },
             runtime_diagnostics: RuntimeDiagnostics {
                 model_id: Some("noiron-test-runtime".to_owned()),
                 selected_adapter: Some("portable-rust".to_owned()),

@@ -2394,6 +2394,7 @@ mod tests {
             runtime_memory_mode: None,
             runtime_forward_energy: Some(0.2),
             runtime_kv_influence: Some(0.1),
+            runtime_uncertainty_perplexity: None,
             recursive_runtime_calls: None,
         }];
         let tier_plan = TieredCachePlan::default();
@@ -2485,6 +2486,7 @@ mod tests {
                 runtime_memory_mode: None,
                 runtime_forward_energy: Some(0.2),
                 runtime_kv_influence: Some(0.1),
+                runtime_uncertainty_perplexity: None,
                 recursive_runtime_calls: None,
             },
             ExperienceMatch {
@@ -2506,6 +2508,7 @@ mod tests {
                 runtime_memory_mode: None,
                 runtime_forward_energy: Some(0.1),
                 runtime_kv_influence: Some(0.9),
+                runtime_uncertainty_perplexity: None,
                 recursive_runtime_calls: None,
             },
         ];
@@ -2564,6 +2567,7 @@ mod tests {
                 runtime_memory_mode: Some(cpu_plan.execution.memory_mode.as_str().to_owned()),
                 runtime_forward_energy: Some(0.2),
                 runtime_kv_influence: Some(0.2),
+                runtime_uncertainty_perplexity: None,
                 recursive_runtime_calls: None,
             },
             ExperienceMatch {
@@ -2585,6 +2589,7 @@ mod tests {
                 runtime_memory_mode: Some(DeviceMemoryMode::GpuResident.as_str().to_owned()),
                 runtime_forward_energy: Some(0.1),
                 runtime_kv_influence: Some(0.9),
+                runtime_uncertainty_perplexity: None,
                 recursive_runtime_calls: None,
             },
         ];

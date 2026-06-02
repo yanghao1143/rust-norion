@@ -157,7 +157,7 @@ Implemented modules:
 - `src/toolsmith.rs`: Rust-only local tool blueprint planner that can propose gated helper CLIs, reject non-Rust tool surfaces, and carry build/validation outlines into runtime requests and reward notes
 - `src/agent_team.rs`: read-only sub-agent/team blackboard planner with single-writer isolation, conflict summaries, collision-free checks, and bounded evolution hints for the main control loop
 - `src/trace.rs`: JSONL trace writer and schema gate for routing, runtime token uncertainty, runtime forward diagnostics, hierarchy, KV, recursion, auto-replay router/hierarchy update counters plus threshold/weight mutation deltas, consumed live memory-feedback counters, cumulative self-evolution ledger counters including replay live-feedback consumption, drift rollback safety counters, memory updates, recursive cost pressure, hardware execution, the stable runtime device contract, runtime device-contract semantic alignment, KV budgets, Toolsmith, Agent Team, reflection diagnostics, drift, reward, memory policy, and memory counters
-- `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted live memory-feedback notes, per-inference live-evolution evidence, persisted reflection issues, and revision actions
+- `src/experience.rs`: structured reflection experience store with route budget, KV usage traces, persisted runtime diagnostics, persisted runtime token uncertainty metrics, persisted live memory-feedback notes, per-inference live-evolution evidence, persisted reflection issues, and revision actions
 - `src/experience_replay.rs`: reward-ranked experience replay planner that can automatically reinforce or penalize used, stored, gist, and runtime-KV memories by scaling actual KV update strength from reward, runtime-diagnostic, persisted live memory-feedback, structured live-evolution evidence, reflection-diagnostic, and recursive schedule/runtime-cost signals with reportable router-threshold mutation, hierarchy-weight mutation, memory-update, live-feedback consumption, live-evolution consumption, recursive call-pressure, and long-context replay coverage
 - `src/gist_memory.rs`: hierarchical document/section/paragraph gist memory generator
 - `src/hardware.rs`: device-agnostic hardware pressure, best-effort auto probing, device coverage descriptors and aliases, compute allocation, execution-plan selection, a device compatibility gate for CPU-only, integrated GPU, discrete GPU, unified-memory, mobile, embedded, browser-WASM, microcontroller, NPU/AI accelerator, multi-GPU, edge, and server profiles, and a runtime-manifest device gate for current-device execution contracts, adapter intersections, KV prefetch limits, and hot/cold KV precision bounds
@@ -168,7 +168,7 @@ Implemented modules:
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Infini/SpeContext-filtered KV import candidates, imported KV request delivery for command runtimes, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
 - `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, deterministic reference/local kernel harnesses, and single-device plus all-device conformance gates for ABI validation
-- `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, runtime-KV export/hold evidence, reflection diagnostics, persisted live memory-feedback evidence, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters including live inference runs, live router/hierarchy mutations, live KV/store/reflection updates, replay live-feedback consumption, and router-threshold/hierarchy-weight deltas
+- `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, persisted runtime token uncertainty, runtime-KV export/hold evidence, reflection diagnostics, persisted live memory-feedback evidence, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters including live inference runs, live router/hierarchy mutations, live KV/store/reflection updates, replay live-feedback consumption, and router-threshold/hierarchy-weight deltas
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob, Rust-only Toolsmith planning, and read-only Agent Team planning feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
 
@@ -252,7 +252,10 @@ observations must prove the current device still selects the best compatible
 adapter after reload. Use `--inspect-min-runtime-kv-precision-experiences` plus
 `--inspect-max-runtime-kv-precision-mismatches 0` when persisted runtime
 diagnostics must prove their hot/cold KV precision still matches the current
-device execution plan. Use `--inspect-min-runtime-kv-hold-experiences` and
+device execution plan. Use `--inspect-min-runtime-uncertainty-experiences`
+when reloaded experience records must prove runtime token entropy/logprob or
+perplexity evidence reached durable memory rather than only trace or benchmark
+output. Use `--inspect-min-runtime-kv-hold-experiences` and
 `--inspect-min-runtime-kv-held-blocks` when fast-path watch cases must prove the
 runtime exported KV but the control plane held part of it out of durable
 `runtime_kv:` memory. In all-device mode both mismatch caps are applied to the
@@ -265,7 +268,7 @@ created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
 `memory.mobile.ndkv`, and `memory.server.ndkv`:
 
 ```powershell
-cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-runtime-kv-hold-experiences 1 --inspect-min-runtime-kv-held-blocks 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-uncertainty-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-runtime-kv-hold-experiences 1 --inspect-min-runtime-kv-held-blocks 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 All-device inspection can also require matrix-level runtime and
@@ -275,6 +278,7 @@ reflection/revision coverage. Runtime ABI evidence is gated with
 `--inspect-min-runtime-adapter-device-profiles`,
 `--inspect-min-runtime-forward-energy-device-profiles`,
 `--inspect-min-runtime-kv-influence-device-profiles`,
+`--inspect-min-runtime-uncertainty-device-profiles`,
 `--inspect-min-runtime-kv-precision-device-profiles`,
 `--inspect-min-runtime-kv-import-device-profiles`,
 `--inspect-min-runtime-kv-export-device-profiles`, and
@@ -342,6 +346,9 @@ cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-ex
 `--inspect-max-runtime-adapter-selection-mismatches 0`；需要证明持久化 runtime diagnostics 的 hot/cold KV precision 仍然符合当前设备执行计划时，使用
 `--inspect-min-runtime-kv-precision-experiences` 搭配
 `--inspect-max-runtime-kv-precision-mismatches 0`。
+需要证明 runtime token entropy/logprob/perplexity 已经写入持久化 experience，
+而不是只出现在 trace 或 benchmark 输出时，使用
+`--inspect-min-runtime-uncertainty-experiences`。
 需要证明 fast-path watch 场景里 runtime 已导出 KV、但控制层把其中一部分拦截在长期
 `runtime_kv:` 记忆之外时，使用 `--inspect-min-runtime-kv-hold-experiences`
 和 `--inspect-min-runtime-kv-held-blocks`。
@@ -352,7 +359,7 @@ device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
 `memory.server.ndkv`：
 
 ```powershell
-cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-runtime-kv-hold-experiences 1 --inspect-min-runtime-kv-held-blocks 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-uncertainty-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-runtime-kv-hold-experiences 1 --inspect-min-runtime-kv-held-blocks 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-min-evolution-live-inference-runs 1 --inspect-min-evolution-live-memory-updates 1 --inspect-min-evolution-live-stored-memory-updates 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-replay-live-memory-feedback-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
 全设备 inspection 还可以要求矩阵级 runtime 与反思 / 修订覆盖。runtime ABI
@@ -361,6 +368,7 @@ cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-m
 `--inspect-min-runtime-adapter-device-profiles`、
 `--inspect-min-runtime-forward-energy-device-profiles`、
 `--inspect-min-runtime-kv-influence-device-profiles`、
+`--inspect-min-runtime-uncertainty-device-profiles`、
 `--inspect-min-runtime-kv-import-device-profiles` 和
 `--inspect-min-runtime-kv-export-device-profiles`、
 `--inspect-min-runtime-kv-hold-device-profiles` 门禁；runtime KV precision

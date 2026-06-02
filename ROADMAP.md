@@ -827,6 +827,11 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-uncertainty-device-profiles` for all-device sweeps,
   so local/CI production sweeps can fail when a runtime stops returning token
   entropy/logprob signals on any required device profile.
+- State inspection now gates the same runtime token uncertainty after reload
+  through `--inspect-min-runtime-uncertainty-experiences` and
+  `--inspect-min-runtime-uncertainty-device-profiles`, so CI can prove
+  entropy/logprob/perplexity evidence reached durable experience memory rather
+  than only benchmark summaries or trace lines.
 - Benchmark summaries and gates expose stricter runtime forward diagnostic
   coverage through `--benchmark-min-runtime-forward-energy-cases` and
   `--benchmark-min-runtime-kv-influence-cases`, so local/CI production sweeps

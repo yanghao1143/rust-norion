@@ -4,7 +4,9 @@ use std::path::Path;
 use crate::adaptive_state::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
 use crate::agent_team::{AgentTeamInput, AgentTeamPlan, AgentTeamPlanner};
 use crate::drift::{DriftGuard, DriftInput, DriftReport};
-use crate::experience::{ExperienceInput, ExperienceMatch, ExperienceStore};
+use crate::experience::{
+    ExperienceInput, ExperienceMatch, ExperienceRuntimeTokenMetrics, ExperienceStore,
+};
 use crate::experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlanner, ExperienceReplayReport,
 };
@@ -349,6 +351,21 @@ impl RuntimeTokenMetrics {
 
     pub fn has_uncertainty_signal(self) -> bool {
         self.uncertainty_perplexity.is_some()
+            || self.average_entropy.is_some()
+            || self.average_neg_logprob.is_some()
+    }
+}
+
+impl From<RuntimeTokenMetrics> for ExperienceRuntimeTokenMetrics {
+    fn from(metrics: RuntimeTokenMetrics) -> Self {
+        Self {
+            token_count: metrics.token_count,
+            entropy_count: metrics.entropy_count,
+            logprob_count: metrics.logprob_count,
+            average_entropy: metrics.average_entropy,
+            average_neg_logprob: metrics.average_neg_logprob,
+            uncertainty_perplexity: metrics.uncertainty_perplexity,
+        }
     }
 }
 
@@ -893,6 +910,7 @@ impl NoironEngine {
             gist_memory_ids: stored_gist_memory_ids.clone(),
             stored_runtime_kv_memory_ids: stored_runtime_kv_memory_ids.clone(),
             runtime_diagnostics: runtime_diagnostics.clone(),
+            runtime_token_metrics: runtime_token_metrics.into(),
             process_reward: experience_process_reward,
             live_evolution,
         });
@@ -2831,6 +2849,7 @@ mod tests {
                 exported_kv_blocks: 2,
                 ..RuntimeDiagnostics::default()
             },
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: 0.90,
                 action: RewardAction::Reinforce,
@@ -2925,6 +2944,7 @@ mod tests {
                 exported_kv_blocks: 2,
                 ..RuntimeDiagnostics::default()
             },
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: 0.99,
                 action: RewardAction::Reinforce,
@@ -2967,6 +2987,7 @@ mod tests {
                 exported_kv_blocks: 1,
                 ..RuntimeDiagnostics::default()
             },
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: 0.86,
                 action: RewardAction::Reinforce,
@@ -3024,6 +3045,7 @@ mod tests {
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: 0.91,
                 action: RewardAction::Reinforce,
@@ -3078,6 +3100,7 @@ mod tests {
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: 0.90,
                 action: RewardAction::Reinforce,
@@ -3456,6 +3479,7 @@ mod tests {
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport::default(),
             live_evolution: Default::default(),
         });
@@ -3682,6 +3706,7 @@ mod tests {
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: 0.93,
                 action: RewardAction::Reinforce,
@@ -3807,6 +3832,7 @@ mod tests {
             gist_memory_ids: Vec::new(),
             stored_runtime_kv_memory_ids: Vec::new(),
             runtime_diagnostics,
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: reward,
                 action: if reward >= 0.72 {

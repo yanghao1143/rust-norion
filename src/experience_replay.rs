@@ -930,6 +930,7 @@ mod tests {
                 hot_kv_precision_bits: Some(8),
                 cold_kv_precision_bits: Some(4),
             },
+            runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
                 total: reward,
                 action,
@@ -974,6 +975,7 @@ mod tests {
             gist_memory_ids: input.gist_memory_ids,
             stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
             runtime_diagnostics: input.runtime_diagnostics,
+            runtime_token_metrics: input.runtime_token_metrics,
             process_reward: input.process_reward,
             live_evolution: input.live_evolution,
         }
