@@ -1983,6 +1983,7 @@ struct Args {
     benchmark_min_runtime_kv_stored: Option<usize>,
     benchmark_min_runtime_kv_hold_cases: Option<usize>,
     benchmark_min_runtime_kv_held: Option<usize>,
+    benchmark_min_runtime_kv_hold_device_profiles: Option<usize>,
     benchmark_min_runtime_adapter_contract_cases: Option<usize>,
     benchmark_min_runtime_adapter_kinds: Option<usize>,
     benchmark_min_runtime_adapter_observations: Option<usize>,
@@ -2281,6 +2282,7 @@ impl Args {
         let mut benchmark_min_runtime_kv_stored = None;
         let mut benchmark_min_runtime_kv_hold_cases = None;
         let mut benchmark_min_runtime_kv_held = None;
+        let mut benchmark_min_runtime_kv_hold_device_profiles = None;
         let mut benchmark_min_runtime_adapter_contract_cases = None;
         let mut benchmark_min_runtime_adapter_kinds = None;
         let mut benchmark_min_runtime_adapter_observations = None;
@@ -3073,6 +3075,13 @@ impl Args {
                 "--benchmark-min-runtime-kv-held" if index + 1 < raw.len() => {
                     benchmark_min_runtime_kv_held = Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-kv-hold-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_runtime_kv_hold_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    benchmark_all_devices = true;
                     index += 2;
                 }
                 "--benchmark-min-runtime-adapter-contract-cases" if index + 1 < raw.len() => {
@@ -4435,6 +4444,7 @@ impl Args {
             benchmark_min_runtime_kv_stored,
             benchmark_min_runtime_kv_hold_cases,
             benchmark_min_runtime_kv_held,
+            benchmark_min_runtime_kv_hold_device_profiles,
             benchmark_min_runtime_adapter_contract_cases,
             benchmark_min_runtime_adapter_kinds,
             benchmark_min_runtime_adapter_observations,
@@ -4889,6 +4899,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_kv_held {
             gate.min_runtime_kv_held = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_hold_device_profiles {
+            gate.min_runtime_kv_hold_device_profiles = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_adapter_contract_cases {
             gate.min_runtime_adapter_contract_cases = Some(value);
@@ -5362,7 +5375,7 @@ fn print_help_and_exit() -> ! {
         "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
         "Benchmark runtime adapter: --benchmark-min-runtime-adapter-contract-cases n --benchmark-min-runtime-adapter-kinds n --benchmark-min-runtime-adapter-observations n --benchmark-min-runtime-adapter-best-score f --benchmark-max-runtime-adapter-contract-violations n --benchmark-max-runtime-adapter-selection-mismatches n\n",
         "Benchmark runtime embedding: --benchmark-min-runtime-embedding-cases n --benchmark-min-runtime-embedding-device-profiles n --benchmark-max-embedding-fallback-cases n --benchmark-max-embedding-evidence-failures n\n",
-        "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
+        "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-min-runtime-kv-hold-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
         "Benchmark memory governance: --benchmark-max-memory-governance-failures n --benchmark-min-memory-governance-cases n --benchmark-min-memory-governance-device-profiles n --benchmark-min-memory-retention-activity-cases n --benchmark-min-memory-compaction-activity-cases n\n",
         "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
@@ -5588,6 +5601,8 @@ mod tests {
             "1".to_owned(),
             "--benchmark-min-runtime-kv-held".to_owned(),
             "2".to_owned(),
+            "--benchmark-min-runtime-kv-hold-device-profiles".to_owned(),
+            "6".to_owned(),
             "--benchmark-min-runtime-adapter-contract-cases".to_owned(),
             "4".to_owned(),
             "--benchmark-min-runtime-adapter-kinds".to_owned(),
@@ -6415,6 +6430,11 @@ mod tests {
         assert_eq!(args.benchmark_min_runtime_kv_stored, Some(2));
         assert_eq!(args.benchmark_min_runtime_kv_hold_cases, Some(1));
         assert_eq!(args.benchmark_min_runtime_kv_held, Some(2));
+        assert_eq!(args.benchmark_min_runtime_kv_hold_device_profiles, Some(6));
+        assert_eq!(
+            args.benchmark_gate().min_runtime_kv_hold_device_profiles,
+            Some(6)
+        );
         assert_eq!(args.benchmark_min_runtime_adapter_contract_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_adapter_kinds, Some(3));
         assert_eq!(args.benchmark_min_runtime_adapter_observations, Some(2));

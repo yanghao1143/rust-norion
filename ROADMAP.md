@@ -747,9 +747,13 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-hold-cases` and
   `--benchmark-min-runtime-kv-held`, so fast-path watch cases can prove the
   runtime exported KV while the control plane kept unsafe blocks out of durable
-  `runtime_kv:` memory. Trace records now expose the same hold fact directly
-  through `memory.runtime_kv_hold` and `memory.runtime_kv_held`, and the schema
-  gate rejects mismatches between those fields and exported/stored KV counts.
+  `runtime_kv:` memory. They also expose
+  `--benchmark-min-runtime-kv-hold-device-profiles`, so all-device sweeps can
+  require that exported-but-held KV safety evidence appears across multiple
+  hardware classes instead of only once. Trace records now expose the same hold
+  fact directly through `memory.runtime_kv_hold` and `memory.runtime_kv_held`,
+  and the schema gate rejects mismatches between those fields and exported/stored
+  KV counts.
 - The persistent roundtrip gate also checks that admitted runtime KV keeps the
   `runtime_kv:` namespace, is retrieved as a runtime KV memory after reload,
   and is reconstructed into imported KV blocks before the second runtime call.
@@ -933,7 +937,8 @@ These are algorithmic references, not product dependencies:
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
-  runtime KV precision, runtime KV storage, runtime adapter contract coverage,
+  runtime KV precision, runtime KV storage, runtime KV hold device coverage,
+  runtime adapter contract coverage,
   runtime adapter observation reuse, runtime adapter selection consistency,
   reflection issue / critical issue coverage, revision-action coverage,
   per-device reflection/revision coverage,
