@@ -259,8 +259,10 @@ modules, not external product dependencies:
   dimension buckets should be inspectable from the CLI without running a new
   inference. The same inspection path should also provide threshold gates for
   persisted runtime KV, experience, router observations, and evolution-ledger
-  evidence so local/CI checks can fail when durable self-evolution state is
-  missing. With all-device mode, the inspection gate should evaluate the
+  evidence plus runtime model/adapter/forward-energy/KV-influence/KV-import/
+  KV-export diagnostics captured in persisted experiences, so local/CI checks
+  can fail when durable self-evolution or runtime-boundary state is missing.
+  With all-device mode, the inspection gate should evaluate the
   device-scoped state files emitted by persistence roundtrip runs so CPU,
   mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
   and multi-GPU profiles all prove durable local state independently.
@@ -590,10 +592,12 @@ These are algorithmic references, not product dependencies:
   memories, and top memories/lessons from persisted local files without
   invoking a model runtime. The same CLI path can enforce state-inspection
   gates for minimum memory, runtime-KV, experience, router-observation, and
-  self-evolution ledger counts, failing with a non-zero exit code when persisted
-  evidence is incomplete. In all-device mode, the gate loads every explicit
-  device profile's scoped state files and fails if any device is missing state
-  or lacks the required persisted evidence.
+  self-evolution ledger counts. It can also require persisted runtime evidence
+  in experience records: model id, selected adapter, forward energy, KV
+  influence, imported KV, and exported KV. The gate fails with a non-zero exit
+  code when persisted evidence is incomplete. In all-device mode, the gate
+  loads every explicit device profile's scoped state files and fails if any
+  device is missing state or lacks the required persisted evidence.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -666,8 +670,8 @@ These are algorithmic references, not product dependencies:
   only a routing benchmark check.
 - With `--inspect-state --benchmark-all-devices --inspect-gate`, the same
   device-scoped state files can now be checked after the roundtrip run for
-  minimum runtime-KV, experience, router-observation, and self-evolution ledger
-  evidence per explicit device profile.
+  minimum runtime-KV, experience, runtime-diagnostics, router-observation, and
+  self-evolution ledger evidence per explicit device profile.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps

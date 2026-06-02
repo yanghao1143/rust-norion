@@ -58,6 +58,12 @@ pub struct StateInspectionGate {
     pub min_memories: Option<usize>,
     pub min_runtime_kv_memories: Option<usize>,
     pub min_experiences: Option<usize>,
+    pub min_runtime_model_experiences: Option<usize>,
+    pub min_runtime_adapter_experiences: Option<usize>,
+    pub min_runtime_forward_energy_experiences: Option<usize>,
+    pub min_runtime_kv_influence_experiences: Option<usize>,
+    pub min_runtime_kv_import_experiences: Option<usize>,
+    pub min_runtime_kv_export_experiences: Option<usize>,
     pub min_router_observations: Option<u64>,
     pub min_evolution_replay_runs: Option<u64>,
     pub min_evolution_replay_items: Option<u64>,
@@ -203,6 +209,12 @@ pub struct StateInspectionReport {
     pub memory_count: usize,
     pub runtime_kv_memory_count: usize,
     pub experience_count: usize,
+    pub runtime_model_experience_count: usize,
+    pub runtime_adapter_experience_count: usize,
+    pub runtime_forward_energy_experience_count: usize,
+    pub runtime_kv_influence_experience_count: usize,
+    pub runtime_kv_import_experience_count: usize,
+    pub runtime_kv_export_experience_count: usize,
     pub router_threshold: f32,
     pub router_observations: u64,
     pub profile_thresholds: ProfileThresholds,
@@ -228,6 +240,45 @@ impl StateInspectionReport {
         let top_memories = top_memory_summaries(engine, limit, |_| true);
         let top_runtime_kv_memories =
             top_memory_summaries(engine, limit, |key| key.starts_with("runtime_kv:"));
+        let runtime_model_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| has_text(record.runtime_diagnostics.model_id.as_deref()))
+            .count();
+        let runtime_adapter_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| has_text(record.runtime_diagnostics.selected_adapter.as_deref()))
+            .count();
+        let runtime_forward_energy_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| record.runtime_diagnostics.forward_energy.is_some())
+            .count();
+        let runtime_kv_influence_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| record.runtime_diagnostics.kv_influence.is_some())
+            .count();
+        let runtime_kv_import_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| record.runtime_diagnostics.imported_kv_blocks > 0)
+            .count();
+        let runtime_kv_export_experience_count = engine
+            .experience
+            .records()
+            .iter()
+            .filter(|record| {
+                record.runtime_diagnostics.exported_kv_blocks > 0
+                    || !record.stored_runtime_kv_memory_ids.is_empty()
+            })
+            .count();
 
         let mut top_experiences = engine.experience.records().iter().collect::<Vec<_>>();
         top_experiences.sort_by(|left, right| {
@@ -288,6 +339,12 @@ impl StateInspectionReport {
                 .filter(|entry| entry.key.starts_with("runtime_kv:"))
                 .count(),
             experience_count: engine.experience.len(),
+            runtime_model_experience_count,
+            runtime_adapter_experience_count,
+            runtime_forward_energy_experience_count,
+            runtime_kv_influence_experience_count,
+            runtime_kv_import_experience_count,
+            runtime_kv_export_experience_count,
             router_threshold: adaptive_state.router.threshold,
             router_observations: adaptive_state.router.observations,
             profile_thresholds: adaptive_state.router.profile_thresholds,
@@ -309,10 +366,16 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
+            self.runtime_model_experience_count,
+            self.runtime_adapter_experience_count,
+            self.runtime_forward_energy_experience_count,
+            self.runtime_kv_influence_experience_count,
+            self.runtime_kv_import_experience_count,
+            self.runtime_kv_export_experience_count,
             self.router_threshold,
             self.router_observations,
             self.profile_thresholds.general,
@@ -363,6 +426,42 @@ impl StateInspectionReport {
             "experience_count",
             self.experience_count,
             gate.min_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_model_experience_count",
+            self.runtime_model_experience_count,
+            gate.min_runtime_model_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_adapter_experience_count",
+            self.runtime_adapter_experience_count,
+            gate.min_runtime_adapter_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_forward_energy_experience_count",
+            self.runtime_forward_energy_experience_count,
+            gate.min_runtime_forward_energy_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_kv_influence_experience_count",
+            self.runtime_kv_influence_experience_count,
+            gate.min_runtime_kv_influence_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_kv_import_experience_count",
+            self.runtime_kv_import_experience_count,
+            gate.min_runtime_kv_import_experiences,
+        );
+        require_min_usize(
+            &mut failures,
+            "runtime_kv_export_experience_count",
+            self.runtime_kv_export_experience_count,
+            gate.min_runtime_kv_export_experiences,
         );
         require_min_u64(
             &mut failures,
@@ -541,6 +640,10 @@ fn compact(text: &str, max_chars: usize) -> String {
     out
 }
 
+fn has_text(value: Option<&str>) -> bool {
+    value.map(|value| !value.trim().is_empty()).unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,6 +751,12 @@ mod tests {
         assert_eq!(report.memory_count, 3);
         assert_eq!(report.runtime_kv_memory_count, 1);
         assert_eq!(report.experience_count, 1);
+        assert_eq!(report.runtime_model_experience_count, 1);
+        assert_eq!(report.runtime_adapter_experience_count, 1);
+        assert_eq!(report.runtime_forward_energy_experience_count, 1);
+        assert_eq!(report.runtime_kv_influence_experience_count, 1);
+        assert_eq!(report.runtime_kv_import_experience_count, 1);
+        assert_eq!(report.runtime_kv_export_experience_count, 1);
         assert!(
             report
                 .top_memories
@@ -729,6 +838,36 @@ mod tests {
         assert!(
             report
                 .summary_line()
+                .contains("runtime_model_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_adapter_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_forward_energy_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_influence_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_import_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_export_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
                 .contains("memory_vector_dimensions=3:1|4:1|5:1")
         );
         assert!(
@@ -752,6 +891,12 @@ mod tests {
             min_memories: Some(3),
             min_runtime_kv_memories: Some(1),
             min_experiences: Some(1),
+            min_runtime_model_experiences: Some(1),
+            min_runtime_adapter_experiences: Some(1),
+            min_runtime_forward_energy_experiences: Some(1),
+            min_runtime_kv_influence_experiences: Some(1),
+            min_runtime_kv_import_experiences: Some(1),
+            min_runtime_kv_export_experiences: Some(1),
             min_router_observations: Some(0),
             min_evolution_replay_runs: Some(2),
             min_evolution_replay_items: Some(5),
@@ -773,6 +918,12 @@ mod tests {
             min_memories: Some(4),
             min_runtime_kv_memories: Some(2),
             min_experiences: Some(2),
+            min_runtime_model_experiences: Some(2),
+            min_runtime_adapter_experiences: Some(2),
+            min_runtime_forward_energy_experiences: Some(2),
+            min_runtime_kv_influence_experiences: Some(2),
+            min_runtime_kv_import_experiences: Some(2),
+            min_runtime_kv_export_experiences: Some(2),
             min_router_observations: Some(1),
             min_evolution_replay_runs: Some(3),
             min_evolution_replay_items: Some(6),
@@ -794,6 +945,21 @@ mod tests {
             failing_report
                 .failures
                 .contains(&"runtime_kv_memory_count 1 below required 2".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"runtime_model_experience_count 1 below required 2".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"runtime_forward_energy_experience_count 1 below required 2".to_owned())
+        );
+        assert!(
+            failing_report
+                .failures
+                .contains(&"runtime_kv_import_experience_count 1 below required 2".to_owned())
         );
         assert!(
             failing_report
@@ -874,6 +1040,90 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("device integrated state inspection failed"))
+        );
+    }
+
+    #[test]
+    fn inspection_gate_rejects_experiences_without_runtime_evidence() {
+        let mut engine = NoironEngine::new();
+        engine.experience.record(ExperienceInput {
+            prompt: "plain heuristic answer".to_owned(),
+            profile: TaskProfile::General,
+            lesson: "experience without runtime diagnostics should not satisfy runtime gates"
+                .to_owned(),
+            quality: 0.72,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.5,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.34, 0.33, 0.33),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: crate::reflection::RuntimeDiagnostics::default(),
+            process_reward: ProcessRewardReport {
+                total: 0.62,
+                action: RewardAction::Hold,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
+
+        let report = StateInspectionReport::from_engine(&engine, 3);
+        let gate = StateInspectionGate {
+            min_memories: None,
+            min_runtime_kv_memories: None,
+            min_experiences: Some(1),
+            min_runtime_model_experiences: Some(1),
+            min_runtime_adapter_experiences: Some(1),
+            min_runtime_forward_energy_experiences: Some(1),
+            min_runtime_kv_influence_experiences: Some(1),
+            min_runtime_kv_import_experiences: Some(1),
+            min_runtime_kv_export_experiences: Some(1),
+            min_router_observations: None,
+            min_evolution_replay_runs: None,
+            min_evolution_replay_items: None,
+            min_evolution_router_threshold_mutations: None,
+            min_evolution_hierarchy_weight_mutations: None,
+            min_evolution_memory_updates: None,
+            min_evolution_recursive_runtime_calls: None,
+            max_evolution_drift_rollbacks: None,
+            require_runtime_kv_dimensions: false,
+        };
+
+        let gate_report = report.evaluate(&gate);
+
+        assert_eq!(report.experience_count, 1);
+        assert_eq!(report.runtime_model_experience_count, 0);
+        assert_eq!(report.runtime_adapter_experience_count, 0);
+        assert_eq!(report.runtime_forward_energy_experience_count, 0);
+        assert_eq!(report.runtime_kv_influence_experience_count, 0);
+        assert_eq!(report.runtime_kv_import_experience_count, 0);
+        assert_eq!(report.runtime_kv_export_experience_count, 0);
+        assert!(!gate_report.passed());
+        assert!(
+            gate_report
+                .failures
+                .contains(&"runtime_model_experience_count 0 below required 1".to_owned())
+        );
+        assert!(
+            gate_report
+                .failures
+                .contains(&"runtime_adapter_experience_count 0 below required 1".to_owned())
+        );
+        assert!(
+            gate_report
+                .failures
+                .contains(&"runtime_kv_export_experience_count 0 below required 1".to_owned())
         );
     }
 }
