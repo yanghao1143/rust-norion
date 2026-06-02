@@ -738,8 +738,14 @@ These are algorithmic references, not product dependencies:
   and skipped memory never enters the expensive backend attention path.
 - Benchmark summaries and gates expose runtime KV import coverage through
   `--benchmark-min-runtime-kv-import-cases` and
-  `--benchmark-min-runtime-kv-imported`, so local/CI production sweeps can fail
-  when persisted control-plane memory stops reaching the runtime.
+  `--benchmark-min-runtime-kv-imported`, plus
+  `--benchmark-min-runtime-kv-import-device-profiles`, so local/CI production
+  sweeps can fail when persisted control-plane memory stops reaching the
+  runtime or only reaches one hardware class.
+- Benchmark summaries and gates expose runtime KV export device coverage through
+  `--benchmark-min-runtime-kv-export-device-profiles`, so all-device sweeps can
+  fail when a backend exports KV only on one hardware class even if aggregate
+  exported-block counts still look healthy.
 - Benchmark summaries and gates expose runtime KV long-term admission through
   `--benchmark-min-runtime-kv-stored`, so local/CI production sweeps can fail
   when exported runtime KV is never written back into reinforced memory.
@@ -937,7 +943,8 @@ These are algorithmic references, not product dependencies:
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
-  runtime KV precision, runtime KV storage, runtime KV hold device coverage,
+  runtime KV import/export device coverage, runtime KV precision, runtime KV
+  storage, runtime KV hold device coverage,
   runtime adapter contract coverage,
   runtime adapter observation reuse, runtime adapter selection consistency,
   reflection issue / critical issue coverage, revision-action coverage,

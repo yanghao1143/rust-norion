@@ -698,7 +698,7 @@ cargo run -- --benchmark-roundtrip --benchmark-all-devices --memory target/round
 Benchmark summaries include recursive case counts, recursive device-profile
 coverage, compacted memory counts, runtime forward-signal case counts, runtime
 forward-energy, KV-influence, and runtime hot/cold KV precision coverage,
-runtime KV import/export counts,
+runtime KV import/export counts and device coverage,
 runtime adapter contract coverage, adapter-kind diversity, runtime KV storage, runtime adapter
 observation counts, best scores, and best-adapter selection mismatch counts,
 reflection issue/critical issue coverage, revision action coverage,
@@ -706,7 +706,7 @@ auto-replay router/hierarchy/memory update counts, recursive pressure, covered
 device profiles, cumulative evolution-ledger replay/mutation/memory/live-feedback/recursive
 cost counters, drift rollback safety counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
-diagnostics, missing runtime KV precision evidence, missing KV exchange, missing runtime KV storage, missing runtime KV hold coverage across required devices, missing runtime adapter observation reuse, mismatched runtime adapter selection,
+diagnostics, missing runtime KV precision evidence, missing KV exchange, missing runtime KV import/export coverage across required devices, missing runtime KV storage, missing runtime KV hold coverage across required devices, missing runtime adapter observation reuse, mismatched runtime adapter selection,
 missing closed-loop reflection diagnostics or revision evidence,
 missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
@@ -714,12 +714,18 @@ recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence / hot-cold KV precision 覆盖数、runtime KV import/export 计数、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime KV precision 证据缺失、KV 交换缺失、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、闭环 reflection diagnostics 或 revision 证据缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
-Use `--benchmark-min-runtime-kv-hold-device-profiles` when an all-device run
-must prove exported-but-held runtime KV behavior across more than one hardware
-class instead of accepting one fast-path watch sample as enough.
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence / hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、闭环 reflection diagnostics 或 revision 证据缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Use `--benchmark-min-runtime-kv-import-device-profiles` and
+`--benchmark-min-runtime-kv-export-device-profiles` when an all-device run must
+prove KV exchange on more than one hardware class. Use
+`--benchmark-min-runtime-kv-hold-device-profiles` when it must also prove
+exported-but-held runtime KV behavior across more than one hardware class
+instead of accepting one fast-path watch sample as enough.
 
-当全设备 benchmark 必须证明“已导出但被 hold 的 runtime KV”跨多个硬件类别都出现过时，使用
+当全设备 benchmark 必须证明 KV 导入 / 导出已经跨多个硬件类别真实发生时，使用
+`--benchmark-min-runtime-kv-import-device-profiles` 和
+`--benchmark-min-runtime-kv-export-device-profiles`。当还必须证明“已导出但被 hold 的
+runtime KV”跨多个硬件类别都出现过时，使用
 `--benchmark-min-runtime-kv-hold-device-profiles`，避免只靠单个 fast-path watch 样本通过安全门禁。
 
 Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
