@@ -182,7 +182,7 @@ impl KvFusionCache {
         let usefulness = usefulness.clamp(0.05, 1.0);
         let now = self.tick();
 
-        if let Some((index, score)) = self.best_match_index(&vector) {
+        if let Some((index, score)) = self.best_match_index(&key, &vector) {
             if score >= self.similarity_threshold {
                 let entry = &mut self.entries[index];
                 fuse_vector(&mut entry.vector, &vector, entry.strength, usefulness);
@@ -333,6 +333,11 @@ impl KvFusionCache {
                 let Some(right_index) = self.entry_index(right_id) else {
                     continue;
                 };
+                if memory_namespace(&self.entries[left_index].key)
+                    != memory_namespace(&self.entries[right_index].key)
+                {
+                    continue;
+                }
                 let similarity = cosine_similarity(
                     &self.entries[left_index].vector,
                     &self.entries[right_index].vector,
@@ -501,10 +506,12 @@ impl KvFusionCache {
         self.clock
     }
 
-    fn best_match_index(&self, vector: &[f32]) -> Option<(usize, f32)> {
+    fn best_match_index(&self, key: &str, vector: &[f32]) -> Option<(usize, f32)> {
+        let namespace = memory_namespace(key);
         self.entries
             .iter()
             .enumerate()
+            .filter(|(_, entry)| memory_namespace(&entry.key) == namespace)
             .map(|(index, entry)| (index, cosine_similarity(vector, &entry.vector)))
             .max_by(|(_, left), (_, right)| left.partial_cmp(right).unwrap_or(Ordering::Equal))
     }
@@ -577,6 +584,14 @@ fn merge_memory_entry(
     primary.last_score = primary.last_score.max(similarity);
     primary.created_at = primary.created_at.min(duplicate.created_at);
     primary.last_access = now.max(primary.last_access).max(duplicate.last_access);
+}
+
+fn memory_namespace(key: &str) -> &'static str {
+    if key.starts_with("runtime_kv:") {
+        "runtime_kv"
+    } else {
+        "semantic"
+    }
 }
 
 fn fuse_vector(
@@ -829,6 +844,26 @@ mod tests {
     }
 
     #[test]
+    fn runtime_kv_memories_do_not_fuse_with_semantic_memories() {
+        let mut cache = KvFusionCache::with_limits(0.7, 16);
+        let semantic = cache.store_or_fuse("prompt lesson memory", vec![1.0, 0.0, 0.0], 0.9);
+        let runtime_kv = cache.store_or_fuse(
+            "runtime_kv:l0h0:0-1 :: prompt lesson memory",
+            vec![1.0, 0.0, 0.0],
+            0.9,
+        );
+
+        assert_ne!(semantic, runtime_kv);
+        assert_eq!(cache.len(), 2);
+        assert!(
+            cache
+                .entries()
+                .iter()
+                .any(|entry| entry.id == runtime_kv && entry.key.starts_with("runtime_kv:"))
+        );
+    }
+
+    #[test]
     fn lookup_penalizes_mismatched_embedding_dimensions() {
         let mut cache = KvFusionCache::with_limits(0.7, 16);
         cache.store_or_fuse("short embedding", vec![1.0], 0.9);
@@ -928,6 +963,28 @@ mod tests {
                 .key
                 .contains("old duplicate")
         );
+    }
+
+    #[test]
+    fn compaction_does_not_merge_runtime_kv_with_semantic_memory() {
+        let mut cache = KvFusionCache::with_limits(0.99, 16);
+        let semantic = cache.store_or_fuse("semantic duplicate", vec![1.0, 0.0, 0.0], 0.95);
+        let runtime_kv = cache.store_or_fuse(
+            "runtime_kv:l1h0:0-1 :: semantic duplicate",
+            vec![1.0, 0.0, 0.0],
+            0.95,
+        );
+
+        let report = cache.compact_similar(MemoryCompactionPolicy {
+            similarity_threshold: 0.90,
+            max_candidates: 16,
+            max_merges: 8,
+        });
+
+        assert_eq!(report.after, 2);
+        assert!(report.merged.is_empty());
+        assert!(cache.entries().iter().any(|entry| entry.id == semantic));
+        assert!(cache.entries().iter().any(|entry| entry.id == runtime_kv));
     }
 
     #[test]

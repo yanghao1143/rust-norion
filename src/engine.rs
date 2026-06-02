@@ -2425,6 +2425,15 @@ mod tests {
         );
         assert!(first.stored_memory_id.is_some());
         assert!(!first.stored_runtime_kv_memory_ids.is_empty());
+        let runtime_kv_memory_id = first.stored_runtime_kv_memory_ids[0];
+        let runtime_kv_entry = engine
+            .cache
+            .entries()
+            .iter()
+            .find(|entry| entry.id == runtime_kv_memory_id)
+            .expect("stored runtime KV memory should be present before save")
+            .clone();
+        assert!(runtime_kv_entry.key.starts_with("runtime_kv:"));
 
         engine
             .save_full_state(&memory_path, &experience_path, &adaptive_path)
@@ -2440,6 +2449,18 @@ mod tests {
             restored.evolution_ledger.replay_runs,
             engine.evolution_ledger.replay_runs
         );
+        let restored_runtime_kv_entry = restored
+            .cache
+            .entries()
+            .iter()
+            .find(|entry| entry.id == runtime_kv_memory_id)
+            .expect("stored runtime KV memory should survive full-state reload");
+        assert_eq!(restored_runtime_kv_entry.key, runtime_kv_entry.key);
+        assert_eq!(
+            restored_runtime_kv_entry.vector.len(),
+            runtime_kv_entry.vector.len()
+        );
+        let restored_runtime_kv_vector = restored_runtime_kv_entry.vector.clone();
         let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::default());
         let second = restored.infer(
             InferenceRequest::new(prompt, TaskProfile::Coding),
@@ -2447,8 +2468,24 @@ mod tests {
         );
 
         assert!(!second.used_memories.is_empty());
+        assert!(second.used_memories.iter().any(
+            |memory| memory.id == runtime_kv_memory_id && memory.key.starts_with("runtime_kv:")
+        ));
         assert!(!second.used_experiences.is_empty());
-        assert!(!second_backend.runtime().imported_kv_blocks().is_empty());
+        let imported = second_backend.runtime().imported_kv_blocks();
+        assert!(!imported.is_empty());
+        assert_eq!(
+            second.runtime_diagnostics.imported_kv_blocks,
+            imported.len()
+        );
+        let imported_runtime_kv = imported
+            .iter()
+            .find(|block| restored_runtime_kv_vector.starts_with(&block.key))
+            .expect("persisted runtime KV vector should be reconstructed as imported KV");
+        assert_eq!(
+            imported_runtime_kv.token_end,
+            imported_runtime_kv.token_start + 1
+        );
         assert!(second.answer.contains("imported"));
 
         cleanup(memory_path);
