@@ -128,6 +128,10 @@ pub struct ProductionKernelConformanceReport {
     pub request_device_hot_kv_bits: u8,
     pub request_device_cold_kv_bits: u8,
     pub token_count: usize,
+    pub uncertainty_token_count: usize,
+    pub average_entropy: Option<f32>,
+    pub average_neg_logprob: Option<f32>,
+    pub uncertainty_perplexity: Option<f32>,
     pub trace_steps: usize,
     pub imported_kv_blocks: usize,
     pub exported_kv_blocks: usize,
@@ -159,6 +163,10 @@ impl ProductionKernelConformanceReport {
             request_device_hot_kv_bits: 0,
             request_device_cold_kv_bits: 0,
             token_count: 0,
+            uncertainty_token_count: 0,
+            average_entropy: None,
+            average_neg_logprob: None,
+            uncertainty_perplexity: None,
             trace_steps: 0,
             imported_kv_blocks: 0,
             exported_kv_blocks: 0,
@@ -191,6 +199,10 @@ impl ProductionKernelConformanceReport {
             request_device_hot_kv_bits: 0,
             request_device_cold_kv_bits: 0,
             token_count: 0,
+            uncertainty_token_count: 0,
+            average_entropy: None,
+            average_neg_logprob: None,
+            uncertainty_perplexity: None,
             trace_steps: 0,
             imported_kv_blocks: 0,
             exported_kv_blocks: 0,
@@ -207,7 +219,7 @@ impl ProductionKernelConformanceReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
             self.passed,
             self.model_id,
             self.selected_adapter,
@@ -221,6 +233,10 @@ impl ProductionKernelConformanceReport {
             self.request_device_hot_kv_bits,
             self.request_device_cold_kv_bits,
             self.token_count,
+            self.uncertainty_token_count,
+            option_f32_display(self.average_entropy),
+            option_f32_display(self.average_neg_logprob),
+            option_f32_display(self.uncertainty_perplexity),
             self.trace_steps,
             self.imported_kv_blocks,
             self.exported_kv_blocks,
@@ -720,6 +736,11 @@ impl ProductionTransformerRuntime {
         };
 
         report.token_count = response.tokens.len();
+        let token_uncertainty = ProductionTokenUncertainty::from_tokens(&response.tokens);
+        report.uncertainty_token_count = token_uncertainty.uncertainty_token_count;
+        report.average_entropy = token_uncertainty.average_entropy;
+        report.average_neg_logprob = token_uncertainty.average_neg_logprob;
+        report.uncertainty_perplexity = token_uncertainty.uncertainty_perplexity;
         report.trace_steps = response.trace.len();
         report.forward_energy = response.diagnostics.forward_energy;
         report.kv_influence = response.diagnostics.kv_influence;
@@ -1310,6 +1331,83 @@ fn evaluate_conformance_request_contract(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ProductionTokenUncertainty {
+    uncertainty_token_count: usize,
+    average_entropy: Option<f32>,
+    average_neg_logprob: Option<f32>,
+    uncertainty_perplexity: Option<f32>,
+}
+
+impl ProductionTokenUncertainty {
+    fn from_tokens(tokens: &[RuntimeToken]) -> Self {
+        let mut entropy_total = 0.0;
+        let mut entropy_count = 0;
+        let mut neg_logprob_total = 0.0;
+        let mut logprob_count = 0;
+        let mut loss_total = 0.0;
+        let mut loss_count = 0;
+        let mut uncertainty_token_count = 0;
+
+        for token in tokens {
+            let entropy = token.entropy.and_then(production_bounded_entropy);
+            let neg_logprob = token.logprob.and_then(production_bounded_neg_logprob);
+
+            if entropy.is_some() || neg_logprob.is_some() {
+                uncertainty_token_count += 1;
+            }
+            if let Some(entropy) = entropy {
+                entropy_total += entropy;
+                entropy_count += 1;
+            }
+            if let Some(neg_logprob) = neg_logprob {
+                neg_logprob_total += neg_logprob;
+                logprob_count += 1;
+            }
+
+            match (entropy, neg_logprob) {
+                (Some(entropy), Some(neg_logprob)) => {
+                    loss_total += 2.0 + entropy * 4.0 + neg_logprob;
+                    loss_count += 1;
+                }
+                (Some(entropy), None) => {
+                    loss_total += 2.0 + entropy * 4.0;
+                    loss_count += 1;
+                }
+                (None, Some(neg_logprob)) => {
+                    loss_total += 2.0 + neg_logprob;
+                    loss_count += 1;
+                }
+                (None, None) => {}
+            }
+        }
+
+        Self {
+            uncertainty_token_count,
+            average_entropy: production_average(entropy_total, entropy_count),
+            average_neg_logprob: production_average(neg_logprob_total, logprob_count),
+            uncertainty_perplexity: production_average(loss_total, loss_count),
+        }
+    }
+}
+
+fn production_bounded_entropy(value: f32) -> Option<f32> {
+    value.is_finite().then(|| value.clamp(0.0, 4.0))
+}
+
+fn production_bounded_neg_logprob(value: f32) -> Option<f32> {
+    let value = -value;
+    value.is_finite().then(|| value.clamp(0.0, 12.0))
+}
+
+fn production_average(total: f32, count: usize) -> Option<f32> {
+    if count == 0 {
+        None
+    } else {
+        Some(total / count as f32)
+    }
+}
+
 fn evaluate_conformance_response(
     manifest: &RuntimeManifest,
     gate: ProductionKernelConformanceGate,
@@ -1326,6 +1424,11 @@ fn evaluate_conformance_response(
         report
             .failures
             .push("kernel did not return runtime token uncertainty records".to_owned());
+    }
+    if gate.require_tokens && !response.tokens.is_empty() && report.uncertainty_token_count == 0 {
+        report.failures.push(
+            "kernel did not return any runtime token entropy/logprob uncertainty signal".to_owned(),
+        );
     }
     if response
         .tokens
@@ -2165,6 +2268,10 @@ mod tests {
         assert!(report.passed, "{report:?}");
         assert!(report.kernel_connected);
         assert!(report.token_count > 0);
+        assert_eq!(report.uncertainty_token_count, report.token_count);
+        assert!(report.average_entropy.unwrap() > 0.0);
+        assert!(report.average_neg_logprob.unwrap() > 0.0);
+        assert!(report.uncertainty_perplexity.unwrap() > 2.0);
         assert!(report.trace_steps > 0);
         assert!(report.imported_kv_blocks > 0);
         assert!(report.exported_kv_blocks > 0);
@@ -2181,6 +2288,8 @@ mod tests {
         assert!(report.summary_line().contains("passed=true"));
         assert!(report.summary_line().contains("manifest_kv_bits=8/4"));
         assert!(report.summary_line().contains("request_device_kv_bits=8/4"));
+        assert!(report.summary_line().contains("uncertainty_tokens="));
+        assert!(report.summary_line().contains("uncertainty_perplexity="));
 
         fs::remove_dir_all(asset_dir).unwrap();
     }
@@ -2372,6 +2481,10 @@ mod tests {
             request_device_hot_kv_bits: 8,
             request_device_cold_kv_bits: 4,
             token_count: 1,
+            uncertainty_token_count: 1,
+            average_entropy: Some(0.3),
+            average_neg_logprob: Some(0.2),
+            uncertainty_perplexity: Some(3.4),
             trace_steps: 1,
             imported_kv_blocks: 1,
             exported_kv_blocks: 1,
@@ -2432,6 +2545,36 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("production forward kernel is not connected"))
+        );
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_kernel_conformance_gate_fails_tokens_without_uncertainty_signal() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-no-uncertainty");
+        let manifest = production_manifest(&weights, &tokenizer);
+        let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+            .unwrap()
+            .with_kernel(NoUncertaintyForwardKernel);
+
+        let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+        assert!(!report.passed);
+        assert_eq!(report.token_count, 1);
+        assert_eq!(report.uncertainty_token_count, 0);
+        assert_eq!(report.average_entropy, None);
+        assert_eq!(report.average_neg_logprob, None);
+        assert_eq!(report.uncertainty_perplexity, None);
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("kernel did not return any runtime token entropy/logprob")
+        }));
+        assert!(report.summary_line().contains("uncertainty_tokens=0"));
+        assert!(
+            report
+                .summary_line()
+                .contains("uncertainty_perplexity=none")
         );
 
         fs::remove_dir_all(asset_dir).unwrap();
@@ -2673,6 +2816,39 @@ mod tests {
         ) -> Result<ProductionKernelOutput, RuntimeError> {
             Ok(ProductionKernelOutput::new("invalid kernel export")
                 .with_exported_kv_blocks(vec![self.block.clone()]))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct NoUncertaintyForwardKernel;
+
+    impl ProductionForwardKernel for NoUncertaintyForwardKernel {
+        fn generate(
+            &self,
+            _context: ProductionKernelContext<'_>,
+        ) -> Result<ProductionKernelOutput, RuntimeError> {
+            Ok(
+                ProductionKernelOutput::new("kernel returned tokens without uncertainty")
+                    .with_tokens(vec![RuntimeToken::new("plain")])
+                    .with_trace(vec![ReasoningStep::new(
+                        "production_kernel",
+                        "returned token text but no entropy or logprob",
+                        0.86,
+                    )])
+                    .with_diagnostics(RuntimeDiagnostics {
+                        forward_energy: Some(0.42),
+                        kv_influence: Some(0.0),
+                        ..RuntimeDiagnostics::default()
+                    })
+                    .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                        1,
+                        0,
+                        0,
+                        1,
+                        vec![0.3],
+                        vec![0.4],
+                    )]),
+            )
         }
     }
 

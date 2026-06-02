@@ -1256,6 +1256,9 @@ diagnostics, and exported KV blocks through the same `RuntimeBackend` path.
 they require a connected kernel, runtime token uncertainty, reasoning trace,
 positive finite forward energy, finite KV influence, and exported KV when the
 manifest enables KV export.
+The same report prints uncertainty-bearing token count, average entropy,
+average negative logprob, and derived uncertainty perplexity, and the gate now
+fails when a kernel returns token text without any entropy/logprob signal.
 `--production-kernel-conformance-all-devices-gate` evaluates the same contract
 for every explicit device profile, reporting per-device construction,
 adapter/device-contract, and kernel-output failures instead of hiding them
@@ -1270,6 +1273,7 @@ the runtime architecture instead of assuming one unbounded head per memory.
 
 `ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。`--production-runtime --runtime-command ... --runtime-json` 会把外部自研命令 runtime 自动包装进同一条 production kernel slot，因此本地可执行文件、Rust prototype 和后续训练好的 forward kernel 都必须接受同一份 manifest / device / KV ABI 门禁。
 `ProductionTransformerRuntime::conformance_report` 和 CLI `--production-kernel-conformance-gate` 会把这份契约变成本地/CI 门禁：要求 kernel 已连接，并返回 runtime token uncertainty、reasoning trace、positive finite forward energy、finite KV influence，以及 manifest 启用 KV export 时的导出 KV。
+同一份报告会输出带不确定性信号的 token 数、平均 entropy、平均负 logprob 和派生 uncertainty perplexity；如果 kernel 只返回 token 文本但没有 entropy/logprob 信号，门禁会失败。
 `--production-kernel-conformance-all-devices-gate` 会把同一份契约扩展到每一个显式设备 profile，并逐设备报告构造失败、adapter / device contract 失败和 kernel 输出失败，而不是把问题隐藏在一次 benchmark 运行里。
 Noiron 控制层导入的 KV 会先经过校验再被生产 runtime 接受，生产 kernel 导出的 KV 也会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须合法，key/value 不能为空且维度一致，向量长度必须符合 manifest 与 token span 上界，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。由活跃记忆生成的 runtime KV import 也会按 runtime 架构分配有界的 layer/head，而不是假设每条记忆都能占用一个无限 head。
 

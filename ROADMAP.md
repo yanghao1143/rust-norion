@@ -724,7 +724,9 @@ These are algorithmic references, not product dependencies:
   treated as integrated: `--production-kernel-conformance-gate` requires a
   connected kernel, non-empty answer, token uncertainty, reasoning trace,
   positive forward energy, finite KV influence, and exported KV when KV export
-  is enabled.
+  is enabled. The report now exposes uncertainty-bearing token count, average
+  entropy, average negative logprob, and derived uncertainty perplexity, and it
+  fails kernels that emit token text without entropy/logprob evidence.
 - Production kernel exported KV cannot bypass the runtime boundary: invalid
   layer/head ids, token ranges, empty vectors, mismatched key/value dimensions,
   oversized vectors, or non-finite values must fail before any long-term memory
