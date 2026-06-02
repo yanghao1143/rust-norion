@@ -385,6 +385,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"live_evolution_reflection_issues\":",
     },
     TraceRequiredField {
+        name: "auto_replay_live_evolution_critical_reflection_issues",
+        marker: "\"live_evolution_critical_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_evolution_revision_actions",
+        marker: "\"live_evolution_revision_actions\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_recursive_runtime_calls",
         marker: "\"recursive_runtime_calls\":",
     },
@@ -567,6 +575,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     TraceRequiredField {
         name: "evolution_replay_live_evolution_reflection_issues",
         marker: "\"cumulative_replay_live_evolution_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_critical_reflection_issues",
+        marker: "\"cumulative_replay_live_evolution_critical_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_revision_actions",
+        marker: "\"cumulative_replay_live_evolution_revision_actions\":",
     },
     TraceRequiredField {
         name: "evolution_recursive_runtime_calls",
@@ -3539,6 +3555,8 @@ mod tests {
         assert!(line.contains("\"live_evolution_memory_updates\":"));
         assert!(line.contains("\"live_evolution_stored_memory_updates\":"));
         assert!(line.contains("\"live_evolution_reflection_issues\":"));
+        assert!(line.contains("\"live_evolution_critical_reflection_issues\":"));
+        assert!(line.contains("\"live_evolution_revision_actions\":"));
         assert!(line.contains("\"recursive_runtime_items\":"));
         assert!(line.contains("\"recursive_runtime_calls\":"));
         assert!(line.contains("\"avg_recursive_call_pressure\":"));
@@ -3569,6 +3587,8 @@ mod tests {
         assert!(line.contains("\"cumulative_replay_live_evolution_memory_updates\":"));
         assert!(line.contains("\"cumulative_replay_live_evolution_stored_memory_updates\":"));
         assert!(line.contains("\"cumulative_replay_live_evolution_reflection_issues\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_critical_reflection_issues\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_revision_actions\":"));
         assert!(line.contains("\"cumulative_recursive_runtime_calls\":"));
         assert!(line.contains("\"cumulative_drift_rollbacks\":"));
         assert!(line.contains("\"cumulative_rollback_router_threshold_delta\":"));
@@ -4178,6 +4198,88 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| { failure.contains("cumulative_replay_live_evolution_items") }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_cumulative_live_evolution_critical_reflection_mismatch()
+     {
+        let line = auto_replay_trace_line();
+        let live_critical_reflection_issues =
+            extract_json_usize_field(&line, "live_evolution_critical_reflection_issues").unwrap();
+        let cumulative_critical_reflection_issues = extract_json_usize_field(
+            &line,
+            "cumulative_replay_live_evolution_critical_reflection_issues",
+        )
+        .unwrap();
+        assert!(
+            cumulative_critical_reflection_issues >= live_critical_reflection_issues,
+            "{line}"
+        );
+        let required_live_critical_reflection_issues =
+            live_critical_reflection_issues.saturating_add(1);
+        let line = line
+            .replacen(
+                &format!(
+                    "\"live_evolution_critical_reflection_issues\":{live_critical_reflection_issues}"
+                ),
+                &format!(
+                    "\"live_evolution_critical_reflection_issues\":{required_live_critical_reflection_issues}"
+                ),
+                1,
+            )
+            .replacen(
+                &format!(
+                    "\"cumulative_replay_live_evolution_critical_reflection_issues\":{cumulative_critical_reflection_issues}"
+                ),
+                "\"cumulative_replay_live_evolution_critical_reflection_issues\":0",
+                1,
+            );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_replay_live_evolution_critical_reflection_issues")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_cumulative_live_evolution_revision_action_mismatch() {
+        let line = auto_replay_trace_line();
+        let live_revision_actions =
+            extract_json_usize_field(&line, "live_evolution_revision_actions").unwrap();
+        let cumulative_revision_actions =
+            extract_json_usize_field(&line, "cumulative_replay_live_evolution_revision_actions")
+                .unwrap();
+        assert!(
+            cumulative_revision_actions >= live_revision_actions,
+            "{line}"
+        );
+        let required_live_revision_actions = live_revision_actions.saturating_add(1);
+        let line = line
+            .replacen(
+                &format!("\"live_evolution_revision_actions\":{live_revision_actions}"),
+                &format!("\"live_evolution_revision_actions\":{required_live_revision_actions}"),
+                1,
+            )
+            .replacen(
+                &format!(
+                    "\"cumulative_replay_live_evolution_revision_actions\":{cumulative_revision_actions}"
+                ),
+                "\"cumulative_replay_live_evolution_revision_actions\":0",
+                1,
+            );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_replay_live_evolution_revision_actions")
+            }),
             "{failures:?}"
         );
     }
