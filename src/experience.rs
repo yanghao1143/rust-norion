@@ -10,6 +10,8 @@ use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, Reward
 use crate::reflection::{ReflectionIssue, ReflectionSeverity, RuntimeDiagnostics};
 use crate::router::RouteBudget;
 
+const EXPERIENCE_FLOAT_EPSILON: f32 = 0.000_001;
+
 #[derive(Debug, Clone)]
 pub struct ExperienceInput {
     pub prompt: String,
@@ -466,10 +468,10 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(20)
         .and_then(|value| deserialize_runtime_diagnostics(&unescape_field(value)))
         .unwrap_or_default();
-    let live_evolution = fields
-        .get(21)
-        .and_then(|value| deserialize_live_evolution(&unescape_field(value)))
-        .unwrap_or_default();
+    let live_evolution = match fields.get(21) {
+        Some(value) => deserialize_live_evolution(&unescape_field(value))?,
+        None => LiveInferenceEvolution::default(),
+    };
     let runtime_token_metrics = fields
         .get(22)
         .and_then(|value| deserialize_runtime_token_metrics(&unescape_field(value)))
@@ -597,39 +599,53 @@ fn deserialize_live_evolution(value: &str) -> Option<LiveInferenceEvolution> {
         2
     };
 
-    Some(LiveInferenceEvolution {
+    let online_reward_feedbacks = if has_online_reward_feedback {
+        fields[2].parse::<usize>().ok()?
+    } else {
+        0
+    };
+    let online_reward_reinforcements = if has_online_reward_feedback {
+        fields[3].parse::<usize>().ok()?
+    } else {
+        0
+    };
+    let online_reward_penalties = if has_online_reward_feedback {
+        fields[4].parse::<usize>().ok()?
+    } else {
+        0
+    };
+    if has_online_reward_feedback
+        && online_reward_feedbacks
+            != online_reward_reinforcements.saturating_add(online_reward_penalties)
+    {
+        return None;
+    }
+
+    let online_reward_strength = if has_online_reward_strength {
+        nonnegative_finite_f32_field(fields[5])?
+    } else {
+        0.0
+    };
+    let online_reward_reinforcement_strength = if has_online_reward_strength {
+        nonnegative_finite_f32_field(fields[6])?
+    } else {
+        0.0
+    };
+    let online_reward_penalty_strength = if has_online_reward_strength {
+        nonnegative_finite_f32_field(fields[7])?
+    } else {
+        0.0
+    };
+
+    let report = LiveInferenceEvolution {
         router_threshold_delta: field_to_finite_f32(fields[0])?.max(0.0),
         hierarchy_weight_delta: field_to_finite_f32(fields[1])?.max(0.0),
-        online_reward_feedbacks: if has_online_reward_feedback {
-            fields[2].parse::<usize>().ok()?
-        } else {
-            0
-        },
-        online_reward_reinforcements: if has_online_reward_feedback {
-            fields[3].parse::<usize>().ok()?
-        } else {
-            0
-        },
-        online_reward_penalties: if has_online_reward_feedback {
-            fields[4].parse::<usize>().ok()?
-        } else {
-            0
-        },
-        online_reward_strength: if has_online_reward_strength {
-            field_to_finite_f32(fields[5])?.max(0.0)
-        } else {
-            0.0
-        },
-        online_reward_reinforcement_strength: if has_online_reward_strength {
-            field_to_finite_f32(fields[6])?.max(0.0)
-        } else {
-            0.0
-        },
-        online_reward_penalty_strength: if has_online_reward_strength {
-            field_to_finite_f32(fields[7])?.max(0.0)
-        } else {
-            0.0
-        },
+        online_reward_feedbacks,
+        online_reward_reinforcements,
+        online_reward_penalties,
+        online_reward_strength,
+        online_reward_reinforcement_strength,
+        online_reward_penalty_strength,
         memory_reinforcements: fields[memory_index].parse::<usize>().ok()?,
         memory_penalties: fields[memory_index + 1].parse::<usize>().ok()?,
         stored_memory: field_to_bool(fields[memory_index + 2])?,
@@ -638,7 +654,47 @@ fn deserialize_live_evolution(value: &str) -> Option<LiveInferenceEvolution> {
         reflection_issues: fields[memory_index + 5].parse::<usize>().ok()?,
         critical_reflection_issues: fields[memory_index + 6].parse::<usize>().ok()?,
         revision_actions: fields[memory_index + 7].parse::<usize>().ok()?,
-    })
+    };
+
+    if has_online_reward_strength && !live_online_reward_strength_is_consistent(&report) {
+        return None;
+    }
+
+    Some(report)
+}
+
+fn nonnegative_finite_f32_field(value: &str) -> Option<f32> {
+    field_to_finite_f32(value).filter(|value| *value >= 0.0)
+}
+
+fn live_online_reward_strength_is_consistent(report: &LiveInferenceEvolution) -> bool {
+    let has_reinforcement_strength =
+        report.online_reward_reinforcement_strength > EXPERIENCE_FLOAT_EPSILON;
+    let has_penalty_strength = report.online_reward_penalty_strength > EXPERIENCE_FLOAT_EPSILON;
+    report.online_reward_strength.is_finite()
+        && report.online_reward_reinforcement_strength.is_finite()
+        && report.online_reward_penalty_strength.is_finite()
+        && report.online_reward_feedbacks
+            == report
+                .online_reward_reinforcements
+                .saturating_add(report.online_reward_penalties)
+        && report.online_reward_strength >= 0.0
+        && report.online_reward_reinforcement_strength >= 0.0
+        && report.online_reward_penalty_strength >= 0.0
+        && !(report.online_reward_strength > EXPERIENCE_FLOAT_EPSILON
+            && report.online_reward_feedbacks == 0)
+        && !(report.online_reward_feedbacks > 0
+            && report.online_reward_strength <= EXPERIENCE_FLOAT_EPSILON)
+        && !(has_reinforcement_strength && report.online_reward_reinforcements == 0)
+        && !(report.online_reward_reinforcements > 0
+            && report.online_reward_reinforcement_strength <= EXPERIENCE_FLOAT_EPSILON)
+        && !(has_penalty_strength && report.online_reward_penalties == 0)
+        && !(report.online_reward_penalties > 0
+            && report.online_reward_penalty_strength <= EXPERIENCE_FLOAT_EPSILON)
+        && (report.online_reward_strength
+            - (report.online_reward_reinforcement_strength + report.online_reward_penalty_strength))
+            .abs()
+            <= EXPERIENCE_FLOAT_EPSILON
 }
 
 fn serialize_gists(records: &[GistRecord]) -> String {
@@ -1355,6 +1411,59 @@ mod tests {
         assert_eq!(loaded.memory_reinforcements, 1);
         assert_eq!(loaded.stored_runtime_kv_memories, 1);
         assert_eq!(loaded.revision_actions, 1);
+    }
+
+    #[test]
+    fn deserialize_live_evolution_rejects_online_reward_feedback_count_mismatch() {
+        assert!(
+            deserialize_live_evolution(
+                "0.030000,0.040000,2,1,0,0.720000,0.720000,0.000000,1,0,1,2,1,1,0,1"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn deserialize_live_evolution_rejects_online_reward_strength_total_mismatch() {
+        assert!(
+            deserialize_live_evolution(
+                "0.030000,0.040000,2,1,1,0.720000,0.720000,0.250000,1,0,1,2,1,1,0,1"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn deserialize_live_evolution_rejects_feedback_without_strength_when_strength_fields_present() {
+        assert!(
+            deserialize_live_evolution(
+                "0.030000,0.040000,1,1,0,0.000000,0.000000,0.000000,1,0,1,2,1,1,0,1"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn deserialize_live_evolution_rejects_component_strength_without_count() {
+        assert!(
+            deserialize_live_evolution(
+                "0.030000,0.040000,1,1,0,0.920000,0.720000,0.200000,1,0,1,2,1,1,0,1"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn deserialize_record_rejects_malformed_live_evolution_field() {
+        let mut store = ExperienceStore::new();
+        store.record(input("malformed live evolution", 0.82));
+        let current = serialize_record(&store.records()[0]);
+        let mut fields = current.split('\t').map(str::to_owned).collect::<Vec<_>>();
+        fields[21] =
+            escape_field("0.030000,0.040000,1,1,0,0.000000,0.000000,0.000000,1,0,1,2,1,1,0,1");
+        let malformed = fields.join("\t");
+
+        assert!(deserialize_record(&malformed).is_none());
     }
 
     #[test]
