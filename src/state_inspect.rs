@@ -172,6 +172,9 @@ pub struct StateInspectionMatrixGate {
     pub min_evolution_replay_live_memory_feedback_detail_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_memory_update_device_profiles: Option<usize>,
+    pub min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles:
+        Option<usize>,
+    pub min_evolution_replay_live_evolution_revision_action_device_profiles: Option<usize>,
     pub min_evolution_recursive_replay_device_profiles: Option<usize>,
     pub min_evolution_recursive_runtime_call_device_profiles: Option<usize>,
 }
@@ -246,6 +249,8 @@ pub struct StateInspectionDeviceGateReport {
     pub evolution_replay_live_evolution_memory_updates: u64,
     pub evolution_replay_live_evolution_stored_memory_updates: u64,
     pub evolution_replay_live_evolution_reflection_issues: u64,
+    pub evolution_replay_live_evolution_critical_reflection_issues: u64,
+    pub evolution_replay_live_evolution_revision_actions: u64,
     pub evolution_recursive_replay_items: u64,
     pub evolution_recursive_runtime_calls: u64,
 }
@@ -301,6 +306,8 @@ impl StateInspectionDeviceGateReport {
             evolution_replay_live_evolution_memory_updates: 0,
             evolution_replay_live_evolution_stored_memory_updates: 0,
             evolution_replay_live_evolution_reflection_issues: 0,
+            evolution_replay_live_evolution_critical_reflection_issues: 0,
+            evolution_replay_live_evolution_revision_actions: 0,
             evolution_recursive_replay_items: 0,
             evolution_recursive_runtime_calls: 0,
         }
@@ -396,6 +403,12 @@ impl StateInspectionDeviceGateReport {
             evolution_replay_live_evolution_reflection_issues: inspection
                 .evolution_ledger
                 .replay_live_evolution_reflection_issues,
+            evolution_replay_live_evolution_critical_reflection_issues: inspection
+                .evolution_ledger
+                .replay_live_evolution_critical_reflection_issues,
+            evolution_replay_live_evolution_revision_actions: inspection
+                .evolution_ledger
+                .replay_live_evolution_revision_actions,
             evolution_recursive_replay_items: inspection.evolution_ledger.recursive_replay_items,
             evolution_recursive_runtime_calls: inspection.evolution_ledger.recursive_runtime_calls,
         }
@@ -561,11 +574,16 @@ impl StateInspectionDeviceGateReport {
         memory_updates: u64,
         stored_memory_updates: u64,
         reflection_issues: u64,
+        critical_reflection_issues: u64,
+        revision_actions: u64,
     ) -> Self {
         self.evolution_replay_live_evolution_items = items;
         self.evolution_replay_live_evolution_memory_updates = memory_updates;
         self.evolution_replay_live_evolution_stored_memory_updates = stored_memory_updates;
         self.evolution_replay_live_evolution_reflection_issues = reflection_issues;
+        self.evolution_replay_live_evolution_critical_reflection_issues =
+            critical_reflection_issues;
+        self.evolution_replay_live_evolution_revision_actions = revision_actions;
         self
     }
 }
@@ -822,6 +840,20 @@ impl StateInspectionMatrixGateReport {
         );
         require_min_device_profiles(
             &mut failures,
+            "evolution_replay_live_evolution_critical_reflection_issue_device_profiles",
+            evolution_replay_live_evolution_critical_reflection_issue_device_profiles(
+                &device_reports,
+            ),
+            gate.min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "evolution_replay_live_evolution_revision_action_device_profiles",
+            evolution_replay_live_evolution_revision_action_device_profiles(&device_reports),
+            gate.min_evolution_replay_live_evolution_revision_action_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "evolution_recursive_replay_device_profiles",
             evolution_recursive_replay_device_profiles(&device_reports),
             gate.min_evolution_recursive_replay_device_profiles,
@@ -996,6 +1028,18 @@ impl StateInspectionMatrixGateReport {
         evolution_replay_live_evolution_memory_update_device_profiles(&self.device_reports)
     }
 
+    pub fn evolution_replay_live_evolution_critical_reflection_issue_device_profiles(
+        &self,
+    ) -> usize {
+        evolution_replay_live_evolution_critical_reflection_issue_device_profiles(
+            &self.device_reports,
+        )
+    }
+
+    pub fn evolution_replay_live_evolution_revision_action_device_profiles(&self) -> usize {
+        evolution_replay_live_evolution_revision_action_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_recursive_replay_device_profiles(&self) -> usize {
         evolution_recursive_replay_device_profiles(&self.device_reports)
     }
@@ -1006,7 +1050,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -1045,6 +1089,8 @@ impl StateInspectionMatrixGateReport {
             self.evolution_replay_live_memory_feedback_detail_device_profiles(),
             self.evolution_replay_live_evolution_device_profiles(),
             self.evolution_replay_live_evolution_memory_update_device_profiles(),
+            self.evolution_replay_live_evolution_critical_reflection_issue_device_profiles(),
+            self.evolution_replay_live_evolution_revision_action_device_profiles(),
             self.evolution_recursive_replay_device_profiles(),
             self.evolution_recursive_runtime_call_device_profiles(),
             self.failures.len()
@@ -1327,6 +1373,22 @@ fn evolution_replay_live_evolution_memory_update_device_profiles(
 ) -> usize {
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.evolution_replay_live_evolution_memory_updates > 0
+    })
+}
+
+fn evolution_replay_live_evolution_critical_reflection_issue_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.evolution_replay_live_evolution_critical_reflection_issues > 0
+    })
+}
+
+fn evolution_replay_live_evolution_revision_action_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.evolution_replay_live_evolution_revision_actions > 0
     })
 }
 
@@ -3994,6 +4056,8 @@ mod tests {
             min_evolution_replay_live_memory_feedback_detail_device_profiles: Some(2),
             min_evolution_replay_live_evolution_device_profiles: Some(2),
             min_evolution_replay_live_evolution_memory_update_device_profiles: Some(2),
+            min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles: Some(1),
+            min_evolution_replay_live_evolution_revision_action_device_profiles: Some(2),
             min_evolution_recursive_replay_device_profiles: Some(1),
             min_evolution_recursive_runtime_call_device_profiles: Some(1),
             ..StateInspectionMatrixGate::default()
@@ -4014,7 +4078,7 @@ mod tests {
                                 .with_evolution_replay_live_memory_feedback_detail_evidence(
                                     1, 1, 0, 1, 0.2,
                                 )
-                                .with_evolution_replay_live_evolution_evidence(1, 2, 1, 1);
+                                .with_evolution_replay_live_evolution_evidence(1, 2, 1, 1, 1, 1);
                         }
                         DeviceClass::IntegratedGpu => {
                             device_report = device_report
@@ -4023,7 +4087,7 @@ mod tests {
                                 .with_evolution_replay_live_memory_feedback_detail_evidence(
                                     1, 1, 0, 0, 0.1,
                                 )
-                                .with_evolution_replay_live_evolution_evidence(1, 1, 0, 0);
+                                .with_evolution_replay_live_evolution_evidence(1, 1, 0, 0, 0, 1);
                         }
                         _ => {}
                     }
@@ -4078,6 +4142,14 @@ mod tests {
             report.evolution_replay_live_evolution_memory_update_device_profiles(),
             2
         );
+        assert_eq!(
+            report.evolution_replay_live_evolution_critical_reflection_issue_device_profiles(),
+            1
+        );
+        assert_eq!(
+            report.evolution_replay_live_evolution_revision_action_device_profiles(),
+            2
+        );
         assert_eq!(report.evolution_recursive_replay_device_profiles(), 1);
         assert_eq!(report.evolution_recursive_runtime_call_device_profiles(), 1);
         assert!(
@@ -4114,6 +4186,14 @@ mod tests {
             report
                 .summary_line()
                 .contains("evolution_replay_live_evolution_memory_update_device_profiles=2")
+        );
+        assert!(report.summary_line().contains(
+            "evolution_replay_live_evolution_critical_reflection_issue_device_profiles=1"
+        ));
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_replay_live_evolution_revision_action_device_profiles=2")
         );
 
         let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
@@ -4172,6 +4252,14 @@ mod tests {
         assert!(failing.failures.iter().any(|failure| {
             failure
                 == "evolution_replay_live_evolution_memory_update_device_profiles 0 below required 2"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure
+                == "evolution_replay_live_evolution_critical_reflection_issue_device_profiles 0 below required 1"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure
+                == "evolution_replay_live_evolution_revision_action_device_profiles 0 below required 2"
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "evolution_recursive_replay_device_profiles 0 below required 1"
