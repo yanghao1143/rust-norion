@@ -266,17 +266,19 @@ modules, not external product dependencies:
   live memory-feedback notes captured in persisted experiences, so local/CI
   checks can fail when durable self-evolution only records events without
   actually changing control-plane parameters, when closed-loop reflection or
-  live memory-feedback evidence is missing, when long-context replay evidence
-  is missing, when persisted drift rollback magnitude exceeds local safety
-  caps, or when runtime-boundary state is missing.
+  live memory-feedback evidence is missing, when replay does not consume
+  persisted live-feedback notes in the cumulative evolution ledger, when
+  long-context replay evidence is missing, when persisted drift rollback
+  magnitude exceeds local safety caps, or when runtime-boundary state is
+  missing.
   With all-device mode, the inspection gate should evaluate the
   device-scoped state files emitted by persistence roundtrip runs so CPU,
   mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
   and multi-GPU profiles all prove durable local state independently. Matrix
   thresholds should also be able to require reflection-issue, critical
-  reflection-issue, revision-action, and live memory-feedback evidence across a
-  minimum number of explicit device profiles, not only inside individual state
-  files.
+  reflection-issue, revision-action, live memory-feedback evidence, and
+  evolution-ledger replay live-feedback consumption across a minimum number of
+  explicit device profiles, not only inside individual state files.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -422,12 +424,12 @@ These are algorithmic references, not product dependencies:
   against memories used during generation; adaptive
   state now persists a cumulative self-evolution ledger across restarts for
   replay runs, applied items, router/hierarchy mutation deltas, memory updates,
-  recursive replay cost evidence, and drift rollback safety audits for reverted
-  router/hierarchy deltas, and trace schema gates now require those
+  replay live-feedback consumption, recursive replay cost evidence, and drift
+  rollback safety audits for reverted router/hierarchy deltas, and trace schema gates now require those
   cumulative ledger fields in every generated JSONL record; benchmark summaries
   now expose the same cumulative ledger snapshot, and benchmark gates can enforce
   minimum replay runs, applied items, mutation counts/deltas, memory updates,
-  recursive replay cost evidence, and zero-tolerance production caps for
+  replay live-feedback consumption, recursive replay cost evidence, and zero-tolerance production caps for
   cumulative drift rollback counts/deltas; production all-device benchmark gates now apply
   those ledger thresholds across the manifest-backed runtime boundary as well as
   the heuristic control-plane suite; replay planning now
@@ -732,6 +734,7 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-evolution-router-threshold-mutation-device-profiles`,
   `--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`,
   `--inspect-min-evolution-memory-update-device-profiles`,
+  `--inspect-min-evolution-replay-live-memory-feedback-device-profiles`,
   `--inspect-min-evolution-recursive-replay-device-profiles`, and
   `--inspect-min-evolution-recursive-runtime-call-device-profiles`, so a device
   profile cannot pass all-device inspection by persisting runtime/reflection
@@ -766,12 +769,16 @@ These are algorithmic references, not product dependencies:
   fail when reflection evidence only appears on a subset of supported hardware
   classes.
 - Benchmark summaries and gates now distinguish live memory-feedback writes
-  from replay consumption of persisted feedback. Use
+  from current-run replay consumption and persisted cumulative ledger evidence.
+  Use
   `--benchmark-min-live-memory-feedback-updates` to prove inference wrote
   online memory feedback, and
   `--benchmark-min-auto-replay-live-memory-feedback-updates` to prove
   auto-replay consumed those persisted notes when scaling later KV memory
-  reinforcement or penalty decisions.
+  reinforcement or penalty decisions. Use
+  `--benchmark-min-evolution-replay-live-memory-feedback-updates` when the same
+  replay live-feedback consumption must survive in adaptive state and be
+  visible after reload.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -835,6 +842,7 @@ These are algorithmic references, not product dependencies:
   per-device reflection/revision coverage,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay live memory-feedback consumption,
+  persisted evolution-ledger replay live memory-feedback consumption,
   auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
   drift block/rollback counts, or persistent state reuse regress.

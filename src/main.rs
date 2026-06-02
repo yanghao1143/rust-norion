@@ -1388,7 +1388,7 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
             device_report.runtime_kv_memories,
@@ -1408,6 +1408,7 @@ fn print_state_inspection_matrix_gate_report(
             device_report.evolution_router_threshold_mutations,
             device_report.evolution_hierarchy_weight_mutations,
             device_report.evolution_memory_updates,
+            device_report.evolution_replay_live_memory_feedback_updates,
             device_report.evolution_recursive_replay_items,
             device_report.evolution_recursive_runtime_calls
         );
@@ -1810,6 +1811,7 @@ struct Args {
     benchmark_min_evolution_router_threshold_delta: Option<f32>,
     benchmark_min_evolution_hierarchy_weight_delta: Option<f32>,
     benchmark_min_evolution_memory_updates: Option<u64>,
+    benchmark_min_evolution_replay_live_memory_feedback_updates: Option<u64>,
     benchmark_min_evolution_recursive_replay_items: Option<u64>,
     benchmark_min_evolution_recursive_runtime_calls: Option<u64>,
     benchmark_max_evolution_drift_rollbacks: Option<u64>,
@@ -1892,6 +1894,7 @@ struct Args {
     inspect_min_evolution_router_threshold_mutation_device_profiles: Option<usize>,
     inspect_min_evolution_hierarchy_weight_mutation_device_profiles: Option<usize>,
     inspect_min_evolution_memory_update_device_profiles: Option<usize>,
+    inspect_min_evolution_replay_live_memory_feedback_device_profiles: Option<usize>,
     inspect_min_evolution_recursive_replay_device_profiles: Option<usize>,
     inspect_min_evolution_recursive_runtime_call_device_profiles: Option<usize>,
     inspect_min_router_observations: Option<u64>,
@@ -1902,6 +1905,7 @@ struct Args {
     inspect_min_evolution_router_threshold_delta: Option<f32>,
     inspect_min_evolution_hierarchy_weight_delta: Option<f32>,
     inspect_min_evolution_memory_updates: Option<u64>,
+    inspect_min_evolution_replay_live_memory_feedback_updates: Option<u64>,
     inspect_min_evolution_recursive_replay_items: Option<u64>,
     inspect_min_evolution_recursive_runtime_calls: Option<u64>,
     inspect_max_evolution_drift_rollbacks: Option<u64>,
@@ -1993,6 +1997,7 @@ impl Args {
         let mut benchmark_min_evolution_router_threshold_delta = None;
         let mut benchmark_min_evolution_hierarchy_weight_delta = None;
         let mut benchmark_min_evolution_memory_updates = None;
+        let mut benchmark_min_evolution_replay_live_memory_feedback_updates = None;
         let mut benchmark_min_evolution_recursive_replay_items = None;
         let mut benchmark_min_evolution_recursive_runtime_calls = None;
         let mut benchmark_max_evolution_drift_rollbacks = None;
@@ -2075,6 +2080,7 @@ impl Args {
         let mut inspect_min_evolution_router_threshold_mutation_device_profiles = None;
         let mut inspect_min_evolution_hierarchy_weight_mutation_device_profiles = None;
         let mut inspect_min_evolution_memory_update_device_profiles = None;
+        let mut inspect_min_evolution_replay_live_memory_feedback_device_profiles = None;
         let mut inspect_min_evolution_recursive_replay_device_profiles = None;
         let mut inspect_min_evolution_recursive_runtime_call_device_profiles = None;
         let mut inspect_min_router_observations = None;
@@ -2085,6 +2091,7 @@ impl Args {
         let mut inspect_min_evolution_router_threshold_delta = None;
         let mut inspect_min_evolution_hierarchy_weight_delta = None;
         let mut inspect_min_evolution_memory_updates = None;
+        let mut inspect_min_evolution_replay_live_memory_feedback_updates = None;
         let mut inspect_min_evolution_recursive_replay_items = None;
         let mut inspect_min_evolution_recursive_runtime_calls = None;
         let mut inspect_max_evolution_drift_rollbacks = None;
@@ -2312,6 +2319,14 @@ impl Args {
                 }
                 "--benchmark-min-evolution-memory-updates" if index + 1 < raw.len() => {
                     benchmark_min_evolution_memory_updates = Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-replay-live-memory-feedback-updates"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_replay_live_memory_feedback_updates =
+                        Some(parse_u64(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -2815,6 +2830,16 @@ impl Args {
                     benchmark_all_devices = true;
                     index += 2;
                 }
+                "--inspect-min-evolution-replay-live-memory-feedback-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_replay_live_memory_feedback_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
                 "--inspect-min-evolution-recursive-replay-device-profiles"
                     if index + 1 < raw.len() =>
                 {
@@ -2883,6 +2908,15 @@ impl Args {
                 }
                 "--inspect-min-evolution-memory-updates" if index + 1 < raw.len() => {
                     inspect_min_evolution_memory_updates = Some(parse_u64(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-live-memory-feedback-updates"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_replay_live_memory_feedback_updates =
+                        Some(parse_u64(&raw[index + 1], 0));
                     inspect_state = true;
                     inspect_gate = true;
                     index += 2;
@@ -3172,6 +3206,7 @@ impl Args {
             benchmark_min_evolution_router_threshold_delta,
             benchmark_min_evolution_hierarchy_weight_delta,
             benchmark_min_evolution_memory_updates,
+            benchmark_min_evolution_replay_live_memory_feedback_updates,
             benchmark_min_evolution_recursive_replay_items,
             benchmark_min_evolution_recursive_runtime_calls,
             benchmark_max_evolution_drift_rollbacks,
@@ -3254,6 +3289,7 @@ impl Args {
             inspect_min_evolution_router_threshold_mutation_device_profiles,
             inspect_min_evolution_hierarchy_weight_mutation_device_profiles,
             inspect_min_evolution_memory_update_device_profiles,
+            inspect_min_evolution_replay_live_memory_feedback_device_profiles,
             inspect_min_evolution_recursive_replay_device_profiles,
             inspect_min_evolution_recursive_runtime_call_device_profiles,
             inspect_min_router_observations,
@@ -3264,6 +3300,7 @@ impl Args {
             inspect_min_evolution_router_threshold_delta,
             inspect_min_evolution_hierarchy_weight_delta,
             inspect_min_evolution_memory_updates,
+            inspect_min_evolution_replay_live_memory_feedback_updates,
             inspect_min_evolution_recursive_replay_items,
             inspect_min_evolution_recursive_runtime_calls,
             inspect_max_evolution_drift_rollbacks,
@@ -3378,6 +3415,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_evolution_memory_updates {
             gate.min_evolution_memory_updates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_replay_live_memory_feedback_updates {
+            gate.min_evolution_replay_live_memory_feedback_updates = Some(value);
         }
         if let Some(value) = self.benchmark_min_evolution_recursive_replay_items {
             gate.min_evolution_recursive_replay_items = Some(value);
@@ -3517,6 +3557,8 @@ impl Args {
                 .inspect_min_evolution_hierarchy_weight_delta
                 .map(|value| value.max(0.0)),
             min_evolution_memory_updates: self.inspect_min_evolution_memory_updates,
+            min_evolution_replay_live_memory_feedback_updates: self
+                .inspect_min_evolution_replay_live_memory_feedback_updates,
             min_evolution_recursive_replay_items: self.inspect_min_evolution_recursive_replay_items,
             min_evolution_recursive_runtime_calls: self
                 .inspect_min_evolution_recursive_runtime_calls,
@@ -3561,6 +3603,8 @@ impl Args {
                 .inspect_min_evolution_hierarchy_weight_mutation_device_profiles,
             min_evolution_memory_update_device_profiles: self
                 .inspect_min_evolution_memory_update_device_profiles,
+            min_evolution_replay_live_memory_feedback_device_profiles: self
+                .inspect_min_evolution_replay_live_memory_feedback_device_profiles,
             min_evolution_recursive_replay_device_profiles: self
                 .inspect_min_evolution_recursive_replay_device_profiles,
             min_evolution_recursive_runtime_call_device_profiles: self
@@ -3736,14 +3780,14 @@ fn print_help_and_exit() -> ! {
         "Usage: rust-norion [options] <prompt>\n",
         "\n",
         "Core: --profile coding|writing|long|general --memory path --experience path --adaptive path\n",
-        "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n\n",
+        "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-evolution-replay-live-memory-feedback-updates n\n",
         "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
         "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n\n",
         "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-device-profiles n\n",
-        "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
+        "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-replay-live-memory-feedback-updates n --inspect-min-evolution-replay-live-memory-feedback-device-profiles n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Device: --list-devices --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
     );
     println!("{usage}");
@@ -3844,6 +3888,8 @@ mod tests {
             "0.03".to_owned(),
             "--benchmark-min-evolution-memory-updates".to_owned(),
             "5".to_owned(),
+            "--benchmark-min-evolution-replay-live-memory-feedback-updates".to_owned(),
+            "6".to_owned(),
             "--benchmark-min-evolution-recursive-replay-items".to_owned(),
             "6".to_owned(),
             "--benchmark-min-evolution-recursive-runtime-calls".to_owned(),
@@ -3999,6 +4045,8 @@ mod tests {
             "12".to_owned(),
             "--inspect-min-evolution-memory-update-device-profiles".to_owned(),
             "12".to_owned(),
+            "--inspect-min-evolution-replay-live-memory-feedback-device-profiles".to_owned(),
+            "12".to_owned(),
             "--inspect-min-evolution-recursive-replay-device-profiles".to_owned(),
             "12".to_owned(),
             "--inspect-min-evolution-recursive-runtime-call-device-profiles".to_owned(),
@@ -4019,6 +4067,8 @@ mod tests {
             "0.05".to_owned(),
             "--inspect-min-evolution-memory-updates".to_owned(),
             "9".to_owned(),
+            "--inspect-min-evolution-replay-live-memory-feedback-updates".to_owned(),
+            "10".to_owned(),
             "--inspect-min-evolution-recursive-replay-items".to_owned(),
             "10".to_owned(),
             "--inspect-min-evolution-recursive-runtime-calls".to_owned(),
@@ -4194,6 +4244,10 @@ mod tests {
             Some(0.03)
         );
         assert_eq!(args.benchmark_min_evolution_memory_updates, Some(5));
+        assert_eq!(
+            args.benchmark_min_evolution_replay_live_memory_feedback_updates,
+            Some(6)
+        );
         assert_eq!(args.benchmark_min_evolution_recursive_replay_items, Some(6));
         assert_eq!(
             args.benchmark_min_evolution_recursive_runtime_calls,
@@ -4229,6 +4283,11 @@ mod tests {
             Some(0.03)
         );
         assert_eq!(args.benchmark_gate().min_evolution_memory_updates, Some(5));
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_replay_live_memory_feedback_updates,
+            Some(6)
+        );
         assert_eq!(
             args.benchmark_gate().min_evolution_recursive_replay_items,
             Some(6)
@@ -4442,6 +4501,10 @@ mod tests {
             Some(12)
         );
         assert_eq!(
+            args.inspect_min_evolution_replay_live_memory_feedback_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
             args.inspect_min_evolution_recursive_replay_device_profiles,
             Some(12)
         );
@@ -4469,6 +4532,10 @@ mod tests {
             Some(0.05)
         );
         assert_eq!(args.inspect_min_evolution_memory_updates, Some(9));
+        assert_eq!(
+            args.inspect_min_evolution_replay_live_memory_feedback_updates,
+            Some(10)
+        );
         assert_eq!(args.inspect_min_evolution_recursive_replay_items, Some(10));
         assert_eq!(args.inspect_min_evolution_recursive_runtime_calls, Some(11));
         assert_eq!(args.inspect_max_evolution_drift_rollbacks, Some(0));
@@ -4621,6 +4688,11 @@ mod tests {
         );
         assert_eq!(
             args.state_inspection_matrix_gate()
+                .min_evolution_replay_live_memory_feedback_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
                 .min_evolution_recursive_replay_device_profiles,
             Some(12)
         );
@@ -4642,6 +4714,11 @@ mod tests {
         assert_eq!(
             args.state_inspection_gate().min_evolution_memory_updates,
             Some(9)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_replay_live_memory_feedback_updates,
+            Some(10)
         );
         assert_eq!(
             args.state_inspection_gate()

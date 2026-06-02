@@ -81,6 +81,7 @@ pub struct StateInspectionGate {
     pub min_evolution_router_threshold_delta: Option<f32>,
     pub min_evolution_hierarchy_weight_delta: Option<f32>,
     pub min_evolution_memory_updates: Option<u64>,
+    pub min_evolution_replay_live_memory_feedback_updates: Option<u64>,
     pub min_evolution_recursive_replay_items: Option<u64>,
     pub min_evolution_recursive_runtime_calls: Option<u64>,
     pub max_evolution_drift_rollbacks: Option<u64>,
@@ -107,6 +108,7 @@ pub struct StateInspectionMatrixGate {
     pub min_evolution_router_threshold_mutation_device_profiles: Option<usize>,
     pub min_evolution_hierarchy_weight_mutation_device_profiles: Option<usize>,
     pub min_evolution_memory_update_device_profiles: Option<usize>,
+    pub min_evolution_replay_live_memory_feedback_device_profiles: Option<usize>,
     pub min_evolution_recursive_replay_device_profiles: Option<usize>,
     pub min_evolution_recursive_runtime_call_device_profiles: Option<usize>,
 }
@@ -152,6 +154,7 @@ pub struct StateInspectionDeviceGateReport {
     pub evolution_router_threshold_mutations: u64,
     pub evolution_hierarchy_weight_mutations: u64,
     pub evolution_memory_updates: u64,
+    pub evolution_replay_live_memory_feedback_updates: u64,
     pub evolution_recursive_replay_items: u64,
     pub evolution_recursive_runtime_calls: u64,
 }
@@ -178,6 +181,7 @@ impl StateInspectionDeviceGateReport {
             evolution_router_threshold_mutations: 0,
             evolution_hierarchy_weight_mutations: 0,
             evolution_memory_updates: 0,
+            evolution_replay_live_memory_feedback_updates: 0,
             evolution_recursive_replay_items: 0,
             evolution_recursive_runtime_calls: 0,
         }
@@ -213,6 +217,9 @@ impl StateInspectionDeviceGateReport {
                 .evolution_ledger
                 .hierarchy_weight_mutations,
             evolution_memory_updates: inspection.evolution_ledger.memory_updates(),
+            evolution_replay_live_memory_feedback_updates: inspection
+                .evolution_ledger
+                .replay_live_memory_feedback_updates(),
             evolution_recursive_replay_items: inspection.evolution_ledger.recursive_replay_items,
             evolution_recursive_runtime_calls: inspection.evolution_ledger.recursive_runtime_calls,
         }
@@ -267,6 +274,7 @@ impl StateInspectionDeviceGateReport {
         router_threshold_mutations: u64,
         hierarchy_weight_mutations: u64,
         memory_updates: u64,
+        replay_live_memory_feedback_updates: u64,
         recursive_replay_items: u64,
         recursive_runtime_calls: u64,
     ) -> Self {
@@ -275,6 +283,7 @@ impl StateInspectionDeviceGateReport {
         self.evolution_router_threshold_mutations = router_threshold_mutations;
         self.evolution_hierarchy_weight_mutations = hierarchy_weight_mutations;
         self.evolution_memory_updates = memory_updates;
+        self.evolution_replay_live_memory_feedback_updates = replay_live_memory_feedback_updates;
         self.evolution_recursive_replay_items = recursive_replay_items;
         self.evolution_recursive_runtime_calls = recursive_runtime_calls;
         self
@@ -425,6 +434,12 @@ impl StateInspectionMatrixGateReport {
         );
         require_min_device_profiles(
             &mut failures,
+            "evolution_replay_live_memory_feedback_device_profiles",
+            evolution_replay_live_memory_feedback_device_profiles(&device_reports),
+            gate.min_evolution_replay_live_memory_feedback_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "evolution_recursive_replay_device_profiles",
             evolution_recursive_replay_device_profiles(&device_reports),
             gate.min_evolution_recursive_replay_device_profiles,
@@ -527,6 +542,10 @@ impl StateInspectionMatrixGateReport {
         evolution_memory_update_device_profiles(&self.device_reports)
     }
 
+    pub fn evolution_replay_live_memory_feedback_device_profiles(&self) -> usize {
+        evolution_replay_live_memory_feedback_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_recursive_replay_device_profiles(&self) -> usize {
         evolution_recursive_replay_device_profiles(&self.device_reports)
     }
@@ -537,7 +556,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -558,6 +577,7 @@ impl StateInspectionMatrixGateReport {
             self.evolution_router_threshold_mutation_device_profiles(),
             self.evolution_hierarchy_weight_mutation_device_profiles(),
             self.evolution_memory_update_device_profiles(),
+            self.evolution_replay_live_memory_feedback_device_profiles(),
             self.evolution_recursive_replay_device_profiles(),
             self.evolution_recursive_runtime_call_device_profiles(),
             self.failures.len()
@@ -677,6 +697,14 @@ fn evolution_memory_update_device_profiles(
 ) -> usize {
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.evolution_memory_updates > 0
+    })
+}
+
+fn evolution_replay_live_memory_feedback_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.evolution_replay_live_memory_feedback_updates > 0
     })
 }
 
@@ -970,7 +998,7 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
@@ -1008,6 +1036,11 @@ impl StateInspectionReport {
             self.evolution_ledger.router_threshold_delta,
             self.evolution_ledger.hierarchy_weight_delta,
             self.evolution_ledger.memory_updates(),
+            self.evolution_ledger.replay_live_memory_feedback_items,
+            self.evolution_ledger.replay_live_memory_feedback_updates(),
+            self.evolution_ledger
+                .replay_live_memory_feedback_reinforcements,
+            self.evolution_ledger.replay_live_memory_feedback_penalties,
             self.evolution_ledger.recursive_replay_items,
             self.evolution_ledger.recursive_runtime_calls,
             self.evolution_ledger.drift_rollbacks,
@@ -1152,6 +1185,12 @@ impl StateInspectionReport {
             "evolution_memory_updates",
             self.evolution_ledger.memory_updates(),
             gate.min_evolution_memory_updates,
+        );
+        require_min_u64(
+            &mut failures,
+            "evolution_replay_live_memory_feedback_updates",
+            self.evolution_ledger.replay_live_memory_feedback_updates(),
+            gate.min_evolution_replay_live_memory_feedback_updates,
         );
         require_min_u64(
             &mut failures,
@@ -1369,6 +1408,9 @@ mod tests {
             hierarchy_weight_delta: 0.08,
             memory_reinforcements: 6,
             memory_penalties: 1,
+            replay_live_memory_feedback_items: 2,
+            replay_live_memory_feedback_reinforcements: 2,
+            replay_live_memory_feedback_penalties: 1,
             recursive_replay_items: 8,
             recursive_runtime_calls: 9,
             drift_rollbacks: 2,
@@ -1657,6 +1699,11 @@ mod tests {
         assert!(
             report
                 .summary_line()
+                .contains("evolution_replay_live_memory_feedback_updates=3")
+        );
+        assert!(
+            report
+                .summary_line()
                 .contains("evolution_recursive_replay_items=8")
         );
         assert!(
@@ -1693,6 +1740,7 @@ mod tests {
             min_evolution_router_threshold_delta: Some(0.17),
             min_evolution_hierarchy_weight_delta: Some(0.08),
             min_evolution_memory_updates: Some(7),
+            min_evolution_replay_live_memory_feedback_updates: Some(3),
             min_evolution_recursive_replay_items: Some(8),
             min_evolution_recursive_runtime_calls: Some(9),
             max_evolution_drift_rollbacks: Some(2),
@@ -1730,6 +1778,7 @@ mod tests {
             min_evolution_router_threshold_delta: Some(0.18),
             min_evolution_hierarchy_weight_delta: Some(0.09),
             min_evolution_memory_updates: Some(8),
+            min_evolution_replay_live_memory_feedback_updates: Some(4),
             min_evolution_recursive_replay_items: Some(9),
             min_evolution_recursive_runtime_calls: Some(10),
             max_evolution_drift_rollbacks: Some(1),
@@ -1800,6 +1849,9 @@ mod tests {
                 .failures
                 .contains(&"evolution_memory_updates 7 below required 8".to_owned())
         );
+        assert!(failing_report.failures.contains(
+            &"evolution_replay_live_memory_feedback_updates 3 below required 4".to_owned()
+        ));
         assert!(
             failing_report
                 .failures
@@ -2119,6 +2171,7 @@ mod tests {
             min_evolution_router_threshold_mutation_device_profiles: Some(1),
             min_evolution_hierarchy_weight_mutation_device_profiles: Some(1),
             min_evolution_memory_update_device_profiles: Some(2),
+            min_evolution_replay_live_memory_feedback_device_profiles: Some(2),
             min_evolution_recursive_replay_device_profiles: Some(1),
             min_evolution_recursive_runtime_call_device_profiles: Some(1),
             ..StateInspectionMatrixGate::default()
@@ -2134,11 +2187,11 @@ mod tests {
                     match device {
                         DeviceClass::CpuOnly => {
                             device_report =
-                                device_report.with_evolution_evidence(1, 2, 1, 1, 3, 1, 1);
+                                device_report.with_evolution_evidence(1, 2, 1, 1, 3, 2, 1, 1);
                         }
                         DeviceClass::IntegratedGpu => {
                             device_report =
-                                device_report.with_evolution_evidence(1, 1, 0, 0, 2, 0, 0);
+                                device_report.with_evolution_evidence(1, 1, 0, 0, 2, 1, 0, 0);
                         }
                         _ => {}
                     }
@@ -2160,6 +2213,10 @@ mod tests {
             1
         );
         assert_eq!(report.evolution_memory_update_device_profiles(), 2);
+        assert_eq!(
+            report.evolution_replay_live_memory_feedback_device_profiles(),
+            2
+        );
         assert_eq!(report.evolution_recursive_replay_device_profiles(), 1);
         assert_eq!(report.evolution_recursive_runtime_call_device_profiles(), 1);
         assert!(
@@ -2167,11 +2224,16 @@ mod tests {
                 .summary_line()
                 .contains("evolution_memory_update_device_profiles=2")
         );
+        assert!(
+            report
+                .summary_line()
+                .contains("evolution_replay_live_memory_feedback_device_profiles=2")
+        );
 
         let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
             vec![
                 StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
-                    .with_evolution_evidence(1, 0, 0, 0, 0, 0, 0),
+                    .with_evolution_evidence(1, 0, 0, 0, 0, 0, 0, 0),
             ],
             &gate,
         );
@@ -2191,6 +2253,9 @@ mod tests {
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "evolution_memory_update_device_profiles 0 below required 2"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "evolution_replay_live_memory_feedback_device_profiles 0 below required 2"
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "evolution_recursive_replay_device_profiles 0 below required 1"
@@ -2259,6 +2324,7 @@ mod tests {
             min_evolution_router_threshold_delta: None,
             min_evolution_hierarchy_weight_delta: None,
             min_evolution_memory_updates: None,
+            min_evolution_replay_live_memory_feedback_updates: None,
             min_evolution_recursive_replay_items: None,
             min_evolution_recursive_runtime_calls: None,
             max_evolution_drift_rollbacks: None,

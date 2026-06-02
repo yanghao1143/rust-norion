@@ -311,6 +311,10 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"cumulative_memory_updates\":",
     },
     TraceRequiredField {
+        name: "evolution_replay_live_memory_feedback_updates",
+        marker: "\"cumulative_replay_live_memory_feedback_updates\":",
+    },
+    TraceRequiredField {
         name: "evolution_recursive_runtime_calls",
         marker: "\"cumulative_recursive_runtime_calls\":",
     },
@@ -898,7 +902,7 @@ pub fn trace_json_line_with_case(
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
-         \"evolution_ledger\":{{\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
+         \"evolution_ledger\":{{\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -1107,6 +1111,16 @@ pub fn trace_json_line_with_case(
         outcome.evolution_ledger.memory_reinforcements,
         outcome.evolution_ledger.memory_penalties,
         outcome.evolution_ledger.memory_updates(),
+        outcome.evolution_ledger.replay_live_memory_feedback_items,
+        outcome
+            .evolution_ledger
+            .replay_live_memory_feedback_updates(),
+        outcome
+            .evolution_ledger
+            .replay_live_memory_feedback_reinforcements,
+        outcome
+            .evolution_ledger
+            .replay_live_memory_feedback_penalties,
         outcome.evolution_ledger.recursive_replay_items,
         outcome.evolution_ledger.recursive_runtime_calls,
         outcome.evolution_ledger.drift_rollbacks,
@@ -1300,6 +1314,7 @@ mod tests {
         assert!(line.contains("\"cumulative_router_threshold_mutations\":"));
         assert!(line.contains("\"cumulative_hierarchy_weight_mutations\":"));
         assert!(line.contains("\"cumulative_memory_updates\":"));
+        assert!(line.contains("\"cumulative_replay_live_memory_feedback_updates\":"));
         assert!(line.contains("\"cumulative_recursive_runtime_calls\":"));
         assert!(line.contains("\"cumulative_drift_rollbacks\":"));
         assert!(line.contains("\"cumulative_rollback_router_threshold_delta\":"));

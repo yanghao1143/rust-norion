@@ -30,6 +30,9 @@ pub struct EvolutionLedger {
     pub hierarchy_weight_delta: f32,
     pub memory_reinforcements: u64,
     pub memory_penalties: u64,
+    pub replay_live_memory_feedback_items: u64,
+    pub replay_live_memory_feedback_reinforcements: u64,
+    pub replay_live_memory_feedback_penalties: u64,
     pub recursive_replay_items: u64,
     pub recursive_runtime_calls: u64,
     pub drift_rollbacks: u64,
@@ -59,6 +62,15 @@ impl EvolutionLedger {
         self.memory_penalties = self
             .memory_penalties
             .saturating_add(report.memory_penalties as u64);
+        self.replay_live_memory_feedback_items = self
+            .replay_live_memory_feedback_items
+            .saturating_add(report.live_memory_feedback_items as u64);
+        self.replay_live_memory_feedback_reinforcements = self
+            .replay_live_memory_feedback_reinforcements
+            .saturating_add(report.live_memory_feedback_reinforcements as u64);
+        self.replay_live_memory_feedback_penalties = self
+            .replay_live_memory_feedback_penalties
+            .saturating_add(report.live_memory_feedback_penalties as u64);
         self.recursive_replay_items = self
             .recursive_replay_items
             .saturating_add(report.recursive_runtime_items as u64);
@@ -70,6 +82,11 @@ impl EvolutionLedger {
     pub fn memory_updates(self) -> u64 {
         self.memory_reinforcements
             .saturating_add(self.memory_penalties)
+    }
+
+    pub fn replay_live_memory_feedback_updates(self) -> u64 {
+        self.replay_live_memory_feedback_reinforcements
+            .saturating_add(self.replay_live_memory_feedback_penalties)
     }
 
     pub fn record_drift_rollback(
@@ -84,7 +101,7 @@ impl EvolutionLedger {
 
     pub fn summary_line(self) -> String {
         format!(
-            "evolution: replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
+            "evolution: replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} replay_live_memory_feedback_items={} replay_live_memory_feedback_updates={} replay_live_memory_feedback_reinforcements={} replay_live_memory_feedback_penalties={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
             self.replay_runs,
             self.replay_items,
             self.router_threshold_mutations,
@@ -92,6 +109,10 @@ impl EvolutionLedger {
             self.router_threshold_delta,
             self.hierarchy_weight_delta,
             self.memory_updates(),
+            self.replay_live_memory_feedback_items,
+            self.replay_live_memory_feedback_updates(),
+            self.replay_live_memory_feedback_reinforcements,
+            self.replay_live_memory_feedback_penalties,
             self.recursive_replay_items,
             self.recursive_runtime_calls,
             self.drift_rollbacks,
@@ -383,7 +404,7 @@ fn parse_memory_compaction_policy(value: &str) -> Option<MemoryCompactionPolicy>
 
 fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
     format!(
-        "{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}",
+        "{}\t{}\t{}\t{}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.6}\t{:.6}",
         ledger.replay_runs,
         ledger.replay_items,
         ledger.router_threshold_mutations,
@@ -392,6 +413,9 @@ fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
         ledger.hierarchy_weight_delta,
         ledger.memory_reinforcements,
         ledger.memory_penalties,
+        ledger.replay_live_memory_feedback_items,
+        ledger.replay_live_memory_feedback_reinforcements,
+        ledger.replay_live_memory_feedback_penalties,
         ledger.recursive_replay_items,
         ledger.recursive_runtime_calls,
         ledger.drift_rollbacks,
@@ -402,9 +426,27 @@ fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
 
 fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
     let fields = value.split('\t').collect::<Vec<_>>();
-    if fields.len() != 10 && fields.len() != 13 {
+    if fields.len() != 10 && fields.len() != 13 && fields.len() != 16 {
         return None;
     }
+
+    let (
+        replay_live_memory_feedback_items,
+        replay_live_memory_feedback_reinforcements,
+        replay_live_memory_feedback_penalties,
+        recursive_replay_index,
+    ) = if fields.len() == 16 {
+        (
+            fields[8].parse::<u64>().ok()?,
+            fields[9].parse::<u64>().ok()?,
+            fields[10].parse::<u64>().ok()?,
+            11,
+        )
+    } else {
+        (0, 0, 0, 8)
+    };
+
+    let rollback_index = recursive_replay_index + 2;
 
     Some(EvolutionLedger {
         replay_runs: fields[0].parse::<u64>().ok()?,
@@ -415,19 +457,22 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
         hierarchy_weight_delta: fields[5].parse::<f32>().ok()?.max(0.0),
         memory_reinforcements: fields[6].parse::<u64>().ok()?,
         memory_penalties: fields[7].parse::<u64>().ok()?,
-        recursive_replay_items: fields[8].parse::<u64>().ok()?,
-        recursive_runtime_calls: fields[9].parse::<u64>().ok()?,
+        replay_live_memory_feedback_items,
+        replay_live_memory_feedback_reinforcements,
+        replay_live_memory_feedback_penalties,
+        recursive_replay_items: fields[recursive_replay_index].parse::<u64>().ok()?,
+        recursive_runtime_calls: fields[recursive_replay_index + 1].parse::<u64>().ok()?,
         drift_rollbacks: fields
-            .get(10)
+            .get(rollback_index)
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(0),
         rollback_router_threshold_delta: fields
-            .get(11)
+            .get(rollback_index + 1)
             .and_then(|value| value.parse::<f32>().ok())
             .unwrap_or(0.0)
             .max(0.0),
         rollback_hierarchy_weight_delta: fields
-            .get(12)
+            .get(rollback_index + 2)
             .and_then(|value| value.parse::<f32>().ok())
             .unwrap_or(0.0)
             .max(0.0),
@@ -549,6 +594,9 @@ mod tests {
                 hierarchy_weight_delta: 0.21,
                 memory_reinforcements: 4,
                 memory_penalties: 2,
+                replay_live_memory_feedback_items: 3,
+                replay_live_memory_feedback_reinforcements: 5,
+                replay_live_memory_feedback_penalties: 1,
                 recursive_replay_items: 1,
                 recursive_runtime_calls: 8,
                 drift_rollbacks: 2,
@@ -584,6 +632,25 @@ mod tests {
         assert!((loaded.evolution_ledger.router_threshold_delta - 0.42).abs() < 0.0001);
         assert!((loaded.evolution_ledger.hierarchy_weight_delta - 0.21).abs() < 0.0001);
         assert_eq!(loaded.evolution_ledger.memory_updates(), 6);
+        assert_eq!(loaded.evolution_ledger.replay_live_memory_feedback_items, 3);
+        assert_eq!(
+            loaded
+                .evolution_ledger
+                .replay_live_memory_feedback_updates(),
+            6
+        );
+        assert_eq!(
+            loaded
+                .evolution_ledger
+                .replay_live_memory_feedback_reinforcements,
+            5
+        );
+        assert_eq!(
+            loaded
+                .evolution_ledger
+                .replay_live_memory_feedback_penalties,
+            1
+        );
         assert_eq!(loaded.evolution_ledger.recursive_replay_items, 1);
         assert_eq!(loaded.evolution_ledger.recursive_runtime_calls, 8);
         assert_eq!(loaded.evolution_ledger.drift_rollbacks, 2);
@@ -599,6 +666,8 @@ mod tests {
 
         assert_eq!(ledger.replay_runs, 3);
         assert_eq!(ledger.memory_updates(), 6);
+        assert_eq!(ledger.replay_live_memory_feedback_items, 0);
+        assert_eq!(ledger.replay_live_memory_feedback_updates(), 0);
         assert_eq!(ledger.recursive_runtime_calls, 8);
         assert_eq!(ledger.drift_rollbacks, 0);
         assert_eq!(ledger.rollback_router_threshold_delta, 0.0);
