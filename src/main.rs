@@ -1435,7 +1435,7 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
             device_report.runtime_kv_memories,
@@ -1443,6 +1443,8 @@ fn print_state_inspection_matrix_gate_report(
             device_report.runtime_adapter_experiences,
             device_report.runtime_forward_energy_experiences,
             device_report.runtime_kv_influence_experiences,
+            device_report.runtime_kv_precision_experiences,
+            device_report.runtime_kv_precision_mismatches,
             device_report.runtime_kv_import_experiences,
             device_report.runtime_kv_export_experiences,
             device_report.reflection_issue_experiences,
@@ -4737,6 +4739,7 @@ impl Args {
                 .inspect_min_runtime_kv_influence_device_profiles,
             min_runtime_kv_precision_device_profiles: self
                 .inspect_min_runtime_kv_precision_device_profiles,
+            max_runtime_kv_precision_mismatches: self.inspect_max_runtime_kv_precision_mismatches,
             min_runtime_device_execution_device_profiles: self
                 .inspect_min_runtime_device_execution_device_profiles,
             min_runtime_layer_mode_device_profiles: self
@@ -6469,6 +6472,11 @@ mod tests {
             args.state_inspection_matrix_gate()
                 .min_runtime_kv_precision_device_profiles,
             Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .max_runtime_kv_precision_mismatches,
+            Some(0)
         );
         assert_eq!(
             args.state_inspection_matrix_gate()

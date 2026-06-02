@@ -641,8 +641,10 @@ These are algorithmic references, not product dependencies:
   energy, KV influence, hot/cold KV precision, imported KV, and exported KV.
   It can also cap runtime KV precision mismatches against the current device
   execution plan, so stale or wrong persisted runtime diagnostics cannot pass
-  only because the precision fields are present. The same inspection gate
-  can require live-inference self-evolution evidence through
+  only because the precision fields are present. In all-device mode the same
+  cap is applied to the summed mismatch count across device-scoped state files,
+  and the matrix summary exposes that total as first-class evidence. The same
+  inspection gate can require live-inference self-evolution evidence through
   `--inspect-min-evolution-live-*`, including online inference counts,
   router/hierarchy mutations and deltas, live memory feedback, durable memory
   writes, reflection issues, critical reflection issues, and revision actions.
@@ -791,7 +793,9 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-runtime-kv-precision-experiences` and
   `--inspect-max-runtime-kv-precision-mismatches`, so local/CI checks can fail
   when reloaded experience diagnostics disagree with the current device
-  execution plan's hot/cold KV precision policy.
+  execution plan's hot/cold KV precision policy. All-device inspection applies
+  the same cap to the matrix-wide mismatch total and prints
+  `runtime_kv_precision_mismatches` in the summary.
 - Benchmark summaries and gates expose closed-loop reflection evidence through
   `--benchmark-min-reflection-issue-cases`,
   `--benchmark-min-reflection-issues`,

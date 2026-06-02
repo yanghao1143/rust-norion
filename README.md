@@ -249,7 +249,9 @@ state-inspection safety cap. Use
 `--inspect-min-runtime-kv-precision-experiences` plus
 `--inspect-max-runtime-kv-precision-mismatches 0` when persisted runtime
 diagnostics must prove their hot/cold KV precision still matches the current
-device execution plan.
+device execution plan. In all-device mode the same mismatch cap is applied to
+the summed mismatch count across all device-scoped state files, and the matrix
+summary prints `runtime_kv_precision_mismatches`.
 
 Add `--benchmark-all-devices` to inspect the same device-scoped state files
 created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
@@ -268,7 +270,9 @@ reflection/revision coverage. Runtime ABI evidence is gated with
 `--inspect-min-runtime-kv-influence-device-profiles`,
 `--inspect-min-runtime-kv-precision-device-profiles`,
 `--inspect-min-runtime-kv-import-device-profiles`, and
-`--inspect-min-runtime-kv-export-device-profiles`. Closed-loop evidence is
+`--inspect-min-runtime-kv-export-device-profiles`. Runtime KV precision
+contract drift is capped across the whole matrix with
+`--inspect-max-runtime-kv-precision-mismatches`. Closed-loop evidence is
 gated with `--inspect-min-reflection-issue-device-profiles`,
 `--inspect-min-critical-reflection-issue-device-profiles`, and
 `--inspect-min-revision-action-device-profiles`. Persisted live memory feedback
