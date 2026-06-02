@@ -403,6 +403,10 @@ These are algorithmic references, not product dependencies:
   memory ids, structured reflection issues, and revision actions for replay;
   recursive runtime call costs now feed replay metrics so expensive successful
   long-context paths are weaker control-plane exemplars than efficient ones,
+  runtime KV influence now increases useful replay memory reinforcement, and
+  critical reflection issues plus revision actions increase replay penalties or
+  dampen reinforcement so diagnostics change actual KV memory strength instead
+  of only appearing in reports;
   and replay summaries/traces expose recursive call pressure for regression
   checks; benchmark gates can now require auto-replay recursive coverage and
   enforce replay recursive call pressure floors and ceilings; replay reports,

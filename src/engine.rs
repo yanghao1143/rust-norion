@@ -394,15 +394,16 @@ impl NoironEngine {
 
             match item.action {
                 RewardAction::Reinforce => {
+                    let reinforcement = replay_reinforcement_amount(&item);
                     for memory_id in &item.memory_ids {
-                        self.cache.reinforce(*memory_id, item.reward);
+                        self.cache.reinforce(*memory_id, reinforcement);
                         report.touched_memories += 1;
                         report.memory_reinforcements += 1;
                     }
                     report.reinforced += 1;
                 }
                 RewardAction::Penalize => {
-                    let penalty = 1.0 - item.reward;
+                    let penalty = replay_penalty_amount(&item);
                     for memory_id in &item.memory_ids {
                         self.cache.penalize(*memory_id, penalty);
                         report.touched_memories += 1;
@@ -414,11 +415,13 @@ impl NoironEngine {
             }
 
             report.applied += 1;
+            let memory_update = replay_memory_update_amount(&item);
             report.notes.push(format!(
-                "experience:{}:{} reward={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} lesson={}",
+                "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} lesson={}",
                 item.experience_id,
                 item.action.as_str(),
                 item.reward,
+                memory_update,
                 item.reflection_issue_count,
                 item.critical_reflection_issue_count,
                 item.revision_action_count,
@@ -992,6 +995,39 @@ fn average(total: f32, count: usize) -> Option<f32> {
     }
 }
 
+fn replay_memory_update_amount(item: &ExperienceReplayItem) -> f32 {
+    match item.action {
+        RewardAction::Reinforce => replay_reinforcement_amount(item),
+        RewardAction::Penalize => replay_penalty_amount(item),
+        RewardAction::Hold => 0.0,
+    }
+}
+
+fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
+    let reflection_drag = item.reflection_issue_count as f32 * 0.03
+        + item.critical_reflection_issue_count as f32 * 0.16
+        + item.revision_action_count as f32 * 0.02;
+    let runtime_bonus = runtime_kv_influence_bonus(item);
+    (item.reward + runtime_bonus - reflection_drag - item.recursive_call_pressure() * 0.25)
+        .clamp(0.05, 1.0)
+}
+
+fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
+    let reflection_pressure = item.reflection_issue_count as f32 * 0.04
+        + item.critical_reflection_issue_count as f32 * 0.18
+        + item.revision_action_count as f32 * 0.03;
+    (1.0 - item.reward + reflection_pressure + item.recursive_call_pressure() * 0.20)
+        .clamp(0.05, 1.0)
+}
+
+fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
+    item.runtime_diagnostics
+        .kv_influence
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0) * 0.10)
+        .unwrap_or(0.0)
+}
+
 fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
     let token_count = item.route_token_count();
     let recursive_call_pressure = item.recursive_call_pressure();
@@ -1310,7 +1346,7 @@ mod tests {
         ProductionForwardKernel, ProductionKernelContext, ProductionKernelOutput,
         ProductionTransformerRuntime,
     };
-    use crate::reflection::DraftToken;
+    use crate::reflection::{DraftToken, ReflectionIssue, ReflectionSeverity};
     use crate::runtime::{RuntimeBackend, RuntimeError, RuntimeToken};
     use crate::runtime_manifest::{
         RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, TransformerRuntimeArchitecture,
@@ -2325,6 +2361,122 @@ mod tests {
     }
 
     #[test]
+    fn replay_experience_scales_penalties_from_reflection_diagnostics() {
+        let mut engine = NoironEngine::new();
+        let plain_memory_id =
+            engine
+                .cache
+                .store_or_fuse("plain replay penalty", vec![1.0, 0.0, 0.0], 0.9);
+        let diagnosed_memory_id =
+            engine
+                .cache
+                .store_or_fuse("diagnosed replay penalty", vec![0.0, 1.0, 0.0], 0.9);
+        engine.experience.record(replay_memory_input(
+            "plain penalty path",
+            "penalize weak memory without diagnostics",
+            0.30,
+            plain_memory_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            Vec::new(),
+        ));
+        engine.experience.record(replay_memory_input(
+            "diagnosed penalty path",
+            "penalize weak memory with critical reflection repair",
+            0.30,
+            diagnosed_memory_id,
+            vec![ReflectionIssue::new(
+                "unsupported_claim",
+                ReflectionSeverity::Critical,
+                "critical reflection issue should increase memory penalty",
+            )],
+            vec!["rerun local verification before reuse".to_owned()],
+            RuntimeDiagnostics::default(),
+            Vec::new(),
+        ));
+
+        let report = engine.replay_experience(4);
+
+        assert_eq!(report.penalized, 2);
+        assert_eq!(report.memory_penalties, 2);
+        assert!(
+            memory_strength(&engine, diagnosed_memory_id)
+                < memory_strength(&engine, plain_memory_id)
+        );
+        assert!(report.notes.iter().any(|note| {
+            note.contains("memory_update=0.950")
+                && note.contains("critical=1")
+                && note.contains("actions=1")
+        }));
+    }
+
+    #[test]
+    fn replay_experience_scales_reinforcement_from_runtime_and_recursive_cost() {
+        let mut engine = NoironEngine::new();
+        let plain_memory_id =
+            engine
+                .cache
+                .store_or_fuse("plain replay reinforcement", vec![1.0, 0.0, 0.0], 0.8);
+        let runtime_memory_id =
+            engine
+                .cache
+                .store_or_fuse("runtime replay reinforcement", vec![0.0, 1.0, 0.0], 0.8);
+        let expensive_memory_id = engine.cache.store_or_fuse(
+            "expensive recursive replay reinforcement",
+            vec![0.0, 0.0, 1.0],
+            0.8,
+        );
+        engine.experience.record(replay_memory_input(
+            "plain reinforcement path",
+            "reinforce useful memory without runtime diagnostics",
+            0.80,
+            plain_memory_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            Vec::new(),
+        ));
+        engine.experience.record(replay_memory_input(
+            "runtime reinforcement path",
+            "reinforce useful memory with imported KV influence",
+            0.80,
+            runtime_memory_id,
+            Vec::new(),
+            Vec::new(),
+            replay_runtime_diagnostics(0.80),
+            Vec::new(),
+        ));
+        engine.experience.record(replay_memory_input(
+            "expensive recursive reinforcement path",
+            "dampen useful memory when recursive runtime cost is excessive",
+            0.80,
+            expensive_memory_id,
+            Vec::new(),
+            Vec::new(),
+            replay_runtime_diagnostics(0.80),
+            vec![
+                "recursive:chunks=4:merge_rounds=2:waves=2:parallel=1:runtime_calls=96".to_owned(),
+            ],
+        ));
+
+        let report = engine.replay_experience(4);
+
+        assert_eq!(report.reinforced, 3);
+        assert_eq!(report.memory_reinforcements, 3);
+        assert!(
+            memory_strength(&engine, runtime_memory_id) > memory_strength(&engine, plain_memory_id)
+        );
+        assert!(
+            memory_strength(&engine, expensive_memory_id)
+                < memory_strength(&engine, plain_memory_id)
+        );
+        assert!(report.notes.iter().any(|note| {
+            note.contains("memory_update=0.793") && note.contains("recursive_runtime_calls=96")
+        }));
+    }
+
+    #[test]
     fn inference_tracks_tier_migrations_across_runs() {
         let mut cache = KvFusionCache::new();
         cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
@@ -2653,6 +2805,78 @@ mod tests {
 
     fn cleanup(path: std::path::PathBuf) {
         let _ = fs::remove_file(path);
+    }
+
+    fn memory_strength(engine: &NoironEngine, memory_id: u64) -> f32 {
+        engine
+            .cache
+            .entries()
+            .iter()
+            .find(|entry| entry.id == memory_id)
+            .map(|entry| entry.strength)
+            .unwrap()
+    }
+
+    fn replay_runtime_diagnostics(kv_influence: f32) -> RuntimeDiagnostics {
+        RuntimeDiagnostics {
+            model_id: Some("self-transformer-replay-test".to_owned()),
+            selected_adapter: Some(RuntimeAdapterHint::CpuSimd.as_str().to_owned()),
+            layer_count: 6,
+            hidden_size: 128,
+            local_window_tokens: 4096,
+            forward_energy: Some(0.22),
+            kv_influence: Some(kv_influence),
+            imported_kv_blocks: 1,
+            exported_kv_blocks: 1,
+        }
+    }
+
+    fn replay_memory_input(
+        prompt: &str,
+        lesson: &str,
+        reward: f32,
+        memory_id: u64,
+        reflection_issues: Vec<ReflectionIssue>,
+        revision_actions: Vec<String>,
+        runtime_diagnostics: RuntimeDiagnostics,
+        reward_notes: Vec<String>,
+    ) -> ExperienceInput {
+        ExperienceInput {
+            prompt: prompt.to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: lesson.to_owned(),
+            quality: reward,
+            contradictions: Vec::new(),
+            reflection_issues,
+            revision_actions,
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 2,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 2,
+                fast_tokens: 2,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+            used_memory_ids: vec![memory_id],
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics,
+            process_reward: ProcessRewardReport {
+                total: reward,
+                action: if reward >= 0.72 {
+                    RewardAction::Reinforce
+                } else if reward <= 0.42 {
+                    RewardAction::Penalize
+                } else {
+                    RewardAction::Hold
+                },
+                components: ProcessRewardComponents::default(),
+                notes: reward_notes,
+            },
+        }
     }
 
     fn create_runtime_assets(label: &str) -> (PathBuf, PathBuf, PathBuf) {
