@@ -2028,6 +2028,7 @@ struct Args {
     inspect_min_experiences: Option<usize>,
     inspect_min_runtime_model_experiences: Option<usize>,
     inspect_min_runtime_adapter_experiences: Option<usize>,
+    inspect_max_runtime_adapter_selection_mismatches: Option<usize>,
     inspect_min_runtime_forward_energy_experiences: Option<usize>,
     inspect_min_runtime_kv_influence_experiences: Option<usize>,
     inspect_min_runtime_kv_precision_experiences: Option<usize>,
@@ -2295,6 +2296,7 @@ impl Args {
         let mut inspect_min_experiences = None;
         let mut inspect_min_runtime_model_experiences = None;
         let mut inspect_min_runtime_adapter_experiences = None;
+        let mut inspect_max_runtime_adapter_selection_mismatches = None;
         let mut inspect_min_runtime_forward_energy_experiences = None;
         let mut inspect_min_runtime_kv_influence_experiences = None;
         let mut inspect_min_runtime_kv_precision_experiences = None;
@@ -3212,6 +3214,13 @@ impl Args {
                 }
                 "--inspect-min-runtime-adapter-experiences" if index + 1 < raw.len() => {
                     inspect_min_runtime_adapter_experiences = Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-max-runtime-adapter-selection-mismatches" if index + 1 < raw.len() => {
+                    inspect_max_runtime_adapter_selection_mismatches =
+                        Some(parse_usize(&raw[index + 1], usize::MAX));
                     inspect_state = true;
                     inspect_gate = true;
                     index += 2;
@@ -4201,6 +4210,7 @@ impl Args {
             inspect_min_experiences,
             inspect_min_runtime_model_experiences,
             inspect_min_runtime_adapter_experiences,
+            inspect_max_runtime_adapter_selection_mismatches,
             inspect_min_runtime_forward_energy_experiences,
             inspect_min_runtime_kv_influence_experiences,
             inspect_min_runtime_kv_precision_experiences,
@@ -4644,6 +4654,8 @@ impl Args {
             min_experiences: self.inspect_min_experiences,
             min_runtime_model_experiences: self.inspect_min_runtime_model_experiences,
             min_runtime_adapter_experiences: self.inspect_min_runtime_adapter_experiences,
+            max_runtime_adapter_selection_mismatches: self
+                .inspect_max_runtime_adapter_selection_mismatches,
             min_runtime_forward_energy_experiences: self
                 .inspect_min_runtime_forward_energy_experiences,
             min_runtime_kv_influence_experiences: self.inspect_min_runtime_kv_influence_experiences,
@@ -4733,6 +4745,8 @@ impl Args {
                 .inspect_min_runtime_kv_memory_device_profiles,
             min_runtime_model_device_profiles: self.inspect_min_runtime_model_device_profiles,
             min_runtime_adapter_device_profiles: self.inspect_min_runtime_adapter_device_profiles,
+            max_runtime_adapter_selection_mismatches: self
+                .inspect_max_runtime_adapter_selection_mismatches,
             min_runtime_forward_energy_device_profiles: self
                 .inspect_min_runtime_forward_energy_device_profiles,
             min_runtime_kv_influence_device_profiles: self
@@ -4971,7 +4985,7 @@ fn print_help_and_exit() -> ! {
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
-        "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
+        "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-max-runtime-adapter-selection-mismatches n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-precision-experiences n --inspect-max-runtime-kv-precision-mismatches n --inspect-min-runtime-device-execution-experiences n --inspect-min-runtime-layer-mode-experiences n --inspect-min-runtime-all-layer-mode-experiences n --inspect-min-runtime-global-layers n --inspect-min-runtime-local-window-layers n --inspect-min-runtime-convolutional-fusion-layers n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n --inspect-min-runtime-kv-precision-device-profiles n --inspect-min-runtime-device-execution-device-profiles n --inspect-min-runtime-layer-mode-device-profiles n --inspect-min-runtime-all-layer-mode-device-profiles n\n",
         "Inspect reflection evidence: --inspect-min-reflection-issue-experiences n --inspect-min-critical-reflection-issue-experiences n --inspect-min-revision-action-experiences n --inspect-min-live-memory-feedback-experiences n --inspect-min-live-memory-feedback-updates n --inspect-min-live-memory-feedback-detail-experiences n --inspect-min-live-memory-feedback-applied n --inspect-min-live-memory-feedback-strength-delta f --inspect-min-live-memory-feedback-device-profiles n\n",
         "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-replay-live-memory-feedback-updates n --inspect-min-evolution-replay-live-memory-feedback-detail-items n --inspect-min-evolution-replay-live-memory-feedback-applied n --inspect-min-evolution-replay-live-memory-feedback-strength-delta f --inspect-min-evolution-replay-live-memory-feedback-device-profiles n --inspect-min-evolution-replay-live-memory-feedback-detail-device-profiles n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Inspect live evolution: --inspect-min-evolution-live-inference-runs n --inspect-min-evolution-live-router-threshold-mutations n --inspect-min-evolution-live-hierarchy-weight-mutations n --inspect-min-evolution-live-router-threshold-delta f --inspect-min-evolution-live-hierarchy-weight-delta f --inspect-min-evolution-live-memory-updates n --inspect-min-evolution-live-stored-memory-updates n --inspect-min-evolution-live-reflection-issues n --inspect-min-evolution-live-critical-reflection-issues n --inspect-min-evolution-live-revision-actions n\n",
@@ -5260,6 +5274,8 @@ mod tests {
             "2".to_owned(),
             "--inspect-min-runtime-adapter-experiences".to_owned(),
             "2".to_owned(),
+            "--inspect-max-runtime-adapter-selection-mismatches".to_owned(),
+            "0".to_owned(),
             "--inspect-min-runtime-forward-energy-experiences".to_owned(),
             "2".to_owned(),
             "--inspect-min-runtime-kv-influence-experiences".to_owned(),
@@ -6296,6 +6312,15 @@ mod tests {
             Some(2)
         );
         assert_eq!(
+            args.inspect_max_runtime_adapter_selection_mismatches,
+            Some(0)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .max_runtime_adapter_selection_mismatches,
+            Some(0)
+        );
+        assert_eq!(
             args.state_inspection_gate()
                 .min_runtime_forward_energy_experiences,
             Some(2)
@@ -6457,6 +6482,11 @@ mod tests {
             args.state_inspection_matrix_gate()
                 .min_runtime_adapter_device_profiles,
             Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .max_runtime_adapter_selection_mismatches,
+            Some(0)
         );
         assert_eq!(
             args.state_inspection_matrix_gate()
@@ -7528,6 +7558,8 @@ mod tests {
             "1".to_owned(),
             "--inspect-min-runtime-adapter-experiences".to_owned(),
             "1".to_owned(),
+            "--inspect-max-runtime-adapter-selection-mismatches".to_owned(),
+            "0".to_owned(),
             "--inspect-min-runtime-forward-energy-experiences".to_owned(),
             "1".to_owned(),
             "--inspect-min-runtime-kv-influence-experiences".to_owned(),
@@ -7715,6 +7747,8 @@ mod tests {
             "1".to_owned(),
             "--inspect-min-runtime-adapter-experiences".to_owned(),
             "1".to_owned(),
+            "--inspect-max-runtime-adapter-selection-mismatches".to_owned(),
+            "0".to_owned(),
             "--inspect-min-runtime-forward-energy-experiences".to_owned(),
             "1".to_owned(),
             "--inspect-min-runtime-kv-influence-experiences".to_owned(),
@@ -7796,6 +7830,8 @@ mod tests {
             "1".to_owned(),
             "--inspect-min-runtime-adapter-experiences".to_owned(),
             "1".to_owned(),
+            "--inspect-max-runtime-adapter-selection-mismatches".to_owned(),
+            "0".to_owned(),
             "--inspect-min-runtime-forward-energy-experiences".to_owned(),
             "1".to_owned(),
             "--inspect-min-runtime-kv-influence-experiences".to_owned(),

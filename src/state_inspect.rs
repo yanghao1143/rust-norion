@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use crate::adaptive_state::EvolutionLedger;
 use crate::engine::NoironEngine;
-use crate::experience::recursive_runtime_calls_from_notes;
+use crate::experience::{ExperienceMatch, recursive_runtime_calls_from_notes};
 use crate::experience_replay::LiveMemoryFeedbackStats;
 use crate::hardware::{DeviceClass, HardwarePlan};
 use crate::hierarchy::{
@@ -12,6 +12,7 @@ use crate::hierarchy::{
 use crate::kv_cache::{MemoryCompactionPolicy, MemoryRetentionPolicy};
 use crate::process_reward::RewardAction;
 use crate::router::{ProfileObservations, ProfileThresholds};
+use crate::runtime::RuntimeAdapterObservation;
 use crate::tiered_cache::TierCounts;
 
 #[derive(Debug, Clone)]
@@ -78,6 +79,7 @@ pub struct StateInspectionGate {
     pub min_experiences: Option<usize>,
     pub min_runtime_model_experiences: Option<usize>,
     pub min_runtime_adapter_experiences: Option<usize>,
+    pub max_runtime_adapter_selection_mismatches: Option<usize>,
     pub min_runtime_forward_energy_experiences: Option<usize>,
     pub min_runtime_kv_influence_experiences: Option<usize>,
     pub min_runtime_kv_precision_experiences: Option<usize>,
@@ -133,6 +135,7 @@ pub struct StateInspectionMatrixGate {
     pub min_runtime_kv_memory_device_profiles: Option<usize>,
     pub min_runtime_model_device_profiles: Option<usize>,
     pub min_runtime_adapter_device_profiles: Option<usize>,
+    pub max_runtime_adapter_selection_mismatches: Option<usize>,
     pub min_runtime_forward_energy_device_profiles: Option<usize>,
     pub min_runtime_kv_influence_device_profiles: Option<usize>,
     pub min_runtime_kv_precision_device_profiles: Option<usize>,
@@ -192,6 +195,7 @@ pub struct StateInspectionDeviceGateReport {
     pub runtime_kv_memories: usize,
     pub runtime_model_experiences: usize,
     pub runtime_adapter_experiences: usize,
+    pub runtime_adapter_selection_mismatches: usize,
     pub runtime_forward_energy_experiences: usize,
     pub runtime_kv_influence_experiences: usize,
     pub runtime_kv_precision_experiences: usize,
@@ -242,6 +246,7 @@ impl StateInspectionDeviceGateReport {
             runtime_kv_memories: 0,
             runtime_model_experiences: 0,
             runtime_adapter_experiences: 0,
+            runtime_adapter_selection_mismatches: 0,
             runtime_forward_energy_experiences: 0,
             runtime_kv_influence_experiences: 0,
             runtime_kv_precision_experiences: 0,
@@ -296,6 +301,8 @@ impl StateInspectionDeviceGateReport {
             runtime_kv_memories: inspection.runtime_kv_memory_count,
             runtime_model_experiences: inspection.runtime_model_experience_count,
             runtime_adapter_experiences: inspection.runtime_adapter_experience_count,
+            runtime_adapter_selection_mismatches: inspection
+                .runtime_adapter_selection_mismatch_count,
             runtime_forward_energy_experiences: inspection.runtime_forward_energy_experience_count,
             runtime_kv_influence_experiences: inspection.runtime_kv_influence_experience_count,
             runtime_kv_precision_experiences: inspection.runtime_kv_precision_experience_count,
@@ -385,6 +392,14 @@ impl StateInspectionDeviceGateReport {
         self.runtime_device_execution_experiences = runtime_device_execution_experiences;
         self.runtime_kv_import_experiences = runtime_kv_import_experiences;
         self.runtime_kv_export_experiences = runtime_kv_export_experiences;
+        self
+    }
+
+    pub fn with_runtime_adapter_selection_mismatches(
+        mut self,
+        runtime_adapter_selection_mismatches: usize,
+    ) -> Self {
+        self.runtime_adapter_selection_mismatches = runtime_adapter_selection_mismatches;
         self
     }
 
@@ -576,6 +591,12 @@ impl StateInspectionMatrixGateReport {
             "runtime_adapter_device_profiles",
             runtime_adapter_device_profiles(&device_reports),
             gate.min_runtime_adapter_device_profiles,
+        );
+        require_max_usize(
+            &mut failures,
+            "runtime_adapter_selection_mismatches",
+            runtime_adapter_selection_mismatches(&device_reports),
+            gate.max_runtime_adapter_selection_mismatches,
         );
         require_min_device_profiles(
             &mut failures,
@@ -797,6 +818,10 @@ impl StateInspectionMatrixGateReport {
         runtime_adapter_device_profiles(&self.device_reports)
     }
 
+    pub fn runtime_adapter_selection_mismatches(&self) -> usize {
+        runtime_adapter_selection_mismatches(&self.device_reports)
+    }
+
     pub fn runtime_forward_energy_device_profiles(&self) -> usize {
         runtime_forward_energy_device_profiles(&self.device_reports)
     }
@@ -919,7 +944,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -927,6 +952,7 @@ impl StateInspectionMatrixGateReport {
             self.runtime_kv_memory_device_profiles(),
             self.runtime_model_device_profiles(),
             self.runtime_adapter_device_profiles(),
+            self.runtime_adapter_selection_mismatches(),
             self.runtime_forward_energy_device_profiles(),
             self.runtime_kv_influence_device_profiles(),
             self.runtime_kv_precision_device_profiles(),
@@ -978,6 +1004,15 @@ fn runtime_adapter_device_profiles(device_reports: &[StateInspectionDeviceGateRe
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.runtime_adapter_experiences > 0
     })
+}
+
+fn runtime_adapter_selection_mismatches(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    device_reports
+        .iter()
+        .map(|device_report| device_report.runtime_adapter_selection_mismatches)
+        .sum()
 }
 
 fn runtime_forward_energy_device_profiles(
@@ -1293,6 +1328,7 @@ pub struct StateInspectionReport {
     pub experience_count: usize,
     pub runtime_model_experience_count: usize,
     pub runtime_adapter_experience_count: usize,
+    pub runtime_adapter_selection_mismatch_count: usize,
     pub runtime_forward_energy_experience_count: usize,
     pub runtime_kv_influence_experience_count: usize,
     pub runtime_kv_precision_experience_count: usize,
@@ -1352,6 +1388,8 @@ impl StateInspectionReport {
             .iter()
             .filter(|record| has_text(record.runtime_diagnostics.selected_adapter.as_deref()))
             .count();
+        let runtime_adapter_selection_mismatch_count =
+            runtime_adapter_selection_mismatch_count(engine, &inspection_hardware_plan(engine));
         let runtime_forward_energy_experience_count = engine
             .experience
             .records()
@@ -1580,6 +1618,7 @@ impl StateInspectionReport {
             experience_count: engine.experience.len(),
             runtime_model_experience_count,
             runtime_adapter_experience_count,
+            runtime_adapter_selection_mismatch_count,
             runtime_forward_energy_experience_count,
             runtime_kv_influence_experience_count,
             runtime_kv_precision_experience_count,
@@ -1623,12 +1662,13 @@ impl StateInspectionReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
+            "state: memories={} runtime_kv_memories={} experiences={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_adapter_selection_mismatches={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_precision_experiences={} runtime_kv_precision_mismatches={} runtime_device_execution_experiences={} runtime_layer_mode_experiences={} runtime_all_layer_mode_experiences={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} live_memory_feedback_experiences={} live_memory_feedback_updates={} live_memory_feedback_detail_experiences={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} router_threshold={:.3} router_observations={} profile_thresholds=(general:{:.3},coding:{:.3},writing:{:.3},long:{:.3}) hierarchy=({:.2},{:.2},{:.2}) profile_hierarchy_local=(general:{:.2},coding:{:.2},writing:{:.2},long:{:.2}) tiers=({},{},{}) evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} memory_vector_dimensions={} runtime_kv_vector_dimensions={}",
             self.memory_count,
             self.runtime_kv_memory_count,
             self.experience_count,
             self.runtime_model_experience_count,
             self.runtime_adapter_experience_count,
+            self.runtime_adapter_selection_mismatch_count,
             self.runtime_forward_energy_experience_count,
             self.runtime_kv_influence_experience_count,
             self.runtime_kv_precision_experience_count,
@@ -1738,6 +1778,12 @@ impl StateInspectionReport {
             "runtime_adapter_experience_count",
             self.runtime_adapter_experience_count,
             gate.min_runtime_adapter_experiences,
+        );
+        require_max_usize(
+            &mut failures,
+            "runtime_adapter_selection_mismatch_count",
+            self.runtime_adapter_selection_mismatch_count,
+            gate.max_runtime_adapter_selection_mismatches,
         );
         require_min_usize(
             &mut failures,
@@ -2210,6 +2256,116 @@ fn runtime_kv_precision_mismatch_count(
         .count()
 }
 
+fn runtime_adapter_selection_mismatch_count(
+    engine: &NoironEngine,
+    hardware_plan: &HardwarePlan,
+) -> usize {
+    let matches = runtime_adapter_experience_matches(engine);
+    let observations =
+        RuntimeAdapterObservation::from_experiences_for_hardware(&matches, "", hardware_plan);
+    let Some(best_adapter) = observations
+        .iter()
+        .filter(|observation| observation.score >= 0.50)
+        .map(|observation| observation.adapter.as_str())
+        .next()
+    else {
+        return 0;
+    };
+
+    let Some(selected_adapter) =
+        latest_runtime_selected_adapter_for_hardware(engine, hardware_plan)
+    else {
+        return 1;
+    };
+
+    usize::from(selected_adapter != best_adapter)
+}
+
+fn latest_runtime_selected_adapter_for_hardware<'a>(
+    engine: &'a NoironEngine,
+    hardware_plan: &HardwarePlan,
+) -> Option<&'a str> {
+    engine
+        .experience
+        .records()
+        .iter()
+        .rev()
+        .filter(|record| record_matches_hardware_plan(record, hardware_plan))
+        .filter_map(|record| record.runtime_diagnostics.selected_adapter.as_deref())
+        .find(|adapter| {
+            hardware_plan
+                .execution
+                .adapter_hints
+                .iter()
+                .any(|hint| hint.as_str() == *adapter)
+        })
+}
+
+fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMatch> {
+    engine
+        .experience
+        .records()
+        .iter()
+        .filter_map(|record| {
+            let selected_adapter = record.runtime_diagnostics.selected_adapter.clone()?;
+            Some(ExperienceMatch {
+                id: record.id,
+                prompt: record.prompt.clone(),
+                lesson: record.lesson.clone(),
+                quality: record.quality,
+                score: runtime_adapter_record_score(record),
+                gist_hints: Vec::new(),
+                reflection_issue_codes: Vec::new(),
+                revision_actions: record.revision_actions.clone(),
+                process_reward: record.process_reward.total,
+                reward_action: record.process_reward.action,
+                runtime_model_id: record.runtime_diagnostics.model_id.clone(),
+                runtime_selected_adapter: Some(selected_adapter),
+                runtime_device_profile: record.runtime_diagnostics.device_profile.clone(),
+                runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
+                runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),
+                runtime_memory_mode: record.runtime_diagnostics.memory_mode.clone(),
+                runtime_forward_energy: record.runtime_diagnostics.forward_energy,
+                runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                recursive_runtime_calls: recursive_runtime_calls_from_notes(
+                    &record.process_reward.notes,
+                ),
+            })
+        })
+        .collect()
+}
+
+fn runtime_adapter_record_score(record: &crate::experience::ExperienceRecord) -> f32 {
+    let reward_bonus = record.process_reward.total.clamp(0.0, 1.0) * 0.20;
+    let issue_penalty = (record.reflection_issues.len() as f32 * 0.03).min(0.18);
+    let contradiction_penalty = (record.contradictions.len() as f32 * 0.05).min(0.25);
+    (record.quality * 0.80 + reward_bonus - issue_penalty - contradiction_penalty).clamp(0.0, 1.0)
+}
+
+fn record_matches_hardware_plan(
+    record: &crate::experience::ExperienceRecord,
+    hardware_plan: &HardwarePlan,
+) -> bool {
+    let diagnostics = &record.runtime_diagnostics;
+    runtime_diagnostic_matches(
+        diagnostics.device_profile.as_deref(),
+        hardware_plan.device.as_str(),
+    ) && runtime_diagnostic_matches(
+        diagnostics.primary_lane.as_deref(),
+        hardware_plan.execution.primary_lane.as_str(),
+    ) && runtime_diagnostic_matches(
+        diagnostics.fallback_lane.as_deref(),
+        hardware_plan.execution.fallback_lane.as_str(),
+    ) && runtime_diagnostic_matches(
+        diagnostics.memory_mode.as_deref(),
+        hardware_plan.execution.memory_mode.as_str(),
+    )
+}
+
+fn runtime_diagnostic_matches(actual: Option<&str>, expected: &str) -> bool {
+    actual.map(|actual| actual == expected).unwrap_or(true)
+}
+
 fn has_text(value: Option<&str>) -> bool {
     value.map(|value| !value.trim().is_empty()).unwrap_or(false)
 }
@@ -2389,6 +2545,7 @@ mod tests {
         assert_eq!(report.experience_count, 2);
         assert_eq!(report.runtime_model_experience_count, 1);
         assert_eq!(report.runtime_adapter_experience_count, 1);
+        assert_eq!(report.runtime_adapter_selection_mismatch_count, 0);
         assert_eq!(report.runtime_forward_energy_experience_count, 1);
         assert_eq!(report.runtime_kv_influence_experience_count, 1);
         assert_eq!(report.runtime_kv_precision_experience_count, 1);
@@ -2530,6 +2687,11 @@ mod tests {
             report
                 .summary_line()
                 .contains("runtime_adapter_experiences=1")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_adapter_selection_mismatches=0")
         );
         assert!(
             report
@@ -2725,6 +2887,7 @@ mod tests {
             min_experiences: Some(1),
             min_runtime_model_experiences: Some(1),
             min_runtime_adapter_experiences: Some(1),
+            max_runtime_adapter_selection_mismatches: Some(0),
             min_runtime_forward_energy_experiences: Some(1),
             min_runtime_kv_influence_experiences: Some(1),
             min_runtime_kv_precision_experiences: Some(1),
@@ -2787,6 +2950,7 @@ mod tests {
             min_experiences: Some(2),
             min_runtime_model_experiences: Some(2),
             min_runtime_adapter_experiences: Some(2),
+            max_runtime_adapter_selection_mismatches: Some(0),
             min_runtime_forward_energy_experiences: Some(2),
             min_runtime_kv_influence_experiences: Some(2),
             min_runtime_kv_precision_experiences: Some(2),
@@ -3015,6 +3179,64 @@ mod tests {
         assert!(failing_report.failures.contains(
             &"evolution_rollback_hierarchy_weight_delta 0.040000 above maximum 0.030000".to_owned()
         ));
+    }
+
+    fn record_cpu_runtime_adapter_experience(
+        engine: &mut NoironEngine,
+        adapter: &str,
+        quality: f32,
+        reward: f32,
+        forward_energy: f32,
+    ) {
+        engine.experience.record(ExperienceInput {
+            prompt: format!("inspect runtime adapter {adapter}"),
+            profile: TaskProfile::General,
+            lesson: format!("reuse {adapter} only when persisted evidence still wins"),
+            quality,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.50,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.50,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.34, 0.33, 0.33),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
+                model_id: Some("inspect-runtime".to_owned()),
+                selected_adapter: Some(adapter.to_owned()),
+                device_profile: Some("cpu".to_owned()),
+                primary_lane: Some("cpu-vector".to_owned()),
+                fallback_lane: Some("cpu-portable".to_owned()),
+                memory_mode: Some("tiered-disk".to_owned()),
+                layer_count: 8,
+                global_layers: 2,
+                local_window_layers: 4,
+                convolutional_fusion_layers: 2,
+                hidden_size: 96,
+                local_window_tokens: 2048,
+                forward_energy: Some(forward_energy),
+                kv_influence: Some(0.42),
+                imported_kv_blocks: 1,
+                exported_kv_blocks: 1,
+                hot_kv_precision_bits: Some(8),
+                cold_kv_precision_bits: Some(4),
+            },
+            process_reward: ProcessRewardReport {
+                total: reward,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+        });
     }
 
     #[test]
@@ -3269,6 +3491,39 @@ mod tests {
                 .summary_line()
                 .contains("runtime_kv_precision_mismatches=1")
         );
+
+        let adapter_mismatch_passing = StateInspectionGateReport {
+            passed: true,
+            failures: Vec::new(),
+        };
+        let adapter_mismatch = StateInspectionMatrixGateReport::evaluate_with_gate(
+            vec![
+                StateInspectionDeviceGateReport::new(
+                    DeviceClass::CpuOnly,
+                    adapter_mismatch_passing.clone(),
+                )
+                .with_runtime_adapter_selection_mismatches(1),
+                StateInspectionDeviceGateReport::new(
+                    DeviceClass::IntegratedGpu,
+                    adapter_mismatch_passing,
+                ),
+            ],
+            &StateInspectionMatrixGate {
+                max_runtime_adapter_selection_mismatches: Some(0),
+                ..StateInspectionMatrixGate::default()
+            },
+        );
+
+        assert_eq!(adapter_mismatch.runtime_adapter_selection_mismatches(), 1);
+        assert!(!adapter_mismatch.passed());
+        assert!(adapter_mismatch.failures.iter().any(|failure| {
+            failure == "runtime_adapter_selection_mismatches 1 above maximum 0"
+        }));
+        assert!(
+            adapter_mismatch
+                .summary_line()
+                .contains("runtime_adapter_selection_mismatches=1")
+        );
     }
 
     #[test]
@@ -3345,6 +3600,39 @@ mod tests {
             report
                 .summary_line()
                 .contains("runtime_kv_precision_mismatches=1")
+        );
+    }
+
+    #[test]
+    fn inspection_gate_rejects_runtime_adapter_selection_mismatch() {
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.35,
+            0.00,
+            0.45,
+            0.20,
+        ));
+        record_cpu_runtime_adapter_experience(&mut engine, "cpu-simd", 0.96, 0.92, 0.10);
+        record_cpu_runtime_adapter_experience(&mut engine, "portable-rust", 0.56, 0.42, 0.35);
+
+        let report = StateInspectionReport::from_engine(&engine, 2);
+        let gate_report = report.evaluate(&StateInspectionGate {
+            min_runtime_adapter_experiences: Some(2),
+            max_runtime_adapter_selection_mismatches: Some(0),
+            ..StateInspectionGate::default()
+        });
+
+        assert_eq!(report.runtime_adapter_experience_count, 2);
+        assert_eq!(report.runtime_adapter_selection_mismatch_count, 1);
+        assert!(!gate_report.passed());
+        assert!(gate_report.failures.iter().any(|failure| {
+            failure == "runtime_adapter_selection_mismatch_count 1 above maximum 0"
+        }));
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_adapter_selection_mismatches=1")
         );
     }
 
@@ -3704,6 +3992,7 @@ mod tests {
             min_experiences: Some(1),
             min_runtime_model_experiences: Some(1),
             min_runtime_adapter_experiences: Some(1),
+            max_runtime_adapter_selection_mismatches: Some(0),
             min_runtime_forward_energy_experiences: Some(1),
             min_runtime_kv_influence_experiences: Some(1),
             min_runtime_kv_precision_experiences: Some(1),

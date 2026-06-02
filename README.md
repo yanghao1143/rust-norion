@@ -246,12 +246,15 @@ prove it consumed persisted live feedback in the cumulative ledger, use
 evidence must also survive in persisted adaptive state, and use the
 `--inspect-max-evolution-rollback-*` flags to make drift rollback magnitude a
 state-inspection safety cap. Use
-`--inspect-min-runtime-kv-precision-experiences` plus
+`--inspect-max-runtime-adapter-selection-mismatches 0` when persisted adapter
+observations must prove the current device still selects the best compatible
+adapter after reload. Use `--inspect-min-runtime-kv-precision-experiences` plus
 `--inspect-max-runtime-kv-precision-mismatches 0` when persisted runtime
 diagnostics must prove their hot/cold KV precision still matches the current
-device execution plan. In all-device mode the same mismatch cap is applied to
-the summed mismatch count across all device-scoped state files, and the matrix
-summary prints `runtime_kv_precision_mismatches`.
+device execution plan. In all-device mode both mismatch caps are applied to the
+summed mismatch counts across all device-scoped state files, and the matrix
+summary prints `runtime_adapter_selection_mismatches` and
+`runtime_kv_precision_mismatches`.
 
 Add `--benchmark-all-devices` to inspect the same device-scoped state files
 created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
@@ -272,7 +275,9 @@ reflection/revision coverage. Runtime ABI evidence is gated with
 `--inspect-min-runtime-kv-import-device-profiles`, and
 `--inspect-min-runtime-kv-export-device-profiles`. Runtime KV precision
 contract drift is capped across the whole matrix with
-`--inspect-max-runtime-kv-precision-mismatches`. Closed-loop evidence is
+`--inspect-max-runtime-kv-precision-mismatches`; persisted adapter-selection
+drift is capped with `--inspect-max-runtime-adapter-selection-mismatches`.
+Closed-loop evidence is
 gated with `--inspect-min-reflection-issue-device-profiles`,
 `--inspect-min-critical-reflection-issue-device-profiles`, and
 `--inspect-min-revision-action-device-profiles`. Persisted live memory feedback
@@ -328,7 +333,8 @@ cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-ex
 
 任意 `--inspect-min-*` 阈值都会隐式开启 `--inspect-state --inspect-gate`；如果
 持久化 runtime KV、experience、runtime diagnostics、live memory feedback、reflection diagnostics、router observation 或自进化 ledger 计数 / delta 证据不足，
-进程会用退出码 `2` 失败。需要证明持久化 runtime diagnostics 的 hot/cold KV precision 仍然符合当前设备执行计划时，使用
+进程会用退出码 `2` 失败。需要证明持久化 adapter 观察在 reload 后仍然选择当前设备的最佳兼容 adapter 时，使用
+`--inspect-max-runtime-adapter-selection-mismatches 0`；需要证明持久化 runtime diagnostics 的 hot/cold KV precision 仍然符合当前设备执行计划时，使用
 `--inspect-min-runtime-kv-precision-experiences` 搭配
 `--inspect-max-runtime-kv-precision-mismatches 0`。
 使用 `--inspect-min-evolution-live-*` 可以要求在线推理本身已经把自进化证据持久化下来，包括 live inference 次数、router / hierarchy 变更和 delta、记忆反馈更新、semantic/gist/runtime-KV 写入、reflection issue、critical reflection issue 和 revision action。
@@ -348,7 +354,10 @@ cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-m
 `--inspect-min-runtime-forward-energy-device-profiles`、
 `--inspect-min-runtime-kv-influence-device-profiles`、
 `--inspect-min-runtime-kv-import-device-profiles` 和
-`--inspect-min-runtime-kv-export-device-profiles` 门禁；闭环证据通过
+`--inspect-min-runtime-kv-export-device-profiles` 门禁；runtime KV precision
+漂移通过 `--inspect-max-runtime-kv-precision-mismatches` 控制，持久化
+adapter 选择漂移通过 `--inspect-max-runtime-adapter-selection-mismatches`
+控制；闭环证据通过
 `--inspect-min-reflection-issue-device-profiles`、
 `--inspect-min-critical-reflection-issue-device-profiles` 和
 `--inspect-min-revision-action-device-profiles` 门禁；持久化 live memory feedback

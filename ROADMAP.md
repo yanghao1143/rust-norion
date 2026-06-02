@@ -639,11 +639,14 @@ These are algorithmic references, not product dependencies:
   rollback deltas for router/hierarchy state. It can also require persisted
   runtime evidence in experience records: model id, selected adapter, forward
   energy, KV influence, hot/cold KV precision, imported KV, and exported KV.
+  It can also cap persisted adapter-selection mismatches between the best
+  compatible adapter observation and the latest selected adapter after reload,
+  so stale runtime experience cannot pass only because an adapter field exists.
   It can also cap runtime KV precision mismatches against the current device
   execution plan, so stale or wrong persisted runtime diagnostics cannot pass
   only because the precision fields are present. In all-device mode the same
-  cap is applied to the summed mismatch count across device-scoped state files,
-  and the matrix summary exposes that total as first-class evidence. The same
+  caps are applied to summed mismatch counts across device-scoped state files,
+  and the matrix summary exposes those totals as first-class evidence. The same
   inspection gate can require live-inference self-evolution evidence through
   `--inspect-min-evolution-live-*`, including online inference counts,
   router/hierarchy mutations and deltas, live memory feedback, durable memory
@@ -796,6 +799,13 @@ These are algorithmic references, not product dependencies:
   execution plan's hot/cold KV precision policy. All-device inspection applies
   the same cap to the matrix-wide mismatch total and prints
   `runtime_kv_precision_mismatches` in the summary.
+- State inspection also gates persisted runtime adapter selection through
+  `--inspect-max-runtime-adapter-selection-mismatches`, so local/CI checks can
+  fail when reloaded runtime experience says a different compatible adapter is
+  the best observation than the adapter most recently selected for the current
+  device plan. All-device inspection applies the same cap to the matrix-wide
+  mismatch total and prints `runtime_adapter_selection_mismatches` in the
+  summary.
 - Benchmark summaries and gates expose closed-loop reflection evidence through
   `--benchmark-min-reflection-issue-cases`,
   `--benchmark-min-reflection-issues`,
