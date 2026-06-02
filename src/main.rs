@@ -5,17 +5,18 @@ use std::time::Instant;
 use rust_norion::{
     BenchmarkCase, BenchmarkGate, BenchmarkGateReport, BenchmarkSummary, CommandPromptMode,
     CommandRuntime, CommandWireFormat, DeviceClass, DevicePlanGateReport, ExperienceInput,
-    GistLevel, HardwareAllocator, HardwarePlan, HardwareSnapshot, HeuristicBackend,
-    HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest, KvQuantBenchmarkGate,
-    KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary, LocalTransformerRuntime,
-    MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime, ModelRuntimeForwardKernel,
-    NoironEngine, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
-    PersistentRoundtripMatrixReport, PersistentRoundtripReport, ProcessRewardComponents,
-    ProcessRewardReport, ProductionKernelConformanceDeviceReport, ProductionKernelConformanceGate,
-    ProductionKernelConformanceMatrixReport, ProductionKernelConformanceReport, RecursiveScheduler,
-    ReferenceProductionForwardKernel, ReflectionIssue, ReflectionSeverity, RewardAction,
-    RouteBudget, RuntimeAssetPaths, RuntimeBackend, RuntimeDiagnostics, RuntimeError,
-    RuntimeManifest, RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
+    GistLevel, HardwareAllocator, HardwarePlan, HardwareProbeReport, HardwareSnapshot,
+    HeuristicBackend, HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest,
+    KvQuantBenchmarkGate, KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary,
+    LocalTransformerRuntime, MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime,
+    ModelRuntimeForwardKernel, NoironEngine, PersistentRoundtripDeviceReport,
+    PersistentRoundtripInput, PersistentRoundtripMatrixReport, PersistentRoundtripReport,
+    ProcessRewardComponents, ProcessRewardReport, ProductionKernelConformanceDeviceReport,
+    ProductionKernelConformanceGate, ProductionKernelConformanceMatrixReport,
+    ProductionKernelConformanceReport, RecursiveScheduler, ReferenceProductionForwardKernel,
+    ReflectionIssue, ReflectionSeverity, RewardAction, RouteBudget, RuntimeAssetPaths,
+    RuntimeBackend, RuntimeDiagnostics, RuntimeError, RuntimeManifest,
+    RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
     StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
     StateInspectionMatrixGate, StateInspectionMatrixGateReport, StateInspectionReport, TaskProfile,
     TierMigrationAction, TraceSchemaGateReport, TransformerRuntimeArchitecture, append_trace_jsonl,
@@ -26,6 +27,10 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse(env::args().skip(1).collect());
     if args.list_devices {
         print_device_matrix_and_exit();
+    }
+    if args.probe_device {
+        print_device_probe_report(&args);
+        return Ok(());
     }
     if args.device_gate {
         let report = DevicePlanGateReport::evaluate();
@@ -1064,13 +1069,7 @@ fn device_scoped_path(path: &std::path::Path, device: DeviceClass) -> PathBuf {
 }
 
 fn configure_engine(engine: &mut NoironEngine, args: &Args) {
-    let hardware_snapshot = HardwareSnapshot::new(
-        args.device,
-        args.cpu_load,
-        args.gpu_load,
-        args.ram_load,
-        args.disk_load,
-    );
+    let hardware_snapshot = args.hardware_snapshot();
     engine.recursive_scheduler = RecursiveScheduler::new(
         args.native_window_tokens,
         args.chunk_tokens,
@@ -1578,6 +1577,32 @@ fn print_device_matrix_and_exit() -> ! {
     std::process::exit(0);
 }
 
+fn print_device_probe_report(args: &Args) {
+    let report = args.effective_probe_report();
+    let plan = args.runtime_manifest_device_plan();
+    let governance = HardwareAllocator::new().memory_governance_plan(
+        report.snapshot(),
+        MemoryRetentionPolicy::default(),
+        MemoryCompactionPolicy::default(),
+    );
+
+    println!("Noiron device probe");
+    println!("{}", report.summary());
+    println!("auto_probe: {}", args.auto_device_probe.is_some());
+    println!("device_flag_provided: {}", args.device_flag_provided);
+    println!("profile: {:?}", args.profile);
+    println!("prompt_tokens: {}", args.prompt_token_estimate());
+    println!("hardware_plan: {}", plan.summary());
+    println!(
+        "runtime_device_contract: {}",
+        plan.runtime_contract_summary()
+    );
+    println!("memory_governance: {}", governance.summary());
+    for evidence in &report.evidence {
+        println!("probe_evidence: {evidence}");
+    }
+}
+
 fn print_device_gate_report(report: &DevicePlanGateReport) {
     println!("Noiron device compatibility gate");
     println!("{}", report.summary_line());
@@ -2029,6 +2054,7 @@ struct Args {
     benchmark_max_drift_rollbacks: Option<usize>,
     benchmark_roundtrip: bool,
     list_devices: bool,
+    probe_device: bool,
     device_gate: bool,
     kv_quant_gate: bool,
     kv_quant_max_total_us: Option<u128>,
@@ -2174,6 +2200,12 @@ struct Args {
     compaction_max_candidates: Option<usize>,
     compaction_max_merges: Option<usize>,
     device: DeviceClass,
+    device_flag_provided: bool,
+    auto_device_probe: Option<HardwareProbeReport>,
+    cpu_load_override: bool,
+    gpu_load_override: bool,
+    ram_load_override: bool,
+    disk_load_override: bool,
     cpu_load: f32,
     gpu_load: f32,
     ram_load: f32,
@@ -2181,9 +2213,81 @@ struct Args {
 }
 
 impl Args {
+    fn hardware_snapshot(&self) -> HardwareSnapshot {
+        HardwareSnapshot::new(
+            self.device,
+            self.cpu_load,
+            self.gpu_load,
+            self.ram_load,
+            self.disk_load,
+        )
+    }
+
+    fn prompt_token_estimate(&self) -> usize {
+        RecursiveScheduler::new(
+            self.native_window_tokens,
+            self.chunk_tokens,
+            self.chunk_overlap_tokens,
+            self.merge_fan_in,
+        )
+        .plan(&self.prompt)
+        .prompt_tokens
+    }
+
+    fn effective_probe_report(&self) -> HardwareProbeReport {
+        let snapshot = self.hardware_snapshot();
+        if let Some(report) = &self.auto_device_probe {
+            let mut report = report.clone();
+            report.cpu_load = snapshot.cpu_load;
+            report.gpu_load = snapshot.gpu_load;
+            report.ram_load = snapshot.ram_load;
+            report.disk_load = snapshot.disk_load;
+            self.append_cli_load_evidence(&mut report.evidence);
+            return report;
+        }
+
+        let mut evidence = vec![format!("selected_profile:{}", snapshot.device.as_str())];
+        self.append_cli_load_evidence(&mut evidence);
+        HardwareProbeReport {
+            device: snapshot.device,
+            reason: if self.device_flag_provided {
+                "manual-device".to_owned()
+            } else {
+                "default-device".to_owned()
+            },
+            os: "manual".to_owned(),
+            arch: "manual".to_owned(),
+            cpu_count: 0,
+            accelerator_count: 0,
+            evidence,
+            cpu_load: snapshot.cpu_load,
+            gpu_load: snapshot.gpu_load,
+            ram_load: snapshot.ram_load,
+            disk_load: snapshot.disk_load,
+        }
+    }
+
+    fn append_cli_load_evidence(&self, evidence: &mut Vec<String>) {
+        for (enabled, key) in [
+            (self.cpu_load_override, "NOIRON_CPU_LOAD"),
+            (self.gpu_load_override, "NOIRON_GPU_LOAD"),
+            (self.ram_load_override, "NOIRON_RAM_LOAD"),
+            (self.disk_load_override, "NOIRON_DISK_LOAD"),
+        ] {
+            if enabled {
+                let item = format!("cli_override:{key}");
+                if !evidence.iter().any(|existing| existing == &item) {
+                    evidence.push(item);
+                }
+            }
+        }
+    }
+
     fn for_inspect_device(&self, device: DeviceClass) -> Self {
         let mut args = self.clone();
         args.device = device;
+        args.device_flag_provided = true;
+        args.auto_device_probe = None;
         args.memory_path = device_scoped_path(&self.memory_path, device);
         args.experience_path = device_scoped_path(&self.experience_path, device);
         args.adaptive_path = device_scoped_path(&self.adaptive_path, device);
@@ -2193,6 +2297,8 @@ impl Args {
     fn for_roundtrip_device(&self, device: DeviceClass) -> Self {
         let mut args = self.clone();
         args.device = device;
+        args.device_flag_provided = true;
+        args.auto_device_probe = None;
         args.memory_path = device_scoped_path(&self.memory_path, device);
         args.experience_path = device_scoped_path(&self.experience_path, device);
         args.adaptive_path = device_scoped_path(&self.adaptive_path, device);
@@ -2337,6 +2443,7 @@ impl Args {
         let mut benchmark_max_drift_rollbacks = None;
         let mut benchmark_roundtrip = false;
         let mut list_devices = false;
+        let mut probe_device = false;
         let mut device_gate = false;
         let mut kv_quant_gate = false;
         let mut kv_quant_max_total_us = None;
@@ -2485,6 +2592,8 @@ impl Args {
         let mut compaction_max_merges = None;
         let default_hardware = HardwareSnapshot::default();
         let mut device = default_hardware.device;
+        let mut device_flag_provided = false;
+        let mut auto_device_probe = None;
         let mut cpu_load = default_hardware.cpu_load;
         let mut gpu_load = default_hardware.gpu_load;
         let mut ram_load = default_hardware.ram_load;
@@ -3340,6 +3449,10 @@ impl Args {
                 }
                 "--list-devices" => {
                     list_devices = true;
+                    index += 1;
+                }
+                "--probe-device" => {
+                    probe_device = true;
                     index += 1;
                 }
                 "--device-gate" => {
@@ -4381,6 +4494,7 @@ impl Args {
                 }
                 "--device" if index + 1 < raw.len() => {
                     device = parse_device_or_generic(&raw[index + 1]);
+                    device_flag_provided = true;
                     index += 2;
                 }
                 "--cpu-load" if index + 1 < raw.len() => {
@@ -4425,7 +4539,7 @@ impl Args {
             inspect_gate = true;
         }
         if device == DeviceClass::Auto {
-            let detected = HardwareSnapshot::auto_detect();
+            let detected = HardwareSnapshot::auto_detect_report();
             device = detected.device;
             if !cpu_load_set {
                 cpu_load = detected.cpu_load;
@@ -4439,6 +4553,7 @@ impl Args {
             if !disk_load_set {
                 disk_load = detected.disk_load;
             }
+            auto_device_probe = Some(detected);
         }
 
         Self {
@@ -4576,6 +4691,7 @@ impl Args {
             benchmark_max_drift_rollbacks,
             benchmark_roundtrip,
             list_devices,
+            probe_device,
             device_gate,
             kv_quant_gate,
             kv_quant_max_total_us,
@@ -4720,6 +4836,12 @@ impl Args {
             compaction_max_candidates,
             compaction_max_merges,
             device,
+            device_flag_provided,
+            auto_device_probe,
+            cpu_load_override: cpu_load_set,
+            gpu_load_override: gpu_load_set,
+            ram_load_override: ram_load_set,
+            disk_load_override: disk_load_set,
             cpu_load,
             gpu_load,
             ram_load,
@@ -5509,7 +5631,7 @@ fn print_help_and_exit() -> ! {
         "Inspect replay live evolution: --inspect-min-evolution-replay-live-evolution-items n --inspect-min-evolution-replay-live-evolution-memory-updates n --inspect-min-evolution-replay-live-evolution-stored-memory-updates n --inspect-min-evolution-replay-live-evolution-reflection-issues n --inspect-min-evolution-replay-live-evolution-critical-reflection-issues n --inspect-min-evolution-replay-live-evolution-revision-actions n --inspect-min-evolution-replay-live-evolution-device-profiles n --inspect-min-evolution-replay-live-evolution-memory-update-device-profiles n --inspect-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --inspect-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
         "Inspect live evolution: --inspect-min-evolution-live-inference-runs n --inspect-min-evolution-live-router-threshold-mutations n --inspect-min-evolution-live-hierarchy-weight-mutations n --inspect-min-evolution-live-router-threshold-delta f --inspect-min-evolution-live-hierarchy-weight-delta f --inspect-min-evolution-live-memory-updates n --inspect-min-evolution-live-stored-memory-updates n --inspect-min-evolution-live-reflection-issues n --inspect-min-evolution-live-critical-reflection-issues n --inspect-min-evolution-live-revision-actions n\n",
         "Inspect all-device live evolution: --inspect-min-evolution-live-inference-device-profiles n --inspect-min-evolution-live-router-threshold-mutation-device-profiles n --inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles n --inspect-min-evolution-live-memory-update-device-profiles n --inspect-min-evolution-live-stored-memory-update-device-profiles n --inspect-min-evolution-live-reflection-issue-device-profiles n --inspect-min-evolution-live-critical-reflection-issue-device-profiles n --inspect-min-evolution-live-revision-action-device-profiles n\n",
-        "Device: --list-devices --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
+        "Device: --list-devices --probe-device --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
     );
     println!("{usage}");
     std::process::exit(0);
@@ -5799,6 +5921,7 @@ mod tests {
             "0".to_owned(),
             "--benchmark-roundtrip".to_owned(),
             "--list-devices".to_owned(),
+            "--probe-device".to_owned(),
             "--device-gate".to_owned(),
             "--kv-quant-max-total-us".to_owned(),
             "100000".to_owned(),
@@ -6797,6 +6920,7 @@ mod tests {
         assert_eq!(args.benchmark_max_drift_rollbacks, Some(0));
         assert!(args.benchmark_roundtrip);
         assert!(args.list_devices);
+        assert!(args.probe_device);
         assert!(args.device_gate);
         assert!(args.kv_quant_gate);
         assert_eq!(args.kv_quant_max_total_us, Some(100000));
@@ -9715,6 +9839,25 @@ mod tests {
         assert_eq!(args.gpu_load, 12.0);
         assert_eq!(args.ram_load, 61.0);
         assert_eq!(args.disk_load, 7.0);
+        assert!(args.auto_device_probe.is_some());
+        let report = args.effective_probe_report();
+        assert_eq!(report.device, args.device);
+        assert!((report.cpu_load - 0.91).abs() < 0.0001);
+        assert!((report.gpu_load - 0.12).abs() < 0.0001);
+        assert!((report.ram_load - 0.61).abs() < 0.0001);
+        assert!((report.disk_load - 0.07).abs() < 0.0001);
+        assert!(
+            report
+                .evidence
+                .iter()
+                .any(|item| item == "cli_override:NOIRON_CPU_LOAD")
+        );
+        assert!(
+            report
+                .evidence
+                .iter()
+                .any(|item| item == "cli_override:NOIRON_GPU_LOAD")
+        );
     }
 
     #[test]
@@ -9726,6 +9869,37 @@ mod tests {
         ]);
 
         assert_eq!(args.device, DeviceClass::CpuOnly);
+    }
+
+    #[test]
+    fn probe_device_flag_exposes_manual_device_plan() {
+        let args = Args::parse(vec![
+            "--probe-device".to_owned(),
+            "--device".to_owned(),
+            "server".to_owned(),
+            "--cpu-load".to_owned(),
+            "20".to_owned(),
+            "--ram-load".to_owned(),
+            "30".to_owned(),
+            "audit the selected server device".to_owned(),
+        ]);
+
+        assert!(args.probe_device);
+        assert!(args.device_flag_provided);
+        assert!(args.auto_device_probe.is_none());
+        let report = args.effective_probe_report();
+        let plan = args.runtime_manifest_device_plan();
+
+        assert_eq!(report.device, DeviceClass::Server);
+        assert_eq!(report.reason, "manual-device");
+        assert_eq!(plan.device, DeviceClass::Server);
+        assert!(plan.summary().contains("device=server"));
+        assert!(
+            report
+                .evidence
+                .iter()
+                .any(|item| item == "selected_profile:server")
+        );
     }
 
     fn temp_asset_dir(name: &str) -> PathBuf {

@@ -403,7 +403,9 @@ These are algorithmic references, not product dependencies:
   architecture, CPU parallelism, common GPU/NPU environment hints, edge device
   hints, WASM/tiny targets, and discrete GPU adapter names into a conservative
   device profile and exposes an auditable `HardwareProbeReport` with reason,
-  sanitized evidence, accelerator count, and normalized load hints; each profile now emits execution-lane, memory mode,
+  sanitized evidence, accelerator count, and normalized load hints; `--probe-device`
+  now prints the effective probe report, hardware plan, runtime device contract,
+  and memory-governance defaults for automatic detection or manual overrides; each profile now emits execution-lane, memory mode,
   adapter-hint, KV-precision, prefetch, disk-spill, and recursive parallelism
   policies; runtime KV import now honors the device prefetch budget; recursive
   schedules are now grouped into execution waves using the device
@@ -934,7 +936,9 @@ These are algorithmic references, not product dependencies:
 - Default CLI execution performs conservative local device probing, and manual
   device/load flags remain authoritative. Hardware probing is auditable through
   `HardwareProbeReport`, including the selected profile, reason, sanitized
-  evidence, accelerator count, and normalized load hints.
+  evidence, accelerator count, and normalized load hints; `--probe-device`
+  exposes the same report with the effective `HardwarePlan` and
+  `runtime_device_contract`.
 - Benchmark execution can sweep every explicit device profile with
   `--benchmark-all-devices`, and the benchmark gate can require all-device
   control-loop coverage through `--benchmark-min-device-profiles`.

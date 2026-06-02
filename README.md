@@ -828,6 +828,26 @@ cargo run -- --list-devices
 矩阵会列出每个 profile 的覆盖范围、常见别名、主计算通道、可移植降级通道、内存模式、
 runtime adapter hint、KV 精度、预取数量、磁盘溢出策略、local/global KV token budget、延迟预算、retention / compaction 默认值和递归并行预算。
 
+Inspect the current effective device probe and execution plan:
+
+```powershell
+cargo run -- --probe-device --device auto
+```
+
+`--probe-device` prints the selected device profile, probe reason, sanitized
+evidence, normalized load hints, prompt token estimate, `HardwarePlan`,
+`runtime_device_contract`, and memory-governance defaults. Manual flags such as
+`--device server --cpu-load 20` are reflected in the same report, so CI and
+operators can audit both automatic detection and explicit overrides.
+
+审计当前生效的设备探测结果与执行计划：
+
+```powershell
+cargo run -- --probe-device --device auto
+```
+
+`--probe-device` 会打印选中的设备 profile、探测原因、脱敏证据、归一化负载、prompt token 估算、`HardwarePlan`、`runtime_device_contract` 和 memory-governance 默认值。像 `--device server --cpu-load 20` 这样的手动参数也会反映在同一份报告里，方便 CI 和本地部署审计自动探测与显式覆盖。
+
 Run the device compatibility gate. It fails with exit code `2` if any supported
 device profile loses its alias coverage, execution plan, KV budget, adapter
 hints, portable fallback path, bounded memory governance policy, or a valid
