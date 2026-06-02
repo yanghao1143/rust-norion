@@ -370,6 +370,49 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
 
     failures.extend(evaluate_trace_device_contract(line));
     failures.extend(evaluate_trace_adapter_observations(line));
+    failures.extend(evaluate_trace_runtime_kv(line));
+
+    failures
+}
+
+fn evaluate_trace_runtime_kv(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let runtime_kv_exported = extract_json_usize_field(line, "runtime_kv_exported").unwrap_or(0);
+    let runtime_kv_stored = extract_json_usize_field(line, "runtime_kv_stored").unwrap_or(0);
+    let diagnostic_exported = extract_json_usize_field(line, "exported_kv_blocks").unwrap_or(0);
+    let memory_write = extract_json_bool_field(line, "memory_write").unwrap_or(false);
+    let runtime_kv_write = extract_json_bool_field(line, "runtime_kv_write").unwrap_or(false);
+    let revision_passes = extract_json_usize_field(line, "revision_passes").unwrap_or(0);
+
+    if diagnostic_exported != runtime_kv_exported {
+        failures.push(format!(
+            "runtime_diagnostics exported_kv_blocks {diagnostic_exported} does not match memory runtime_kv_exported {runtime_kv_exported}"
+        ));
+    }
+
+    if runtime_kv_stored > runtime_kv_exported {
+        failures.push(format!(
+            "runtime_kv_stored {runtime_kv_stored} exceeds runtime_kv_exported {runtime_kv_exported}"
+        ));
+    }
+
+    if runtime_kv_stored > 0 && !runtime_kv_write {
+        failures.push(format!(
+            "runtime_kv_stored {runtime_kv_stored} requires runtime_kv_write=true"
+        ));
+    }
+
+    if runtime_kv_stored > 0 && !memory_write {
+        failures.push(format!(
+            "runtime_kv_stored {runtime_kv_stored} requires memory_write=true"
+        ));
+    }
+
+    if runtime_kv_stored > 0 && revision_passes > 0 {
+        failures.push(format!(
+            "runtime_kv_stored {runtime_kv_stored} requires revision_passes=0"
+        ));
+    }
 
     failures
 }
@@ -1259,6 +1302,115 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_accepts_runtime_kv_storage_consistency() {
+        let line = runtime_kv_trace_line()
+            .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
+            .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
+            .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen("\"memory_write\":false", "\"memory_write\":true", 1)
+            .replacen("\"runtime_kv_write\":false", "\"runtime_kv_write\":true", 1)
+            .replacen("\"revision_passes\":1", "\"revision_passes\":0", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_storage_without_write_permission() {
+        let line = runtime_kv_trace_line()
+            .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
+            .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
+            .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen("\"memory_write\":false", "\"memory_write\":true", 1)
+            .replacen("\"runtime_kv_write\":true", "\"runtime_kv_write\":false", 1)
+            .replacen("\"revision_passes\":1", "\"revision_passes\":0", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_write=true")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_storage_without_memory_write() {
+        let line = runtime_kv_trace_line()
+            .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
+            .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
+            .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen("\"runtime_kv_write\":false", "\"runtime_kv_write\":true", 1)
+            .replacen("\"memory_write\":true", "\"memory_write\":false", 1)
+            .replacen("\"revision_passes\":1", "\"revision_passes\":0", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("memory_write=true")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_storage_after_revision() {
+        let line = runtime_kv_trace_line()
+            .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
+            .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
+            .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen("\"memory_write\":false", "\"memory_write\":true", 1)
+            .replacen("\"runtime_kv_write\":false", "\"runtime_kv_write\":true", 1)
+            .replacen("\"revision_passes\":0", "\"revision_passes\":1", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("revision_passes=0")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_export_mismatch() {
+        let line = runtime_kv_trace_line()
+            .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":2", 1)
+            .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("exported_kv_blocks")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_stored_above_exported() {
+        let line = runtime_kv_trace_line()
+            .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
+            .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
+            .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":2", 1)
+            .replacen("\"memory_write\":false", "\"memory_write\":true", 1)
+            .replacen("\"runtime_kv_write\":false", "\"runtime_kv_write\":true", 1)
+            .replacen("\"revision_passes\":1", "\"revision_passes\":0", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| failure.contains("exceeds")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_reports_missing_required_fields() {
         let failures = evaluate_trace_schema_line("{\"schema\":\"other\"}");
 
@@ -1301,6 +1453,21 @@ mod tests {
                 .any(|failure| failure.contains("runtime_device_contract device=")),
             "{failures:?}"
         );
+    }
+
+    fn runtime_kv_trace_line() -> String {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace runtime kv consistency", TaskProfile::Coding),
+            &mut backend,
+        );
+        trace_json_line(
+            "trace runtime kv consistency",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
     }
 
     #[test]
