@@ -245,7 +245,8 @@ modules, not external product dependencies:
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
-  memory reuse, and roll back adaptive state when the drift is severe.
+  memory reuse with severity-scaled penalties from reflection and generation
+  metrics, and roll back adaptive state when the drift is severe.
 - Trace schema gate:
   benchmark and inference JSONL traces should have an executable field-presence
   gate for the control-plane schema so route, memory, drift, reward, hardware,
@@ -437,7 +438,7 @@ These are algorithmic references, not product dependencies:
   the CLI can inspect persisted local state without running inference, including
   effective memory policies and persisted memory vector dimensions;
   drift guard now gates memory writes, runtime KV
-  admission, used-memory penalties, and adaptive-state rollback)
+  admission, severity-scaled used-memory penalties, and adaptive-state rollback)
 - v0.7: Rust-native Transformer templates, KV import/export ABI, benchmark
   harness for self-developed model runtimes
   (explicit general, coding-local, creative-writing-global, and

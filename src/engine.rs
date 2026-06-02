@@ -608,9 +608,13 @@ impl NoironEngine {
 
         for memory in &used_memories {
             if admit_memory && !drift_report.penalize_used_memory {
-                self.cache.reinforce(memory.id, report.quality);
+                self.cache
+                    .reinforce(memory.id, used_memory_reinforcement_amount(&report));
             } else {
-                self.cache.penalize(memory.id, 1.0 - report.quality);
+                self.cache.penalize(
+                    memory.id,
+                    used_memory_penalty_amount(&report, &drift_report, metrics),
+                );
             }
         }
 
@@ -1026,6 +1030,32 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
         .filter(|value| value.is_finite())
         .map(|value| value.clamp(0.0, 1.0) * 0.10)
         .unwrap_or(0.0)
+}
+
+fn used_memory_reinforcement_amount(report: &ReflectionReport) -> f32 {
+    (report.quality - report.revision_actions.len() as f32 * 0.02).clamp(0.05, 1.0)
+}
+
+fn used_memory_penalty_amount(
+    report: &ReflectionReport,
+    drift_report: &DriftReport,
+    metrics: GenerationMetrics,
+) -> f32 {
+    let severity_pressure = match drift_report.severity {
+        crate::drift::DriftSeverity::Stable => 0.05,
+        crate::drift::DriftSeverity::Watch => 0.12,
+        crate::drift::DriftSeverity::Block => 0.38,
+        crate::drift::DriftSeverity::Rollback => 0.62,
+    };
+    let reflection_pressure = report.contradictions.len() as f32 * 0.12
+        + report.critical_issue_count() as f32 * 0.18
+        + report.revision_actions.len() as f32 * 0.03;
+    let metric_pressure = metrics.contradiction_count as f32 * 0.10
+        + ((metrics.perplexity - 24.0).max(0.0) / 48.0).min(0.20)
+        + (1.0 - metrics.semantic_consistency.clamp(0.0, 1.0)) * 0.10;
+
+    (1.0 - report.quality + severity_pressure + reflection_pressure + metric_pressure)
+        .clamp(0.05, 1.0)
 }
 
 fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
@@ -1846,6 +1876,45 @@ mod tests {
     }
 
     #[test]
+    fn drift_guard_penalizes_used_memory_by_reflection_severity() {
+        struct ContradictingBackend;
+
+        impl InferenceBackend for ContradictingBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new(
+                    "Rust Noiron cached answer is certain and guaranteed, but maybe unknown.",
+                    vec![ReasoningStep::new(
+                        "runtime",
+                        "contradictory cached path",
+                        0.90,
+                    )],
+                )
+            }
+        }
+
+        let prompt = "Rust Noiron cached answer";
+        let mut cache = KvFusionCache::new();
+        let memory_id = cache.store_or_fuse(prompt, TextEmbedder::default().embed(prompt), 0.82);
+        let mut engine = NoironEngine::with_cache(cache);
+        let before_strength = memory_strength(&engine, memory_id);
+        let mut backend = ContradictingBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(
+            outcome.drift_report.severity,
+            crate::drift::DriftSeverity::Block
+        );
+        assert_eq!(outcome.used_memories.len(), 1);
+        assert!(outcome.drift_report.penalize_used_memory);
+        assert!(outcome.report.critical_issue_count() > 0);
+        assert!(memory_strength(&engine, memory_id) < before_strength - 0.10);
+    }
+
+    #[test]
     fn drift_guard_rolls_back_adaptive_state_for_bad_draft() {
         struct BadBackend;
 
@@ -1877,6 +1946,37 @@ mod tests {
         assert!(outcome.evolution_ledger.rollback_router_threshold_delta > 0.0);
         assert!(outcome.evolution_ledger.rollback_hierarchy_weight_delta > 0.0);
         assert!(outcome.stored_memory_id.is_none());
+    }
+
+    #[test]
+    fn drift_guard_strongly_penalizes_used_memory_on_rollback() {
+        struct BadBackend;
+
+        impl InferenceBackend for BadBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new("", vec![ReasoningStep::new("runtime", "empty", 0.0)])
+            }
+        }
+
+        let prompt = "Rust Noiron rollback cached memory";
+        let mut cache = KvFusionCache::new();
+        let memory_id = cache.store_or_fuse(prompt, TextEmbedder::default().embed(prompt), 0.82);
+        let mut engine = NoironEngine::with_cache(cache);
+        let before_strength = memory_strength(&engine, memory_id);
+        let mut backend = BadBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert_eq!(
+            outcome.drift_report.severity,
+            crate::drift::DriftSeverity::Rollback
+        );
+        assert_eq!(outcome.used_memories.len(), 1);
+        assert!(outcome.drift_report.penalize_used_memory);
+        assert!(memory_strength(&engine, memory_id) < before_strength - 0.18);
     }
 
     #[test]

@@ -145,7 +145,7 @@ Implemented modules:
 - `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, recursive-cost mutations, and drift rollback safety audits
 - `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, cumulative evolution-ledger gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, and device-adapter-contract gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
-- `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, used-memory penalties, and adaptive-state rollback
+- `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, severity-scaled used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering and vector-carrying import decisions
 - `src/kv_cache.rs`: reinforced KV fusion cache with disk persistence, retention policy, embedding-dimension-aware similarity, and batch semantic compaction for near-duplicate memories
 - `src/kv_exchange.rs`: shared runtime KV block type for import/export between Noiron and model runtimes
@@ -850,6 +850,10 @@ know which self-developed runtime, adapter, forward energy, and KV influence
 produced a useful or weak control path. Runtime KV influence can strengthen
 useful memory replay, while critical reflection issues, revision actions, and
 excessive recursive runtime calls dampen reinforcement or increase penalties.
+During live inference, drift severity, reflection contradictions, critical
+issues, and perplexity/consistency metrics also scale penalties on memories used
+by a blocked or rolled-back answer, so contaminated retrieval paths are weakened
+immediately instead of waiting for offline replay.
 Runtime requests also derive bounded adapter observations from those experience
 matches. A self-developed runtime manifest first respects the current device
 execution plan, then can prefer a historically stronger adapter only when that
@@ -867,7 +871,7 @@ durable memory.
 当 runtime tokens 带有 `entropy` 或 `logprob` 时，引擎会把这些 token 级信号合入主生成 perplexity，并用于 drift 检查、router / hierarchy 自适应、process reward 评分和经验回放。
 同一组聚合后的 token 不确定性也会写入 trace JSONL 的 `runtime_tokens`，包括平均 entropy、平均负 logprob 与派生的 uncertainty perplexity。
 runtime response 也可以返回结构化 `diagnostics`，让本地或命令行 runtime 上报模型 ID、选中的 adapter、执行层数、hidden size、本地窗口、forward energy、KV influence 以及 KV 导入导出计数；engine 会把这些字段作为 `runtime_diagnostics` 写入 trace JSONL。
-同一组 diagnostics 也会持久化进 experience 记录，因此后续经验回放能知道是哪一个自研 runtime、adapter、forward energy 和 KV influence 产生了有效或较弱的控制路径。runtime KV influence 会加强有用记忆的回放强化；critical reflection issue、revision action 和过高的 recursive runtime call 成本会削弱强化或加大惩罚。
+同一组 diagnostics 也会持久化进 experience 记录，因此后续经验回放能知道是哪一个自研 runtime、adapter、forward energy 和 KV influence 产生了有效或较弱的控制路径。runtime KV influence 会加强有用记忆的回放强化；critical reflection issue、revision action 和过高的 recursive runtime call 成本会削弱强化或加大惩罚。在线推理时，drift 严重度、反思矛盾、critical issue、perplexity / consistency 指标也会放大被 block 或 rollback 答案用过的记忆惩罚，让污染检索路径立即变弱，而不是等离线 replay 才处理。
 runtime request 还会从这些经验匹配中提炼有边界的 adapter observation。自研 runtime manifest 会先遵守当前设备执行计划，然后只在 adapter 同时被设备计划和 runtime manifest 支持时，才优先选择历史表现更强的 adapter。
 发送请求前，backend 会按当前设备执行计划过滤历史 adapter observation；同一组受设备约束的 observation 也会暴露在每次 inference outcome、trace JSONL 和 benchmark summary 中，因此高分但当前不可用的 CUDA / Metal / NPU 历史路径不会影响 CPU、移动端、浏览器或边缘设备运行。生成后，response diagnostics 会按请求的 model id、架构边界和设备 adapter hints 做契约检查。违反契约会被记录为低置信 runtime contract issue，并丢弃导出的 runtime KV，避免无效 adapter 路径污染长期记忆。
 
