@@ -250,7 +250,9 @@ modules, not external product dependencies:
   route budgets, used KV memory ids, gist memory ids, runtime-KV memory ids,
   structured live-inference evolution evidence, structured reflection issues,
   and revision actions so replay can reinforce or penalize the actual memory
-  and reasoning path used by an answer.
+  and reasoning path used by an answer. Replay reports and the cumulative
+  evolution ledger should record when that structured live-evolution evidence is
+  consumed, so self-evolution can be audited beyond text notes.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated

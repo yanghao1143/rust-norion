@@ -401,6 +401,16 @@ pub struct ExperienceReplayReport {
     pub live_memory_feedback_removed: usize,
     pub live_memory_feedback_missing: usize,
     pub live_memory_feedback_strength_delta: f32,
+    pub live_evolution_items: usize,
+    pub live_evolution_router_threshold_mutations: usize,
+    pub live_evolution_hierarchy_weight_mutations: usize,
+    pub live_evolution_router_threshold_delta: f32,
+    pub live_evolution_hierarchy_weight_delta: f32,
+    pub live_evolution_memory_updates: usize,
+    pub live_evolution_stored_memory_updates: usize,
+    pub live_evolution_reflection_issues: usize,
+    pub live_evolution_critical_reflection_issues: usize,
+    pub live_evolution_revision_actions: usize,
     pub notes: Vec<String>,
 }
 
@@ -485,6 +495,56 @@ impl ExperienceReplayReport {
             .filter_map(|item| item.live_memory_feedback)
             .map(|feedback| feedback.strength_delta)
             .sum();
+        let live_evolution_items = plan
+            .items
+            .iter()
+            .filter(|item| item.live_evolution.has_evidence())
+            .count();
+        let live_evolution_router_threshold_mutations = plan
+            .items
+            .iter()
+            .filter(|item| item.live_evolution.router_threshold_delta > 0.000001)
+            .count();
+        let live_evolution_hierarchy_weight_mutations = plan
+            .items
+            .iter()
+            .filter(|item| item.live_evolution.hierarchy_weight_delta > 0.000001)
+            .count();
+        let live_evolution_router_threshold_delta = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.router_threshold_delta.max(0.0))
+            .sum();
+        let live_evolution_hierarchy_weight_delta = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.hierarchy_weight_delta.max(0.0))
+            .sum();
+        let live_evolution_memory_updates = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.memory_updates())
+            .sum();
+        let live_evolution_stored_memory_updates = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.stored_memory_updates())
+            .sum();
+        let live_evolution_reflection_issues = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.reflection_issues)
+            .sum();
+        let live_evolution_critical_reflection_issues = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.critical_reflection_issues)
+            .sum();
+        let live_evolution_revision_actions = plan
+            .items
+            .iter()
+            .map(|item| item.live_evolution.revision_actions)
+            .sum();
 
         Self {
             planned: plan.items.len(),
@@ -502,13 +562,23 @@ impl ExperienceReplayReport {
             live_memory_feedback_removed,
             live_memory_feedback_missing,
             live_memory_feedback_strength_delta,
+            live_evolution_items,
+            live_evolution_router_threshold_mutations,
+            live_evolution_hierarchy_weight_mutations,
+            live_evolution_router_threshold_delta,
+            live_evolution_hierarchy_weight_delta,
+            live_evolution_memory_updates,
+            live_evolution_stored_memory_updates,
+            live_evolution_reflection_issues,
+            live_evolution_critical_reflection_issues,
+            live_evolution_revision_actions,
             ..Self::default()
         }
     }
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_detail_items={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_detail_items={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} live_evolution_items={} live_evolution_router_threshold_mutations={} live_evolution_hierarchy_weight_mutations={} live_evolution_router_threshold_delta={:.6} live_evolution_hierarchy_weight_delta={:.6} live_evolution_memory_updates={} live_evolution_stored_memory_updates={} live_evolution_reflection_issues={} live_evolution_critical_reflection_issues={} live_evolution_revision_actions={}",
             self.planned,
             self.applied,
             self.router_updates,
@@ -539,7 +609,17 @@ impl ExperienceReplayReport {
             self.live_memory_feedback_applied,
             self.live_memory_feedback_removed,
             self.live_memory_feedback_missing,
-            self.live_memory_feedback_strength_delta
+            self.live_memory_feedback_strength_delta,
+            self.live_evolution_items,
+            self.live_evolution_router_threshold_mutations,
+            self.live_evolution_hierarchy_weight_mutations,
+            self.live_evolution_router_threshold_delta,
+            self.live_evolution_hierarchy_weight_delta,
+            self.live_evolution_memory_updates,
+            self.live_evolution_stored_memory_updates,
+            self.live_evolution_reflection_issues,
+            self.live_evolution_critical_reflection_issues,
+            self.live_evolution_revision_actions
         )
     }
 
@@ -831,6 +911,29 @@ mod tests {
         assert_eq!(plan.items[0].recursive_stats.unwrap().chunks, Some(4));
         assert_eq!(plan.items[0].live_evolution.memory_reinforcements, 2);
         assert_eq!(plan.items[0].live_evolution.stored_runtime_kv_memories, 1);
+    }
+
+    #[test]
+    fn report_summarizes_structured_live_evolution_consumed_by_replay() {
+        let planner = ExperienceReplayPlanner::new();
+        let reinforced = record(9, 0.88, RewardAction::Reinforce);
+        let penalized = record(10, 0.12, RewardAction::Penalize);
+        let plan = planner.plan(&[reinforced, penalized], 4);
+
+        let report = ExperienceReplayReport::from_plan(&plan);
+
+        assert_eq!(report.live_evolution_items, 2);
+        assert_eq!(report.live_evolution_router_threshold_mutations, 2);
+        assert_eq!(report.live_evolution_hierarchy_weight_mutations, 2);
+        assert!((report.live_evolution_router_threshold_delta - 0.04).abs() < 0.0001);
+        assert!((report.live_evolution_hierarchy_weight_delta - 0.06).abs() < 0.0001);
+        assert_eq!(report.live_evolution_memory_updates, 4);
+        assert_eq!(report.live_evolution_stored_memory_updates, 6);
+        assert_eq!(report.live_evolution_reflection_issues, 1);
+        assert_eq!(report.live_evolution_critical_reflection_issues, 1);
+        assert_eq!(report.live_evolution_revision_actions, 1);
+        assert!(report.summary().contains("live_evolution_items=2"));
+        assert!(report.summary().contains("live_evolution_memory_updates=4"));
     }
 
     #[test]

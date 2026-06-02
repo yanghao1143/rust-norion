@@ -3789,6 +3789,36 @@ fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> Evolut
         replay_live_memory_feedback_strength_delta: left
             .replay_live_memory_feedback_strength_delta
             .max(right.replay_live_memory_feedback_strength_delta),
+        replay_live_evolution_items: left
+            .replay_live_evolution_items
+            .max(right.replay_live_evolution_items),
+        replay_live_evolution_router_threshold_mutations: left
+            .replay_live_evolution_router_threshold_mutations
+            .max(right.replay_live_evolution_router_threshold_mutations),
+        replay_live_evolution_hierarchy_weight_mutations: left
+            .replay_live_evolution_hierarchy_weight_mutations
+            .max(right.replay_live_evolution_hierarchy_weight_mutations),
+        replay_live_evolution_router_threshold_delta: left
+            .replay_live_evolution_router_threshold_delta
+            .max(right.replay_live_evolution_router_threshold_delta),
+        replay_live_evolution_hierarchy_weight_delta: left
+            .replay_live_evolution_hierarchy_weight_delta
+            .max(right.replay_live_evolution_hierarchy_weight_delta),
+        replay_live_evolution_memory_updates: left
+            .replay_live_evolution_memory_updates
+            .max(right.replay_live_evolution_memory_updates),
+        replay_live_evolution_stored_memory_updates: left
+            .replay_live_evolution_stored_memory_updates
+            .max(right.replay_live_evolution_stored_memory_updates),
+        replay_live_evolution_reflection_issues: left
+            .replay_live_evolution_reflection_issues
+            .max(right.replay_live_evolution_reflection_issues),
+        replay_live_evolution_critical_reflection_issues: left
+            .replay_live_evolution_critical_reflection_issues
+            .max(right.replay_live_evolution_critical_reflection_issues),
+        replay_live_evolution_revision_actions: left
+            .replay_live_evolution_revision_actions
+            .max(right.replay_live_evolution_revision_actions),
         recursive_replay_items: left
             .recursive_replay_items
             .max(right.recursive_replay_items),
@@ -5767,6 +5797,16 @@ mod tests {
                 replay_live_memory_feedback_removed: 1,
                 replay_live_memory_feedback_missing: 1,
                 replay_live_memory_feedback_strength_delta: 0.42,
+                replay_live_evolution_items: 2,
+                replay_live_evolution_router_threshold_mutations: 1,
+                replay_live_evolution_hierarchy_weight_mutations: 1,
+                replay_live_evolution_router_threshold_delta: 0.04,
+                replay_live_evolution_hierarchy_weight_delta: 0.03,
+                replay_live_evolution_memory_updates: 3,
+                replay_live_evolution_stored_memory_updates: 2,
+                replay_live_evolution_reflection_issues: 2,
+                replay_live_evolution_critical_reflection_issues: 1,
+                replay_live_evolution_revision_actions: 2,
                 recursive_replay_items: 6,
                 recursive_runtime_calls: 7,
                 drift_rollbacks: 0,

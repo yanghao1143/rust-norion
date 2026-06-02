@@ -1250,7 +1250,8 @@ fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         .and_then(|feedback| feedback.penalty_average())
         .map(|average| average.clamp(0.0, 1.0) * 0.12)
         .unwrap_or(0.0);
-    (item.reward + runtime_bonus + live_feedback_bonus
+    let live_evolution_bonus = replay_live_evolution_reinforcement_bonus(item);
+    (item.reward + runtime_bonus + live_feedback_bonus + live_evolution_bonus
         - reflection_drag
         - live_penalty_drag
         - item.recursive_call_pressure() * 0.25)
@@ -1266,11 +1267,37 @@ fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
         .and_then(|feedback| feedback.penalty_average())
         .map(|average| average.clamp(0.0, 1.0) * 0.18)
         .unwrap_or(0.0);
+    let live_evolution_pressure = replay_live_evolution_penalty_pressure(item);
     (1.0 - item.reward
         + reflection_pressure
         + live_penalty_pressure
+        + live_evolution_pressure
         + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
+}
+
+fn replay_live_evolution_reinforcement_bonus(item: &ExperienceReplayItem) -> f32 {
+    let live = item.live_evolution;
+    let mutation_bonus =
+        ((live.router_threshold_delta + live.hierarchy_weight_delta).clamp(0.0, 0.25)) * 0.16;
+    let memory_bonus = (live.memory_reinforcements as f32 * 0.018).min(0.06);
+    let stored_bonus = (live.stored_memory_updates() as f32 * 0.012).min(0.05);
+    let reflection_drag =
+        (live.reflection_issues as f32 * 0.010 + live.revision_actions as f32 * 0.008).min(0.05);
+
+    (mutation_bonus + memory_bonus + stored_bonus - reflection_drag).clamp(0.0, 0.12)
+}
+
+fn replay_live_evolution_penalty_pressure(item: &ExperienceReplayItem) -> f32 {
+    let live = item.live_evolution;
+    let reflection_pressure = (live.reflection_issues as f32 * 0.015
+        + live.critical_reflection_issues as f32 * 0.055
+        + live.revision_actions as f32 * 0.018)
+        .min(0.16);
+    let memory_penalty_pressure = (live.memory_penalties as f32 * 0.024).min(0.08);
+    let stored_memory_drag = (live.stored_memory_updates() as f32 * 0.006).min(0.04);
+
+    (reflection_pressure + memory_penalty_pressure - stored_memory_drag).clamp(0.0, 0.18)
 }
 
 fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
@@ -3089,6 +3116,108 @@ mod tests {
     }
 
     #[test]
+    fn replay_experience_consumes_structured_live_evolution_for_update_strength() {
+        let mut engine = NoironEngine::new();
+        let plain_reinforce_id =
+            engine
+                .cache
+                .store_or_fuse("plain live evolution reinforce", vec![1.0, 0.0, 0.0], 0.8);
+        let evolved_reinforce_id = engine.cache.store_or_fuse(
+            "evolved live evolution reinforce",
+            vec![0.0, 1.0, 0.0],
+            0.8,
+        );
+        let plain_penalty_id =
+            engine
+                .cache
+                .store_or_fuse("plain live evolution penalty", vec![0.0, 0.0, 1.0], 0.9);
+        let evolved_penalty_id =
+            engine
+                .cache
+                .store_or_fuse("evolved live evolution penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+        engine.experience.record(replay_memory_input(
+            "plain structured reinforce",
+            "reinforce without structured live evolution evidence",
+            0.80,
+            plain_reinforce_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            Vec::new(),
+        ));
+        engine
+            .experience
+            .record(replay_memory_input_with_live_evolution(
+                "evolved structured reinforce",
+                "reinforce with successful live evolution evidence",
+                0.80,
+                evolved_reinforce_id,
+                LiveInferenceEvolution {
+                    router_threshold_delta: 0.18,
+                    hierarchy_weight_delta: 0.08,
+                    memory_reinforcements: 3,
+                    memory_penalties: 0,
+                    stored_memory: true,
+                    stored_gist_memories: 1,
+                    stored_runtime_kv_memories: 1,
+                    reflection_issues: 0,
+                    critical_reflection_issues: 0,
+                    revision_actions: 0,
+                },
+            ));
+        engine.experience.record(replay_memory_input(
+            "plain structured penalty",
+            "penalize without structured live evolution evidence",
+            0.30,
+            plain_penalty_id,
+            Vec::new(),
+            Vec::new(),
+            RuntimeDiagnostics::default(),
+            Vec::new(),
+        ));
+        engine
+            .experience
+            .record(replay_memory_input_with_live_evolution(
+                "evolved structured penalty",
+                "penalize with failed live evolution evidence",
+                0.30,
+                evolved_penalty_id,
+                LiveInferenceEvolution {
+                    router_threshold_delta: 0.0,
+                    hierarchy_weight_delta: 0.0,
+                    memory_reinforcements: 0,
+                    memory_penalties: 3,
+                    stored_memory: false,
+                    stored_gist_memories: 0,
+                    stored_runtime_kv_memories: 0,
+                    reflection_issues: 3,
+                    critical_reflection_issues: 1,
+                    revision_actions: 2,
+                },
+            ));
+
+        let report = engine.replay_experience(8);
+
+        assert_eq!(report.applied, 4);
+        assert_eq!(report.live_evolution_items, 2);
+        assert_eq!(report.live_evolution_memory_updates, 6);
+        assert_eq!(engine.evolution_ledger.replay_live_evolution_items, 2);
+        assert_eq!(
+            engine.evolution_ledger.replay_live_evolution_memory_updates,
+            6
+        );
+        assert!(
+            memory_strength(&engine, evolved_reinforce_id)
+                > memory_strength(&engine, plain_reinforce_id)
+        );
+        assert!(
+            memory_strength(&engine, evolved_penalty_id)
+                < memory_strength(&engine, plain_penalty_id)
+        );
+    }
+
+    #[test]
     fn replay_experience_uses_live_memory_feedback_notes() {
         let mut engine = NoironEngine::new();
         let plain_memory_id =
@@ -3579,6 +3708,28 @@ mod tests {
                 notes: reward_notes,
             },
             live_evolution: Default::default(),
+        }
+    }
+
+    fn replay_memory_input_with_live_evolution(
+        prompt: &str,
+        lesson: &str,
+        reward: f32,
+        memory_id: u64,
+        live_evolution: LiveInferenceEvolution,
+    ) -> ExperienceInput {
+        ExperienceInput {
+            live_evolution,
+            ..replay_memory_input(
+                prompt,
+                lesson,
+                reward,
+                memory_id,
+                Vec::new(),
+                Vec::new(),
+                RuntimeDiagnostics::default(),
+                Vec::new(),
+            )
         }
     }
 
