@@ -162,6 +162,9 @@ pub struct BenchmarkGate {
     pub min_evolution_live_hierarchy_weight_mutations: Option<u64>,
     pub min_evolution_live_router_threshold_delta: Option<f32>,
     pub min_evolution_live_hierarchy_weight_delta: Option<f32>,
+    pub min_evolution_live_online_reward_feedbacks: Option<u64>,
+    pub min_evolution_live_online_reward_reinforcements: Option<u64>,
+    pub min_evolution_live_online_reward_penalties: Option<u64>,
     pub min_evolution_live_memory_updates: Option<u64>,
     pub min_evolution_live_stored_memory_updates: Option<u64>,
     pub min_evolution_live_reflection_issues: Option<u64>,
@@ -170,6 +173,7 @@ pub struct BenchmarkGate {
     pub min_evolution_live_inference_device_profiles: Option<usize>,
     pub min_evolution_live_router_threshold_mutation_device_profiles: Option<usize>,
     pub min_evolution_live_hierarchy_weight_mutation_device_profiles: Option<usize>,
+    pub min_evolution_live_online_reward_device_profiles: Option<usize>,
     pub min_evolution_live_memory_update_device_profiles: Option<usize>,
     pub min_evolution_live_stored_memory_update_device_profiles: Option<usize>,
     pub min_evolution_live_reflection_issue_device_profiles: Option<usize>,
@@ -187,12 +191,16 @@ pub struct BenchmarkGate {
     pub min_evolution_replay_live_memory_feedback_applied: Option<u64>,
     pub min_evolution_replay_live_memory_feedback_strength_delta: Option<f32>,
     pub min_evolution_replay_live_evolution_items: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_feedbacks: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_reinforcements: Option<u64>,
+    pub min_evolution_replay_live_evolution_online_reward_penalties: Option<u64>,
     pub min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     pub min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
     pub min_evolution_replay_live_evolution_critical_reflection_issues: Option<u64>,
     pub min_evolution_replay_live_evolution_revision_actions: Option<u64>,
     pub min_evolution_replay_live_evolution_device_profiles: Option<usize>,
+    pub min_evolution_replay_live_evolution_online_reward_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_memory_update_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles:
         Option<usize>,
@@ -291,6 +299,9 @@ impl Default for BenchmarkGate {
             min_evolution_live_hierarchy_weight_mutations: None,
             min_evolution_live_router_threshold_delta: None,
             min_evolution_live_hierarchy_weight_delta: None,
+            min_evolution_live_online_reward_feedbacks: None,
+            min_evolution_live_online_reward_reinforcements: None,
+            min_evolution_live_online_reward_penalties: None,
             min_evolution_live_memory_updates: None,
             min_evolution_live_stored_memory_updates: None,
             min_evolution_live_reflection_issues: None,
@@ -299,6 +310,7 @@ impl Default for BenchmarkGate {
             min_evolution_live_inference_device_profiles: None,
             min_evolution_live_router_threshold_mutation_device_profiles: None,
             min_evolution_live_hierarchy_weight_mutation_device_profiles: None,
+            min_evolution_live_online_reward_device_profiles: None,
             min_evolution_live_memory_update_device_profiles: None,
             min_evolution_live_stored_memory_update_device_profiles: None,
             min_evolution_live_reflection_issue_device_profiles: None,
@@ -316,12 +328,16 @@ impl Default for BenchmarkGate {
             min_evolution_replay_live_memory_feedback_applied: None,
             min_evolution_replay_live_memory_feedback_strength_delta: None,
             min_evolution_replay_live_evolution_items: None,
+            min_evolution_replay_live_evolution_online_reward_feedbacks: None,
+            min_evolution_replay_live_evolution_online_reward_reinforcements: None,
+            min_evolution_replay_live_evolution_online_reward_penalties: None,
             min_evolution_replay_live_evolution_memory_updates: None,
             min_evolution_replay_live_evolution_stored_memory_updates: None,
             min_evolution_replay_live_evolution_reflection_issues: None,
             min_evolution_replay_live_evolution_critical_reflection_issues: None,
             min_evolution_replay_live_evolution_revision_actions: None,
             min_evolution_replay_live_evolution_device_profiles: None,
+            min_evolution_replay_live_evolution_online_reward_device_profiles: None,
             min_evolution_replay_live_evolution_memory_update_device_profiles: None,
             min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles: None,
             min_evolution_replay_live_evolution_revision_action_device_profiles: None,
@@ -1020,12 +1036,14 @@ pub struct BenchmarkLiveEvolutionEvidence {
     inference_devices: Vec<DeviceClass>,
     router_threshold_mutation_devices: Vec<DeviceClass>,
     hierarchy_weight_mutation_devices: Vec<DeviceClass>,
+    online_reward_devices: Vec<DeviceClass>,
     memory_update_devices: Vec<DeviceClass>,
     stored_memory_update_devices: Vec<DeviceClass>,
     reflection_issue_devices: Vec<DeviceClass>,
     critical_reflection_issue_devices: Vec<DeviceClass>,
     revision_action_devices: Vec<DeviceClass>,
     replay_live_evolution_devices: Vec<DeviceClass>,
+    replay_live_evolution_online_reward_devices: Vec<DeviceClass>,
     replay_live_evolution_memory_update_devices: Vec<DeviceClass>,
     replay_live_evolution_critical_reflection_issue_devices: Vec<DeviceClass>,
     replay_live_evolution_revision_action_devices: Vec<DeviceClass>,
@@ -1042,6 +1060,14 @@ impl BenchmarkLiveEvolutionEvidence {
         }
         if live.hierarchy_weight_delta > 0.000001 {
             push_unique_device(&mut self.hierarchy_weight_mutation_devices, device);
+        }
+        if live.online_reward_feedbacks > 0
+            && live.online_reward_feedbacks
+                == live
+                    .online_reward_reinforcements
+                    .saturating_add(live.online_reward_penalties)
+        {
+            push_unique_device(&mut self.online_reward_devices, device);
         }
         if live.memory_reinforcements > 0 || live.memory_penalties > 0 {
             push_unique_device(&mut self.memory_update_devices, device);
@@ -1064,6 +1090,17 @@ impl BenchmarkLiveEvolutionEvidence {
         if let Some(replay) = outcome.auto_replay_report.as_ref() {
             if replay.live_evolution_items > 0 {
                 push_unique_device(&mut self.replay_live_evolution_devices, device);
+            }
+            if replay.live_evolution_online_reward_feedbacks > 0
+                && replay.live_evolution_online_reward_feedbacks
+                    == replay
+                        .live_evolution_online_reward_reinforcements
+                        .saturating_add(replay.live_evolution_online_reward_penalties)
+            {
+                push_unique_device(
+                    &mut self.replay_live_evolution_online_reward_devices,
+                    device,
+                );
             }
             if replay.live_evolution_memory_updates > 0 {
                 push_unique_device(
@@ -1098,6 +1135,10 @@ impl BenchmarkLiveEvolutionEvidence {
         explicit_device_count(&self.hierarchy_weight_mutation_devices)
     }
 
+    pub fn online_reward_device_profiles(&self) -> usize {
+        explicit_device_count(&self.online_reward_devices)
+    }
+
     pub fn memory_update_device_profiles(&self) -> usize {
         explicit_device_count(&self.memory_update_devices)
     }
@@ -1120,6 +1161,10 @@ impl BenchmarkLiveEvolutionEvidence {
 
     pub fn replay_live_evolution_device_profiles(&self) -> usize {
         explicit_device_count(&self.replay_live_evolution_devices)
+    }
+
+    pub fn replay_live_evolution_online_reward_device_profiles(&self) -> usize {
+        explicit_device_count(&self.replay_live_evolution_online_reward_devices)
     }
 
     pub fn replay_live_evolution_memory_update_device_profiles(&self) -> usize {
@@ -2874,6 +2919,42 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_evolution_live_online_reward_feedbacks) =
+            gate.min_evolution_live_online_reward_feedbacks
+        {
+            let observed = self.evolution_ledger.live_online_reward_feedbacks;
+            if observed < min_evolution_live_online_reward_feedbacks {
+                failures.push(format!(
+                    "evolution_live_online_reward_feedbacks {} below minimum {}",
+                    observed, min_evolution_live_online_reward_feedbacks
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_online_reward_reinforcements) =
+            gate.min_evolution_live_online_reward_reinforcements
+        {
+            let observed = self.evolution_ledger.live_online_reward_reinforcements;
+            if observed < min_evolution_live_online_reward_reinforcements {
+                failures.push(format!(
+                    "evolution_live_online_reward_reinforcements {} below minimum {}",
+                    observed, min_evolution_live_online_reward_reinforcements
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_online_reward_penalties) =
+            gate.min_evolution_live_online_reward_penalties
+        {
+            let observed = self.evolution_ledger.live_online_reward_penalties;
+            if observed < min_evolution_live_online_reward_penalties {
+                failures.push(format!(
+                    "evolution_live_online_reward_penalties {} below minimum {}",
+                    observed, min_evolution_live_online_reward_penalties
+                ));
+            }
+        }
+
         if let Some(min_evolution_live_memory_updates) = gate.min_evolution_live_memory_updates {
             let observed = self.evolution_ledger.live_memory_updates();
             if observed < min_evolution_live_memory_updates {
@@ -2967,6 +3048,18 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "evolution_live_hierarchy_weight_mutation_device_profiles {} below minimum {}",
                     observed, min_evolution_live_hierarchy_weight_mutation_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_online_reward_device_profiles) =
+            gate.min_evolution_live_online_reward_device_profiles
+        {
+            let observed = self.live_evolution_evidence.online_reward_device_profiles();
+            if observed < min_evolution_live_online_reward_device_profiles {
+                failures.push(format!(
+                    "evolution_live_online_reward_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_online_reward_device_profiles
                 ));
             }
         }
@@ -3181,6 +3274,48 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_evolution_replay_live_evolution_online_reward_feedbacks) =
+            gate.min_evolution_replay_live_evolution_online_reward_feedbacks
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_online_reward_feedbacks;
+            if observed < min_evolution_replay_live_evolution_online_reward_feedbacks {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_feedbacks {} below minimum {}",
+                    observed, min_evolution_replay_live_evolution_online_reward_feedbacks
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_online_reward_reinforcements) =
+            gate.min_evolution_replay_live_evolution_online_reward_reinforcements
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_online_reward_reinforcements;
+            if observed < min_evolution_replay_live_evolution_online_reward_reinforcements {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_reinforcements {} below minimum {}",
+                    observed, min_evolution_replay_live_evolution_online_reward_reinforcements
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_online_reward_penalties) =
+            gate.min_evolution_replay_live_evolution_online_reward_penalties
+        {
+            let observed = self
+                .evolution_ledger
+                .replay_live_evolution_online_reward_penalties;
+            if observed < min_evolution_replay_live_evolution_online_reward_penalties {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_penalties {} below minimum {}",
+                    observed, min_evolution_replay_live_evolution_online_reward_penalties
+                ));
+            }
+        }
+
         if let Some(min_evolution_replay_live_evolution_memory_updates) =
             gate.min_evolution_replay_live_evolution_memory_updates
         {
@@ -3257,6 +3392,21 @@ impl BenchmarkSummary {
                 failures.push(format!(
                     "evolution_replay_live_evolution_device_profiles {} below minimum {}",
                     observed, min_evolution_replay_live_evolution_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_replay_live_evolution_online_reward_device_profiles) =
+            gate.min_evolution_replay_live_evolution_online_reward_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .replay_live_evolution_online_reward_device_profiles();
+            if observed < min_evolution_replay_live_evolution_online_reward_device_profiles {
+                failures.push(format!(
+                    "evolution_replay_live_evolution_online_reward_device_profiles {} below minimum {}",
+                    observed,
+                    min_evolution_replay_live_evolution_online_reward_device_profiles
                 ));
             }
         }
@@ -4035,7 +4185,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_uncertainty_device_profiles={} runtime_uncertainty_devices={} runtime_uncertainty_token_device_profiles={} runtime_uncertainty_token_devices={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_import_device_profiles={} runtime_kv_import_devices={} runtime_kv_exported={} runtime_kv_export_device_profiles={} runtime_kv_export_devices={} runtime_kv_stored={} runtime_kv_stored_device_profiles={} runtime_kv_stored_devices={} runtime_kv_hold_cases={} runtime_kv_held={} runtime_kv_hold_device_profiles={} runtime_kv_hold_devices={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_online_reward_feedbacks={} evolution_live_online_reward_reinforcements={} evolution_live_online_reward_penalties={} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_online_reward_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_online_reward_feedbacks={} evolution_replay_live_evolution_online_reward_reinforcements={} evolution_replay_live_evolution_online_reward_penalties={} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_online_reward_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_uncertainty_device_profiles={} runtime_uncertainty_devices={} runtime_uncertainty_token_device_profiles={} runtime_uncertainty_token_devices={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_import_device_profiles={} runtime_kv_import_devices={} runtime_kv_exported={} runtime_kv_export_device_profiles={} runtime_kv_export_devices={} runtime_kv_stored={} runtime_kv_stored_device_profiles={} runtime_kv_stored_devices={} runtime_kv_hold_cases={} runtime_kv_held={} runtime_kv_hold_device_profiles={} runtime_kv_hold_devices={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -4083,6 +4233,9 @@ impl BenchmarkSummary {
             self.evolution_ledger.live_hierarchy_weight_mutations,
             self.evolution_ledger.live_router_threshold_delta,
             self.evolution_ledger.live_hierarchy_weight_delta,
+            self.evolution_ledger.live_online_reward_feedbacks,
+            self.evolution_ledger.live_online_reward_reinforcements,
+            self.evolution_ledger.live_online_reward_penalties,
             self.evolution_ledger.live_memory_updates(),
             self.evolution_ledger.live_stored_memory_updates(),
             self.evolution_ledger.live_reflection_issues,
@@ -4093,6 +4246,7 @@ impl BenchmarkSummary {
                 .router_threshold_mutation_device_profiles(),
             self.live_evolution_evidence
                 .hierarchy_weight_mutation_device_profiles(),
+            self.live_evolution_evidence.online_reward_device_profiles(),
             self.live_evolution_evidence.memory_update_device_profiles(),
             self.live_evolution_evidence
                 .stored_memory_update_device_profiles(),
@@ -4130,6 +4284,12 @@ impl BenchmarkSummary {
                 .replay_live_evolution_router_threshold_delta,
             self.evolution_ledger
                 .replay_live_evolution_hierarchy_weight_delta,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_feedbacks,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_reinforcements,
+            self.evolution_ledger
+                .replay_live_evolution_online_reward_penalties,
             self.evolution_ledger.replay_live_evolution_memory_updates,
             self.evolution_ledger
                 .replay_live_evolution_stored_memory_updates,
@@ -4140,6 +4300,8 @@ impl BenchmarkSummary {
             self.evolution_ledger.replay_live_evolution_revision_actions,
             self.live_evolution_evidence
                 .replay_live_evolution_device_profiles(),
+            self.live_evolution_evidence
+                .replay_live_evolution_online_reward_device_profiles(),
             self.live_evolution_evidence
                 .replay_live_evolution_memory_update_device_profiles(),
             self.live_evolution_evidence
@@ -5364,12 +5526,14 @@ mod tests {
                 inference_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
                 router_threshold_mutation_devices: vec![DeviceClass::CpuOnly],
                 hierarchy_weight_mutation_devices: vec![DeviceClass::CpuOnly],
+                online_reward_devices: vec![DeviceClass::CpuOnly],
                 memory_update_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
                 stored_memory_update_devices: vec![DeviceClass::CpuOnly],
                 reflection_issue_devices: vec![DeviceClass::CpuOnly],
                 critical_reflection_issue_devices: vec![DeviceClass::CpuOnly],
                 revision_action_devices: vec![DeviceClass::CpuOnly],
                 replay_live_evolution_devices: Vec::new(),
+                replay_live_evolution_online_reward_devices: Vec::new(),
                 replay_live_evolution_memory_update_devices: Vec::new(),
                 replay_live_evolution_critical_reflection_issue_devices: Vec::new(),
                 replay_live_evolution_revision_action_devices: Vec::new(),
@@ -5387,6 +5551,7 @@ mod tests {
             min_evolution_live_inference_device_profiles: Some(2),
             min_evolution_live_router_threshold_mutation_device_profiles: Some(2),
             min_evolution_live_hierarchy_weight_mutation_device_profiles: Some(2),
+            min_evolution_live_online_reward_device_profiles: Some(2),
             min_evolution_live_memory_update_device_profiles: Some(2),
             min_evolution_live_stored_memory_update_device_profiles: Some(2),
             min_evolution_live_reflection_issue_device_profiles: Some(2),
@@ -5401,6 +5566,7 @@ mod tests {
         for marker in [
             "evolution_live_router_threshold_mutation_device_profiles",
             "evolution_live_hierarchy_weight_mutation_device_profiles",
+            "evolution_live_online_reward_device_profiles",
             "evolution_live_stored_memory_update_device_profiles",
             "evolution_live_reflection_issue_device_profiles",
             "evolution_live_critical_reflection_issue_device_profiles",
@@ -5438,6 +5604,7 @@ mod tests {
                     DeviceClass::CpuOnly,
                     DeviceClass::IntegratedGpu,
                 ],
+                online_reward_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
                 stored_memory_update_devices: vec![
                     DeviceClass::CpuOnly,
                     DeviceClass::IntegratedGpu,
@@ -5456,6 +5623,11 @@ mod tests {
         let passing_report = passing.evaluate(&gate);
 
         assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_live_online_reward_device_profiles=2")
+        );
         assert!(
             passing
                 .summary_line()
@@ -5480,6 +5652,7 @@ mod tests {
         summary.record(&case, 1, &outcome);
         summary.live_evolution_evidence = BenchmarkLiveEvolutionEvidence {
             replay_live_evolution_devices: vec![DeviceClass::CpuOnly],
+            replay_live_evolution_online_reward_devices: vec![DeviceClass::CpuOnly],
             replay_live_evolution_memory_update_devices: vec![DeviceClass::CpuOnly],
             ..BenchmarkLiveEvolutionEvidence::default()
         };
@@ -5487,6 +5660,7 @@ mod tests {
             min_average_quality: 0.0,
             min_average_reward: 0.0,
             min_evolution_replay_live_evolution_device_profiles: Some(2),
+            min_evolution_replay_live_evolution_online_reward_device_profiles: Some(2),
             min_evolution_replay_live_evolution_memory_update_device_profiles: Some(2),
             min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles: Some(2),
             min_evolution_replay_live_evolution_revision_action_device_profiles: Some(2),
@@ -5498,6 +5672,7 @@ mod tests {
         assert!(!failing.passed);
         for marker in [
             "evolution_replay_live_evolution_device_profiles",
+            "evolution_replay_live_evolution_online_reward_device_profiles",
             "evolution_replay_live_evolution_memory_update_device_profiles",
             "evolution_replay_live_evolution_critical_reflection_issue_device_profiles",
             "evolution_replay_live_evolution_revision_action_device_profiles",
@@ -5515,6 +5690,10 @@ mod tests {
         let mut passing = summary.clone();
         passing.live_evolution_evidence = BenchmarkLiveEvolutionEvidence {
             replay_live_evolution_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+            replay_live_evolution_online_reward_devices: vec![
+                DeviceClass::CpuOnly,
+                DeviceClass::IntegratedGpu,
+            ],
             replay_live_evolution_memory_update_devices: vec![
                 DeviceClass::CpuOnly,
                 DeviceClass::IntegratedGpu,
@@ -5536,6 +5715,11 @@ mod tests {
             passing
                 .summary_line()
                 .contains("evolution_replay_live_evolution_device_profiles=2")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_replay_live_evolution_online_reward_device_profiles=2")
         );
         assert!(
             passing
@@ -6416,6 +6600,9 @@ mod tests {
         gate.min_evolution_live_hierarchy_weight_mutations = Some(1);
         gate.min_evolution_live_router_threshold_delta = Some(0.01);
         gate.min_evolution_live_hierarchy_weight_delta = Some(0.01);
+        gate.min_evolution_live_online_reward_feedbacks = Some(1);
+        gate.min_evolution_live_online_reward_reinforcements = Some(1);
+        gate.min_evolution_live_online_reward_penalties = Some(1);
         gate.min_evolution_live_memory_updates = Some(1);
         gate.min_evolution_live_stored_memory_updates = Some(1);
         gate.min_evolution_live_reflection_issues = Some(1);
@@ -6433,6 +6620,9 @@ mod tests {
         gate.min_evolution_replay_live_memory_feedback_applied = Some(4);
         gate.min_evolution_replay_live_memory_feedback_strength_delta = Some(0.42);
         gate.min_evolution_replay_live_evolution_items = Some(2);
+        gate.min_evolution_replay_live_evolution_online_reward_feedbacks = Some(2);
+        gate.min_evolution_replay_live_evolution_online_reward_reinforcements = Some(1);
+        gate.min_evolution_replay_live_evolution_online_reward_penalties = Some(1);
         gate.min_evolution_replay_live_evolution_memory_updates = Some(3);
         gate.min_evolution_replay_live_evolution_stored_memory_updates = Some(2);
         gate.min_evolution_replay_live_evolution_reflection_issues = Some(2);
@@ -6453,6 +6643,9 @@ mod tests {
             "evolution_live_hierarchy_weight_mutations",
             "evolution_live_router_threshold_delta",
             "evolution_live_hierarchy_weight_delta",
+            "evolution_live_online_reward_feedbacks",
+            "evolution_live_online_reward_reinforcements",
+            "evolution_live_online_reward_penalties",
             "evolution_live_memory_updates",
             "evolution_live_stored_memory_updates",
             "evolution_live_reflection_issues",
@@ -6470,6 +6663,9 @@ mod tests {
             "evolution_replay_live_memory_feedback_applied",
             "evolution_replay_live_memory_feedback_strength_delta",
             "evolution_replay_live_evolution_items",
+            "evolution_replay_live_evolution_online_reward_feedbacks",
+            "evolution_replay_live_evolution_online_reward_reinforcements",
+            "evolution_replay_live_evolution_online_reward_penalties",
             "evolution_replay_live_evolution_memory_updates",
             "evolution_replay_live_evolution_stored_memory_updates",
             "evolution_replay_live_evolution_reflection_issues",
@@ -6554,6 +6750,13 @@ mod tests {
         assert!(passing_report.passed, "{:?}", passing_report.failures);
         assert_eq!(passing.evolution_ledger().replay_runs, 1);
         assert_eq!(passing.evolution_ledger().live_inference_runs, 8);
+        assert_eq!(passing.evolution_ledger().live_online_reward_feedbacks, 3);
+        assert_eq!(
+            passing
+                .evolution_ledger()
+                .replay_live_evolution_online_reward_feedbacks,
+            2
+        );
         assert_eq!(passing.evolution_ledger().live_memory_updates(), 5);
         assert_eq!(passing.evolution_ledger().live_stored_memory_updates(), 4);
         assert_eq!(passing.evolution_ledger().memory_updates(), 5);
@@ -6568,6 +6771,11 @@ mod tests {
             passing
                 .summary_line()
                 .contains("evolution_live_inference_runs=8")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_live_online_reward_feedbacks=3")
         );
         assert!(
             passing
@@ -6603,6 +6811,11 @@ mod tests {
             passing
                 .summary_line()
                 .contains("evolution_replay_live_evolution_items=2")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_replay_live_evolution_online_reward_feedbacks=2")
         );
         assert!(
             passing

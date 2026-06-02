@@ -1955,6 +1955,9 @@ struct Args {
     benchmark_min_evolution_live_hierarchy_weight_mutations: Option<u64>,
     benchmark_min_evolution_live_router_threshold_delta: Option<f32>,
     benchmark_min_evolution_live_hierarchy_weight_delta: Option<f32>,
+    benchmark_min_evolution_live_online_reward_feedbacks: Option<u64>,
+    benchmark_min_evolution_live_online_reward_reinforcements: Option<u64>,
+    benchmark_min_evolution_live_online_reward_penalties: Option<u64>,
     benchmark_min_evolution_live_memory_updates: Option<u64>,
     benchmark_min_evolution_live_stored_memory_updates: Option<u64>,
     benchmark_min_evolution_live_reflection_issues: Option<u64>,
@@ -1963,6 +1966,7 @@ struct Args {
     benchmark_min_evolution_live_inference_device_profiles: Option<usize>,
     benchmark_min_evolution_live_router_threshold_mutation_device_profiles: Option<usize>,
     benchmark_min_evolution_live_hierarchy_weight_mutation_device_profiles: Option<usize>,
+    benchmark_min_evolution_live_online_reward_device_profiles: Option<usize>,
     benchmark_min_evolution_live_memory_update_device_profiles: Option<usize>,
     benchmark_min_evolution_live_stored_memory_update_device_profiles: Option<usize>,
     benchmark_min_evolution_live_reflection_issue_device_profiles: Option<usize>,
@@ -1980,12 +1984,16 @@ struct Args {
     benchmark_min_evolution_replay_live_memory_feedback_applied: Option<u64>,
     benchmark_min_evolution_replay_live_memory_feedback_strength_delta: Option<f32>,
     benchmark_min_evolution_replay_live_evolution_items: Option<u64>,
+    benchmark_min_evolution_replay_live_evolution_online_reward_feedbacks: Option<u64>,
+    benchmark_min_evolution_replay_live_evolution_online_reward_reinforcements: Option<u64>,
+    benchmark_min_evolution_replay_live_evolution_online_reward_penalties: Option<u64>,
     benchmark_min_evolution_replay_live_evolution_memory_updates: Option<u64>,
     benchmark_min_evolution_replay_live_evolution_stored_memory_updates: Option<u64>,
     benchmark_min_evolution_replay_live_evolution_reflection_issues: Option<u64>,
     benchmark_min_evolution_replay_live_evolution_critical_reflection_issues: Option<u64>,
     benchmark_min_evolution_replay_live_evolution_revision_actions: Option<u64>,
     benchmark_min_evolution_replay_live_evolution_device_profiles: Option<usize>,
+    benchmark_min_evolution_replay_live_evolution_online_reward_device_profiles: Option<usize>,
     benchmark_min_evolution_replay_live_evolution_memory_update_device_profiles: Option<usize>,
     benchmark_min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles:
         Option<usize>,
@@ -2350,6 +2358,9 @@ impl Args {
         let mut benchmark_min_evolution_live_hierarchy_weight_mutations = None;
         let mut benchmark_min_evolution_live_router_threshold_delta = None;
         let mut benchmark_min_evolution_live_hierarchy_weight_delta = None;
+        let mut benchmark_min_evolution_live_online_reward_feedbacks = None;
+        let mut benchmark_min_evolution_live_online_reward_reinforcements = None;
+        let mut benchmark_min_evolution_live_online_reward_penalties = None;
         let mut benchmark_min_evolution_live_memory_updates = None;
         let mut benchmark_min_evolution_live_stored_memory_updates = None;
         let mut benchmark_min_evolution_live_reflection_issues = None;
@@ -2358,6 +2369,7 @@ impl Args {
         let mut benchmark_min_evolution_live_inference_device_profiles = None;
         let mut benchmark_min_evolution_live_router_threshold_mutation_device_profiles = None;
         let mut benchmark_min_evolution_live_hierarchy_weight_mutation_device_profiles = None;
+        let mut benchmark_min_evolution_live_online_reward_device_profiles = None;
         let mut benchmark_min_evolution_live_memory_update_device_profiles = None;
         let mut benchmark_min_evolution_live_stored_memory_update_device_profiles = None;
         let mut benchmark_min_evolution_live_reflection_issue_device_profiles = None;
@@ -2375,12 +2387,16 @@ impl Args {
         let mut benchmark_min_evolution_replay_live_memory_feedback_applied = None;
         let mut benchmark_min_evolution_replay_live_memory_feedback_strength_delta = None;
         let mut benchmark_min_evolution_replay_live_evolution_items = None;
+        let mut benchmark_min_evolution_replay_live_evolution_online_reward_feedbacks = None;
+        let mut benchmark_min_evolution_replay_live_evolution_online_reward_reinforcements = None;
+        let mut benchmark_min_evolution_replay_live_evolution_online_reward_penalties = None;
         let mut benchmark_min_evolution_replay_live_evolution_memory_updates = None;
         let mut benchmark_min_evolution_replay_live_evolution_stored_memory_updates = None;
         let mut benchmark_min_evolution_replay_live_evolution_reflection_issues = None;
         let mut benchmark_min_evolution_replay_live_evolution_critical_reflection_issues = None;
         let mut benchmark_min_evolution_replay_live_evolution_revision_actions = None;
         let mut benchmark_min_evolution_replay_live_evolution_device_profiles = None;
+        let mut benchmark_min_evolution_replay_live_evolution_online_reward_device_profiles = None;
         let mut benchmark_min_evolution_replay_live_evolution_memory_update_device_profiles = None;
         let mut
         benchmark_min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles =
@@ -2831,6 +2847,30 @@ impl Args {
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
+                "--benchmark-min-evolution-live-online-reward-feedbacks"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_live_online_reward_feedbacks =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-live-online-reward-reinforcements"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_live_online_reward_reinforcements =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-live-online-reward-penalties"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_live_online_reward_penalties =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
                 "--benchmark-min-evolution-live-memory-updates" if index + 1 < raw.len() => {
                     benchmark_min_evolution_live_memory_updates =
                         Some(parse_u64(&raw[index + 1], 0));
@@ -2885,6 +2925,15 @@ impl Args {
                     if index + 1 < raw.len() =>
                 {
                     benchmark_min_evolution_live_hierarchy_weight_mutation_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-live-online-reward-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_live_online_reward_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     benchmark_all_devices = true;
@@ -3014,6 +3063,30 @@ impl Args {
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
+                "--benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_replay_live_evolution_online_reward_feedbacks =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-replay-live-evolution-online-reward-reinforcements"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_replay_live_evolution_online_reward_reinforcements =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-replay-live-evolution-online-reward-penalties"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_replay_live_evolution_online_reward_penalties =
+                        Some(parse_u64(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
                 "--benchmark-min-evolution-replay-live-evolution-memory-updates"
                     if index + 1 < raw.len() =>
                 {
@@ -3058,6 +3131,15 @@ impl Args {
                     if index + 1 < raw.len() =>
                 {
                     benchmark_min_evolution_replay_live_evolution_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--benchmark-min-evolution-replay-live-evolution-online-reward-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_evolution_replay_live_evolution_online_reward_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     benchmark_all_devices = true;
@@ -4679,6 +4761,9 @@ impl Args {
             benchmark_min_evolution_live_hierarchy_weight_mutations,
             benchmark_min_evolution_live_router_threshold_delta,
             benchmark_min_evolution_live_hierarchy_weight_delta,
+            benchmark_min_evolution_live_online_reward_feedbacks,
+            benchmark_min_evolution_live_online_reward_reinforcements,
+            benchmark_min_evolution_live_online_reward_penalties,
             benchmark_min_evolution_live_memory_updates,
             benchmark_min_evolution_live_stored_memory_updates,
             benchmark_min_evolution_live_reflection_issues,
@@ -4687,6 +4772,7 @@ impl Args {
             benchmark_min_evolution_live_inference_device_profiles,
             benchmark_min_evolution_live_router_threshold_mutation_device_profiles,
             benchmark_min_evolution_live_hierarchy_weight_mutation_device_profiles,
+            benchmark_min_evolution_live_online_reward_device_profiles,
             benchmark_min_evolution_live_memory_update_device_profiles,
             benchmark_min_evolution_live_stored_memory_update_device_profiles,
             benchmark_min_evolution_live_reflection_issue_device_profiles,
@@ -4704,12 +4790,16 @@ impl Args {
             benchmark_min_evolution_replay_live_memory_feedback_applied,
             benchmark_min_evolution_replay_live_memory_feedback_strength_delta,
             benchmark_min_evolution_replay_live_evolution_items,
+            benchmark_min_evolution_replay_live_evolution_online_reward_feedbacks,
+            benchmark_min_evolution_replay_live_evolution_online_reward_reinforcements,
+            benchmark_min_evolution_replay_live_evolution_online_reward_penalties,
             benchmark_min_evolution_replay_live_evolution_memory_updates,
             benchmark_min_evolution_replay_live_evolution_stored_memory_updates,
             benchmark_min_evolution_replay_live_evolution_reflection_issues,
             benchmark_min_evolution_replay_live_evolution_critical_reflection_issues,
             benchmark_min_evolution_replay_live_evolution_revision_actions,
             benchmark_min_evolution_replay_live_evolution_device_profiles,
+            benchmark_min_evolution_replay_live_evolution_online_reward_device_profiles,
             benchmark_min_evolution_replay_live_evolution_memory_update_device_profiles,
             benchmark_min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles,
             benchmark_min_evolution_replay_live_evolution_revision_action_device_profiles,
@@ -5024,6 +5114,15 @@ impl Args {
         if let Some(value) = self.benchmark_min_evolution_live_hierarchy_weight_delta {
             gate.min_evolution_live_hierarchy_weight_delta = Some(value.max(0.0));
         }
+        if let Some(value) = self.benchmark_min_evolution_live_online_reward_feedbacks {
+            gate.min_evolution_live_online_reward_feedbacks = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_live_online_reward_reinforcements {
+            gate.min_evolution_live_online_reward_reinforcements = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_live_online_reward_penalties {
+            gate.min_evolution_live_online_reward_penalties = Some(value);
+        }
         if let Some(value) = self.benchmark_min_evolution_live_memory_updates {
             gate.min_evolution_live_memory_updates = Some(value);
         }
@@ -5051,6 +5150,9 @@ impl Args {
             self.benchmark_min_evolution_live_hierarchy_weight_mutation_device_profiles
         {
             gate.min_evolution_live_hierarchy_weight_mutation_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_evolution_live_online_reward_device_profiles {
+            gate.min_evolution_live_online_reward_device_profiles = Some(value);
         }
         if let Some(value) = self.benchmark_min_evolution_live_memory_update_device_profiles {
             gate.min_evolution_live_memory_update_device_profiles = Some(value);
@@ -5107,6 +5209,21 @@ impl Args {
         if let Some(value) = self.benchmark_min_evolution_replay_live_evolution_items {
             gate.min_evolution_replay_live_evolution_items = Some(value);
         }
+        if let Some(value) =
+            self.benchmark_min_evolution_replay_live_evolution_online_reward_feedbacks
+        {
+            gate.min_evolution_replay_live_evolution_online_reward_feedbacks = Some(value);
+        }
+        if let Some(value) =
+            self.benchmark_min_evolution_replay_live_evolution_online_reward_reinforcements
+        {
+            gate.min_evolution_replay_live_evolution_online_reward_reinforcements = Some(value);
+        }
+        if let Some(value) =
+            self.benchmark_min_evolution_replay_live_evolution_online_reward_penalties
+        {
+            gate.min_evolution_replay_live_evolution_online_reward_penalties = Some(value);
+        }
         if let Some(value) = self.benchmark_min_evolution_replay_live_evolution_memory_updates {
             gate.min_evolution_replay_live_evolution_memory_updates = Some(value);
         }
@@ -5128,6 +5245,11 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_evolution_replay_live_evolution_device_profiles {
             gate.min_evolution_replay_live_evolution_device_profiles = Some(value);
+        }
+        if let Some(value) =
+            self.benchmark_min_evolution_replay_live_evolution_online_reward_device_profiles
+        {
+            gate.min_evolution_replay_live_evolution_online_reward_device_profiles = Some(value);
         }
         if let Some(value) =
             self.benchmark_min_evolution_replay_live_evolution_memory_update_device_profiles
@@ -5724,9 +5846,9 @@ fn print_help_and_exit() -> ! {
         "\n",
         "Core: --profile coding|writing|long|general --memory path --experience path --adaptive path\n",
         "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-detail-items n --benchmark-min-auto-replay-live-memory-feedback-applied n --benchmark-min-auto-replay-live-memory-feedback-strength-delta f --benchmark-min-evolution-replay-live-memory-feedback-updates n --benchmark-min-evolution-replay-live-memory-feedback-detail-items n --benchmark-min-evolution-replay-live-memory-feedback-applied n --benchmark-min-evolution-replay-live-memory-feedback-strength-delta f\n",
-        "Benchmark replay live evolution: --benchmark-min-evolution-replay-live-evolution-items n --benchmark-min-evolution-replay-live-evolution-memory-updates n --benchmark-min-evolution-replay-live-evolution-stored-memory-updates n --benchmark-min-evolution-replay-live-evolution-reflection-issues n --benchmark-min-evolution-replay-live-evolution-critical-reflection-issues n --benchmark-min-evolution-replay-live-evolution-revision-actions n --benchmark-min-evolution-replay-live-evolution-device-profiles n --benchmark-min-evolution-replay-live-evolution-memory-update-device-profiles n --benchmark-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --benchmark-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
-        "Benchmark live evolution: --benchmark-min-evolution-live-inference-runs n --benchmark-min-evolution-live-router-threshold-mutations n --benchmark-min-evolution-live-hierarchy-weight-mutations n --benchmark-min-evolution-live-router-threshold-delta f --benchmark-min-evolution-live-hierarchy-weight-delta f --benchmark-min-evolution-live-memory-updates n --benchmark-min-evolution-live-stored-memory-updates n --benchmark-min-evolution-live-reflection-issues n --benchmark-min-evolution-live-critical-reflection-issues n --benchmark-min-evolution-live-revision-actions n\n",
-        "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
+        "Benchmark replay live evolution: --benchmark-min-evolution-replay-live-evolution-items n --benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks n --benchmark-min-evolution-replay-live-evolution-online-reward-reinforcements n --benchmark-min-evolution-replay-live-evolution-online-reward-penalties n --benchmark-min-evolution-replay-live-evolution-memory-updates n --benchmark-min-evolution-replay-live-evolution-stored-memory-updates n --benchmark-min-evolution-replay-live-evolution-reflection-issues n --benchmark-min-evolution-replay-live-evolution-critical-reflection-issues n --benchmark-min-evolution-replay-live-evolution-revision-actions n --benchmark-min-evolution-replay-live-evolution-device-profiles n --benchmark-min-evolution-replay-live-evolution-online-reward-device-profiles n --benchmark-min-evolution-replay-live-evolution-memory-update-device-profiles n --benchmark-min-evolution-replay-live-evolution-critical-reflection-issue-device-profiles n --benchmark-min-evolution-replay-live-evolution-revision-action-device-profiles n\n",
+        "Benchmark live evolution: --benchmark-min-evolution-live-inference-runs n --benchmark-min-evolution-live-router-threshold-mutations n --benchmark-min-evolution-live-hierarchy-weight-mutations n --benchmark-min-evolution-live-router-threshold-delta f --benchmark-min-evolution-live-hierarchy-weight-delta f --benchmark-min-evolution-live-online-reward-feedbacks n --benchmark-min-evolution-live-online-reward-reinforcements n --benchmark-min-evolution-live-online-reward-penalties n --benchmark-min-evolution-live-memory-updates n --benchmark-min-evolution-live-stored-memory-updates n --benchmark-min-evolution-live-reflection-issues n --benchmark-min-evolution-live-critical-reflection-issues n --benchmark-min-evolution-live-revision-actions n\n",
+        "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-online-reward-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
         "Benchmark runtime adapter: --benchmark-min-runtime-adapter-contract-cases n --benchmark-min-runtime-adapter-kinds n --benchmark-min-runtime-adapter-observations n --benchmark-min-runtime-adapter-best-score f --benchmark-max-runtime-adapter-contract-violations n --benchmark-max-runtime-adapter-selection-mismatches n\n",
         "Benchmark runtime embedding: --benchmark-min-runtime-embedding-cases n --benchmark-min-runtime-embedding-device-profiles n --benchmark-max-embedding-fallback-cases n --benchmark-max-embedding-evidence-failures n\n",
         "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-min-runtime-uncertainty-device-profiles n --benchmark-min-runtime-uncertainty-token-device-profiles n --benchmark-min-runtime-kv-import-device-profiles n --benchmark-min-runtime-kv-export-device-profiles n --benchmark-min-runtime-kv-stored-device-profiles n --benchmark-min-runtime-kv-hold-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
@@ -5844,6 +5966,12 @@ mod tests {
             "0.04".to_owned(),
             "--benchmark-min-evolution-live-hierarchy-weight-delta".to_owned(),
             "0.03".to_owned(),
+            "--benchmark-min-evolution-live-online-reward-feedbacks".to_owned(),
+            "3".to_owned(),
+            "--benchmark-min-evolution-live-online-reward-reinforcements".to_owned(),
+            "2".to_owned(),
+            "--benchmark-min-evolution-live-online-reward-penalties".to_owned(),
+            "1".to_owned(),
             "--benchmark-min-evolution-live-memory-updates".to_owned(),
             "5".to_owned(),
             "--benchmark-min-evolution-live-stored-memory-updates".to_owned(),
@@ -5859,6 +5987,8 @@ mod tests {
             "--benchmark-min-evolution-live-router-threshold-mutation-device-profiles".to_owned(),
             "12".to_owned(),
             "--benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--benchmark-min-evolution-live-online-reward-device-profiles".to_owned(),
             "12".to_owned(),
             "--benchmark-min-evolution-live-memory-update-device-profiles".to_owned(),
             "12".to_owned(),
@@ -5894,6 +6024,13 @@ mod tests {
             "0.09".to_owned(),
             "--benchmark-min-evolution-replay-live-evolution-items".to_owned(),
             "9".to_owned(),
+            "--benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks".to_owned(),
+            "4".to_owned(),
+            "--benchmark-min-evolution-replay-live-evolution-online-reward-reinforcements"
+                .to_owned(),
+            "3".to_owned(),
+            "--benchmark-min-evolution-replay-live-evolution-online-reward-penalties".to_owned(),
+            "1".to_owned(),
             "--benchmark-min-evolution-replay-live-evolution-memory-updates".to_owned(),
             "10".to_owned(),
             "--benchmark-min-evolution-replay-live-evolution-stored-memory-updates".to_owned(),
@@ -5905,6 +6042,9 @@ mod tests {
             "--benchmark-min-evolution-replay-live-evolution-revision-actions".to_owned(),
             "14".to_owned(),
             "--benchmark-min-evolution-replay-live-evolution-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--benchmark-min-evolution-replay-live-evolution-online-reward-device-profiles"
+                .to_owned(),
             "12".to_owned(),
             "--benchmark-min-evolution-replay-live-evolution-memory-update-device-profiles"
                 .to_owned(),
@@ -6509,6 +6649,33 @@ mod tests {
             Some(0.03)
         );
         assert_eq!(
+            args.benchmark_min_evolution_live_online_reward_feedbacks,
+            Some(3)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_live_online_reward_reinforcements,
+            Some(2)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_live_online_reward_penalties,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_live_online_reward_feedbacks,
+            Some(3)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_live_online_reward_reinforcements,
+            Some(2)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_live_online_reward_penalties,
+            Some(1)
+        );
+        assert_eq!(
             args.benchmark_gate().min_evolution_live_memory_updates,
             Some(5)
         );
@@ -6540,6 +6707,10 @@ mod tests {
         );
         assert_eq!(
             args.benchmark_min_evolution_live_hierarchy_weight_mutation_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_live_online_reward_device_profiles,
             Some(12)
         );
         assert_eq!(
@@ -6575,6 +6746,11 @@ mod tests {
         assert_eq!(
             args.benchmark_gate()
                 .min_evolution_live_hierarchy_weight_mutation_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_live_online_reward_device_profiles,
             Some(12)
         );
         assert_eq!(
@@ -6642,6 +6818,18 @@ mod tests {
             Some(9)
         );
         assert_eq!(
+            args.benchmark_min_evolution_replay_live_evolution_online_reward_feedbacks,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_replay_live_evolution_online_reward_reinforcements,
+            Some(3)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_replay_live_evolution_online_reward_penalties,
+            Some(1)
+        );
+        assert_eq!(
             args.benchmark_min_evolution_replay_live_evolution_memory_updates,
             Some(10)
         );
@@ -6663,6 +6851,10 @@ mod tests {
         );
         assert_eq!(
             args.benchmark_min_evolution_replay_live_evolution_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_min_evolution_replay_live_evolution_online_reward_device_profiles,
             Some(12)
         );
         assert_eq!(
@@ -6739,6 +6931,21 @@ mod tests {
         );
         assert_eq!(
             args.benchmark_gate()
+                .min_evolution_replay_live_evolution_online_reward_feedbacks,
+            Some(4)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_replay_live_evolution_online_reward_reinforcements,
+            Some(3)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_replay_live_evolution_online_reward_penalties,
+            Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate()
                 .min_evolution_replay_live_evolution_memory_updates,
             Some(10)
         );
@@ -6765,6 +6972,11 @@ mod tests {
         assert_eq!(
             args.benchmark_gate()
                 .min_evolution_replay_live_evolution_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_evolution_replay_live_evolution_online_reward_device_profiles,
             Some(12)
         );
         assert_eq!(

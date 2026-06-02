@@ -910,6 +910,21 @@ These are algorithmic references, not product dependencies:
   runs must prove online inference itself changed router thresholds or
   hierarchy weights, updated live KV feedback, stored durable memories, and
   recorded reflection or revision evidence before replay is counted.
+- Benchmark summaries and gates also expose live and replay live-evolution
+  online reward feedback as separate feedback, reinforcement, and penalty
+  counters. Use
+  `--benchmark-min-evolution-live-online-reward-feedbacks`,
+  `--benchmark-min-evolution-live-online-reward-reinforcements`, and
+  `--benchmark-min-evolution-live-online-reward-penalties` to prove the current
+  benchmark run generated same-inference reward evidence. Use
+  `--benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks`,
+  `--benchmark-min-evolution-replay-live-evolution-online-reward-reinforcements`,
+  and
+  `--benchmark-min-evolution-replay-live-evolution-online-reward-penalties` to
+  prove replay consumed that live-evolution reward evidence later. All-device
+  sweeps can require matrix coverage with
+  `--benchmark-min-evolution-live-online-reward-device-profiles` and
+  `--benchmark-min-evolution-replay-live-evolution-online-reward-device-profiles`.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -991,6 +1006,7 @@ These are algorithmic references, not product dependencies:
   reflection issue / critical issue coverage, revision-action coverage,
   per-device reflection/revision coverage,
   live-inference router/hierarchy mutation and memory/reflection/revision coverage,
+  live/replay online reward feedback and online reward device coverage,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay live memory-feedback consumption,
   persisted evolution-ledger replay live memory-feedback consumption,

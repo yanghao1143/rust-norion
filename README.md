@@ -145,7 +145,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, live-inference online reward feedback counters, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, replay live-feedback consumption, structured live-evolution replay consumption, online reward feedback, recursive-cost mutations, and drift rollback safety audits
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, live memory-feedback write and auto-replay consumption gates, cumulative evolution-ledger replay live-feedback consumption gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, runtime-KV hold, device-adapter-contract, and best-adapter selection gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, live memory-feedback write and auto-replay consumption gates, live/replay online reward feedback/reinforcement/penalty gates with all-device coverage floors, cumulative evolution-ledger replay live-feedback consumption gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, runtime-KV hold, device-adapter-contract, and best-adapter selection gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, severity-scaled used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering and vector-carrying import decisions
@@ -740,7 +740,7 @@ recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence、runtime token uncertainty 设备覆盖、runtime token evidence 设备覆盖、hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV 长期准入设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / recursive cost 计数、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime token uncertainty 没有覆盖要求的设备、runtime token-level entropy/logprob 证据没有覆盖要求的设备、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV 长期准入没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、闭环 reflection diagnostics 或 revision 证据缺失、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence、runtime token uncertainty 设备覆盖、runtime token evidence 设备覆盖、hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV 长期准入设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / online reward / recursive cost 计数、live 与 replay live-evolution 在线奖励设备覆盖、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime token uncertainty 没有覆盖要求的设备、runtime token-level entropy/logprob 证据没有覆盖要求的设备、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV 长期准入没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、闭环 reflection diagnostics 或 revision 证据缺失、在线奖励反馈没有产生 reinforcement / penalty 证据、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 Use `--benchmark-min-runtime-kv-import-device-profiles` and
 `--benchmark-min-runtime-kv-export-device-profiles` when an all-device run must
 prove KV exchange on more than one hardware class. Use
@@ -769,9 +769,27 @@ runtime KV”跨多个硬件类别都出现过时，使用
 Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
 online inference itself mutated control policy, updated live memory feedback,
 stored durable semantic/gist/runtime-KV memory, and recorded reflection or
-revision evidence before replay is considered.
+revision evidence before replay is considered. Add
+`--benchmark-min-evolution-live-online-reward-feedbacks`,
+`--benchmark-min-evolution-live-online-reward-reinforcements`, and
+`--benchmark-min-evolution-live-online-reward-penalties` when the same run must
+prove same-inference online reward feedback split into auditable reinforcement
+and penalty evidence. Add
+`--benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks`,
+`--benchmark-min-evolution-replay-live-evolution-online-reward-reinforcements`,
+and `--benchmark-min-evolution-replay-live-evolution-online-reward-penalties`
+when replay must prove it consumed online reward evidence from prior
+live-evolution records.
 
-当 benchmark 必须证明在线推理本身已经改变控制策略、更新 live memory feedback、写入长期 semantic/gist/runtime-KV 记忆，并记录 reflection 或 revision 证据时，可以使用 `--benchmark-min-evolution-live-*` 门禁；这些证据独立于 replay 是否随后发生。
+当 benchmark 必须证明在线推理本身已经改变控制策略、更新 live memory feedback、写入长期 semantic/gist/runtime-KV 记忆，并记录 reflection 或 revision 证据时，可以使用 `--benchmark-min-evolution-live-*` 门禁；这些证据独立于 replay 是否随后发生。需要证明同次推理的在线奖励反馈也拆分成可审计的 reinforcement / penalty 证据时，加入 `--benchmark-min-evolution-live-online-reward-feedbacks`、`--benchmark-min-evolution-live-online-reward-reinforcements` 和 `--benchmark-min-evolution-live-online-reward-penalties`。需要证明 replay 已经消费过旧 live-evolution 记录中的在线奖励证据时，加入 `--benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks`、`--benchmark-min-evolution-replay-live-evolution-online-reward-reinforcements` 和 `--benchmark-min-evolution-replay-live-evolution-online-reward-penalties`。
+
+With `--benchmark-all-devices`, use
+`--benchmark-min-evolution-live-online-reward-device-profiles` and
+`--benchmark-min-evolution-replay-live-evolution-online-reward-device-profiles`
+when online reward evidence must appear across a minimum number of explicit
+hardware profiles, not only in one benchmark run.
+
+配合 `--benchmark-all-devices` 时，可以用 `--benchmark-min-evolution-live-online-reward-device-profiles` 和 `--benchmark-min-evolution-replay-live-evolution-online-reward-device-profiles` 要求在线奖励证据覆盖最低数量的显式硬件 profile，而不是只在单个 benchmark run 中出现。
 
 Use the reflection-specific benchmark gates when a weak-output or repair audit
 must prove that reflection diagnostics actually fired during the benchmark:
