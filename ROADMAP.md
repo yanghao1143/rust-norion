@@ -664,6 +664,9 @@ These are algorithmic references, not product dependencies:
 - The persistent roundtrip gate also checks that admitted runtime KV keeps the
   `runtime_kv:` namespace, is retrieved as a runtime KV memory after reload,
   and is reconstructed into imported KV blocks before the second runtime call.
+  Persisted runtime diagnostics must also produce adapter observations whose
+  best adapter is selected by the second runtime call, proving the control
+  plane can reuse durable runtime experience instead of only printing it.
 - With `--benchmark-roundtrip --benchmark-all-devices`, the same namespace
   roundtrip gate now runs once per explicit device profile with device-scoped
   state files, so all-device support has a persistence/reuse check rather than

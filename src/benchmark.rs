@@ -450,7 +450,7 @@ impl KvQuantBenchmarkSummary {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PersistentRoundtripInput {
     pub first_stored_memory: bool,
     pub first_runtime_kv_stored: usize,
@@ -462,6 +462,8 @@ pub struct PersistentRoundtripInput {
     pub second_imported_runtime_kv_from_namespace: bool,
     pub second_runtime_adapter_observations: usize,
     pub second_runtime_adapter_best_score: Option<f32>,
+    pub second_runtime_adapter_best_adapter: Option<String>,
+    pub second_runtime_selected_adapter: Option<String>,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -480,6 +482,8 @@ pub struct PersistentRoundtripReport {
     pub second_imported_runtime_kv_from_namespace: bool,
     pub second_runtime_adapter_observations: usize,
     pub second_runtime_adapter_best_score: Option<f32>,
+    pub second_runtime_adapter_best_adapter: Option<String>,
+    pub second_runtime_selected_adapter: Option<String>,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -532,6 +536,19 @@ impl PersistentRoundtripReport {
                 "second run did not expose a positive runtime adapter observation score".to_owned(),
             );
         }
+        match (
+            input.second_runtime_adapter_best_adapter.as_deref(),
+            input.second_runtime_selected_adapter.as_deref(),
+        ) {
+            (Some(best_adapter), Some(selected_adapter)) if best_adapter == selected_adapter => {}
+            (None, _) => failures.push(
+                "second run did not expose a best runtime adapter observation".to_owned(),
+            ),
+            (_, None) => failures.push("second run did not select a runtime adapter".to_owned()),
+            (Some(best_adapter), Some(selected_adapter)) => failures.push(format!(
+                "second run selected adapter {selected_adapter} but best persisted observation was {best_adapter}"
+            )),
+        }
         if input.second_quality < 0.50 {
             failures.push(format!(
                 "second_quality {:.3} below minimum 0.500",
@@ -564,6 +581,8 @@ impl PersistentRoundtripReport {
                 .second_imported_runtime_kv_from_namespace,
             second_runtime_adapter_observations: input.second_runtime_adapter_observations,
             second_runtime_adapter_best_score: input.second_runtime_adapter_best_score,
+            second_runtime_adapter_best_adapter: input.second_runtime_adapter_best_adapter,
+            second_runtime_selected_adapter: input.second_runtime_selected_adapter,
             second_quality: input.second_quality,
             first_drift_severity: input.first_drift_severity,
             second_drift_severity: input.second_drift_severity,
@@ -573,7 +592,7 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
@@ -585,6 +604,8 @@ impl PersistentRoundtripReport {
             self.second_imported_runtime_kv_from_namespace,
             self.second_runtime_adapter_observations,
             option_f32_display(self.second_runtime_adapter_best_score),
+            option_str_display(self.second_runtime_adapter_best_adapter.as_deref()),
+            option_str_display(self.second_runtime_selected_adapter.as_deref()),
             self.second_quality,
             self.first_drift_severity.as_str(),
             self.second_drift_severity.as_str(),
@@ -1849,6 +1870,10 @@ fn option_f32_display(value: Option<f32>) -> String {
         .filter(|value| value.is_finite())
         .map(|value| format!("{value:.3}"))
         .unwrap_or_else(|| "none".to_owned())
+}
+
+fn option_str_display(value: Option<&str>) -> &str {
+    value.filter(|value| !value.is_empty()).unwrap_or("none")
 }
 
 fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> EvolutionLedger {
@@ -3958,6 +3983,8 @@ mod tests {
             second_imported_runtime_kv_from_namespace: true,
             second_runtime_adapter_observations: 1,
             second_runtime_adapter_best_score: Some(0.84),
+            second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+            second_runtime_selected_adapter: Some("portable-rust".to_owned()),
             second_quality: 0.82,
             first_drift_severity: DriftSeverity::Watch,
             second_drift_severity: DriftSeverity::Stable,
@@ -3987,6 +4014,8 @@ mod tests {
             second_imported_runtime_kv_from_namespace: false,
             second_runtime_adapter_observations: 0,
             second_runtime_adapter_best_score: None,
+            second_runtime_adapter_best_adapter: None,
+            second_runtime_selected_adapter: None,
             second_quality: 0.2,
             first_drift_severity: DriftSeverity::Stable,
             second_drift_severity: DriftSeverity::Block,
@@ -4012,6 +4041,51 @@ mod tests {
                 .iter()
                 .any(|failure| failure.contains("adapter observations"))
         );
+        assert!(
+            failed
+                .failures
+                .iter()
+                .any(|failure| failure.contains("best runtime adapter observation"))
+        );
+    }
+
+    #[test]
+    fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime() {
+        let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+            first_stored_memory: true,
+            first_runtime_kv_stored: 1,
+            first_runtime_kv_namespace_preserved: true,
+            second_used_memories: 2,
+            second_used_runtime_kv_memory: true,
+            second_used_experiences: 1,
+            second_imported_runtime_kv_blocks: 2,
+            second_imported_runtime_kv_from_namespace: true,
+            second_runtime_adapter_observations: 1,
+            second_runtime_adapter_best_score: Some(0.80),
+            second_runtime_adapter_best_adapter: Some("cpu-simd".to_owned()),
+            second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+            second_quality: 0.82,
+            first_drift_severity: DriftSeverity::Stable,
+            second_drift_severity: DriftSeverity::Stable,
+        });
+
+        assert!(!report.passed);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("selected adapter portable-rust"))
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("second_runtime_adapter_best_adapter=cpu-simd")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("second_runtime_selected_adapter=portable-rust")
+        );
     }
 
     #[test]
@@ -4027,6 +4101,8 @@ mod tests {
             second_imported_runtime_kv_from_namespace: true,
             second_runtime_adapter_observations: 1,
             second_runtime_adapter_best_score: Some(0.72),
+            second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+            second_runtime_selected_adapter: Some("portable-rust".to_owned()),
             second_quality: 0.80,
             first_drift_severity: DriftSeverity::Stable,
             second_drift_severity: DriftSeverity::Stable,
@@ -4065,6 +4141,8 @@ mod tests {
             second_imported_runtime_kv_from_namespace: false,
             second_runtime_adapter_observations: 1,
             second_runtime_adapter_best_score: Some(0.72),
+            second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+            second_runtime_selected_adapter: Some("portable-rust".to_owned()),
             second_quality: 0.80,
             first_drift_severity: DriftSeverity::Stable,
             second_drift_severity: DriftSeverity::Stable,

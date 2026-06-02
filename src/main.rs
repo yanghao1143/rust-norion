@@ -850,6 +850,11 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
                 .runtime_adapter_observations
                 .first()
                 .map(|observation| observation.score),
+            second_runtime_adapter_best_adapter: second
+                .runtime_adapter_observations
+                .first()
+                .map(|observation| observation.adapter.as_str().to_owned()),
+            second_runtime_selected_adapter: second.runtime_diagnostics.selected_adapter.clone(),
             second_quality: second.report.quality,
             first_drift_severity: first.drift_report.severity,
             second_drift_severity: second.drift_report.severity,
@@ -4434,6 +4439,8 @@ mod tests {
                 && device_report
                     .report
                     .second_imported_runtime_kv_from_namespace
+                && device_report.report.second_runtime_adapter_best_adapter
+                    == device_report.report.second_runtime_selected_adapter
         }));
         assert!(
             device_scoped_path(&args.memory_path, DeviceClass::CpuOnly)

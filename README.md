@@ -544,7 +544,9 @@ cargo run -- --production-reference-kernel --production-kernel-conformance-gate 
 Run a persistence roundtrip gate that writes state, reloads it, and verifies the
 second local-runtime pass uses persisted memory, persisted experience, imported
 runtime KV reconstructed from the persisted `runtime_kv:` namespace, and
-runtime adapter observations derived from the persisted diagnostics:
+runtime adapter observations derived from persisted diagnostics. The gate also
+requires the second runtime to select the best adapter from that persisted
+observation set:
 
 ```powershell
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
@@ -560,7 +562,8 @@ cargo run -- --benchmark-roundtrip --benchmark-all-devices --memory target/round
 
 运行持久化 roundtrip 门禁：第一轮写入状态，第二轮重新加载，并验证 local runtime
 确实使用了持久化 memory、experience、从持久化 `runtime_kv:` 命名空间重建并导入的
-runtime KV，以及从持久化 diagnostics 派生出的 runtime adapter observation：
+runtime KV，以及从持久化 diagnostics 派生出的 runtime adapter observation；门禁还会要求
+第二轮 runtime 实际选择该 observation 中评分最高的 adapter：
 
 ```powershell
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
