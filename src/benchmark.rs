@@ -454,9 +454,12 @@ impl KvQuantBenchmarkSummary {
 pub struct PersistentRoundtripInput {
     pub first_stored_memory: bool,
     pub first_runtime_kv_stored: usize,
+    pub first_runtime_kv_namespace_preserved: bool,
     pub second_used_memories: usize,
+    pub second_used_runtime_kv_memory: bool,
     pub second_used_experiences: usize,
     pub second_imported_runtime_kv_blocks: usize,
+    pub second_imported_runtime_kv_from_namespace: bool,
     pub second_runtime_adapter_observations: usize,
     pub second_runtime_adapter_best_score: Option<f32>,
     pub second_quality: f32,
@@ -469,9 +472,12 @@ pub struct PersistentRoundtripReport {
     pub passed: bool,
     pub first_stored_memory: bool,
     pub first_runtime_kv_stored: usize,
+    pub first_runtime_kv_namespace_preserved: bool,
     pub second_used_memories: usize,
+    pub second_used_runtime_kv_memory: bool,
     pub second_used_experiences: usize,
     pub second_imported_runtime_kv_blocks: usize,
+    pub second_imported_runtime_kv_from_namespace: bool,
     pub second_runtime_adapter_observations: usize,
     pub second_runtime_adapter_best_score: Option<f32>,
     pub second_quality: f32,
@@ -490,14 +496,26 @@ impl PersistentRoundtripReport {
         if input.first_runtime_kv_stored == 0 {
             failures.push("first run did not store runtime KV memory".to_owned());
         }
+        if !input.first_runtime_kv_namespace_preserved {
+            failures.push("first run stored runtime KV without runtime_kv namespace".to_owned());
+        }
         if input.second_used_memories == 0 {
             failures.push("second run did not retrieve persisted memory".to_owned());
+        }
+        if !input.second_used_runtime_kv_memory {
+            failures.push("second run did not retrieve persisted runtime KV memory".to_owned());
         }
         if input.second_used_experiences == 0 {
             failures.push("second run did not retrieve persisted experience".to_owned());
         }
         if input.second_imported_runtime_kv_blocks == 0 {
             failures.push("second run did not import persisted runtime KV".to_owned());
+        }
+        if !input.second_imported_runtime_kv_from_namespace {
+            failures.push(
+                "second run did not import KV reconstructed from persisted runtime_kv namespace"
+                    .to_owned(),
+            );
         }
         if input.second_runtime_adapter_observations == 0 {
             failures.push(
@@ -537,9 +555,13 @@ impl PersistentRoundtripReport {
             passed: failures.is_empty(),
             first_stored_memory: input.first_stored_memory,
             first_runtime_kv_stored: input.first_runtime_kv_stored,
+            first_runtime_kv_namespace_preserved: input.first_runtime_kv_namespace_preserved,
             second_used_memories: input.second_used_memories,
+            second_used_runtime_kv_memory: input.second_used_runtime_kv_memory,
             second_used_experiences: input.second_used_experiences,
             second_imported_runtime_kv_blocks: input.second_imported_runtime_kv_blocks,
+            second_imported_runtime_kv_from_namespace: input
+                .second_imported_runtime_kv_from_namespace,
             second_runtime_adapter_observations: input.second_runtime_adapter_observations,
             second_runtime_adapter_best_score: input.second_runtime_adapter_best_score,
             second_quality: input.second_quality,
@@ -551,13 +573,16 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} second_used_memories={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
+            self.first_runtime_kv_namespace_preserved,
             self.second_used_memories,
+            self.second_used_runtime_kv_memory,
             self.second_used_experiences,
             self.second_imported_runtime_kv_blocks,
+            self.second_imported_runtime_kv_from_namespace,
             self.second_runtime_adapter_observations,
             option_f32_display(self.second_runtime_adapter_best_score),
             self.second_quality,
@@ -3817,9 +3842,12 @@ mod tests {
         let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
             first_stored_memory: true,
             first_runtime_kv_stored: 1,
+            first_runtime_kv_namespace_preserved: true,
             second_used_memories: 2,
+            second_used_runtime_kv_memory: true,
             second_used_experiences: 1,
             second_imported_runtime_kv_blocks: 2,
+            second_imported_runtime_kv_from_namespace: true,
             second_runtime_adapter_observations: 1,
             second_runtime_adapter_best_score: Some(0.84),
             second_quality: 0.82,
@@ -3834,13 +3862,21 @@ mod tests {
                 .summary_line()
                 .contains("second_runtime_adapter_observations=1")
         );
+        assert!(
+            report
+                .summary_line()
+                .contains("second_imported_runtime_kv_from_namespace=true")
+        );
 
         let failed = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
             first_stored_memory: false,
             first_runtime_kv_stored: 0,
+            first_runtime_kv_namespace_preserved: false,
             second_used_memories: 0,
+            second_used_runtime_kv_memory: false,
             second_used_experiences: 0,
             second_imported_runtime_kv_blocks: 0,
+            second_imported_runtime_kv_from_namespace: false,
             second_runtime_adapter_observations: 0,
             second_runtime_adapter_best_score: None,
             second_quality: 0.2,
@@ -3850,6 +3886,18 @@ mod tests {
 
         assert!(!failed.passed);
         assert!(failed.failures.len() >= 7);
+        assert!(
+            failed
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv namespace"))
+        );
+        assert!(
+            failed
+                .failures
+                .iter()
+                .any(|failure| failure.contains("persisted runtime KV memory"))
+        );
         assert!(
             failed
                 .failures

@@ -731,6 +731,15 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
         InferenceRequest::new(args.prompt.clone(), args.profile),
         &mut first_backend,
     );
+    let first_runtime_kv_memory_ids = first.stored_runtime_kv_memory_ids.clone();
+    let first_runtime_kv_namespace_preserved = !first_runtime_kv_memory_ids.is_empty()
+        && first_runtime_kv_memory_ids.iter().all(|id| {
+            first_engine
+                .cache
+                .entries()
+                .iter()
+                .any(|entry| entry.id == *id && entry.key.starts_with("runtime_kv:"))
+        });
     first_engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
@@ -743,6 +752,17 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
         &args.adaptive_path,
     )?;
     configure_engine(&mut second_engine, args);
+    let restored_runtime_kv_vectors = first_runtime_kv_memory_ids
+        .iter()
+        .filter_map(|id| {
+            second_engine
+                .cache
+                .entries()
+                .iter()
+                .find(|entry| entry.id == *id && entry.key.starts_with("runtime_kv:"))
+                .map(|entry| entry.vector.clone())
+        })
+        .collect::<Vec<_>>();
     let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::with_manifest(
         args.runtime_manifest(),
     ));
@@ -750,7 +770,18 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
         InferenceRequest::new(args.prompt.clone(), args.profile),
         &mut second_backend,
     );
-    let second_imported_runtime_kv_blocks = second_backend.runtime().imported_kv_blocks().len();
+    let second_used_runtime_kv_memory = second.used_memories.iter().any(|memory| {
+        first_runtime_kv_memory_ids.contains(&memory.id) && memory.key.starts_with("runtime_kv:")
+    });
+    let imported_runtime_kv_blocks = second_backend.runtime().imported_kv_blocks();
+    let second_imported_runtime_kv_blocks = imported_runtime_kv_blocks.len();
+    let second_imported_runtime_kv_from_namespace =
+        imported_runtime_kv_blocks.iter().any(|block| {
+            !block.key.is_empty()
+                && restored_runtime_kv_vectors
+                    .iter()
+                    .any(|vector| vector.starts_with(&block.key))
+        });
     second_engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
@@ -761,9 +792,12 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
         PersistentRoundtripInput {
             first_stored_memory: first.stored_memory_id.is_some(),
             first_runtime_kv_stored: first.stored_runtime_kv_memory_ids.len(),
+            first_runtime_kv_namespace_preserved,
             second_used_memories: second.used_memories.len(),
+            second_used_runtime_kv_memory,
             second_used_experiences: second.used_experiences.len(),
             second_imported_runtime_kv_blocks,
+            second_imported_runtime_kv_from_namespace,
             second_runtime_adapter_observations: second.runtime_adapter_observations.len(),
             second_runtime_adapter_best_score: second
                 .runtime_adapter_observations

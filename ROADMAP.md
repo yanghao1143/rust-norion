@@ -444,7 +444,7 @@ These are algorithmic references, not product dependencies:
   benchmark regression gates can enforce minimum quality, minimum reward, total
   latency ceilings, minimum recursive-case coverage, recursive chunk ceilings,
   and maximum drift block/rollback counts; a persistent roundtrip gate now verifies memory, experience, and
-  runtime KV reuse after full-state reload; a deterministic Rust-native local
+  runtime KV reuse from the persisted `runtime_kv:` namespace after full-state reload; a deterministic Rust-native local
   runtime prototype now implements
   tokenizer, embedding, deterministic global/local/convolution forward layers,
   imported-KV influence, generation, token trace, and KV import/export through
@@ -644,6 +644,9 @@ These are algorithmic references, not product dependencies:
 - Benchmark summaries and gates expose runtime KV long-term admission through
   `--benchmark-min-runtime-kv-stored`, so local/CI production sweeps can fail
   when exported runtime KV is never written back into reinforced memory.
+- The persistent roundtrip gate also checks that admitted runtime KV keeps the
+  `runtime_kv:` namespace, is retrieved as a runtime KV memory after reload,
+  and is reconstructed into imported KV blocks before the second runtime call.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps
