@@ -414,7 +414,10 @@ These are algorithmic references, not product dependencies:
   traces, CLI output, and benchmark gates now expose router updates, hierarchy
   updates, router-threshold mutation counts/deltas, hierarchy-weight mutation
   counts/deltas, memory reinforcements, and memory penalties so automatic replay
-  must prove measurable control-plane mutation, not just execution; adaptive
+  must prove measurable control-plane mutation, not just execution; live
+  inference memory feedback is now summarized and gateable separately from
+  replay, so benchmark runs can require real reinforcement or penalty updates
+  against memories used during generation; adaptive
   state now persists a cumulative self-evolution ledger across restarts for
   replay runs, applied items, router/hierarchy mutation deltas, memory updates,
   recursive replay cost evidence, and drift rollback safety audits for reverted

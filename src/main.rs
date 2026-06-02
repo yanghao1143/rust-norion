@@ -1780,6 +1780,7 @@ struct Args {
     benchmark_min_auto_replay_router_threshold_delta: Option<f32>,
     benchmark_min_auto_replay_hierarchy_weight_delta: Option<f32>,
     benchmark_min_auto_replay_memory_updates: Option<usize>,
+    benchmark_min_live_memory_feedback_updates: Option<usize>,
     benchmark_min_auto_replay_recursive_items: Option<usize>,
     benchmark_min_auto_replay_recursive_call_pressure: Option<f32>,
     benchmark_max_auto_replay_recursive_call_pressure: Option<f32>,
@@ -1958,6 +1959,7 @@ impl Args {
         let mut benchmark_min_auto_replay_router_threshold_delta = None;
         let mut benchmark_min_auto_replay_hierarchy_weight_delta = None;
         let mut benchmark_min_auto_replay_memory_updates = None;
+        let mut benchmark_min_live_memory_feedback_updates = None;
         let mut benchmark_min_auto_replay_recursive_items = None;
         let mut benchmark_min_auto_replay_recursive_call_pressure = None;
         let mut benchmark_max_auto_replay_recursive_call_pressure = None;
@@ -2212,6 +2214,12 @@ impl Args {
                 }
                 "--benchmark-min-auto-replay-memory-updates" if index + 1 < raw.len() => {
                     benchmark_min_auto_replay_memory_updates =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-live-memory-feedback-updates" if index + 1 < raw.len() => {
+                    benchmark_min_live_memory_feedback_updates =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
@@ -3096,6 +3104,7 @@ impl Args {
             benchmark_min_auto_replay_router_threshold_delta,
             benchmark_min_auto_replay_hierarchy_weight_delta,
             benchmark_min_auto_replay_memory_updates,
+            benchmark_min_live_memory_feedback_updates,
             benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure,
@@ -3273,6 +3282,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_auto_replay_memory_updates {
             gate.min_auto_replay_memory_updates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_live_memory_feedback_updates {
+            gate.min_live_memory_feedback_updates = Some(value);
         }
         if let Some(value) = self.benchmark_min_auto_replay_recursive_items {
             gate.min_auto_replay_recursive_items = Some(value);
@@ -3657,7 +3669,7 @@ fn print_help_and_exit() -> ! {
         "Usage: rust-norion [options] <prompt>\n",
         "\n",
         "Core: --profile coding|writing|long|general --memory path --experience path --adaptive path\n",
-        "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip\n",
+        "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n\n",
         "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
@@ -3741,6 +3753,8 @@ mod tests {
             "0.01".to_owned(),
             "--benchmark-min-auto-replay-memory-updates".to_owned(),
             "1".to_owned(),
+            "--benchmark-min-live-memory-feedback-updates".to_owned(),
+            "2".to_owned(),
             "--benchmark-min-auto-replay-recursive-items".to_owned(),
             "1".to_owned(),
             "--benchmark-min-auto-replay-recursive-call-pressure".to_owned(),
@@ -4019,6 +4033,7 @@ mod tests {
             Some(0.01)
         );
         assert_eq!(args.benchmark_min_auto_replay_memory_updates, Some(1));
+        assert_eq!(args.benchmark_min_live_memory_feedback_updates, Some(2));
         assert_eq!(
             args.benchmark_gate().min_auto_replay_router_updates,
             Some(1)
@@ -4048,6 +4063,10 @@ mod tests {
         assert_eq!(
             args.benchmark_gate().min_auto_replay_memory_updates,
             Some(1)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_live_memory_feedback_updates,
+            Some(2)
         );
         assert_eq!(args.benchmark_min_auto_replay_recursive_items, Some(1));
         assert_eq!(
