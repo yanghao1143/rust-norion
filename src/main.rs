@@ -1984,6 +1984,7 @@ struct Args {
     benchmark_min_runtime_uncertainty_cases: Option<usize>,
     benchmark_min_runtime_uncertainty_tokens: Option<usize>,
     benchmark_min_runtime_uncertainty_device_profiles: Option<usize>,
+    benchmark_min_runtime_uncertainty_token_device_profiles: Option<usize>,
     benchmark_min_runtime_kv_import_cases: Option<usize>,
     benchmark_min_runtime_kv_imported: Option<usize>,
     benchmark_min_runtime_kv_import_device_profiles: Option<usize>,
@@ -2291,6 +2292,7 @@ impl Args {
         let mut benchmark_min_runtime_uncertainty_cases = None;
         let mut benchmark_min_runtime_uncertainty_tokens = None;
         let mut benchmark_min_runtime_uncertainty_device_profiles = None;
+        let mut benchmark_min_runtime_uncertainty_token_device_profiles = None;
         let mut benchmark_min_runtime_kv_import_cases = None;
         let mut benchmark_min_runtime_kv_imported = None;
         let mut benchmark_min_runtime_kv_import_device_profiles = None;
@@ -3071,6 +3073,15 @@ impl Args {
                 }
                 "--benchmark-min-runtime-uncertainty-device-profiles" if index + 1 < raw.len() => {
                     benchmark_min_runtime_uncertainty_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--benchmark-min-runtime-uncertainty-token-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_runtime_uncertainty_token_device_profiles =
                         Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     benchmark_all_devices = true;
@@ -4520,6 +4531,7 @@ impl Args {
             benchmark_min_runtime_uncertainty_cases,
             benchmark_min_runtime_uncertainty_tokens,
             benchmark_min_runtime_uncertainty_device_profiles,
+            benchmark_min_runtime_uncertainty_token_device_profiles,
             benchmark_min_runtime_kv_import_cases,
             benchmark_min_runtime_kv_imported,
             benchmark_min_runtime_kv_import_device_profiles,
@@ -4973,6 +4985,9 @@ impl Args {
         }
         if let Some(value) = self.benchmark_min_runtime_uncertainty_device_profiles {
             gate.min_runtime_uncertainty_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_uncertainty_token_device_profiles {
+            gate.min_runtime_uncertainty_token_device_profiles = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_kv_import_cases {
             gate.min_runtime_kv_import_cases = Some(value);
@@ -5482,7 +5497,7 @@ fn print_help_and_exit() -> ! {
         "Benchmark all-device live evolution: --benchmark-min-evolution-live-inference-device-profiles n --benchmark-min-evolution-live-router-threshold-mutation-device-profiles n --benchmark-min-evolution-live-hierarchy-weight-mutation-device-profiles n --benchmark-min-evolution-live-memory-update-device-profiles n --benchmark-min-evolution-live-stored-memory-update-device-profiles n --benchmark-min-evolution-live-reflection-issue-device-profiles n --benchmark-min-evolution-live-critical-reflection-issue-device-profiles n --benchmark-min-evolution-live-revision-action-device-profiles n\n",
         "Benchmark runtime adapter: --benchmark-min-runtime-adapter-contract-cases n --benchmark-min-runtime-adapter-kinds n --benchmark-min-runtime-adapter-observations n --benchmark-min-runtime-adapter-best-score f --benchmark-max-runtime-adapter-contract-violations n --benchmark-max-runtime-adapter-selection-mismatches n\n",
         "Benchmark runtime embedding: --benchmark-min-runtime-embedding-cases n --benchmark-min-runtime-embedding-device-profiles n --benchmark-max-embedding-fallback-cases n --benchmark-max-embedding-evidence-failures n\n",
-        "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-min-runtime-uncertainty-device-profiles n --benchmark-min-runtime-kv-import-device-profiles n --benchmark-min-runtime-kv-export-device-profiles n --benchmark-min-runtime-kv-stored-device-profiles n --benchmark-min-runtime-kv-hold-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
+        "Benchmark runtime device execution: --benchmark-min-runtime-device-execution-cases n --benchmark-min-runtime-device-execution-device-profiles n --benchmark-min-runtime-kv-precision-cases n --benchmark-min-runtime-kv-precision-device-profiles n --benchmark-min-runtime-uncertainty-device-profiles n --benchmark-min-runtime-uncertainty-token-device-profiles n --benchmark-min-runtime-kv-import-device-profiles n --benchmark-min-runtime-kv-export-device-profiles n --benchmark-min-runtime-kv-stored-device-profiles n --benchmark-min-runtime-kv-hold-device-profiles n --benchmark-max-runtime-device-execution-violations n\n",
         "Benchmark memory governance: --benchmark-max-memory-governance-failures n --benchmark-min-memory-governance-cases n --benchmark-min-memory-governance-device-profiles n --benchmark-min-memory-retention-activity-cases n --benchmark-min-memory-compaction-activity-cases n\n",
         "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
@@ -5697,6 +5712,8 @@ mod tests {
             "--benchmark-min-runtime-uncertainty-tokens".to_owned(),
             "4".to_owned(),
             "--benchmark-min-runtime-uncertainty-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--benchmark-min-runtime-uncertainty-token-device-profiles".to_owned(),
             "12".to_owned(),
             "--benchmark-min-runtime-kv-import-cases".to_owned(),
             "4".to_owned(),
@@ -6551,6 +6568,10 @@ mod tests {
             args.benchmark_min_runtime_uncertainty_device_profiles,
             Some(12)
         );
+        assert_eq!(
+            args.benchmark_min_runtime_uncertainty_token_device_profiles,
+            Some(12)
+        );
         assert_eq!(args.benchmark_min_runtime_kv_import_cases, Some(4));
         assert_eq!(args.benchmark_min_runtime_kv_imported, Some(4));
         assert_eq!(
@@ -6653,6 +6674,11 @@ mod tests {
         assert_eq!(
             args.benchmark_gate()
                 .min_runtime_uncertainty_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_runtime_uncertainty_token_device_profiles,
             Some(12)
         );
         assert_eq!(args.benchmark_gate().min_runtime_kv_import_cases, Some(4));
@@ -8973,6 +8999,8 @@ mod tests {
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-uncertainty-device-profiles".to_owned(),
             device_count.to_string(),
+            "--benchmark-min-runtime-uncertainty-token-device-profiles".to_owned(),
+            device_count.to_string(),
             "--benchmark-min-runtime-kv-import-cases".to_owned(),
             (device_count * case_count).to_string(),
             "--benchmark-min-runtime-kv-imported".to_owned(),
@@ -9135,6 +9163,15 @@ mod tests {
         );
         assert!(summary.total_runtime_uncertainty_tokens() >= device_count * case_count);
         assert_eq!(summary.runtime_uncertainty_device_profiles(), device_count);
+        assert_eq!(
+            summary.runtime_uncertainty_token_device_profiles(),
+            device_count
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_runtime_uncertainty_token_device_profiles,
+            Some(device_count)
+        );
         assert_eq!(summary.runtime_kv_import_cases(), device_count * case_count);
         assert!(summary.total_runtime_kv_imported() >= device_count * case_count);
         assert_eq!(

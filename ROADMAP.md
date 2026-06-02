@@ -612,8 +612,10 @@ These are algorithmic references, not product dependencies:
   derived uncertainty perplexity, and the schema gate requires that block.
   Benchmark gates can also require runtime uncertainty case coverage and
   uncertainty-bearing token totals, plus all-device uncertainty signal coverage
-  through `--benchmark-min-runtime-uncertainty-device-profiles`, before
-  production runtime sweeps pass.
+  through `--benchmark-min-runtime-uncertainty-device-profiles` and stricter
+  token-evidence coverage through
+  `--benchmark-min-runtime-uncertainty-token-device-profiles`, before production
+  runtime sweeps pass.
 - Runtime forward diagnostics are observable: local and command runtimes can
   report model id, selected adapter, executed layer count, hidden size, local
   window, forward energy, KV influence, hot/cold KV precision, and runtime KV
@@ -826,9 +828,11 @@ These are algorithmic references, not product dependencies:
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, plus
-  `--benchmark-min-runtime-uncertainty-device-profiles` for all-device sweeps,
-  so local/CI production sweeps can fail when a runtime stops returning token
-  entropy/logprob signals on any required device profile.
+  `--benchmark-min-runtime-uncertainty-device-profiles` for all-device signal
+  coverage and `--benchmark-min-runtime-uncertainty-token-device-profiles` for
+  all-device token evidence coverage, so local/CI production sweeps can fail
+  when a runtime stops returning token entropy/logprob evidence on any required
+  device profile.
 - State inspection now gates the same runtime token uncertainty after reload
   through `--inspect-min-runtime-uncertainty-experiences`,
   `--inspect-min-runtime-uncertainty-tokens`,
