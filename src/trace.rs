@@ -2473,14 +2473,29 @@ fn check_online_reward_strength(
             "{label}_strength {total_strength:.6} requires feedbacks > 0"
         ));
     }
+    if feedbacks > 0 && total_strength <= TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "{label}_strength {total_strength:.6} requires positive strength when feedbacks > 0"
+        ));
+    }
     if reinforcement_strength > TRACE_FLOAT_EPSILON && reinforcements == 0 {
         failures.push(format!(
             "{label}_reinforcement_strength {reinforcement_strength:.6} requires reinforcements > 0"
         ));
     }
+    if reinforcements > 0 && reinforcement_strength <= TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "{label}_reinforcement_strength {reinforcement_strength:.6} requires positive strength when reinforcements > 0"
+        ));
+    }
     if penalty_strength > TRACE_FLOAT_EPSILON && penalties == 0 {
         failures.push(format!(
             "{label}_penalty_strength {penalty_strength:.6} requires penalties > 0"
+        ));
+    }
+    if penalties > 0 && penalty_strength <= TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "{label}_penalty_strength {penalty_strength:.6} requires positive strength when penalties > 0"
         ));
     }
 }
@@ -4690,6 +4705,49 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_live_online_reward_feedback_without_strength() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace live online reward missing strength",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace live online reward missing strength",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let line =
+            replace_trace_object_f32(&line, "live_evolution", "live_online_reward_strength", 0.0);
+        let line = replace_trace_object_f32(
+            &line,
+            "live_evolution",
+            "live_online_reward_reinforcement_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "live_evolution",
+            "live_online_reward_penalty_strength",
+            0.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("live_online_reward_strength")
+                    && failure.contains("requires positive strength when feedbacks > 0")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_cumulative_live_online_reward_count_mismatch() {
         let mut engine = NoironEngine::new();
         let mut backend = HeuristicBackend;
@@ -4753,6 +4811,53 @@ mod tests {
             failures.iter().any(|failure| {
                 failure.contains("cumulative_live_online_reward_strength")
                     && failure.contains("does not match reinforcement+penalty strength")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_cumulative_live_online_reward_feedback_without_strength() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace cumulative live online reward missing strength",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace cumulative live online reward missing strength",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_live_online_reward_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_live_online_reward_reinforcement_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_live_online_reward_penalty_strength",
+            0.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_live_online_reward_strength")
+                    && failure.contains("requires positive strength when feedbacks > 0")
             }),
             "{failures:?}"
         );
@@ -4940,6 +5045,40 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_auto_replay_live_evolution_online_reward_feedback_without_strength()
+     {
+        let line = auto_replay_trace_line();
+        let line = replace_trace_object_f32(
+            &line,
+            "auto_replay",
+            "live_evolution_online_reward_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "auto_replay",
+            "live_evolution_online_reward_reinforcement_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "auto_replay",
+            "live_evolution_online_reward_penalty_strength",
+            0.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("auto_replay live_evolution_online_reward_strength")
+                    && failure.contains("requires positive strength when feedbacks > 0")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_cumulative_replay_live_evolution_online_reward_count_mismatch() {
         let line = increment_trace_object_usize(
             &auto_replay_trace_line(),
@@ -4979,6 +5118,40 @@ mod tests {
             failures.iter().any(|failure| {
                 failure.contains("cumulative_replay_live_evolution_online_reward_strength")
                     && failure.contains("does not match reinforcement+penalty strength")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_cumulative_replay_live_evolution_online_reward_feedback_without_strength()
+     {
+        let line = auto_replay_trace_line();
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_replay_live_evolution_online_reward_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_replay_live_evolution_online_reward_reinforcement_strength",
+            0.0,
+        );
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_replay_live_evolution_online_reward_penalty_strength",
+            0.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_replay_live_evolution_online_reward_strength")
+                    && failure.contains("requires positive strength when feedbacks > 0")
             }),
             "{failures:?}"
         );
