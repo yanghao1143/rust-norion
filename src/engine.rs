@@ -120,6 +120,7 @@ pub struct InferenceOutcome {
     pub agent_team_plan: AgentTeamPlan,
     pub stream_reports: Vec<TokenWindowReport>,
     pub used_memories: Vec<MemoryMatch>,
+    pub memory_feedback: MemoryFeedbackReport,
     pub used_experiences: Vec<ExperienceMatch>,
     pub gist_records: Vec<GistRecord>,
     pub stored_memory_id: Option<u64>,
@@ -135,6 +136,30 @@ pub struct InferenceOutcome {
     pub experience_id: u64,
     pub router_threshold_after: f32,
     pub evolution_ledger: EvolutionLedger,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct MemoryFeedbackReport {
+    pub reinforced: usize,
+    pub penalized: usize,
+    pub reinforcement_amount: f32,
+    pub penalty_amount: f32,
+}
+
+impl MemoryFeedbackReport {
+    pub fn total_updates(&self) -> usize {
+        self.reinforced + self.penalized
+    }
+
+    pub fn record_reinforcement(&mut self, amount: f32) {
+        self.reinforced += 1;
+        self.reinforcement_amount += amount;
+    }
+
+    pub fn record_penalty(&mut self, amount: f32) {
+        self.penalized += 1;
+        self.penalty_amount += amount;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -606,15 +631,16 @@ impl NoironEngine {
             Vec::new()
         };
 
+        let mut memory_feedback = MemoryFeedbackReport::default();
         for memory in &used_memories {
             if admit_memory && !drift_report.penalize_used_memory {
-                self.cache
-                    .reinforce(memory.id, used_memory_reinforcement_amount(&report));
+                let amount = used_memory_reinforcement_amount(&report);
+                self.cache.reinforce(memory.id, amount);
+                memory_feedback.record_reinforcement(amount);
             } else {
-                self.cache.penalize(
-                    memory.id,
-                    used_memory_penalty_amount(&report, &drift_report, metrics),
-                );
+                let amount = used_memory_penalty_amount(&report, &drift_report, metrics);
+                self.cache.penalize(memory.id, amount);
+                memory_feedback.record_penalty(amount);
             }
         }
 
@@ -722,6 +748,7 @@ impl NoironEngine {
             agent_team_plan,
             stream_reports,
             used_memories,
+            memory_feedback,
             used_experiences,
             gist_records,
             stored_memory_id,
@@ -1910,6 +1937,10 @@ mod tests {
         );
         assert_eq!(outcome.used_memories.len(), 1);
         assert!(outcome.drift_report.penalize_used_memory);
+        assert_eq!(outcome.memory_feedback.reinforced, 0);
+        assert_eq!(outcome.memory_feedback.penalized, 1);
+        assert!(outcome.memory_feedback.penalty_amount > 0.10);
+        assert_eq!(outcome.memory_feedback.total_updates(), 1);
         assert!(outcome.report.critical_issue_count() > 0);
         assert!(memory_strength(&engine, memory_id) < before_strength - 0.10);
     }
@@ -1976,6 +2007,10 @@ mod tests {
         );
         assert_eq!(outcome.used_memories.len(), 1);
         assert!(outcome.drift_report.penalize_used_memory);
+        assert_eq!(outcome.memory_feedback.reinforced, 0);
+        assert_eq!(outcome.memory_feedback.penalized, 1);
+        assert!(outcome.memory_feedback.penalty_amount > 0.18);
+        assert_eq!(outcome.memory_feedback.total_updates(), 1);
         assert!(memory_strength(&engine, memory_id) < before_strength - 0.18);
     }
 

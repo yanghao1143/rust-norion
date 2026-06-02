@@ -43,7 +43,7 @@ pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest,
-    NoironEngine,
+    MemoryFeedbackReport, NoironEngine,
 };
 pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
 pub use experience_replay::{

@@ -203,6 +203,22 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"runtime_kv_stored\":",
     },
     TraceRequiredField {
+        name: "memory_feedback_reinforced",
+        marker: "\"feedback_reinforced\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_penalized",
+        marker: "\"feedback_penalized\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_reinforcement_amount",
+        marker: "\"feedback_reinforcement_amount\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_penalty_amount",
+        marker: "\"feedback_penalty_amount\":",
+    },
+    TraceRequiredField {
         name: "drift",
         marker: "\"drift\":{",
     },
@@ -862,7 +878,7 @@ pub fn trace_json_line_with_case(
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
          \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
          \"stream_windows\":{},\
-         \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{}}},\
+         \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
@@ -995,6 +1011,10 @@ pub fn trace_json_line_with_case(
         outcome.stored_gist_memory_ids.len(),
         outcome.exported_runtime_kv_blocks,
         outcome.stored_runtime_kv_memory_ids.len(),
+        outcome.memory_feedback.reinforced,
+        outcome.memory_feedback.penalized,
+        outcome.memory_feedback.reinforcement_amount,
+        outcome.memory_feedback.penalty_amount,
         outcome.drift_report.severity.as_str(),
         outcome.drift_report.allow_memory_write,
         outcome.drift_report.allow_runtime_kv_write,
@@ -1253,6 +1273,10 @@ mod tests {
         assert!(line.contains("\"cumulative_rollback_router_threshold_delta\":"));
         assert!(line.contains("\"cumulative_rollback_hierarchy_weight_delta\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
+        assert!(line.contains("\"feedback_reinforced\":"));
+        assert!(line.contains("\"feedback_penalized\":"));
+        assert!(line.contains("\"feedback_reinforcement_amount\":"));
+        assert!(line.contains("\"feedback_penalty_amount\":"));
         assert!(line.contains("\"stale_after\":"));
         assert!(line.contains("\"decay_rate\":"));
         assert!(line.contains("\"similarity_threshold\":"));

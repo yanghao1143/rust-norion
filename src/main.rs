@@ -408,9 +408,13 @@ fn main() -> std::io::Result<()> {
     println!("agent_team: {}", outcome.agent_team_plan.summary());
     println!("stream_windows={}", outcome.stream_reports.len());
     println!(
-        "memory: used={} stored={:?} experience_used={} experience={}",
+        "memory: used={} stored={:?} feedback_reinforced={} feedback_penalized={} feedback_reinforcement_amount={:.3} feedback_penalty_amount={:.3} experience_used={} experience={}",
         outcome.used_memories.len(),
         outcome.stored_memory_id,
+        outcome.memory_feedback.reinforced,
+        outcome.memory_feedback.penalized,
+        outcome.memory_feedback.reinforcement_amount,
+        outcome.memory_feedback.penalty_amount,
         outcome.used_experiences.len(),
         outcome.experience_id
     );
