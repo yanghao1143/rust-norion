@@ -616,8 +616,9 @@ These are algorithmic references, not product dependencies:
   or lacks the required persisted evidence. Matrix-level thresholds can also
   require runtime-KV memory, runtime model id, selected adapter, forward
   energy, KV influence, KV import/export, reflection-issue,
-  critical-reflection-issue, and revision-action evidence to appear across
-  enough device profiles before the all-device state inspection passes.
+  critical-reflection-issue, revision-action, and self-evolution ledger
+  replay/mutation/memory/recursive evidence to appear across enough device
+  profiles before the all-device state inspection passes.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -710,7 +711,17 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-runtime-kv-import-device-profiles`, and
   `--inspect-min-runtime-kv-export-device-profiles`, so all-device state
   inspection can fail when a supported hardware class stops persisting runtime
-  ABI feedback even though its files exist.
+  ABI feedback even though its files exist. Evolution-ledger matrix coverage is
+  also available through
+  `--inspect-min-evolution-replay-run-device-profiles`,
+  `--inspect-min-evolution-replay-item-device-profiles`,
+  `--inspect-min-evolution-router-threshold-mutation-device-profiles`,
+  `--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`,
+  `--inspect-min-evolution-memory-update-device-profiles`,
+  `--inspect-min-evolution-recursive-replay-device-profiles`, and
+  `--inspect-min-evolution-recursive-runtime-call-device-profiles`, so a device
+  profile cannot pass all-device inspection by persisting runtime/reflection
+  records while missing durable self-evolution ledger evidence.
 - With `--benchmark-roundtrip --inspect-state`, the CLI now chains the write/
   reload runtime-KV roundtrip and persisted-state inspection in one run. Adding
   `--benchmark-all-devices` applies the same chain to every explicit device

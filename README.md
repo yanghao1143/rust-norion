@@ -258,10 +258,18 @@ reflection/revision coverage. Runtime ABI evidence is gated with
 `--inspect-min-runtime-kv-export-device-profiles`. Closed-loop evidence is
 gated with `--inspect-min-reflection-issue-device-profiles`,
 `--inspect-min-critical-reflection-issue-device-profiles`, and
-`--inspect-min-revision-action-device-profiles`. These flags imply
-`--inspect-state --inspect-gate --benchmark-all-devices` and fail when
-persisted runtime, reflection, or revision evidence only exists in a subset of
-device-scoped state files.
+`--inspect-min-revision-action-device-profiles`. Persisted self-evolution
+ledger evidence is gated with
+`--inspect-min-evolution-replay-run-device-profiles`,
+`--inspect-min-evolution-replay-item-device-profiles`,
+`--inspect-min-evolution-router-threshold-mutation-device-profiles`,
+`--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`,
+`--inspect-min-evolution-memory-update-device-profiles`,
+`--inspect-min-evolution-recursive-replay-device-profiles`, and
+`--inspect-min-evolution-recursive-runtime-call-device-profiles`. These flags
+imply `--inspect-state --inspect-gate --benchmark-all-devices` and fail when
+persisted runtime, reflection, revision, or self-evolution ledger evidence only
+exists in a subset of device-scoped state files.
 
 For a single CI smoke gate that writes fresh runtime KV state and immediately
 inspects the persisted evidence, combine roundtrip and inspection:
@@ -311,9 +319,17 @@ cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-m
 `--inspect-min-runtime-kv-export-device-profiles` 门禁；闭环证据通过
 `--inspect-min-reflection-issue-device-profiles`、
 `--inspect-min-critical-reflection-issue-device-profiles` 和
-`--inspect-min-revision-action-device-profiles` 门禁。这些参数会隐式开启
+`--inspect-min-revision-action-device-profiles` 门禁；持久化自进化 ledger 证据通过
+`--inspect-min-evolution-replay-run-device-profiles`、
+`--inspect-min-evolution-replay-item-device-profiles`、
+`--inspect-min-evolution-router-threshold-mutation-device-profiles`、
+`--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`、
+`--inspect-min-evolution-memory-update-device-profiles`、
+`--inspect-min-evolution-recursive-replay-device-profiles` 和
+`--inspect-min-evolution-recursive-runtime-call-device-profiles` 门禁。这些参数会隐式开启
 `--inspect-state --inspect-gate --benchmark-all-devices`；如果持久化 runtime、
-reflection 或 revision 证据只存在于部分 device-scoped 状态文件中，门禁会失败。
+reflection、revision 或 self-evolution ledger 证据只存在于部分 device-scoped
+状态文件中，门禁会失败。
 
 如果希望一条 CI 命令先写入新的 runtime KV 状态，再立刻检查持久化证据，可以组合
 roundtrip 和 inspection：

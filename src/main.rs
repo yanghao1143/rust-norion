@@ -1368,7 +1368,7 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
             device_report.runtime_kv_memories,
@@ -1380,7 +1380,14 @@ fn print_state_inspection_matrix_gate_report(
             device_report.runtime_kv_export_experiences,
             device_report.reflection_issue_experiences,
             device_report.critical_reflection_issue_experiences,
-            device_report.revision_action_experiences
+            device_report.revision_action_experiences,
+            device_report.evolution_replay_runs,
+            device_report.evolution_replay_items,
+            device_report.evolution_router_threshold_mutations,
+            device_report.evolution_hierarchy_weight_mutations,
+            device_report.evolution_memory_updates,
+            device_report.evolution_recursive_replay_items,
+            device_report.evolution_recursive_runtime_calls
         );
         for failure in &device_report.report.failures {
             println!(
@@ -1853,6 +1860,13 @@ struct Args {
     inspect_min_reflection_issue_device_profiles: Option<usize>,
     inspect_min_critical_reflection_issue_device_profiles: Option<usize>,
     inspect_min_revision_action_device_profiles: Option<usize>,
+    inspect_min_evolution_replay_run_device_profiles: Option<usize>,
+    inspect_min_evolution_replay_item_device_profiles: Option<usize>,
+    inspect_min_evolution_router_threshold_mutation_device_profiles: Option<usize>,
+    inspect_min_evolution_hierarchy_weight_mutation_device_profiles: Option<usize>,
+    inspect_min_evolution_memory_update_device_profiles: Option<usize>,
+    inspect_min_evolution_recursive_replay_device_profiles: Option<usize>,
+    inspect_min_evolution_recursive_runtime_call_device_profiles: Option<usize>,
     inspect_min_router_observations: Option<u64>,
     inspect_min_evolution_replay_runs: Option<u64>,
     inspect_min_evolution_replay_items: Option<u64>,
@@ -2024,6 +2038,13 @@ impl Args {
         let mut inspect_min_reflection_issue_device_profiles = None;
         let mut inspect_min_critical_reflection_issue_device_profiles = None;
         let mut inspect_min_revision_action_device_profiles = None;
+        let mut inspect_min_evolution_replay_run_device_profiles = None;
+        let mut inspect_min_evolution_replay_item_device_profiles = None;
+        let mut inspect_min_evolution_router_threshold_mutation_device_profiles = None;
+        let mut inspect_min_evolution_hierarchy_weight_mutation_device_profiles = None;
+        let mut inspect_min_evolution_memory_update_device_profiles = None;
+        let mut inspect_min_evolution_recursive_replay_device_profiles = None;
+        let mut inspect_min_evolution_recursive_runtime_call_device_profiles = None;
         let mut inspect_min_router_observations = None;
         let mut inspect_min_evolution_replay_runs = None;
         let mut inspect_min_evolution_replay_items = None;
@@ -2680,6 +2701,72 @@ impl Args {
                     benchmark_all_devices = true;
                     index += 2;
                 }
+                "--inspect-min-evolution-replay-run-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_evolution_replay_run_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-replay-item-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_evolution_replay_item_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-router-threshold-mutation-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_router_threshold_mutation_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-hierarchy-weight-mutation-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_hierarchy_weight_mutation_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-memory-update-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_memory_update_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-recursive-replay-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_recursive_replay_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-recursive-runtime-call-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_min_evolution_recursive_runtime_call_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
                 "--inspect-min-router-observations" if index + 1 < raw.len() => {
                     inspect_min_router_observations = Some(parse_u64(&raw[index + 1], 0));
                     inspect_state = true;
@@ -3089,6 +3176,13 @@ impl Args {
             inspect_min_reflection_issue_device_profiles,
             inspect_min_critical_reflection_issue_device_profiles,
             inspect_min_revision_action_device_profiles,
+            inspect_min_evolution_replay_run_device_profiles,
+            inspect_min_evolution_replay_item_device_profiles,
+            inspect_min_evolution_router_threshold_mutation_device_profiles,
+            inspect_min_evolution_hierarchy_weight_mutation_device_profiles,
+            inspect_min_evolution_memory_update_device_profiles,
+            inspect_min_evolution_recursive_replay_device_profiles,
+            inspect_min_evolution_recursive_runtime_call_device_profiles,
             inspect_min_router_observations,
             inspect_min_evolution_replay_runs,
             inspect_min_evolution_replay_items,
@@ -3374,6 +3468,20 @@ impl Args {
             min_critical_reflection_issue_device_profiles: self
                 .inspect_min_critical_reflection_issue_device_profiles,
             min_revision_action_device_profiles: self.inspect_min_revision_action_device_profiles,
+            min_evolution_replay_run_device_profiles: self
+                .inspect_min_evolution_replay_run_device_profiles,
+            min_evolution_replay_item_device_profiles: self
+                .inspect_min_evolution_replay_item_device_profiles,
+            min_evolution_router_threshold_mutation_device_profiles: self
+                .inspect_min_evolution_router_threshold_mutation_device_profiles,
+            min_evolution_hierarchy_weight_mutation_device_profiles: self
+                .inspect_min_evolution_hierarchy_weight_mutation_device_profiles,
+            min_evolution_memory_update_device_profiles: self
+                .inspect_min_evolution_memory_update_device_profiles,
+            min_evolution_recursive_replay_device_profiles: self
+                .inspect_min_evolution_recursive_replay_device_profiles,
+            min_evolution_recursive_runtime_call_device_profiles: self
+                .inspect_min_evolution_recursive_runtime_call_device_profiles,
         }
     }
 
@@ -3788,6 +3896,20 @@ mod tests {
             "6".to_owned(),
             "--inspect-min-revision-action-device-profiles".to_owned(),
             "12".to_owned(),
+            "--inspect-min-evolution-replay-run-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-evolution-replay-item-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-evolution-router-threshold-mutation-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-evolution-hierarchy-weight-mutation-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-evolution-memory-update-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-evolution-recursive-replay-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-evolution-recursive-runtime-call-device-profiles".to_owned(),
+            "12".to_owned(),
             "--inspect-min-router-observations".to_owned(),
             "4".to_owned(),
             "--inspect-min-evolution-replay-runs".to_owned(),
@@ -4186,6 +4308,34 @@ mod tests {
             Some(6)
         );
         assert_eq!(args.inspect_min_revision_action_device_profiles, Some(12));
+        assert_eq!(
+            args.inspect_min_evolution_replay_run_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_replay_item_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_router_threshold_mutation_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_hierarchy_weight_mutation_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_memory_update_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_recursive_replay_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_recursive_runtime_call_device_profiles,
+            Some(12)
+        );
         assert_eq!(args.inspect_min_router_observations, Some(4));
         assert_eq!(args.inspect_min_evolution_replay_runs, Some(5));
         assert_eq!(args.inspect_min_evolution_replay_items, Some(6));
@@ -4314,6 +4464,41 @@ mod tests {
         assert_eq!(
             args.state_inspection_matrix_gate()
                 .min_revision_action_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_replay_run_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_replay_item_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_router_threshold_mutation_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_hierarchy_weight_mutation_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_memory_update_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_recursive_replay_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_evolution_recursive_runtime_call_device_profiles,
             Some(12)
         );
         assert_eq!(
@@ -5185,6 +5370,12 @@ mod tests {
             DeviceClass::explicit_profiles().len().to_string(),
             "--inspect-min-revision-action-device-profiles".to_owned(),
             DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-evolution-replay-run-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-evolution-replay-item-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-evolution-memory-update-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
             "--inspect-min-evolution-memory-updates".to_owned(),
             "1".to_owned(),
             "--inspect-require-runtime-kv-dimensions".to_owned(),
@@ -5233,6 +5424,18 @@ mod tests {
         );
         assert_eq!(
             report.revision_action_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.evolution_replay_run_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.evolution_replay_item_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.evolution_memory_update_device_profiles(),
             DeviceClass::explicit_profiles().len()
         );
         assert!(report.missing_devices().is_empty());
