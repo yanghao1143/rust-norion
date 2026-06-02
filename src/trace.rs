@@ -245,6 +245,14 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"runtime_kv_stored\":",
     },
     TraceRequiredField {
+        name: "runtime_kv_hold",
+        marker: "\"runtime_kv_hold\":",
+    },
+    TraceRequiredField {
+        name: "runtime_kv_held",
+        marker: "\"runtime_kv_held\":",
+    },
+    TraceRequiredField {
         name: "memory_feedback_reinforced",
         marker: "\"feedback_reinforced\":",
     },
@@ -2082,10 +2090,13 @@ fn evaluate_trace_runtime_kv(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
     let runtime_kv_exported = extract_json_usize_field(line, "runtime_kv_exported").unwrap_or(0);
     let runtime_kv_stored = extract_json_usize_field(line, "runtime_kv_stored").unwrap_or(0);
+    let runtime_kv_hold = extract_json_bool_field(line, "runtime_kv_hold").unwrap_or(false);
+    let runtime_kv_held = extract_json_usize_field(line, "runtime_kv_held").unwrap_or(0);
     let diagnostic_exported = extract_json_usize_field(line, "exported_kv_blocks").unwrap_or(0);
     let memory_write = extract_json_bool_field(line, "memory_write").unwrap_or(false);
     let runtime_kv_write = extract_json_bool_field(line, "runtime_kv_write").unwrap_or(false);
     let revision_passes = extract_json_usize_field(line, "revision_passes").unwrap_or(0);
+    let expected_runtime_kv_held = runtime_kv_exported.saturating_sub(runtime_kv_stored);
 
     if diagnostic_exported != runtime_kv_exported {
         failures.push(format!(
@@ -2096,6 +2107,18 @@ fn evaluate_trace_runtime_kv(line: &str) -> Vec<String> {
     if runtime_kv_stored > runtime_kv_exported {
         failures.push(format!(
             "runtime_kv_stored {runtime_kv_stored} exceeds runtime_kv_exported {runtime_kv_exported}"
+        ));
+    }
+
+    if runtime_kv_held != expected_runtime_kv_held {
+        failures.push(format!(
+            "runtime_kv_held {runtime_kv_held} does not match runtime_kv_exported-runtime_kv_stored {expected_runtime_kv_held}"
+        ));
+    }
+
+    if runtime_kv_hold != (runtime_kv_held > 0) {
+        failures.push(format!(
+            "runtime_kv_hold {runtime_kv_hold} does not match runtime_kv_held {runtime_kv_held}"
         ));
     }
 
@@ -2931,6 +2954,11 @@ pub fn trace_json_line_with_case(
     let agent_team_messages = outcome.agent_team_plan.message_summaries(16);
     let agent_team_conflicts = outcome.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = outcome.agent_team_plan.evolution_summaries(8);
+    let runtime_kv_stored = outcome.stored_runtime_kv_memory_ids.len();
+    let runtime_kv_held = outcome
+        .exported_runtime_kv_blocks
+        .saturating_sub(runtime_kv_stored);
+    let runtime_kv_hold = runtime_kv_held > 0;
 
     format!(
         "{{\
@@ -2958,7 +2986,7 @@ pub fn trace_json_line_with_case(
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
          \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
          \"stream_windows\":{},\
-         \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
+         \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
@@ -3123,7 +3151,9 @@ pub fn trace_json_line_with_case(
         outcome.gist_records.len(),
         outcome.stored_gist_memory_ids.len(),
         outcome.exported_runtime_kv_blocks,
-        outcome.stored_runtime_kv_memory_ids.len(),
+        runtime_kv_stored,
+        runtime_kv_hold,
+        runtime_kv_held,
         outcome.memory_feedback.reinforced,
         outcome.memory_feedback.penalized,
         outcome.memory_feedback.reinforcement_amount,
@@ -3644,6 +3674,8 @@ mod tests {
         assert!(line.contains("\"cumulative_rollback_router_threshold_delta\":"));
         assert!(line.contains("\"cumulative_rollback_hierarchy_weight_delta\":"));
         assert!(line.contains("\"runtime_kv_exported\":"));
+        assert!(line.contains("\"runtime_kv_hold\":"));
+        assert!(line.contains("\"runtime_kv_held\":"));
         assert!(line.contains("\"feedback_reinforced\":"));
         assert!(line.contains("\"feedback_penalized\":"));
         assert!(line.contains("\"feedback_reinforcement_amount\":"));
@@ -4391,6 +4423,8 @@ mod tests {
 
         assert!(line.contains("\"runtime_kv_exported\":1"));
         assert!(line.contains("\"runtime_kv_stored\":0"));
+        assert!(line.contains("\"runtime_kv_hold\":true"));
+        assert!(line.contains("\"runtime_kv_held\":1"));
         assert!(line.contains("\"memory_write\":true"));
         assert!(line.contains("\"runtime_kv_write\":false"));
         assert!(line.contains("\"route:fast_path_watch\""));
@@ -4398,9 +4432,47 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_runtime_kv_hold_flag_mismatch() {
+        let line = fast_path_watch_trace_line().replacen(
+            "\"runtime_kv_hold\":true",
+            "\"runtime_kv_hold\":false",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_hold false")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_kv_held_count_mismatch() {
+        let line = fast_path_watch_trace_line().replacen(
+            "\"runtime_kv_held\":1",
+            "\"runtime_kv_held\":0",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("runtime_kv_held 0")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_fast_path_watch_runtime_kv_storage() {
         let line = fast_path_watch_trace_line()
             .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
+            .replacen("\"runtime_kv_hold\":true", "\"runtime_kv_hold\":false", 1)
+            .replacen("\"runtime_kv_held\":1", "\"runtime_kv_held\":0", 1)
             .replacen(
                 "\"live_stored_runtime_kv_memories\":0",
                 "\"live_stored_runtime_kv_memories\":1",

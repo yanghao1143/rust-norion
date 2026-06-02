@@ -628,7 +628,11 @@ These are algorithmic references, not product dependencies:
   positive observation count must include bounded score/reward/quality values,
   an experience id, a best adapter allowed by the current device contract, and
   a `selection_mismatch` flag that matches the trace's best-adapter versus
-  selected-adapter comparison.
+  selected-adapter comparison. It also requires explicit
+  `memory.runtime_kv_hold` and `memory.runtime_kv_held` fields and validates
+  them against exported/stored runtime KV counts, so fast-path watch safety is
+  visible in each trace record before benchmark or state inspection aggregate
+  it.
 - KV compression has an accuracy, compression-ratio, and latency benchmark gate
   before it becomes default.
 - Long-context claims are tied to reproducible benchmarks, including gates that
@@ -743,7 +747,9 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-runtime-kv-hold-cases` and
   `--benchmark-min-runtime-kv-held`, so fast-path watch cases can prove the
   runtime exported KV while the control plane kept unsafe blocks out of durable
-  `runtime_kv:` memory.
+  `runtime_kv:` memory. Trace records now expose the same hold fact directly
+  through `memory.runtime_kv_hold` and `memory.runtime_kv_held`, and the schema
+  gate rejects mismatches between those fields and exported/stored KV counts.
 - The persistent roundtrip gate also checks that admitted runtime KV keeps the
   `runtime_kv:` namespace, is retrieved as a runtime KV memory after reload,
   and is reconstructed into imported KV blocks before the second runtime call.
