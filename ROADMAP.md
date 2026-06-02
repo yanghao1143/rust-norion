@@ -197,7 +197,15 @@ The north star is now explicitly scoped around five core requirements:
     only adapters supported by both manifest and device execution plan, and fail
     when KV prefetch or hot/cold precision requirements exceed manifest bounds.
 
-14. Rust-only Toolsmith and read-only Agent Team / Rust-only 工具匠与只读 Agent Team
+14. Production kernel conformance matrix / 生产内核一致性矩阵
+    The production boundary should expose a conformance gate that validates a
+    connected self-developed forward kernel against token uncertainty, trace,
+    forward-energy, KV influence, and KV export expectations. The all-device
+    matrix form must run the same ABI contract across every explicit hardware
+    profile so adapter/device-contract mismatches and kernel output regressions
+    are caught before benchmark or deployment runs.
+
+15. Rust-only Toolsmith and read-only Agent Team / Rust-only 工具匠与只读 Agent Team
     When the control loop needs new local helper capabilities, it can plan
     small Rust-only tool blueprints with explicit build and validation gates.
     Agent-style decomposition stays read-only: sub-agents write structured

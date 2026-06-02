@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rust_norion::{
@@ -11,9 +11,10 @@ use rust_norion::{
     MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime, ModelRuntimeForwardKernel,
     NoironEngine, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
     PersistentRoundtripMatrixReport, PersistentRoundtripReport, ProcessRewardComponents,
-    ProcessRewardReport, ProductionKernelConformanceGate, ProductionKernelConformanceReport,
-    RecursiveScheduler, ReferenceProductionForwardKernel, ReflectionIssue, ReflectionSeverity,
-    RewardAction, RouteBudget, RuntimeAssetPaths, RuntimeBackend, RuntimeDiagnostics, RuntimeError,
+    ProcessRewardReport, ProductionKernelConformanceDeviceReport, ProductionKernelConformanceGate,
+    ProductionKernelConformanceMatrixReport, ProductionKernelConformanceReport, RecursiveScheduler,
+    ReferenceProductionForwardKernel, ReflectionIssue, ReflectionSeverity, RewardAction,
+    RouteBudget, RuntimeAssetPaths, RuntimeBackend, RuntimeDiagnostics, RuntimeError,
     RuntimeManifest, RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
     StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
     StateInspectionMatrixGate, StateInspectionMatrixGateReport, StateInspectionReport, TaskProfile,
@@ -68,6 +69,14 @@ fn main() -> std::io::Result<()> {
                 .map(|report| !report.passed())
                 .unwrap_or(false)
         {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+    if args.production_kernel_conformance_all_devices_gate {
+        let report = run_production_kernel_conformance_all_devices(&args);
+        print_production_kernel_conformance_matrix_report(&report);
+        if !report.passed {
             std::process::exit(2);
         }
         return Ok(());
@@ -604,6 +613,33 @@ fn run_production_benchmark_all_devices(
     configure_engine(engine, args);
 
     Ok(summary)
+}
+
+fn run_production_kernel_conformance_all_devices(
+    args: &Args,
+) -> ProductionKernelConformanceMatrixReport {
+    let manifest = args.runtime_manifest();
+    let device_reports = DeviceClass::explicit_profiles()
+        .iter()
+        .copied()
+        .map(|device| {
+            let report = match args.production_runtime_for_case(device, args.profile, &args.prompt)
+            {
+                Ok(runtime) => {
+                    runtime.conformance_report(ProductionKernelConformanceGate::default())
+                }
+                Err(error) => ProductionKernelConformanceReport::failed(
+                    manifest.metadata.model_id.clone(),
+                    "none",
+                    false,
+                    format!("production runtime construction failed: {error}"),
+                ),
+            };
+            ProductionKernelConformanceDeviceReport { device, report }
+        })
+        .collect();
+
+    ProductionKernelConformanceMatrixReport::evaluate(device_reports)
 }
 
 fn seed_sparse_benchmark_memories(engine: &mut NoironEngine) {
@@ -1752,6 +1788,30 @@ fn print_production_kernel_conformance_report(report: &ProductionKernelConforman
     }
 }
 
+fn print_production_kernel_conformance_matrix_report(
+    report: &ProductionKernelConformanceMatrixReport,
+) {
+    println!("Noiron production kernel conformance all-devices gate");
+    println!("{}", report.summary_line());
+    for device_report in &report.device_reports {
+        println!(
+            "production_kernel_conformance_device: device={} {}",
+            device_report.device.as_str(),
+            device_report.report.summary_line()
+        );
+        for failure in &device_report.report.failures {
+            println!(
+                "production_kernel_conformance_device_failure: {}: {}",
+                device_report.device.as_str(),
+                failure
+            );
+        }
+    }
+    for failure in &report.failures {
+        println!("production_kernel_conformance_matrix_failure: {failure}");
+    }
+}
+
 fn option_path_display(path: Option<&PathBuf>) -> String {
     path.map(|path| path.display().to_string())
         .unwrap_or_else(|| "none".to_owned())
@@ -1917,6 +1977,7 @@ struct Args {
     production_reference_kernel: bool,
     production_local_kernel: bool,
     production_kernel_conformance_gate: bool,
+    production_kernel_conformance_all_devices_gate: bool,
     runtime_command: Option<PathBuf>,
     runtime_args: Vec<String>,
     runtime_prompt_mode: CommandPromptMode,
@@ -2103,6 +2164,7 @@ impl Args {
         let mut production_reference_kernel = false;
         let mut production_local_kernel = false;
         let mut production_kernel_conformance_gate = false;
+        let mut production_kernel_conformance_all_devices_gate = false;
         let mut runtime_command = None;
         let mut runtime_args = Vec::new();
         let mut runtime_prompt_mode = CommandPromptMode::Stdin;
@@ -2999,6 +3061,14 @@ impl Args {
                     runtime_metadata.supports_kv_export = true;
                     index += 1;
                 }
+                "--production-kernel-conformance-all-devices-gate" => {
+                    production_runtime = true;
+                    production_kernel_conformance_gate = true;
+                    production_kernel_conformance_all_devices_gate = true;
+                    runtime_metadata.supports_kv_import = true;
+                    runtime_metadata.supports_kv_export = true;
+                    index += 1;
+                }
                 "--runtime-command" if index + 1 < raw.len() => {
                     runtime_command = Some(PathBuf::from(&raw[index + 1]));
                     index += 2;
@@ -3312,6 +3382,7 @@ impl Args {
             production_reference_kernel,
             production_local_kernel,
             production_kernel_conformance_gate,
+            production_kernel_conformance_all_devices_gate,
             runtime_command,
             runtime_args,
             runtime_prompt_mode,
@@ -4085,6 +4156,7 @@ mod tests {
             "--production-reference-kernel".to_owned(),
             "--production-local-kernel".to_owned(),
             "--production-kernel-conformance-gate".to_owned(),
+            "--production-kernel-conformance-all-devices-gate".to_owned(),
             "--runtime-model-id".to_owned(),
             "dev-transformer".to_owned(),
             "--runtime-tokenizer".to_owned(),
@@ -4746,6 +4818,7 @@ mod tests {
         assert!(args.production_reference_kernel);
         assert!(args.production_local_kernel);
         assert!(args.production_kernel_conformance_gate);
+        assert!(args.production_kernel_conformance_all_devices_gate);
         assert_eq!(args.runtime_metadata.model_id, "dev-transformer");
         assert_eq!(args.runtime_metadata.tokenizer, "dev-bpe");
         assert_eq!(args.runtime_wire_format, CommandWireFormat::Json);
@@ -5101,6 +5174,62 @@ mod tests {
                 .iter()
                 .any(|failure| failure.contains("production forward kernel is not connected"))
         );
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_reference_kernel_conformance_all_devices_cli_passes() {
+        assert_production_kernel_conformance_all_devices_cli_passes(
+            "--production-reference-kernel",
+            "production-runtime-cli-conformance-reference-matrix",
+        );
+    }
+
+    #[test]
+    fn production_local_kernel_conformance_all_devices_cli_passes() {
+        assert_production_kernel_conformance_all_devices_cli_passes(
+            "--production-local-kernel",
+            "production-runtime-cli-conformance-local-matrix",
+        );
+    }
+
+    #[test]
+    fn production_kernel_conformance_all_devices_cli_fails_without_kernel() {
+        let asset_dir = temp_asset_dir("production-runtime-cli-conformance-missing-matrix");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let args = Args::parse(production_conformance_all_devices_args(
+            "--production-kernel-conformance-all-devices-gate",
+            &weights,
+            &tokenizer,
+        ));
+
+        let report = run_production_kernel_conformance_all_devices(&args);
+
+        assert!(args.production_runtime);
+        assert!(args.production_kernel_conformance_gate);
+        assert!(args.production_kernel_conformance_all_devices_gate);
+        assert!(!report.passed);
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.failed_devices().len(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.device_reports.iter().all(|device_report| {
+            !device_report.report.kernel_connected
+                && device_report
+                    .report
+                    .failures
+                    .iter()
+                    .any(|failure| failure.contains("production forward kernel is not connected"))
+        }));
 
         fs::remove_dir_all(asset_dir).unwrap();
     }
@@ -6225,6 +6354,87 @@ mod tests {
         assert_eq!(trace_report.checked_lines, summary.len());
 
         fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    fn assert_production_kernel_conformance_all_devices_cli_passes(
+        kernel_flag: &str,
+        asset_name: &str,
+    ) {
+        let asset_dir = temp_asset_dir(asset_name);
+        fs::create_dir_all(&asset_dir).unwrap();
+        let weights = asset_dir.join("weights.noiron");
+        let tokenizer = asset_dir.join("tokenizer.noiron");
+        File::create(&weights).unwrap();
+        File::create(&tokenizer).unwrap();
+        let args = Args::parse(production_conformance_all_devices_args(
+            kernel_flag,
+            &weights,
+            &tokenizer,
+        ));
+
+        let report = run_production_kernel_conformance_all_devices(&args);
+
+        assert!(args.production_runtime);
+        assert!(args.production_kernel_conformance_gate);
+        assert!(args.production_kernel_conformance_all_devices_gate);
+        match kernel_flag {
+            "--production-reference-kernel" => assert!(args.production_reference_kernel),
+            "--production-local-kernel" => assert!(args.production_local_kernel),
+            _ => panic!("unexpected production kernel flag {kernel_flag}"),
+        }
+        assert!(report.passed, "{report:?}");
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.missing_devices().is_empty());
+        assert!(report.failed_devices().is_empty());
+        assert!(report.device_reports.iter().all(|device_report| {
+            device_report.report.kernel_connected
+                && device_report.report.token_count > 0
+                && device_report.report.trace_steps > 0
+                && device_report.report.imported_kv_blocks > 0
+                && device_report.report.exported_kv_blocks > 0
+        }));
+        assert!(report.summary_line().contains("devices=12"));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    fn production_conformance_all_devices_args(
+        kernel_flag: &str,
+        weights: &Path,
+        tokenizer: &Path,
+    ) -> Vec<String> {
+        vec![
+            kernel_flag.to_owned(),
+            "--production-kernel-conformance-all-devices-gate".to_owned(),
+            "--runtime-model-id".to_owned(),
+            "self-owned-transformer".to_owned(),
+            "--runtime-tokenizer".to_owned(),
+            "self-bpe".to_owned(),
+            "--runtime-native-window".to_owned(),
+            "4096".to_owned(),
+            "--runtime-embedding-dims".to_owned(),
+            "64".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "1024".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-weights".to_owned(),
+            weights.display().to_string(),
+            "--runtime-tokenizer-path".to_owned(),
+            tokenizer.display().to_string(),
+            "--device".to_owned(),
+            "cpu".to_owned(),
+        ]
     }
 
     fn assert_trace_selected_adapter_allowed(line: &str, allowed: &[&str]) {

@@ -74,7 +74,8 @@ pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };
 pub use production_runtime::{
-    ModelRuntimeForwardKernel, ProductionForwardKernel, ProductionKernelConformanceGate,
+    ModelRuntimeForwardKernel, ProductionForwardKernel, ProductionKernelConformanceDeviceReport,
+    ProductionKernelConformanceGate, ProductionKernelConformanceMatrixReport,
     ProductionKernelConformanceReport, ProductionKernelContext, ProductionKernelOutput,
     ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
 };

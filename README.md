@@ -167,7 +167,7 @@ Implemented modules:
 - `src/reflection.rs`: draft reflection, structured issue/severity diagnostics, one-pass low-risk repair, revision actions, and memory admission logic
 - `src/runtime.rs`: model runtime adapter contract for real LLM backends, including metadata, explicit Transformer architecture shape, tokenizer, optional model-side embedding, architecture-bounded KV import/export ABI hooks, Infini/SpeContext-filtered KV import candidates, Toolsmith/Agent Team request context, runtime-adapter observations from prior experience, and structured JSON command-runtime request/response wiring
 - `src/runtime_manifest.rs`: self-developed Transformer runtime manifest for model metadata, architecture shape, local asset paths, production asset-file validation, KV policy, quantization policy, supported device classes, adapter hints, and observation-aware adapter selection within device bounds
-- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, and a deterministic `ReferenceProductionForwardKernel` for end-to-end boundary validation
+- `src/production_runtime.rs`: manifest-backed production Transformer runtime boundary that hard-gates local assets, architecture shape, device contract, adapter intersection, KV import limits, imported/exported KV block shape/range/finite-value validity, a `ProductionForwardKernel` trait slot for plugging in a real self-developed forward kernel, deterministic reference/local kernel harnesses, and single-device plus all-device conformance gates for ABI validation
 - `src/state_inspect.rs`: local state inspection report for memory, experience, runtime diagnostics, reflection diagnostics, persisted live memory-feedback evidence, adaptive router, hierarchy, tier counts, effective memory policies, persisted memory vector dimensions, and cumulative self-evolution ledger counters including replay live-feedback consumption plus router-threshold/hierarchy-weight deltas
 - `src/engine.rs`: closed-loop Noiron engine and `InferenceBackend` trait; runtime token entropy/logprob, Rust-only Toolsmith planning, and read-only Agent Team planning feed the main generation metrics used by drift, router, hierarchy, process reward, and experience
 - `src/main.rs`: CLI demo using `HeuristicBackend`
@@ -919,6 +919,9 @@ for exercising the production ABI, not for claiming trained-model quality.
 with `ModelRuntimeForwardKernel`, so the same production boundary can exercise
 the self-developed runtime prototype's tokenizer, embedding, deterministic
 layer plan, KV import/export, trace, and diagnostics path.
+Use `--production-kernel-conformance-all-devices-gate` when the same attached
+kernel must pass the manifest/device/KV ABI contract across every explicit
+device profile before it is trusted.
 
 通过 manifest-backed 生产 runtime 边界运行：
 
@@ -929,6 +932,7 @@ cargo run -- --production-runtime --runtime-model-id noiron-dev-transformer --ru
 这条路径会使用真实生产门禁和 `RuntimeBackend` 集成；默认情况下生成阶段会明确返回 kernel-not-connected runtime error。生产代码可以实现 `ProductionForwardKernel`，并通过 `ProductionTransformerRuntime::with_kernel` 把真实自研 Transformer forward kernel 接到边界后面。
 如果要做本地 CI 或集成验证，可以使用 `--production-reference-kernel` 把内置确定性 Rust reference kernel 接到同一条 manifest / 设备 / KV 边界后面。这条路径用于验证生产 ABI，不代表已经具备训练后大模型的真实生成质量。
 `--production-local-kernel` 会通过 `ModelRuntimeForwardKernel` 把 Rust-native `LocalTransformerRuntime` 包装成生产 kernel，让同一条生产边界直接跑自研 runtime prototype 的 tokenizer、embedding、确定性分层执行、KV 导入/导出、trace 和 diagnostics 路径。
+如果同一个挂载的 kernel 必须先覆盖所有显式设备 profile，再进入可信生产路径，可以使用 `--production-kernel-conformance-all-devices-gate`。
 
 Run the production boundary with the reference kernel:
 
@@ -942,6 +946,13 @@ Run the production boundary with the local Rust-native runtime kernel adapter:
 cargo run -- --production-local-kernel --production-kernel-conformance-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
 ```
 
+Run the production kernel conformance gate across every explicit device
+profile:
+
+```powershell
+cargo run -- --production-local-kernel --production-kernel-conformance-all-devices-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron
+```
+
 通过 reference kernel 运行生产边界：
 
 ```powershell
@@ -952,6 +963,12 @@ cargo run -- --production-reference-kernel --runtime-model-id noiron-dev-transfo
 
 ```powershell
 cargo run -- --production-local-kernel --production-kernel-conformance-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron --device cpu
+```
+
+跨所有显式设备 profile 运行生产 kernel conformance 门禁：
+
+```powershell
+cargo run -- --production-local-kernel --production-kernel-conformance-all-devices-gate --runtime-model-id noiron-dev-transformer --runtime-tokenizer noiron-bpe --runtime-native-window 32768 --runtime-embedding-dims 4096 --runtime-layers 32 --runtime-hidden-size 4096 --runtime-attention-heads 32 --runtime-kv-heads 8 --runtime-local-window 8192 --runtime-kv-exchange --runtime-weights ./models/noiron/weights.noiron --runtime-tokenizer-path ./models/noiron/tokenizer.noiron
 ```
 
 By default, the demo writes local memory to `noiron-memory.ndkv`, structured
@@ -1123,6 +1140,10 @@ diagnostics, and exported KV blocks through the same `RuntimeBackend` path.
 they require a connected kernel, runtime token uncertainty, reasoning trace,
 positive finite forward energy, finite KV influence, and exported KV when the
 manifest enables KV export.
+`--production-kernel-conformance-all-devices-gate` evaluates the same contract
+for every explicit device profile, reporting per-device construction,
+adapter/device-contract, and kernel-output failures instead of hiding them
+behind a single benchmark run.
 Imported KV from the Noiron control plane is validated before it is accepted,
 and kernel-exported KV is validated before it can reach `RuntimeBackend`:
 layer/head ids must fit the manifest architecture, token ranges must be valid,
@@ -1133,6 +1154,7 @@ the runtime architecture instead of assuming one unbounded head per memory.
 
 `ProductionTransformerRuntime` 会把这份 manifest 变成真正的生产边界。只有生产资产校验和当前设备门禁都通过时才能构造成功；构造后会暴露 metadata、架构形状、启动期 tokenizer/embedding、选中的 adapter、稳定的 runtime device contract，以及受设备和 manifest 双重限制的 KV 导入/导出能力。未挂载 kernel 时，`generate` 会明确返回 “kernel not connected”。挂载 `ProductionForwardKernel` 后，kernel 会收到 manifest、资产摘要、设备门禁、导入 KV blocks 和 Noiron runtime request，并通过同一条 `RuntimeBackend` 路径返回 answer、token uncertainty、trace、diagnostics 和导出的 KV blocks。
 `ProductionTransformerRuntime::conformance_report` 和 CLI `--production-kernel-conformance-gate` 会把这份契约变成本地/CI 门禁：要求 kernel 已连接，并返回 runtime token uncertainty、reasoning trace、positive finite forward energy、finite KV influence，以及 manifest 启用 KV export 时的导出 KV。
+`--production-kernel-conformance-all-devices-gate` 会把同一份契约扩展到每一个显式设备 profile，并逐设备报告构造失败、adapter / device contract 失败和 kernel 输出失败，而不是把问题隐藏在一次 benchmark 运行里。
 Noiron 控制层导入的 KV 会先经过校验再被生产 runtime 接受，生产 kernel 导出的 KV 也会先在这层边界做 ABI 校验：layer/head 必须落在 manifest 架构范围内，token range 必须合法，key/value 不能为空且维度一致，向量长度必须符合 manifest 与 token span 上界，所有浮点值必须是有限值；未通过校验的 KV 不会进入 `RuntimeBackend` 或长期记忆。由活跃记忆生成的 runtime KV import 也会按 runtime 架构分配有界的 layer/head，而不是假设每条记忆都能占用一个无限 head。
 
 `RuntimeBackend` reports the runtime's native context window back to the engine,

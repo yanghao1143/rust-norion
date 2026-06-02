@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::agent_team::AgentTeamPlan;
 use crate::hardware::{
-    HardwareAllocator, HardwarePlan, HardwareSnapshot, RuntimeAdapterHint,
+    DeviceClass, HardwareAllocator, HardwarePlan, HardwareSnapshot, RuntimeAdapterHint,
     RuntimeManifestDeviceGateReport,
 };
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
@@ -143,6 +143,29 @@ impl ProductionKernelConformanceReport {
         }
     }
 
+    pub fn failed(
+        model_id: impl Into<String>,
+        selected_adapter: impl Into<String>,
+        kernel_connected: bool,
+        failure: impl Into<String>,
+    ) -> Self {
+        let mut report = Self {
+            passed: false,
+            model_id: model_id.into(),
+            selected_adapter: selected_adapter.into(),
+            kernel_connected,
+            token_count: 0,
+            trace_steps: 0,
+            imported_kv_blocks: 0,
+            exported_kv_blocks: 0,
+            forward_energy: None,
+            kv_influence: None,
+            failures: Vec::new(),
+        };
+        report.failures.push(failure.into());
+        report
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
             "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} tokens={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} failures={}",
@@ -159,6 +182,114 @@ impl ProductionKernelConformanceReport {
             self.failures.len()
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProductionKernelConformanceDeviceReport {
+    pub device: DeviceClass,
+    pub report: ProductionKernelConformanceReport,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProductionKernelConformanceMatrixReport {
+    pub passed: bool,
+    pub device_reports: Vec<ProductionKernelConformanceDeviceReport>,
+    pub failures: Vec<String>,
+}
+
+impl ProductionKernelConformanceMatrixReport {
+    pub fn evaluate(device_reports: Vec<ProductionKernelConformanceDeviceReport>) -> Self {
+        let mut failures = Vec::new();
+
+        if device_reports.is_empty() {
+            failures
+                .push("no production kernel conformance device reports were recorded".to_owned());
+        }
+
+        let missing = missing_production_kernel_conformance_devices(&device_reports);
+        if !missing.is_empty() {
+            failures.push(format!(
+                "production_kernel_conformance_devices {} below expected {} missing={}",
+                explicit_production_kernel_conformance_devices(&device_reports),
+                DeviceClass::explicit_profiles().len(),
+                missing
+                    .iter()
+                    .map(|device| device.as_str())
+                    .collect::<Vec<_>>()
+                    .join("+")
+            ));
+        }
+
+        for device_report in &device_reports {
+            if !device_report.report.passed {
+                failures.push(format!(
+                    "device {} production kernel conformance failed with {} failures",
+                    device_report.device.as_str(),
+                    device_report.report.failures.len()
+                ));
+            }
+        }
+
+        Self {
+            passed: failures.is_empty(),
+            device_reports,
+            failures,
+        }
+    }
+
+    pub fn covered_devices(&self) -> usize {
+        explicit_production_kernel_conformance_devices(&self.device_reports)
+    }
+
+    pub fn missing_devices(&self) -> Vec<DeviceClass> {
+        missing_production_kernel_conformance_devices(&self.device_reports)
+    }
+
+    pub fn failed_devices(&self) -> Vec<DeviceClass> {
+        self.device_reports
+            .iter()
+            .filter(|device_report| !device_report.report.passed)
+            .map(|device_report| device_report.device)
+            .collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "production_kernel_conformance_matrix: passed={} devices={} expected_devices={} failed_devices={} failures={}",
+            self.passed,
+            self.covered_devices(),
+            DeviceClass::explicit_profiles().len(),
+            self.failed_devices().len(),
+            self.failures.len()
+        )
+    }
+}
+
+fn explicit_production_kernel_conformance_devices(
+    device_reports: &[ProductionKernelConformanceDeviceReport],
+) -> usize {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .filter(|device| {
+            device_reports
+                .iter()
+                .any(|device_report| device_report.device == **device)
+        })
+        .count()
+}
+
+fn missing_production_kernel_conformance_devices(
+    device_reports: &[ProductionKernelConformanceDeviceReport],
+) -> Vec<DeviceClass> {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .copied()
+        .filter(|device| {
+            !device_reports
+                .iter()
+                .any(|device_report| device_report.device == *device)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1720,6 +1851,127 @@ mod tests {
     }
 
     #[test]
+    fn reference_production_kernel_conformance_matrix_covers_all_devices() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-reference-matrix");
+        let manifest = production_manifest(&weights, &tokenizer)
+            .with_supported_devices(DeviceClass::explicit_profiles().to_vec());
+        let device_reports = DeviceClass::explicit_profiles()
+            .iter()
+            .copied()
+            .map(|device| {
+                let runtime = ProductionTransformerRuntime::from_manifest_for_plan(
+                    manifest.clone(),
+                    &device_plan(device),
+                )
+                .unwrap()
+                .with_kernel(ReferenceProductionForwardKernel::new());
+                ProductionKernelConformanceDeviceReport {
+                    device,
+                    report: runtime.conformance_report(ProductionKernelConformanceGate::default()),
+                }
+            })
+            .collect();
+
+        let report = ProductionKernelConformanceMatrixReport::evaluate(device_reports);
+
+        assert!(report.passed, "{report:?}");
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.missing_devices().is_empty());
+        assert!(report.failed_devices().is_empty());
+        assert!(report.summary_line().contains("devices=12"));
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn local_model_runtime_kernel_conformance_matrix_covers_all_devices() {
+        let (asset_dir, weights, tokenizer, _config) =
+            create_assets("production-runtime-conformance-local-matrix");
+        let manifest = production_manifest(&weights, &tokenizer)
+            .with_supported_devices(DeviceClass::explicit_profiles().to_vec());
+        let device_reports = DeviceClass::explicit_profiles()
+            .iter()
+            .copied()
+            .map(|device| {
+                let local_runtime = LocalTransformerRuntime::with_manifest(manifest.clone());
+                let runtime = ProductionTransformerRuntime::from_manifest_for_plan(
+                    manifest.clone(),
+                    &device_plan(device),
+                )
+                .unwrap()
+                .with_kernel(ModelRuntimeForwardKernel::new(local_runtime));
+                ProductionKernelConformanceDeviceReport {
+                    device,
+                    report: runtime.conformance_report(ProductionKernelConformanceGate::default()),
+                }
+            })
+            .collect();
+
+        let report = ProductionKernelConformanceMatrixReport::evaluate(device_reports);
+
+        assert!(report.passed, "{report:?}");
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.failed_devices().is_empty());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn production_kernel_conformance_matrix_reports_missing_and_failed_devices() {
+        let passing = ProductionKernelConformanceReport {
+            passed: true,
+            model_id: "model".to_owned(),
+            selected_adapter: "portable-rust".to_owned(),
+            kernel_connected: true,
+            token_count: 1,
+            trace_steps: 1,
+            imported_kv_blocks: 1,
+            exported_kv_blocks: 1,
+            forward_energy: Some(1.0),
+            kv_influence: Some(0.0),
+            failures: Vec::new(),
+        };
+        let failing = ProductionKernelConformanceReport::failed(
+            "model",
+            "portable-rust",
+            false,
+            "production forward kernel is not connected",
+        );
+
+        let report = ProductionKernelConformanceMatrixReport::evaluate(vec![
+            ProductionKernelConformanceDeviceReport {
+                device: DeviceClass::CpuOnly,
+                report: passing,
+            },
+            ProductionKernelConformanceDeviceReport {
+                device: DeviceClass::IntegratedGpu,
+                report: failing,
+            },
+        ]);
+
+        assert!(!report.passed);
+        assert_eq!(report.covered_devices(), 2);
+        assert_eq!(
+            report.missing_devices().len(),
+            DeviceClass::explicit_profiles().len() - 2
+        );
+        assert_eq!(report.failed_devices(), vec![DeviceClass::IntegratedGpu]);
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("production_kernel_conformance_devices 2 below expected")
+        }));
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("device integrated production kernel conformance failed")
+        }));
+    }
+
+    #[test]
     fn production_kernel_conformance_gate_fails_when_kernel_is_missing() {
         let (asset_dir, weights, tokenizer, _config) =
             create_assets("production-runtime-conformance-missing");
@@ -1861,8 +2113,12 @@ mod tests {
     }
 
     fn cpu_plan() -> HardwarePlan {
+        device_plan(DeviceClass::CpuOnly)
+    }
+
+    fn device_plan(device: DeviceClass) -> HardwarePlan {
         HardwareAllocator::new().plan(
-            HardwareSnapshot::new(DeviceClass::CpuOnly, 0.20, 0.10, 0.30, 0.10),
+            HardwareSnapshot::new(device, 0.20, 0.10, 0.30, 0.10),
             crate::hierarchy::TaskProfile::General,
             512,
             HierarchyWeights::default(),
