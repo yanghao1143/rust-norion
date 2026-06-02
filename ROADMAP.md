@@ -303,10 +303,11 @@ modules, not external product dependencies:
   mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
   and multi-GPU profiles all prove durable local state independently. Matrix
   thresholds should also be able to require reflection-issue, critical
-  reflection-issue, revision-action, live memory-feedback evidence, and
-  live-inference evolution evidence plus evolution-ledger replay live-feedback
-  consumption across a minimum number of explicit device profiles, not only
-  inside individual state files.
+  reflection-issue, revision-action, live memory-feedback evidence,
+  live-inference online reward evidence, and live-inference evolution evidence
+  plus evolution-ledger replay live-feedback and replay live-evolution online
+  reward consumption across a minimum number of explicit device profiles, not
+  only inside individual state files.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -681,7 +682,8 @@ These are algorithmic references, not product dependencies:
   and the matrix summary exposes those totals as first-class evidence. The same
   inspection gate can require live-inference self-evolution evidence through
   `--inspect-min-evolution-live-*`, including online inference counts,
-  router/hierarchy mutations and deltas, live memory feedback, durable memory
+  router/hierarchy mutations and deltas, online reward feedback split into
+  reinforcement and penalty counts, live memory feedback, durable memory
   writes, reflection issues, critical reflection issues, and revision actions.
   The gate fails with a non-zero exit code when persisted evidence is
   incomplete, when reflection diagnostics or revision actions are missing, when
@@ -694,8 +696,9 @@ These are algorithmic references, not product dependencies:
   thresholds can also require runtime-KV memory, runtime model id, selected
   adapter, forward energy, KV influence, KV import/export, reflection-issue,
   critical-reflection-issue, revision-action, live-inference evolution evidence,
-  and self-evolution ledger replay/mutation/memory/recursive evidence to appear
-  across enough device profiles before the all-device state inspection passes.
+  live-inference online reward evidence, and self-evolution ledger
+  replay/mutation/memory/online-reward/recursive evidence to appear across
+  enough device profiles before the all-device state inspection passes.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -827,6 +830,8 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`,
   `--inspect-min-evolution-memory-update-device-profiles`,
   `--inspect-min-evolution-replay-live-memory-feedback-device-profiles`,
+  `--inspect-min-evolution-live-online-reward-device-profiles`,
+  `--inspect-min-evolution-replay-live-evolution-online-reward-device-profiles`,
   `--inspect-min-evolution-recursive-replay-device-profiles`, and
   `--inspect-min-evolution-recursive-runtime-call-device-profiles`, so a device
   profile cannot pass all-device inspection by persisting runtime/reflection

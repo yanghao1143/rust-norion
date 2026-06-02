@@ -240,11 +240,14 @@ runtime diagnostics evidence, live memory feedback, reflection diagnostics evide
 self-evolution ledger counters/deltas are missing. Use the
 `--inspect-min-evolution-live-*` flags to prove live inference itself persisted
 online evolution evidence, including live inference runs, router/hierarchy
-mutations and deltas, memory feedback updates, stored semantic/gist/runtime-KV
-memory writes, reflection issues, critical reflection issues, and revision
-actions. Use
+mutations and deltas, online reward feedback/reinforcement/penalty counts,
+memory feedback updates, stored semantic/gist/runtime-KV memory writes,
+reflection issues, critical reflection issues, and revision actions. Use
 `--inspect-min-evolution-replay-live-memory-feedback-updates` when replay must
 prove it consumed persisted live feedback in the cumulative ledger, use
+`--inspect-min-evolution-replay-live-evolution-online-reward-*` when replay must
+prove it consumed persisted online reward feedback from live-evolution records,
+use
 `--inspect-min-evolution-recursive-replay-items` when long-context replay
 evidence must also survive in persisted adaptive state, and use the
 `--inspect-max-evolution-rollback-*` flags to make drift rollback magnitude a
@@ -300,6 +303,7 @@ self-evolution coverage is gated with
 `--inspect-min-evolution-live-inference-device-profiles`,
 `--inspect-min-evolution-live-router-threshold-mutation-device-profiles`,
 `--inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles`,
+`--inspect-min-evolution-live-online-reward-device-profiles`,
 `--inspect-min-evolution-live-memory-update-device-profiles`,
 `--inspect-min-evolution-live-stored-memory-update-device-profiles`,
 `--inspect-min-evolution-live-reflection-issue-device-profiles`,
@@ -312,6 +316,7 @@ self-evolution ledger evidence is gated with
 `--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`,
 `--inspect-min-evolution-memory-update-device-profiles`,
 `--inspect-min-evolution-replay-live-memory-feedback-device-profiles`,
+`--inspect-min-evolution-replay-live-evolution-online-reward-device-profiles`,
 `--inspect-min-evolution-recursive-replay-device-profiles`, and
 `--inspect-min-evolution-recursive-runtime-call-device-profiles`. These flags
 imply `--inspect-state --inspect-gate --benchmark-all-devices` and fail when
@@ -359,7 +364,8 @@ entropy/logprob token 证据数量达到最低值，继续加
 需要证明 fast-path watch 场景里 runtime 已导出 KV、但控制层把其中一部分拦截在长期
 `runtime_kv:` 记忆之外时，使用 `--inspect-min-runtime-kv-hold-experiences`
 和 `--inspect-min-runtime-kv-held-blocks`。
-使用 `--inspect-min-evolution-live-*` 可以要求在线推理本身已经把自进化证据持久化下来，包括 live inference 次数、router / hierarchy 变更和 delta、记忆反馈更新、semantic/gist/runtime-KV 写入、reflection issue、critical reflection issue 和 revision action。
+使用 `--inspect-min-evolution-live-*` 可以要求在线推理本身已经把自进化证据持久化下来，包括 live inference 次数、router / hierarchy 变更和 delta、online reward feedback / reinforcement / penalty 计数、记忆反馈更新、semantic/gist/runtime-KV 写入、reflection issue、critical reflection issue 和 revision action。
+使用 `--inspect-min-evolution-replay-live-evolution-online-reward-*` 可以要求 replay 已经消费过 live-evolution 记录里的在线奖励反馈。
 
 加上 `--benchmark-all-devices` 后，会检查 all-device roundtrip 门禁写出的同一组
 device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
@@ -390,6 +396,7 @@ adapter 选择漂移通过 `--inspect-max-runtime-adapter-selection-mismatches`
 `--inspect-min-evolution-live-inference-device-profiles`、
 `--inspect-min-evolution-live-router-threshold-mutation-device-profiles`、
 `--inspect-min-evolution-live-hierarchy-weight-mutation-device-profiles`、
+`--inspect-min-evolution-live-online-reward-device-profiles`、
 `--inspect-min-evolution-live-memory-update-device-profiles`、
 `--inspect-min-evolution-live-stored-memory-update-device-profiles`、
 `--inspect-min-evolution-live-reflection-issue-device-profiles`、
@@ -401,6 +408,7 @@ adapter 选择漂移通过 `--inspect-max-runtime-adapter-selection-mismatches`
 `--inspect-min-evolution-hierarchy-weight-mutation-device-profiles`、
 `--inspect-min-evolution-memory-update-device-profiles`、
 `--inspect-min-evolution-replay-live-memory-feedback-device-profiles`、
+`--inspect-min-evolution-replay-live-evolution-online-reward-device-profiles`、
 `--inspect-min-evolution-recursive-replay-device-profiles` 和
 `--inspect-min-evolution-recursive-runtime-call-device-profiles` 门禁。这些参数会隐式开启
 `--inspect-state --inspect-gate --benchmark-all-devices`；如果持久化 runtime、
