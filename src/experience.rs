@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::io;
 use std::path::Path;
 
+use crate::adaptive_state::LiveInferenceEvolution;
 use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
@@ -29,6 +30,7 @@ pub struct ExperienceInput {
     pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
     pub process_reward: ProcessRewardReport,
+    pub live_evolution: LiveInferenceEvolution,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +54,7 @@ pub struct ExperienceRecord {
     pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
     pub process_reward: ProcessRewardReport,
+    pub live_evolution: LiveInferenceEvolution,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +135,7 @@ impl ExperienceStore {
             stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
             runtime_diagnostics: input.runtime_diagnostics,
             process_reward: input.process_reward,
+            live_evolution: input.live_evolution,
         });
         id
     }
@@ -335,9 +339,10 @@ fn serialize_record(record: &ExperienceRecord) -> String {
     let reflection_issues = serialize_reflection_issues(&record.reflection_issues);
     let revision_actions = serialize_revision_actions(&record.revision_actions);
     let runtime_diagnostics = serialize_runtime_diagnostics(&record.runtime_diagnostics);
+    let live_evolution = serialize_live_evolution(record.live_evolution);
 
     format!(
-        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{:.6}\t{}\t{:.6}\t{}\t{:.6}\t{:.6}\t{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         record.id,
         profile_to_str(record.profile),
         record.quality,
@@ -358,7 +363,8 @@ fn serialize_record(record: &ExperienceRecord) -> String {
         escape_field(&stored_runtime_kv_memory_ids),
         escape_field(&reflection_issues),
         escape_field(&revision_actions),
-        escape_field(&runtime_diagnostics)
+        escape_field(&runtime_diagnostics),
+        escape_field(&live_evolution)
     )
 }
 
@@ -431,6 +437,10 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         .get(20)
         .and_then(|value| deserialize_runtime_diagnostics(&unescape_field(value)))
         .unwrap_or_default();
+    let live_evolution = fields
+        .get(21)
+        .and_then(|value| deserialize_live_evolution(&unescape_field(value)))
+        .unwrap_or_default();
 
     Some(ExperienceRecord {
         id,
@@ -452,6 +462,7 @@ fn deserialize_record(line: &str) -> Option<ExperienceRecord> {
         stored_runtime_kv_memory_ids,
         runtime_diagnostics,
         process_reward,
+        live_evolution,
     })
 }
 
@@ -476,6 +487,46 @@ fn deserialize_route_budget(value: &str) -> Option<RouteBudget> {
         attention_tokens: fields[1].parse::<usize>().ok()?,
         fast_tokens: fields[2].parse::<usize>().ok()?,
         attention_fraction: fields[3].parse::<f32>().ok()?.clamp(0.0, 1.0),
+    })
+}
+
+fn serialize_live_evolution(report: LiveInferenceEvolution) -> String {
+    [
+        finite_f32_to_field(report.router_threshold_delta),
+        finite_f32_to_field(report.hierarchy_weight_delta),
+        report.memory_reinforcements.to_string(),
+        report.memory_penalties.to_string(),
+        bool_to_field(report.stored_memory).to_owned(),
+        report.stored_gist_memories.to_string(),
+        report.stored_runtime_kv_memories.to_string(),
+        report.reflection_issues.to_string(),
+        report.critical_reflection_issues.to_string(),
+        report.revision_actions.to_string(),
+    ]
+    .join(",")
+}
+
+fn deserialize_live_evolution(value: &str) -> Option<LiveInferenceEvolution> {
+    if value.is_empty() {
+        return Some(LiveInferenceEvolution::default());
+    }
+
+    let fields = value.split(',').collect::<Vec<_>>();
+    if fields.len() != 10 {
+        return None;
+    }
+
+    Some(LiveInferenceEvolution {
+        router_threshold_delta: field_to_finite_f32(fields[0])?.max(0.0),
+        hierarchy_weight_delta: field_to_finite_f32(fields[1])?.max(0.0),
+        memory_reinforcements: fields[2].parse::<usize>().ok()?,
+        memory_penalties: fields[3].parse::<usize>().ok()?,
+        stored_memory: field_to_bool(fields[4])?,
+        stored_gist_memories: fields[5].parse::<usize>().ok()?,
+        stored_runtime_kv_memories: fields[6].parse::<usize>().ok()?,
+        reflection_issues: fields[7].parse::<usize>().ok()?,
+        critical_reflection_issues: fields[8].parse::<usize>().ok()?,
+        revision_actions: fields[9].parse::<usize>().ok()?,
     })
 }
 
@@ -759,6 +810,26 @@ fn field_to_finite_f32(value: &str) -> Option<f32> {
         return None;
     }
     value.parse::<f32>().ok().filter(|value| value.is_finite())
+}
+
+fn finite_f32_to_field(value: f32) -> String {
+    if value.is_finite() {
+        format!("{value:.6}")
+    } else {
+        "0.000000".to_owned()
+    }
+}
+
+fn bool_to_field(value: bool) -> &'static str {
+    if value { "1" } else { "0" }
+}
+
+fn field_to_bool(value: &str) -> Option<bool> {
+    match value {
+        "1" | "true" => Some(true),
+        "0" | "false" => Some(false),
+        _ => None,
+    }
 }
 
 fn non_empty_string(value: &str) -> Option<String> {
@@ -1070,6 +1141,30 @@ mod tests {
         );
         assert!((loaded.records()[0].route_budget.attention_fraction - 0.4).abs() < 0.0001);
         assert!((loaded.records()[0].process_reward.total - 0.5).abs() < 0.0001);
+        assert!(
+            (loaded.records()[0].live_evolution.router_threshold_delta - 0.030000).abs() < 0.0001
+        );
+        assert!(
+            (loaded.records()[0].live_evolution.hierarchy_weight_delta - 0.040000).abs() < 0.0001
+        );
+        assert_eq!(loaded.records()[0].live_evolution.memory_reinforcements, 1);
+        assert_eq!(loaded.records()[0].live_evolution.memory_penalties, 0);
+        assert!(loaded.records()[0].live_evolution.stored_memory);
+        assert_eq!(loaded.records()[0].live_evolution.stored_gist_memories, 2);
+        assert_eq!(
+            loaded.records()[0]
+                .live_evolution
+                .stored_runtime_kv_memories,
+            1
+        );
+        assert_eq!(loaded.records()[0].live_evolution.reflection_issues, 1);
+        assert_eq!(
+            loaded.records()[0]
+                .live_evolution
+                .critical_reflection_issues,
+            0
+        );
+        assert_eq!(loaded.records()[0].live_evolution.revision_actions, 1);
         cleanup(path);
     }
 
@@ -1290,6 +1385,18 @@ mod tests {
                         .to_owned(),
                 ],
                 ..ProcessRewardReport::default()
+            },
+            live_evolution: LiveInferenceEvolution {
+                router_threshold_delta: 0.03,
+                hierarchy_weight_delta: 0.04,
+                memory_reinforcements: 1,
+                memory_penalties: 0,
+                stored_memory: true,
+                stored_gist_memories: 2,
+                stored_runtime_kv_memories: 1,
+                reflection_issues: 1,
+                critical_reflection_issues: 0,
+                revision_actions: 1,
             },
         }
     }

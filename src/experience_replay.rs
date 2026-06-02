@@ -1,3 +1,4 @@
+use crate::adaptive_state::LiveInferenceEvolution;
 use crate::experience::{ExperienceRecord, recursive_runtime_calls_from_notes};
 use crate::hierarchy::TaskProfile;
 use crate::kv_cache::{MemoryUpdateAction, MemoryUpdateReport};
@@ -115,6 +116,7 @@ impl ExperienceReplayPlanner {
             route_budget: record.route_budget,
             memory_ids,
             runtime_diagnostics: record.runtime_diagnostics.clone(),
+            live_evolution: record.live_evolution,
             recursive_runtime_calls: recursive_stats
                 .and_then(|stats| stats.runtime_calls)
                 .or_else(|| recursive_runtime_calls_from_notes(&record.process_reward.notes)),
@@ -162,6 +164,7 @@ pub struct ExperienceReplayItem {
     pub route_budget: RouteBudget,
     pub memory_ids: Vec<u64>,
     pub runtime_diagnostics: RuntimeDiagnostics,
+    pub live_evolution: LiveInferenceEvolution,
     pub recursive_runtime_calls: Option<usize>,
     pub recursive_stats: Option<RecursiveReplayStats>,
     pub live_memory_feedback: Option<LiveMemoryFeedbackStats>,
@@ -778,6 +781,18 @@ mod tests {
                         .to_owned(),
                 ],
             },
+            live_evolution: LiveInferenceEvolution {
+                router_threshold_delta: 0.02,
+                hierarchy_weight_delta: 0.03,
+                memory_reinforcements: 2,
+                memory_penalties: 0,
+                stored_memory: true,
+                stored_gist_memories: 1,
+                stored_runtime_kv_memories: 1,
+                reflection_issues: if action == RewardAction::Penalize { 1 } else { 0 },
+                critical_reflection_issues: if action == RewardAction::Penalize { 1 } else { 0 },
+                revision_actions: if action == RewardAction::Penalize { 1 } else { 0 },
+            },
         };
 
         ExperienceRecord {
@@ -800,6 +815,7 @@ mod tests {
             stored_runtime_kv_memory_ids: input.stored_runtime_kv_memory_ids,
             runtime_diagnostics: input.runtime_diagnostics,
             process_reward: input.process_reward,
+            live_evolution: input.live_evolution,
         }
     }
 
@@ -813,6 +829,8 @@ mod tests {
         assert_eq!(plan.items.len(), 1);
         assert_eq!(plan.items[0].recursive_runtime_calls, Some(7));
         assert_eq!(plan.items[0].recursive_stats.unwrap().chunks, Some(4));
+        assert_eq!(plan.items[0].live_evolution.memory_reinforcements, 2);
+        assert_eq!(plan.items[0].live_evolution.stored_runtime_kv_memories, 1);
     }
 
     #[test]

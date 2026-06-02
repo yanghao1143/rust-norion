@@ -863,6 +863,18 @@ impl NoironEngine {
         if let Some(note) = memory_feedback_note(&memory_feedback) {
             experience_process_reward.notes.push(note);
         }
+        let live_evolution = LiveInferenceEvolution {
+            router_threshold_delta: live_router_threshold_delta,
+            hierarchy_weight_delta: live_hierarchy_weight_delta,
+            memory_reinforcements: memory_feedback.reinforced,
+            memory_penalties: memory_feedback.penalized,
+            stored_memory: stored_memory_id.is_some(),
+            stored_gist_memories: stored_gist_memory_ids.len(),
+            stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            reflection_issues: report.issues.len(),
+            critical_reflection_issues: report.critical_issue_count(),
+            revision_actions: report.revision_actions.len(),
+        };
         let experience_id = self.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),
             profile: request.profile,
@@ -882,19 +894,8 @@ impl NoironEngine {
             stored_runtime_kv_memory_ids: stored_runtime_kv_memory_ids.clone(),
             runtime_diagnostics: runtime_diagnostics.clone(),
             process_reward: experience_process_reward,
+            live_evolution,
         });
-        let live_evolution = LiveInferenceEvolution {
-            router_threshold_delta: live_router_threshold_delta,
-            hierarchy_weight_delta: live_hierarchy_weight_delta,
-            memory_reinforcements: memory_feedback.reinforced,
-            memory_penalties: memory_feedback.penalized,
-            stored_memory: stored_memory_id.is_some(),
-            stored_gist_memories: stored_gist_memory_ids.len(),
-            stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
-            reflection_issues: report.issues.len(),
-            critical_reflection_issues: report.critical_issue_count(),
-            revision_actions: report.revision_actions.len(),
-        };
         self.evolution_ledger.record_live_inference(live_evolution);
         let retention_report = self.cache.apply_retention(self.memory_retention_policy);
         let protected_memory_ids = protected_memory_ids(
@@ -2711,6 +2712,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
         let mut backend = DiagnosedBackend;
 
@@ -2804,6 +2806,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
         engine.experience.record(ExperienceInput {
             prompt: "adapter observation history".to_owned(),
@@ -2845,6 +2848,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
         let mut backend = DiagnosedBackend;
 
@@ -2901,6 +2905,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
         let before_hits = engine.cache.entries()[0].hits;
 
@@ -2954,6 +2959,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
         let before_hits = engine.cache.entries()[0].hits;
 
@@ -3224,6 +3230,7 @@ mod tests {
             stored_runtime_kv_memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
             process_reward: ProcessRewardReport::default(),
+            live_evolution: Default::default(),
         });
         let mut backend = HeuristicBackend;
 
@@ -3457,6 +3464,7 @@ mod tests {
                         .to_owned(),
                 ],
             },
+            live_evolution: Default::default(),
         });
 
         let report = engine.replay_experience(4);
@@ -3570,6 +3578,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: reward_notes,
             },
+            live_evolution: Default::default(),
         }
     }
 
@@ -3621,6 +3630,7 @@ mod tests {
             },
             memory_ids: Vec::new(),
             runtime_diagnostics: RuntimeDiagnostics::default(),
+            live_evolution: Default::default(),
             recursive_runtime_calls,
             recursive_stats: recursive_runtime_calls.map(|runtime_calls| RecursiveReplayStats {
                 chunks: Some(4),

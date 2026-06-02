@@ -2502,6 +2502,7 @@ mod tests {
                         .to_owned(),
                 ],
             },
+            live_evolution: Default::default(),
         });
         engine.experience.record(ExperienceInput {
             prompt: "inspect critical reflection state".to_owned(),
@@ -2536,6 +2537,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
 
         let report = StateInspectionReport::from_engine(&engine, 3);
@@ -3236,6 +3238,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
     }
 
@@ -3579,6 +3582,7 @@ mod tests {
                 cold_kv_precision_bits: Some(4),
             },
             process_reward: ProcessRewardReport::default(),
+            live_evolution: Default::default(),
         });
 
         let report = StateInspectionReport::from_engine(&engine, 1);
@@ -3983,6 +3987,7 @@ mod tests {
                 components: ProcessRewardComponents::default(),
                 notes: Vec::new(),
             },
+            live_evolution: Default::default(),
         });
 
         let report = StateInspectionReport::from_engine(&engine, 3);

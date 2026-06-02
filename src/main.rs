@@ -707,6 +707,7 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
                     .to_owned(),
             ],
         },
+        live_evolution: Default::default(),
     });
     engine.experience.record(ExperienceInput {
         prompt: "benchmark auto replay control plane drift".to_owned(),
@@ -746,6 +747,7 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
                     .to_owned(),
             ],
         },
+        live_evolution: Default::default(),
     });
     engine.experience.record(ExperienceInput {
         prompt: "runtime adapter self-developed Transformer KV import export".to_owned(),
@@ -792,6 +794,7 @@ fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {
                     .to_owned(),
             ],
         },
+        live_evolution: Default::default(),
     });
 }
 
@@ -842,6 +845,7 @@ fn seed_roundtrip_reflection_evidence(engine: &mut NoironEngine, profile: TaskPr
             action: RewardAction::Hold,
             notes: Vec::new(),
         },
+        live_evolution: Default::default(),
     });
 }
 

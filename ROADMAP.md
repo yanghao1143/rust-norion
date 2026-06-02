@@ -248,8 +248,9 @@ modules, not external product dependencies:
   the experience store should become replayable training data for the control
   plane state while leaving model weights untouched. Records should preserve
   route budgets, used KV memory ids, gist memory ids, runtime-KV memory ids,
-  structured reflection issues, and revision actions so replay can reinforce or
-  penalize the actual memory and reasoning path used by an answer.
+  structured live-inference evolution evidence, structured reflection issues,
+  and revision actions so replay can reinforce or penalize the actual memory
+  and reasoning path used by an answer.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
