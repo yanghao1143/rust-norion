@@ -805,33 +805,21 @@ impl NoironEngine {
             }
         }
 
+        let baseline_router_threshold = adaptive_before_inference
+            .router
+            .profile_thresholds
+            .get(request.profile);
+        let baseline_hierarchy_weights = adaptive_before_inference
+            .hierarchy
+            .profile_weights
+            .get(request.profile);
         self.router.observe_with_profile(request.profile, metrics);
         let mut hierarchy = self.hierarchy.observe(request.profile, metrics);
-        let live_router_threshold_delta = (self.router.threshold_for(request.profile)
-            - adaptive_before_inference
-                .router
-                .profile_thresholds
-                .get(request.profile))
-        .abs();
-        let live_hierarchy_weight_delta = hierarchy_weight_delta(
-            adaptive_before_inference
-                .hierarchy
-                .profile_weights
-                .get(request.profile),
-            self.hierarchy.state().profile_weights.get(request.profile),
-        );
         if drift_report.rollback_adaptive {
-            let rollback_router_threshold_delta = (self.router.threshold_for(request.profile)
-                - adaptive_before_inference
-                    .router
-                    .profile_thresholds
-                    .get(request.profile))
-            .abs();
+            let rollback_router_threshold_delta =
+                (self.router.threshold_for(request.profile) - baseline_router_threshold).abs();
             let rollback_hierarchy_weight_delta = hierarchy_weight_delta(
-                adaptive_before_inference
-                    .hierarchy
-                    .profile_weights
-                    .get(request.profile),
+                baseline_hierarchy_weights,
                 self.hierarchy.state().profile_weights.get(request.profile),
             );
             self.restore_adaptive_state(adaptive_before_inference);
@@ -841,18 +829,7 @@ impl NoironEngine {
             );
             hierarchy = self.hierarchy.current();
         }
-        let router_threshold_after = self.router.threshold();
-        let live_router_threshold_delta = if drift_report.rollback_adaptive {
-            0.0
-        } else {
-            live_router_threshold_delta
-        };
-        let live_hierarchy_weight_delta = if drift_report.rollback_adaptive {
-            0.0
-        } else {
-            live_hierarchy_weight_delta
-        };
-        let process_reward = self.process_rewarder.score(ProcessRewardInput {
+        let mut process_reward = self.process_rewarder.score(ProcessRewardInput {
             profile: request.profile,
             route_budget,
             hierarchy,
@@ -876,6 +853,30 @@ impl NoironEngine {
             toolsmith_plan: toolsmith_plan.clone(),
             agent_team_plan: agent_team_plan.clone(),
         });
+        if let Some(reward_metrics) =
+            process_reward_feedback_metrics(&process_reward, metrics, &report, &drift_report)
+        {
+            self.router
+                .observe_with_profile(request.profile, reward_metrics);
+            hierarchy = self.hierarchy.observe(request.profile, reward_metrics);
+            let feedback_note = process_reward_feedback_note(&process_reward, reward_metrics);
+            process_reward.notes.push(feedback_note);
+        }
+
+        let router_threshold_after = self.router.threshold();
+        let live_router_threshold_delta = if drift_report.rollback_adaptive {
+            0.0
+        } else {
+            (self.router.threshold_for(request.profile) - baseline_router_threshold).abs()
+        };
+        let live_hierarchy_weight_delta = if drift_report.rollback_adaptive {
+            0.0
+        } else {
+            hierarchy_weight_delta(
+                baseline_hierarchy_weights,
+                self.hierarchy.state().profile_weights.get(request.profile),
+            )
+        };
         let mut experience_process_reward = process_reward.clone();
         if let Some(note) = memory_feedback_note(&memory_feedback) {
             experience_process_reward.notes.push(note);
@@ -1409,6 +1410,65 @@ fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
     }
 }
 
+fn process_reward_feedback_metrics(
+    report: &ProcessRewardReport,
+    base: GenerationMetrics,
+    reflection: &ReflectionReport,
+    drift_report: &DriftReport,
+) -> Option<GenerationMetrics> {
+    if drift_report.rollback_adaptive {
+        return None;
+    }
+
+    match report.action {
+        RewardAction::Reinforce
+            if reflection.critical_issue_count() == 0
+                && reflection.contradictions.is_empty()
+                && reflection.issues.len() <= 1 =>
+        {
+            Some(GenerationMetrics {
+                perplexity: (base.perplexity * 0.72).clamp(3.0, 9.0),
+                semantic_consistency: base
+                    .semantic_consistency
+                    .max(reflection.quality)
+                    .max(report.total)
+                    .clamp(0.84, 0.98),
+                contradiction_count: 0,
+                token_count: base.token_count,
+            })
+        }
+        RewardAction::Penalize => Some(GenerationMetrics {
+            perplexity: (base.perplexity + (1.0 - report.total).clamp(0.0, 1.0) * 18.0)
+                .clamp(18.0, 56.0),
+            semantic_consistency: base
+                .semantic_consistency
+                .min(reflection.quality)
+                .min(report.total)
+                .clamp(0.0, 0.46),
+            contradiction_count: base
+                .contradiction_count
+                .max(reflection.critical_issue_count())
+                .max(1),
+            token_count: base.token_count,
+        }),
+        RewardAction::Hold => None,
+        RewardAction::Reinforce => None,
+    }
+}
+
+fn process_reward_feedback_note(
+    report: &ProcessRewardReport,
+    metrics: GenerationMetrics,
+) -> String {
+    format!(
+        "online_reward_feedback:action={}:perplexity={:.3}:semantic={:.3}:contradictions={}",
+        report.action.as_str(),
+        metrics.perplexity,
+        metrics.semantic_consistency,
+        metrics.contradiction_count
+    )
+}
+
 fn hierarchy_weight_delta(before: HierarchyWeights, after: HierarchyWeights) -> f32 {
     ((before.global - after.global).abs()
         + (before.local - after.local).abs()
@@ -1751,9 +1811,14 @@ mod tests {
         assert!(outcome.answer.contains("Noiron"));
         assert!(outcome.stored_memory_id.is_some());
         assert!(!outcome.stream_reports.is_empty());
+        let online_reward_feedback = outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| note.starts_with("online_reward_feedback:"));
         assert_eq!(
             engine.router.observations(),
-            outcome.stream_reports.len() as u64 + 1
+            outcome.stream_reports.len() as u64 + 1 + u64::from(online_reward_feedback)
         );
         assert_eq!(engine.experience.len(), 1);
         assert_eq!(outcome.experience_id, 1);
@@ -2519,6 +2584,72 @@ mod tests {
     }
 
     #[test]
+    fn process_reward_penalty_updates_adaptive_state_in_same_inference() {
+        struct PenalizedBackend;
+
+        impl InferenceBackend for PenalizedBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                let mut token = DraftToken::new("maybe");
+                token.entropy = Some(3.2);
+                token.logprob = Some(-3.6);
+                InferenceDraft::new(
+                    "Rust Noiron Python tool result is certain and guaranteed, but maybe unknown; use a Python helper script even though the Rust-only control loop must reject it.",
+                    vec![ReasoningStep::new(
+                        "runtime",
+                        "conflicting non-rust tool request",
+                        0.62,
+                    )],
+                )
+                .with_tokens(vec![token])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        let threshold_before = engine.router.threshold_for(TaskProfile::Coding);
+        let mut backend = PenalizedBackend;
+
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "build a python script tool for Rust Noiron routing",
+                TaskProfile::Coding,
+            ),
+            &mut backend,
+        );
+
+        assert_eq!(outcome.process_reward.action, RewardAction::Penalize);
+        assert!(!outcome.drift_report.rollback_adaptive);
+        assert!(outcome.router_threshold_after < threshold_before);
+        assert!(outcome.live_evolution.router_threshold_delta > 0.0);
+        assert!(outcome.live_evolution.hierarchy_weight_delta > 0.0);
+        assert_eq!(
+            engine.router.observations(),
+            outcome.stream_reports.len() as u64 + 2
+        );
+        assert!(
+            outcome
+                .process_reward
+                .notes
+                .iter()
+                .any(|note| { note.starts_with("online_reward_feedback:action=penalize") })
+        );
+        assert!(
+            engine.experience.records()[0]
+                .process_reward
+                .notes
+                .iter()
+                .any(|note| note.starts_with("online_reward_feedback:action=penalize"))
+        );
+        assert!(
+            (engine.experience.records()[0]
+                .live_evolution
+                .router_threshold_delta
+                - outcome.live_evolution.router_threshold_delta)
+                .abs()
+                < 0.0001
+        );
+    }
+
+    #[test]
     fn drift_guard_rolls_back_adaptive_state_for_bad_draft() {
         struct BadBackend;
 
@@ -2550,6 +2681,15 @@ mod tests {
         assert!(outcome.evolution_ledger.rollback_router_threshold_delta > 0.0);
         assert!(outcome.evolution_ledger.rollback_hierarchy_weight_delta > 0.0);
         assert!(outcome.stored_memory_id.is_none());
+        assert_eq!(outcome.live_evolution.router_threshold_delta, 0.0);
+        assert_eq!(outcome.live_evolution.hierarchy_weight_delta, 0.0);
+        assert!(
+            !outcome
+                .process_reward
+                .notes
+                .iter()
+                .any(|note| note.starts_with("online_reward_feedback:"))
+        );
     }
 
     #[test]

@@ -246,7 +246,9 @@ modules, not external product dependencies:
 - Test-time scaling and RLVR-style rewards:
   reflection should score not only the final answer but also routing choices,
   KV reads, hierarchy weights, latency, structured issue severity, revision
-  actions, contradictions, and memory admission.
+  actions, contradictions, and memory admission. Process rewards should feed
+  the live adaptive router/hierarchy loop during the same inference when drift
+  gates allow it, then persist the same evidence for later replay.
 - Experience replay:
   the experience store should become replayable training data for the control
   plane state while leaving model weights untouched. Records should preserve
