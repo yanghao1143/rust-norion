@@ -973,6 +973,9 @@ mod tests {
                 primary_lane: Some("cpu-vector".to_owned()),
                 fallback_lane: Some("cpu-portable".to_owned()),
                 memory_mode: Some("tiered-disk".to_owned()),
+                device_execution_source: Some(
+                    RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+                ),
                 layer_count: 12,
                 global_layers: 3,
                 local_window_layers: 6,

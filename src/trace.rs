@@ -81,6 +81,10 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"device_profile\":",
     },
     TraceRequiredField {
+        name: "runtime_device_execution_source",
+        marker: "\"device_execution_source\":",
+    },
+    TraceRequiredField {
         name: "runtime_hot_kv_precision_bits",
         marker: "\"hot_kv_precision_bits\":",
     },
@@ -2928,6 +2932,8 @@ fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
     let primary_lane = extract_json_nullable_string_field(runtime_diagnostics, "primary_lane");
     let fallback_lane = extract_json_nullable_string_field(runtime_diagnostics, "fallback_lane");
     let memory_mode = extract_json_nullable_string_field(runtime_diagnostics, "memory_mode");
+    let device_execution_source =
+        extract_json_nullable_string_field(runtime_diagnostics, "device_execution_source");
     let hot_kv_precision_bits =
         extract_json_usize_field(runtime_diagnostics, "hot_kv_precision_bits");
     let cold_kv_precision_bits =
@@ -2950,12 +2956,26 @@ fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
             .as_deref()
             .map(has_non_empty_trace_text)
             .unwrap_or(false);
+    let has_runtime_reported_device_execution =
+        device_execution_source.as_deref() == Some("runtime-reported");
 
     if has_forward_signal && !has_device_execution_signal {
         failures.push(
             "runtime_diagnostics has_forward_signal=true but device execution diagnostics are incomplete"
                 .to_owned(),
         );
+    }
+    if has_device_execution_signal {
+        match device_execution_source.as_deref() {
+            Some("runtime-reported" | "control-plane-filled") => {}
+            Some(source) => failures.push(format!(
+                "runtime_diagnostics device_execution_source={source} is invalid"
+            )),
+            None => failures.push(
+                "runtime_diagnostics device execution is missing device_execution_source"
+                    .to_owned(),
+            ),
+        }
     }
 
     let has_valid_kv_precision_signal = matches!(hot_kv_precision_bits, Some(4 | 8))
@@ -2968,6 +2988,14 @@ fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
     }
 
     if !has_device_execution_signal {
+        return failures;
+    }
+
+    if !has_runtime_reported_device_execution {
+        failures.push(format!(
+            "runtime_diagnostics device execution source={} is not runtime-reported",
+            device_execution_source.as_deref().unwrap_or("unknown")
+        ));
         return failures;
     }
 
@@ -3389,7 +3417,7 @@ pub fn trace_json_line_with_case(
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -3461,6 +3489,12 @@ pub fn trace_json_line_with_case(
         option_owned_string_json(outcome.runtime_diagnostics.primary_lane.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.fallback_lane.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.memory_mode.as_deref()),
+        option_owned_string_json(
+            outcome
+                .runtime_diagnostics
+                .device_execution_source
+                .as_deref()
+        ),
         option_u8_json(outcome.runtime_diagnostics.hot_kv_precision_bits),
         option_u8_json(outcome.runtime_diagnostics.cold_kv_precision_bits),
         outcome.runtime_diagnostics.layer_count,
@@ -4436,6 +4470,12 @@ mod tests {
             "runtime_diagnostics",
             "\"memory_mode\":null",
             "\"memory_mode\":\"gpu-resident\"",
+        );
+        let line = replace_in_trace_object(
+            &line,
+            "runtime_diagnostics",
+            "\"device_execution_source\":null",
+            "\"device_execution_source\":\"runtime-reported\"",
         );
         let line = replace_in_trace_object(
             &line,
@@ -5795,6 +5835,36 @@ mod tests {
         let failures = evaluate_trace_schema_line(&line);
 
         assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_control_plane_filled_runtime_device_execution() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RuntimePrecisionBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace control plane device source", TaskProfile::Coding),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace control plane device source",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
+        .replacen(
+            "\"device_execution_source\":\"runtime-reported\"",
+            "\"device_execution_source\":\"control-plane-filled\"",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("is not runtime-reported")),
+            "{failures:?}"
+        );
     }
 
     #[test]

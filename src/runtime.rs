@@ -1223,6 +1223,8 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         primary_lane: extract_json_string_field(payload, "primary_lane"),
         fallback_lane: extract_json_string_field(payload, "fallback_lane"),
         memory_mode: extract_json_string_field(payload, "memory_mode"),
+        device_execution_source: extract_json_string_field(payload, "device_execution_source")
+            .and_then(RuntimeDiagnostics::normalize_device_execution_source),
         layer_count: extract_json_usize_field(payload, "layer_count").unwrap_or(0),
         global_layers: extract_json_usize_field(payload, "global_layers").unwrap_or(0),
         local_window_layers: extract_json_usize_field(payload, "local_window_layers").unwrap_or(0),
@@ -1705,6 +1707,29 @@ fn experience_matches_hardware_plan(
     experience: &ExperienceMatch,
     hardware_plan: &HardwarePlan,
 ) -> bool {
+    let has_device_execution_fields = experience
+        .runtime_device_profile
+        .as_deref()
+        .is_some_and(has_runtime_text)
+        || experience
+            .runtime_primary_lane
+            .as_deref()
+            .is_some_and(has_runtime_text)
+        || experience
+            .runtime_fallback_lane
+            .as_deref()
+            .is_some_and(has_runtime_text)
+        || experience
+            .runtime_memory_mode
+            .as_deref()
+            .is_some_and(has_runtime_text);
+    if has_device_execution_fields
+        && experience.runtime_device_execution_source.as_deref()
+            != Some(RuntimeDiagnostics::runtime_reported_device_execution_source())
+    {
+        return false;
+    }
+
     if let Some(device_profile) = experience.runtime_device_profile.as_deref() {
         let Some(device) = parse_runtime_device_class(device_profile) else {
             return false;
@@ -1742,6 +1767,10 @@ fn experience_matches_hardware_plan(
     }
 
     true
+}
+
+fn has_runtime_text(value: &str) -> bool {
+    !value.trim().is_empty()
 }
 
 #[derive(Debug, Clone)]
@@ -2193,6 +2222,15 @@ fn populate_runtime_device_execution(
     diagnostics: &mut RuntimeDiagnostics,
     hardware_plan: &HardwarePlan,
 ) {
+    let runtime_reported_complete = diagnostics.has_device_execution_signal()
+        && diagnostics
+            .device_execution_source
+            .as_deref()
+            .map(|source| {
+                source != RuntimeDiagnostics::control_plane_filled_device_execution_source()
+            })
+            .unwrap_or(true);
+
     if diagnostics.device_profile.is_none() {
         diagnostics.device_profile = Some(hardware_plan.device.as_str().to_owned());
     }
@@ -2204,6 +2242,17 @@ fn populate_runtime_device_execution(
     }
     if diagnostics.memory_mode.is_none() {
         diagnostics.memory_mode = Some(hardware_plan.execution.memory_mode.as_str().to_owned());
+    }
+
+    if diagnostics.has_device_execution_signal() {
+        diagnostics.device_execution_source = Some(
+            if runtime_reported_complete {
+                RuntimeDiagnostics::runtime_reported_device_execution_source()
+            } else {
+                RuntimeDiagnostics::control_plane_filled_device_execution_source()
+            }
+            .to_owned(),
+        );
     }
 }
 
@@ -2392,6 +2441,7 @@ mod tests {
             runtime_primary_lane: None,
             runtime_fallback_lane: None,
             runtime_memory_mode: None,
+            runtime_device_execution_source: None,
             runtime_forward_energy: Some(0.2),
             runtime_kv_influence: Some(0.1),
             runtime_uncertainty_perplexity: None,
@@ -2484,6 +2534,7 @@ mod tests {
                 runtime_primary_lane: None,
                 runtime_fallback_lane: None,
                 runtime_memory_mode: None,
+                runtime_device_execution_source: None,
                 runtime_forward_energy: Some(0.2),
                 runtime_kv_influence: Some(0.1),
                 runtime_uncertainty_perplexity: None,
@@ -2506,6 +2557,7 @@ mod tests {
                 runtime_primary_lane: None,
                 runtime_fallback_lane: None,
                 runtime_memory_mode: None,
+                runtime_device_execution_source: None,
                 runtime_forward_energy: Some(0.1),
                 runtime_kv_influence: Some(0.9),
                 runtime_uncertainty_perplexity: None,
@@ -2565,6 +2617,9 @@ mod tests {
                 runtime_primary_lane: Some(cpu_plan.execution.primary_lane.as_str().to_owned()),
                 runtime_fallback_lane: Some(cpu_plan.execution.fallback_lane.as_str().to_owned()),
                 runtime_memory_mode: Some(cpu_plan.execution.memory_mode.as_str().to_owned()),
+                runtime_device_execution_source: Some(
+                    RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+                ),
                 runtime_forward_energy: Some(0.2),
                 runtime_kv_influence: Some(0.2),
                 runtime_uncertainty_perplexity: None,
@@ -2587,6 +2642,9 @@ mod tests {
                 runtime_primary_lane: Some(ComputeLane::DiscreteGpu.as_str().to_owned()),
                 runtime_fallback_lane: Some(ComputeLane::CpuPortable.as_str().to_owned()),
                 runtime_memory_mode: Some(DeviceMemoryMode::GpuResident.as_str().to_owned()),
+                runtime_device_execution_source: Some(
+                    RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+                ),
                 runtime_forward_energy: Some(0.1),
                 runtime_kv_influence: Some(0.9),
                 runtime_uncertainty_perplexity: None,
@@ -2746,6 +2804,47 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default, Clone)]
+    struct DeviceSilentRuntime;
+
+    impl ModelRuntime for DeviceSilentRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("device-silent-runtime", "tok", 4096, 64)
+        }
+
+        fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            Ok(
+                RuntimeResponse::new("device silent").with_diagnostics(RuntimeDiagnostics {
+                    model_id: Some("device-silent-runtime".to_owned()),
+                    layer_count: 1,
+                    forward_energy: Some(0.1),
+                    ..RuntimeDiagnostics::default()
+                }),
+            )
+        }
+    }
+
+    #[derive(Debug, Default, Clone)]
+    struct DeviceReportingRuntime;
+
+    impl ModelRuntime for DeviceReportingRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("device-reporting-runtime", "tok", 4096, 64)
+        }
+
+        fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            let execution = &request.hardware_plan.execution;
+            Ok(RuntimeResponse::new("device reporting").with_diagnostics(
+                RuntimeDiagnostics::default().with_device_execution(
+                    request.hardware_plan.device.as_str(),
+                    execution.primary_lane.as_str(),
+                    execution.fallback_lane.as_str(),
+                    execution.memory_mode.as_str(),
+                ),
+            ))
+        }
+    }
+
     #[test]
     fn self_developed_runtime_abi_exposes_tokens_embeddings_and_kv_exchange() {
         let mut runtime = SelfDevelopedRuntime::default();
@@ -2781,6 +2880,93 @@ mod tests {
         assert_eq!(runtime.imported_blocks, 1);
         assert_eq!(exported[0].layer, 1);
         assert_eq!(exported[0].head, 2);
+    }
+
+    #[test]
+    fn runtime_backend_marks_control_plane_filled_device_execution() {
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let context = GenerationContext {
+            prompt: "silent runtime device",
+            profile: TaskProfile::General,
+            memories: &[],
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::default(),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(DeviceSilentRuntime);
+
+        let draft = backend.generate(context);
+
+        assert!(draft.runtime_diagnostics.has_device_execution_signal());
+        assert!(
+            draft
+                .runtime_diagnostics
+                .has_control_plane_filled_device_execution_signal()
+        );
+        assert!(
+            !draft
+                .runtime_diagnostics
+                .has_runtime_reported_device_execution_signal()
+        );
+    }
+
+    #[test]
+    fn runtime_backend_preserves_runtime_reported_device_execution() {
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let context = GenerationContext {
+            prompt: "reported runtime device",
+            profile: TaskProfile::General,
+            memories: &[],
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::default(),
+            tier_plan: &tier_plan,
+            infini_memory_plan: &infini_memory_plan,
+            recursive_schedule: &recursive_schedule,
+            hardware_plan: &hardware_plan,
+            experiences: &[],
+            toolsmith_plan: default_toolsmith_plan(),
+            agent_team_plan: default_agent_team_plan(),
+            transformer_plan: &transformer_plan,
+        };
+        let mut backend = RuntimeBackend::new(DeviceReportingRuntime);
+
+        let draft = backend.generate(context);
+
+        assert!(
+            draft
+                .runtime_diagnostics
+                .has_runtime_reported_device_execution_signal()
+        );
+        assert!(
+            !draft
+                .runtime_diagnostics
+                .has_control_plane_filled_device_execution_signal()
+        );
     }
 
     #[test]

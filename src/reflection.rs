@@ -82,6 +82,7 @@ pub struct RuntimeDiagnostics {
     pub primary_lane: Option<String>,
     pub fallback_lane: Option<String>,
     pub memory_mode: Option<String>,
+    pub device_execution_source: Option<String>,
     pub layer_count: usize,
     pub global_layers: usize,
     pub local_window_layers: usize,
@@ -97,6 +98,19 @@ pub struct RuntimeDiagnostics {
 }
 
 impl RuntimeDiagnostics {
+    pub fn runtime_reported_device_execution_source() -> &'static str {
+        "runtime-reported"
+    }
+
+    pub fn control_plane_filled_device_execution_source() -> &'static str {
+        "control-plane-filled"
+    }
+
+    pub fn normalize_device_execution_source(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        matches!(value, "runtime-reported" | "control-plane-filled").then(|| value.to_owned())
+    }
+
     pub fn empty() -> Self {
         Self::default()
     }
@@ -136,6 +150,18 @@ impl RuntimeDiagnostics {
             && has_text(self.memory_mode.as_deref())
     }
 
+    pub fn has_runtime_reported_device_execution_signal(&self) -> bool {
+        self.has_device_execution_signal()
+            && self.device_execution_source.as_deref()
+                == Some(Self::runtime_reported_device_execution_source())
+    }
+
+    pub fn has_control_plane_filled_device_execution_signal(&self) -> bool {
+        self.has_device_execution_signal()
+            && self.device_execution_source.as_deref()
+                == Some(Self::control_plane_filled_device_execution_source())
+    }
+
     pub fn has_valid_kv_precision_signal(&self) -> bool {
         match (self.hot_kv_precision_bits, self.cold_kv_precision_bits) {
             (Some(hot), Some(cold)) => matches!(hot, 4 | 8) && matches!(cold, 4 | 8) && cold <= hot,
@@ -166,6 +192,9 @@ impl RuntimeDiagnostics {
         self.primary_lane = non_empty_string(primary_lane.into());
         self.fallback_lane = non_empty_string(fallback_lane.into());
         self.memory_mode = non_empty_string(memory_mode.into());
+        self.device_execution_source = self
+            .has_device_execution_signal()
+            .then(|| Self::runtime_reported_device_execution_source().to_owned());
         self
     }
 
@@ -174,6 +203,7 @@ impl RuntimeDiagnostics {
         self.primary_lane = None;
         self.fallback_lane = None;
         self.memory_mode = None;
+        self.device_execution_source = None;
         self
     }
 
@@ -201,6 +231,7 @@ impl Default for RuntimeDiagnostics {
             primary_lane: None,
             fallback_lane: None,
             memory_mode: None,
+            device_execution_source: None,
             layer_count: 0,
             global_layers: 0,
             local_window_layers: 0,

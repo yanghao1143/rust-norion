@@ -503,6 +503,9 @@ impl ProductionForwardKernel for ReferenceProductionForwardKernel {
                     .as_str()
                     .to_owned(),
             ),
+            device_execution_source: Some(
+                RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+            ),
             layer_count: forward.layer_summaries.len(),
             global_layers: counts.global,
             local_window_layers: counts.local,
@@ -1018,6 +1021,14 @@ fn normalize_kernel_diagnostics(
     exported_kv_blocks: usize,
 ) -> RuntimeDiagnostics {
     let kernel_has_forward_signal = diagnostics.has_forward_signal();
+    let runtime_reported_complete = diagnostics.has_device_execution_signal()
+        && diagnostics
+            .device_execution_source
+            .as_deref()
+            .map(|source| {
+                source != RuntimeDiagnostics::control_plane_filled_device_execution_source()
+            })
+            .unwrap_or(true);
 
     if diagnostics.model_id.is_none() {
         diagnostics.model_id = Some(manifest.metadata.model_id.clone());
@@ -1038,6 +1049,16 @@ fn normalize_kernel_diagnostics(
     }
     if diagnostics.memory_mode.is_none() {
         diagnostics.memory_mode = Some(hardware_plan.execution.memory_mode.as_str().to_owned());
+    }
+    if diagnostics.has_device_execution_signal() {
+        diagnostics.device_execution_source = Some(
+            if runtime_reported_complete {
+                RuntimeDiagnostics::runtime_reported_device_execution_source()
+            } else {
+                RuntimeDiagnostics::control_plane_filled_device_execution_source()
+            }
+            .to_owned(),
+        );
     }
     if diagnostics.layer_count == 0 {
         diagnostics.layer_count = manifest.architecture.layer_count;

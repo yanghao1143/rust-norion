@@ -79,6 +79,7 @@ pub struct ExperienceMatch {
     pub runtime_primary_lane: Option<String>,
     pub runtime_fallback_lane: Option<String>,
     pub runtime_memory_mode: Option<String>,
+    pub runtime_device_execution_source: Option<String>,
     pub runtime_forward_energy: Option<f32>,
     pub runtime_kv_influence: Option<f32>,
     pub runtime_uncertainty_perplexity: Option<f32>,
@@ -276,6 +277,10 @@ impl ExperienceStore {
                     runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
                     runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),
                     runtime_memory_mode: record.runtime_diagnostics.memory_mode.clone(),
+                    runtime_device_execution_source: record
+                        .runtime_diagnostics
+                        .device_execution_source
+                        .clone(),
                     runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                     runtime_kv_influence: record.runtime_diagnostics.kv_influence,
                     runtime_uncertainty_perplexity: record
@@ -846,6 +851,11 @@ fn serialize_runtime_diagnostics(diagnostics: &RuntimeDiagnostics) -> String {
         diagnostics.exported_kv_blocks.to_string(),
         option_u8_to_field(diagnostics.hot_kv_precision_bits),
         option_u8_to_field(diagnostics.cold_kv_precision_bits),
+        diagnostics
+            .device_execution_source
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
     ]
     .join("\u{1f}")
 }
@@ -864,6 +874,7 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             primary_lane: None,
             fallback_lane: None,
             memory_mode: None,
+            device_execution_source: None,
             layer_count: fields[2].parse::<usize>().ok()?,
             global_layers: 0,
             local_window_layers: 0,
@@ -884,6 +895,7 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             primary_lane: None,
             fallback_lane: None,
             memory_mode: None,
+            device_execution_source: None,
             layer_count: fields[2].parse::<usize>().ok()?,
             global_layers: fields[3].parse::<usize>().ok()?,
             local_window_layers: fields[4].parse::<usize>().ok()?,
@@ -897,13 +909,16 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             hot_kv_precision_bits: None,
             cold_kv_precision_bits: None,
         }),
-        16 | 18 => Some(RuntimeDiagnostics {
+        16 | 18 | 19 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
             device_profile: non_empty_string(fields[2]),
             primary_lane: non_empty_string(fields[3]),
             fallback_lane: non_empty_string(fields[4]),
             memory_mode: non_empty_string(fields[5]),
+            device_execution_source: fields
+                .get(18)
+                .and_then(|value| RuntimeDiagnostics::normalize_device_execution_source(value)),
             layer_count: fields[6].parse::<usize>().ok()?,
             global_layers: fields[7].parse::<usize>().ok()?,
             local_window_layers: fields[8].parse::<usize>().ok()?,
@@ -933,6 +948,10 @@ fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
         diagnostics.primary_lane.as_deref().unwrap_or_default(),
         diagnostics.fallback_lane.as_deref().unwrap_or_default(),
         diagnostics.memory_mode.as_deref().unwrap_or_default(),
+        diagnostics
+            .device_execution_source
+            .as_deref()
+            .unwrap_or_default(),
     ]
     .into_iter()
     .filter(|item| !item.is_empty())
@@ -1551,6 +1570,9 @@ mod tests {
                 primary_lane: Some("cpu-vector".to_owned()),
                 fallback_lane: Some("cpu-portable".to_owned()),
                 memory_mode: Some("tiered-disk".to_owned()),
+                device_execution_source: Some(
+                    RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+                ),
                 layer_count: 16,
                 global_layers: 4,
                 local_window_layers: 8,
@@ -1591,6 +1613,10 @@ mod tests {
             matches[0].runtime_memory_mode.as_deref(),
             Some("tiered-disk")
         );
+        assert_eq!(
+            matches[0].runtime_device_execution_source.as_deref(),
+            Some(RuntimeDiagnostics::runtime_reported_device_execution_source())
+        );
         assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
         assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
         assert_eq!(matches[0].runtime_uncertainty_perplexity, Some(4.38));
@@ -1623,7 +1649,24 @@ mod tests {
         assert_eq!(diagnostics.model_id.as_deref(), Some("model"));
         assert_eq!(diagnostics.hot_kv_precision_bits, None);
         assert_eq!(diagnostics.cold_kv_precision_bits, None);
+        assert_eq!(diagnostics.device_execution_source, None);
         assert!(!diagnostics.has_valid_kv_precision_signal());
+    }
+
+    #[test]
+    fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
+        let diagnostics = RuntimeDiagnostics::default()
+            .with_device_execution("cpu", "cpu-vector", "cpu-portable", "tiered-disk")
+            .with_kv_precision(8, 4);
+
+        let encoded = serialize_runtime_diagnostics(&diagnostics);
+        let decoded = deserialize_runtime_diagnostics(&encoded).unwrap();
+
+        assert_eq!(
+            decoded.device_execution_source.as_deref(),
+            Some(RuntimeDiagnostics::runtime_reported_device_execution_source())
+        );
+        assert!(decoded.has_runtime_reported_device_execution_signal());
     }
 
     #[test]
@@ -1693,6 +1736,9 @@ mod tests {
                 primary_lane: Some("cpu-vector".to_owned()),
                 fallback_lane: Some("cpu-portable".to_owned()),
                 memory_mode: Some("tiered-disk".to_owned()),
+                device_execution_source: Some(
+                    RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+                ),
                 layer_count: 8,
                 global_layers: 2,
                 local_window_layers: 4,

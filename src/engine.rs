@@ -1740,6 +1740,9 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
     let mut forward_energy_count = 0;
     let mut kv_influence_total = 0.0;
     let mut kv_influence_count = 0;
+    let mut saw_device_execution_signal = false;
+    let mut saw_control_plane_filled_device_execution = false;
+    let mut all_device_execution_runtime_reported = true;
 
     for diagnostic in diagnostics {
         if merged.model_id.is_none() {
@@ -1752,6 +1755,13 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
         merge_runtime_diagnostic_text(&mut merged.primary_lane, &diagnostic.primary_lane);
         merge_runtime_diagnostic_text(&mut merged.fallback_lane, &diagnostic.fallback_lane);
         merge_runtime_diagnostic_text(&mut merged.memory_mode, &diagnostic.memory_mode);
+        if diagnostic.has_device_execution_signal() {
+            saw_device_execution_signal = true;
+            saw_control_plane_filled_device_execution |=
+                diagnostic.has_control_plane_filled_device_execution_signal();
+            all_device_execution_runtime_reported &=
+                diagnostic.has_runtime_reported_device_execution_signal();
+        }
         merge_runtime_diagnostic_kv_precision(
             &mut merged.hot_kv_precision_bits,
             diagnostic.hot_kv_precision_bits,
@@ -1785,6 +1795,15 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
     merged.kv_influence = average(kv_influence_total, kv_influence_count);
     if !merged.has_valid_kv_precision_signal() {
         merged = merged.clear_kv_precision();
+    }
+    if merged.has_device_execution_signal() && saw_device_execution_signal {
+        merged.device_execution_source = if all_device_execution_runtime_reported {
+            Some(RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned())
+        } else if saw_control_plane_filled_device_execution {
+            Some(RuntimeDiagnostics::control_plane_filled_device_execution_source().to_owned())
+        } else {
+            None
+        };
     }
     merged
 }

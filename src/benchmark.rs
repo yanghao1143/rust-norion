@@ -1507,6 +1507,8 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         let diagnostics = &outcome.runtime_diagnostics;
         let has_forward_signal = diagnostics.has_forward_signal();
         let has_device_execution_signal = diagnostics.has_device_execution_signal();
+        let has_runtime_reported_device_execution_signal =
+            diagnostics.has_runtime_reported_device_execution_signal();
 
         if !has_forward_signal && !has_device_execution_signal {
             return;
@@ -1518,6 +1520,18 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
                 "{}:{} runtime forward signal is missing device execution diagnostics",
                 device.as_str(),
                 case.name
+            ));
+            return;
+        }
+        if !has_runtime_reported_device_execution_signal {
+            self.failures.push(format!(
+                "{}:{} runtime device execution diagnostics source={} is not runtime-reported",
+                device.as_str(),
+                case.name,
+                diagnostics
+                    .device_execution_source
+                    .as_deref()
+                    .unwrap_or("unknown")
             ));
             return;
         }

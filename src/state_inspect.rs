@@ -1926,7 +1926,11 @@ impl StateInspectionReport {
             .experience
             .records()
             .iter()
-            .filter(|record| record.runtime_diagnostics.has_device_execution_signal())
+            .filter(|record| {
+                record
+                    .runtime_diagnostics
+                    .has_runtime_reported_device_execution_signal()
+            })
             .count();
         let runtime_layer_mode_experience_count = engine
             .experience
@@ -3048,6 +3052,10 @@ fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMa
                 runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
                 runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),
                 runtime_memory_mode: record.runtime_diagnostics.memory_mode.clone(),
+                runtime_device_execution_source: record
+                    .runtime_diagnostics
+                    .device_execution_source
+                    .clone(),
                 runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                 runtime_kv_influence: record.runtime_diagnostics.kv_influence,
                 runtime_uncertainty_perplexity: record.runtime_token_metrics.uncertainty_perplexity,
@@ -3225,6 +3233,10 @@ mod tests {
                 primary_lane: Some("cpu-vector".to_owned()),
                 fallback_lane: Some("cpu-portable".to_owned()),
                 memory_mode: Some("tiered-disk".to_owned()),
+                device_execution_source: Some(
+                    crate::reflection::RuntimeDiagnostics::runtime_reported_device_execution_source()
+                        .to_owned(),
+                ),
                 layer_count: 12,
                 global_layers: 3,
                 local_window_layers: 6,
@@ -4197,6 +4209,10 @@ mod tests {
                 primary_lane: Some("cpu-vector".to_owned()),
                 fallback_lane: Some("cpu-portable".to_owned()),
                 memory_mode: Some("tiered-disk".to_owned()),
+                device_execution_source: Some(
+                    crate::reflection::RuntimeDiagnostics::runtime_reported_device_execution_source()
+                        .to_owned(),
+                ),
                 layer_count: 8,
                 global_layers: 2,
                 local_window_layers: 4,
@@ -4568,6 +4584,10 @@ mod tests {
                 primary_lane: Some("disk-streaming".to_owned()),
                 fallback_lane: Some("cpu-portable".to_owned()),
                 memory_mode: Some("minimal-disk".to_owned()),
+                device_execution_source: Some(
+                    crate::reflection::RuntimeDiagnostics::runtime_reported_device_execution_source()
+                        .to_owned(),
+                ),
                 layer_count: 4,
                 global_layers: 1,
                 local_window_layers: 2,

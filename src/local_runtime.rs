@@ -214,6 +214,9 @@ impl ModelRuntime for LocalTransformerRuntime {
                         .as_str()
                         .to_owned(),
                 ),
+                device_execution_source: Some(
+                    RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+                ),
                 layer_count: forward.layer_summaries.len(),
                 global_layers: transformer_counts.global,
                 local_window_layers: transformer_counts.local,
