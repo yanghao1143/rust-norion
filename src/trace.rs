@@ -525,8 +525,178 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_device_contract(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
+    failures.extend(evaluate_trace_drift(line));
     failures.extend(evaluate_trace_auto_replay(line));
     failures.extend(evaluate_trace_live_evolution(line));
+
+    failures
+}
+
+fn evaluate_trace_drift(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let severity = extract_json_string_field(line, "severity");
+    let memory_write = extract_json_bool_field(line, "memory_write").unwrap_or(false);
+    let runtime_kv_write = extract_json_bool_field(line, "runtime_kv_write").unwrap_or(false);
+    let penalize_used_memory =
+        extract_json_bool_field(line, "penalize_used_memory").unwrap_or(false);
+    let rollback_adaptive = extract_json_bool_field(line, "rollback_adaptive").unwrap_or(false);
+    let used_memories = extract_json_usize_field(line, "used").unwrap_or(0);
+    let feedback_penalized = extract_json_usize_field(line, "feedback_penalized").unwrap_or(0);
+    let live_stored_memory = extract_json_bool_field(line, "live_stored_memory").unwrap_or(false);
+    let live_stored_gist_memories =
+        extract_json_usize_field(line, "live_stored_gist_memories").unwrap_or(0);
+    let live_stored_runtime_kv_memories =
+        extract_json_usize_field(line, "live_stored_runtime_kv_memories").unwrap_or(0);
+    let live_router_threshold_delta =
+        extract_json_f32_field(line, "live_router_threshold_delta").unwrap_or(0.0);
+    let live_hierarchy_weight_delta =
+        extract_json_f32_field(line, "live_hierarchy_weight_delta").unwrap_or(0.0);
+    let cumulative_drift_rollbacks =
+        extract_json_usize_field(line, "cumulative_drift_rollbacks").unwrap_or(0);
+    let cumulative_rollback_router_threshold_delta =
+        extract_json_f32_field(line, "cumulative_rollback_router_threshold_delta").unwrap_or(0.0);
+    let cumulative_rollback_hierarchy_weight_delta =
+        extract_json_f32_field(line, "cumulative_rollback_hierarchy_weight_delta").unwrap_or(0.0);
+
+    match severity.as_deref() {
+        Some("stable") => {
+            if !memory_write {
+                failures.push("drift severity stable requires memory_write=true".to_owned());
+            }
+            if !runtime_kv_write {
+                failures.push("drift severity stable requires runtime_kv_write=true".to_owned());
+            }
+            if penalize_used_memory {
+                failures
+                    .push("drift severity stable requires penalize_used_memory=false".to_owned());
+            }
+            if rollback_adaptive {
+                failures.push("drift severity stable requires rollback_adaptive=false".to_owned());
+            }
+        }
+        Some("watch") => {
+            if !memory_write {
+                failures.push("drift severity watch requires memory_write=true".to_owned());
+            }
+            if penalize_used_memory {
+                failures
+                    .push("drift severity watch requires penalize_used_memory=false".to_owned());
+            }
+            if rollback_adaptive {
+                failures.push("drift severity watch requires rollback_adaptive=false".to_owned());
+            }
+        }
+        Some("block") => {
+            if memory_write {
+                failures.push("drift severity block requires memory_write=false".to_owned());
+            }
+            if runtime_kv_write {
+                failures.push("drift severity block requires runtime_kv_write=false".to_owned());
+            }
+            if rollback_adaptive {
+                failures.push("drift severity block requires rollback_adaptive=false".to_owned());
+            }
+            if used_memories > 0 && !penalize_used_memory {
+                failures.push(format!(
+                    "drift severity block with used memories {used_memories} requires penalize_used_memory=true"
+                ));
+            }
+        }
+        Some("rollback") => {
+            if !rollback_adaptive {
+                failures.push("drift severity rollback requires rollback_adaptive=true".to_owned());
+            }
+            if memory_write {
+                failures.push("drift severity rollback requires memory_write=false".to_owned());
+            }
+            if runtime_kv_write {
+                failures.push("drift severity rollback requires runtime_kv_write=false".to_owned());
+            }
+            if used_memories > 0 && !penalize_used_memory {
+                failures.push(format!(
+                    "drift severity rollback with used memories {used_memories} requires penalize_used_memory=true"
+                ));
+            }
+        }
+        Some(other) => failures.push(format!("drift severity {other} is not recognized")),
+        None => failures.push("drift severity is missing".to_owned()),
+    }
+
+    if runtime_kv_write && !memory_write {
+        failures.push("drift runtime_kv_write=true requires memory_write=true".to_owned());
+    }
+    if penalize_used_memory && used_memories == 0 {
+        failures.push("drift penalize_used_memory=true requires used memories > 0".to_owned());
+    }
+    if feedback_penalized > 0 && !penalize_used_memory {
+        failures.push(format!(
+            "memory feedback_penalized {feedback_penalized} requires penalize_used_memory=true"
+        ));
+    }
+    if !memory_write
+        && (live_stored_memory
+            || live_stored_gist_memories > 0
+            || live_stored_runtime_kv_memories > 0)
+    {
+        failures.push(
+            "drift memory_write=false forbids live stored semantic/gist/runtime KV memory"
+                .to_owned(),
+        );
+    }
+
+    if rollback_adaptive {
+        if severity.as_deref() != Some("rollback") {
+            failures.push("rollback_adaptive=true requires drift severity rollback".to_owned());
+        }
+        require_usize_at_least(
+            &mut failures,
+            "cumulative_drift_rollbacks",
+            cumulative_drift_rollbacks,
+            "rollback_adaptive",
+            1,
+        );
+        if live_router_threshold_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "rollback_adaptive=true requires live_router_threshold_delta=0, got {live_router_threshold_delta:.6}"
+            ));
+        }
+        if live_hierarchy_weight_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "rollback_adaptive=true requires live_hierarchy_weight_delta=0, got {live_hierarchy_weight_delta:.6}"
+            ));
+        }
+        if cumulative_rollback_router_threshold_delta <= TRACE_FLOAT_EPSILON {
+            failures.push(
+                "rollback_adaptive=true requires cumulative_rollback_router_threshold_delta > 0"
+                    .to_owned(),
+            );
+        }
+        if cumulative_rollback_hierarchy_weight_delta <= TRACE_FLOAT_EPSILON {
+            failures.push(
+                "rollback_adaptive=true requires cumulative_rollback_hierarchy_weight_delta > 0"
+                    .to_owned(),
+            );
+        }
+    }
+
+    if cumulative_drift_rollbacks == 0 {
+        if cumulative_rollback_router_threshold_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "cumulative_rollback_router_threshold_delta {cumulative_rollback_router_threshold_delta:.6} requires cumulative_drift_rollbacks > 0"
+            ));
+        }
+        if cumulative_rollback_hierarchy_weight_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "cumulative_rollback_hierarchy_weight_delta {cumulative_rollback_hierarchy_weight_delta:.6} requires cumulative_drift_rollbacks > 0"
+            ));
+        }
+    } else if cumulative_rollback_router_threshold_delta <= TRACE_FLOAT_EPSILON
+        || cumulative_rollback_hierarchy_weight_delta <= TRACE_FLOAT_EPSILON
+    {
+        failures.push(format!(
+            "cumulative_drift_rollbacks {cumulative_drift_rollbacks} requires positive rollback router and hierarchy deltas"
+        ));
+    }
 
     failures
 }
@@ -2005,7 +2175,10 @@ fn json_escape(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{HeuristicBackend, InferenceRequest, NoironEngine};
+    use crate::engine::{
+        GenerationContext, HeuristicBackend, InferenceBackend, InferenceRequest, NoironEngine,
+    };
+    use crate::reflection::{InferenceDraft, ReasoningStep};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -2203,6 +2376,48 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| failure.contains("live_inference_runs 0")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_accepts_drift_rollback_ledger_consistency() {
+        let line = rollback_trace_line();
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_drift_rollback_without_cumulative_ledger() {
+        let line = rollback_trace_line().replacen(
+            "\"cumulative_drift_rollbacks\":1",
+            "\"cumulative_drift_rollbacks\":0",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("cumulative_drift_rollbacks 0")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_rollback_that_writes_memory() {
+        let line =
+            rollback_trace_line().replacen("\"memory_write\":false", "\"memory_write\":true", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("rollback requires memory_write=false")),
             "{failures:?}"
         );
     }
@@ -2436,6 +2651,31 @@ mod tests {
 
         assert!(outcome.auto_replay_report.is_some());
         trace_json_line("trace auto replay seed", TaskProfile::Coding, 5, &outcome)
+    }
+
+    fn rollback_trace_line() -> String {
+        struct BadBackend;
+
+        impl InferenceBackend for BadBackend {
+            fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+                InferenceDraft::new("", vec![ReasoningStep::new("runtime", "empty", 0.0)])
+            }
+        }
+
+        let mut engine = NoironEngine::new();
+        let mut backend = BadBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace rollback consistency", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(outcome.drift_report.rollback_adaptive);
+        trace_json_line(
+            "trace rollback consistency",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
     }
 
     fn runtime_kv_trace_line() -> String {
