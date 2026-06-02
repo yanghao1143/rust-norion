@@ -647,6 +647,10 @@ These are algorithmic references, not product dependencies:
 - The persistent roundtrip gate also checks that admitted runtime KV keeps the
   `runtime_kv:` namespace, is retrieved as a runtime KV memory after reload,
   and is reconstructed into imported KV blocks before the second runtime call.
+- With `--benchmark-roundtrip --benchmark-all-devices`, the same namespace
+  roundtrip gate now runs once per explicit device profile with device-scoped
+  state files, so all-device support has a persistence/reuse check rather than
+  only a routing benchmark check.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps

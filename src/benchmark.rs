@@ -593,6 +593,114 @@ impl PersistentRoundtripReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PersistentRoundtripDeviceReport {
+    pub device: DeviceClass,
+    pub report: PersistentRoundtripReport,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PersistentRoundtripMatrixReport {
+    pub passed: bool,
+    pub device_reports: Vec<PersistentRoundtripDeviceReport>,
+    pub failures: Vec<String>,
+}
+
+impl PersistentRoundtripMatrixReport {
+    pub fn evaluate(device_reports: Vec<PersistentRoundtripDeviceReport>) -> Self {
+        let mut failures = Vec::new();
+
+        if device_reports.is_empty() {
+            failures.push("no persistent roundtrip device reports were recorded".to_owned());
+        }
+
+        let missing = missing_persistent_roundtrip_devices(&device_reports);
+        if !missing.is_empty() {
+            let missing_devices = missing
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>()
+                .join("+");
+            failures.push(format!(
+                "persistent_roundtrip_devices {} below expected {} missing={}",
+                explicit_persistent_roundtrip_devices(&device_reports),
+                DeviceClass::explicit_profiles().len(),
+                missing_devices
+            ));
+        }
+
+        for device_report in &device_reports {
+            if !device_report.report.passed {
+                failures.push(format!(
+                    "device {} persistent roundtrip failed with {} failures",
+                    device_report.device.as_str(),
+                    device_report.report.failures.len()
+                ));
+            }
+        }
+
+        Self {
+            passed: failures.is_empty(),
+            device_reports,
+            failures,
+        }
+    }
+
+    pub fn covered_devices(&self) -> usize {
+        explicit_persistent_roundtrip_devices(&self.device_reports)
+    }
+
+    pub fn missing_devices(&self) -> Vec<DeviceClass> {
+        missing_persistent_roundtrip_devices(&self.device_reports)
+    }
+
+    pub fn failed_devices(&self) -> Vec<DeviceClass> {
+        self.device_reports
+            .iter()
+            .filter(|device_report| !device_report.report.passed)
+            .map(|device_report| device_report.device)
+            .collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "persistent_roundtrip_matrix: passed={} devices={} expected_devices={} failed_devices={} failures={}",
+            self.passed,
+            self.covered_devices(),
+            DeviceClass::explicit_profiles().len(),
+            self.failed_devices().len(),
+            self.failures.len()
+        )
+    }
+}
+
+fn explicit_persistent_roundtrip_devices(
+    device_reports: &[PersistentRoundtripDeviceReport],
+) -> usize {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .filter(|device| {
+            device_reports
+                .iter()
+                .any(|device_report| device_report.device == **device)
+        })
+        .count()
+}
+
+fn missing_persistent_roundtrip_devices(
+    device_reports: &[PersistentRoundtripDeviceReport],
+) -> Vec<DeviceClass> {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .copied()
+        .filter(|device| {
+            !device_reports
+                .iter()
+                .any(|device_report| device_report.device == *device)
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct BenchmarkSummary {
     results: Vec<BenchmarkCaseResult>,
@@ -3903,6 +4011,96 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("adapter observations"))
+        );
+    }
+
+    #[test]
+    fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
+        let passing_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+            first_stored_memory: true,
+            first_runtime_kv_stored: 1,
+            first_runtime_kv_namespace_preserved: true,
+            second_used_memories: 2,
+            second_used_runtime_kv_memory: true,
+            second_used_experiences: 1,
+            second_imported_runtime_kv_blocks: 1,
+            second_imported_runtime_kv_from_namespace: true,
+            second_runtime_adapter_observations: 1,
+            second_runtime_adapter_best_score: Some(0.72),
+            second_quality: 0.80,
+            first_drift_severity: DriftSeverity::Stable,
+            second_drift_severity: DriftSeverity::Stable,
+        });
+        let complete = PersistentRoundtripMatrixReport::evaluate(
+            DeviceClass::explicit_profiles()
+                .iter()
+                .copied()
+                .map(|device| PersistentRoundtripDeviceReport {
+                    device,
+                    report: passing_report.clone(),
+                })
+                .collect(),
+        );
+
+        assert!(complete.passed, "{:?}", complete.failures);
+        assert_eq!(
+            complete.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(complete.missing_devices().is_empty());
+        assert!(
+            complete
+                .summary_line()
+                .contains("persistent_roundtrip_matrix: passed=true")
+        );
+
+        let failed_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+            first_stored_memory: true,
+            first_runtime_kv_stored: 1,
+            first_runtime_kv_namespace_preserved: true,
+            second_used_memories: 1,
+            second_used_runtime_kv_memory: false,
+            second_used_experiences: 1,
+            second_imported_runtime_kv_blocks: 1,
+            second_imported_runtime_kv_from_namespace: false,
+            second_runtime_adapter_observations: 1,
+            second_runtime_adapter_best_score: Some(0.72),
+            second_quality: 0.80,
+            first_drift_severity: DriftSeverity::Stable,
+            second_drift_severity: DriftSeverity::Stable,
+        });
+        let incomplete = PersistentRoundtripMatrixReport::evaluate(vec![
+            PersistentRoundtripDeviceReport {
+                device: DeviceClass::CpuOnly,
+                report: passing_report,
+            },
+            PersistentRoundtripDeviceReport {
+                device: DeviceClass::IntegratedGpu,
+                report: failed_report,
+            },
+        ]);
+
+        assert!(!incomplete.passed);
+        assert_eq!(incomplete.covered_devices(), 2);
+        assert_eq!(
+            incomplete.missing_devices().len(),
+            DeviceClass::explicit_profiles().len() - 2
+        );
+        assert_eq!(
+            incomplete.failed_devices(),
+            vec![DeviceClass::IntegratedGpu]
+        );
+        assert!(
+            incomplete
+                .failures
+                .iter()
+                .any(|failure| failure.contains("missing="))
+        );
+        assert!(
+            incomplete
+                .failures
+                .iter()
+                .any(|failure| failure.contains("integrated"))
         );
     }
 }

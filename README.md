@@ -497,12 +497,27 @@ runtime adapter observations derived from the persisted diagnostics:
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
+Add `--benchmark-all-devices` to run the same persistent `runtime_kv:`
+namespace reuse gate once per explicit device profile, using device-scoped
+state files:
+
+```powershell
+cargo run -- --benchmark-roundtrip --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
+```
+
 运行持久化 roundtrip 门禁：第一轮写入状态，第二轮重新加载，并验证 local runtime
 确实使用了持久化 memory、experience、从持久化 `runtime_kv:` 命名空间重建并导入的
 runtime KV，以及从持久化 diagnostics 派生出的 runtime adapter observation：
 
 ```powershell
 cargo run -- --benchmark-roundtrip --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
+```
+
+加上 `--benchmark-all-devices` 后，会对每个显式设备 profile 各跑一次同样的
+`runtime_kv:` 命名空间持久化复用门禁，并使用按设备拆分的状态文件：
+
+```powershell
+cargo run -- --benchmark-roundtrip --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --profile coding "Verify persistent Noiron memory reuse"
 ```
 
 Benchmark summaries include recursive case counts, recursive device-profile

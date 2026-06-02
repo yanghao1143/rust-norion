@@ -9,7 +9,8 @@ use rust_norion::{
     HierarchyWeights, InferenceBackend, InferenceOutcome, InferenceRequest, KvQuantBenchmarkGate,
     KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary, LocalTransformerRuntime,
     MemoryCompactionPolicy, MemoryRetentionPolicy, ModelRuntime, ModelRuntimeForwardKernel,
-    NoironEngine, PersistentRoundtripInput, PersistentRoundtripReport, ProcessRewardComponents,
+    NoironEngine, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
+    PersistentRoundtripMatrixReport, PersistentRoundtripReport, ProcessRewardComponents,
     ProcessRewardReport, ProductionKernelConformanceGate, ProductionKernelConformanceReport,
     RecursiveScheduler, ReferenceProductionForwardKernel, RewardAction, RouteBudget,
     RuntimeAssetPaths, RuntimeBackend, RuntimeDiagnostics, RuntimeError, RuntimeManifest,
@@ -105,10 +106,18 @@ fn main() -> std::io::Result<()> {
     }
 
     if args.benchmark_roundtrip {
-        let report = run_persistent_roundtrip(&args)?;
-        print_persistent_roundtrip_report(&args, &report);
-        if !report.passed {
-            std::process::exit(2);
+        if args.benchmark_all_devices {
+            let report = run_persistent_roundtrip_all_devices(&args)?;
+            print_persistent_roundtrip_matrix_report(&args, &report);
+            if !report.passed {
+                std::process::exit(2);
+            }
+        } else {
+            let report = run_persistent_roundtrip(&args)?;
+            print_persistent_roundtrip_report(&args, &report);
+            if !report.passed {
+                std::process::exit(2);
+            }
         }
         return Ok(());
     }
@@ -810,6 +819,42 @@ fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripR
     ))
 }
 
+fn run_persistent_roundtrip_all_devices(
+    args: &Args,
+) -> std::io::Result<PersistentRoundtripMatrixReport> {
+    let mut device_reports = Vec::new();
+
+    for device in DeviceClass::explicit_profiles() {
+        let device_args = args.for_roundtrip_device(*device);
+        let report = run_persistent_roundtrip(&device_args)?;
+        device_reports.push(PersistentRoundtripDeviceReport {
+            device: *device,
+            report,
+        });
+    }
+
+    Ok(PersistentRoundtripMatrixReport::evaluate(device_reports))
+}
+
+fn device_scoped_path(path: &std::path::Path, device: DeviceClass) -> PathBuf {
+    let parent = path.parent();
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("state");
+    let extension = path.extension().and_then(|value| value.to_str());
+    let file_name = match extension {
+        Some(extension) if !extension.is_empty() => {
+            format!("{}.{}.{}", stem, device.as_str(), extension)
+        }
+        _ => format!("{}.{}", stem, device.as_str()),
+    };
+
+    parent
+        .map(|parent| parent.join(&file_name))
+        .unwrap_or_else(|| PathBuf::from(file_name))
+}
+
 fn configure_engine(engine: &mut NoironEngine, args: &Args) {
     let hardware_snapshot = HardwareSnapshot::new(
         args.device,
@@ -962,6 +1007,36 @@ fn print_persistent_roundtrip_report(args: &Args, report: &PersistentRoundtripRe
     println!("{}", report.summary_line());
     for failure in &report.failures {
         println!("persistent_roundtrip_failure: {failure}");
+    }
+}
+
+fn print_persistent_roundtrip_matrix_report(args: &Args, report: &PersistentRoundtripMatrixReport) {
+    println!("Noiron persistent roundtrip all-device benchmark");
+    println!("memory_file_pattern: {}", args.memory_path.display());
+    println!(
+        "experience_file_pattern: {}",
+        args.experience_path.display()
+    );
+    println!("adaptive_file_pattern: {}", args.adaptive_path.display());
+    println!("runtime: local-transformer");
+    println!("prompt_profile: {:?}", args.profile);
+    println!("{}", report.summary_line());
+    for device_report in &report.device_reports {
+        println!(
+            "device={} {}",
+            device_report.device.as_str(),
+            device_report.report.summary_line()
+        );
+        for failure in &device_report.report.failures {
+            println!(
+                "persistent_roundtrip_device_failure: {}: {}",
+                device_report.device.as_str(),
+                failure
+            );
+        }
+    }
+    for failure in &report.failures {
+        println!("persistent_roundtrip_matrix_failure: {failure}");
     }
 }
 
@@ -1525,6 +1600,15 @@ struct Args {
 }
 
 impl Args {
+    fn for_roundtrip_device(&self, device: DeviceClass) -> Self {
+        let mut args = self.clone();
+        args.device = device;
+        args.memory_path = device_scoped_path(&self.memory_path, device);
+        args.experience_path = device_scoped_path(&self.experience_path, device);
+        args.adaptive_path = device_scoped_path(&self.adaptive_path, device);
+        args
+    }
+
     fn parse(raw: Vec<String>) -> Self {
         let mut prompt_parts = Vec::new();
         let mut profile = None;
@@ -3772,6 +3856,71 @@ mod tests {
             "--production-local-kernel",
             "production-local-all-device-recursive",
         );
+    }
+
+    #[test]
+    fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
+        let asset_dir = temp_asset_dir("roundtrip-all-devices");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let args = Args::parse(vec![
+            "--benchmark-roundtrip".to_owned(),
+            "--benchmark-all-devices".to_owned(),
+            "--memory".to_owned(),
+            asset_dir.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            asset_dir.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            asset_dir.join("adaptive.ndkv").display().to_string(),
+            "--profile".to_owned(),
+            "coding".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "32".to_owned(),
+            "Verify persistent runtime KV reuse across every supported device".to_owned(),
+        ]);
+
+        let report = run_persistent_roundtrip_all_devices(&args).unwrap();
+
+        assert!(args.benchmark_roundtrip);
+        assert!(args.benchmark_all_devices);
+        assert!(report.passed, "{:?}", report.failures);
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.device_reports.len(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.missing_devices().is_empty());
+        assert!(report.failed_devices().is_empty());
+        assert!(report.summary_line().contains("devices=12"));
+        assert!(report.device_reports.iter().all(|device_report| {
+            device_report.report.first_runtime_kv_namespace_preserved
+                && device_report.report.second_used_runtime_kv_memory
+                && device_report
+                    .report
+                    .second_imported_runtime_kv_from_namespace
+        }));
+        assert!(
+            device_scoped_path(&args.memory_path, DeviceClass::CpuOnly)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("memory.cpu.ndkv")
+        );
+        assert!(device_scoped_path(&args.memory_path, DeviceClass::CpuOnly).exists());
+        assert!(device_scoped_path(&args.memory_path, DeviceClass::Mobile).exists());
+
+        fs::remove_dir_all(asset_dir).unwrap();
     }
 
     fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
