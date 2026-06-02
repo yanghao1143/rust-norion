@@ -525,7 +525,340 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_device_contract(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
+    failures.extend(evaluate_trace_auto_replay(line));
     failures.extend(evaluate_trace_live_evolution(line));
+
+    failures
+}
+
+fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let applied = extract_json_usize_field(line, "applied").unwrap_or(0);
+    let router_updates = extract_json_usize_field(line, "router_updates").unwrap_or(0);
+    let hierarchy_updates = extract_json_usize_field(line, "hierarchy_updates").unwrap_or(0);
+    let router_threshold_mutations =
+        extract_json_usize_field(line, "router_threshold_mutations").unwrap_or(0);
+    let hierarchy_weight_mutations =
+        extract_json_usize_field(line, "hierarchy_weight_mutations").unwrap_or(0);
+    let router_threshold_delta =
+        extract_json_f32_field(line, "router_threshold_delta").unwrap_or(0.0);
+    let hierarchy_weight_delta =
+        extract_json_f32_field(line, "hierarchy_weight_delta").unwrap_or(0.0);
+    let reinforced = extract_json_usize_field(line, "reinforced").unwrap_or(0);
+    let penalized = extract_json_usize_field(line, "penalized").unwrap_or(0);
+    let touched_memories = extract_json_usize_field(line, "touched_memories").unwrap_or(0);
+    let memory_reinforcements =
+        extract_json_usize_field(line, "memory_reinforcements").unwrap_or(0);
+    let memory_penalties = extract_json_usize_field(line, "memory_penalties").unwrap_or(0);
+    let live_memory_feedback_items =
+        extract_json_usize_field(line, "live_memory_feedback_items").unwrap_or(0);
+    let live_memory_feedback_updates =
+        extract_json_usize_field(line, "live_memory_feedback_updates").unwrap_or(0);
+    let live_memory_feedback_reinforcements =
+        extract_json_usize_field(line, "live_memory_feedback_reinforcements").unwrap_or(0);
+    let live_memory_feedback_penalties =
+        extract_json_usize_field(line, "live_memory_feedback_penalties").unwrap_or(0);
+    let recursive_runtime_items =
+        extract_json_usize_field(line, "recursive_runtime_items").unwrap_or(0);
+    let recursive_runtime_calls =
+        extract_json_usize_field(line, "recursive_runtime_calls").unwrap_or(0);
+    let average_recursive_call_pressure =
+        extract_json_f32_field(line, "avg_recursive_call_pressure").unwrap_or(0.0);
+    let max_recursive_call_pressure =
+        extract_json_f32_field(line, "max_recursive_call_pressure").unwrap_or(0.0);
+
+    let expected_live_feedback_updates =
+        live_memory_feedback_reinforcements.saturating_add(live_memory_feedback_penalties);
+    if live_memory_feedback_updates != expected_live_feedback_updates {
+        failures.push(format!(
+            "auto_replay live_memory_feedback_updates {live_memory_feedback_updates} does not match live_memory_feedback_reinforcements+live_memory_feedback_penalties {expected_live_feedback_updates}"
+        ));
+    }
+
+    let expected_memory_updates = memory_reinforcements.saturating_add(memory_penalties);
+    if touched_memories != expected_memory_updates {
+        failures.push(format!(
+            "auto_replay touched_memories {touched_memories} does not match memory_reinforcements+memory_penalties {expected_memory_updates}"
+        ));
+    }
+
+    if reinforced.saturating_add(penalized) > applied {
+        failures.push(format!(
+            "auto_replay reinforced+penalized {} exceeds applied {applied}",
+            reinforced.saturating_add(penalized)
+        ));
+    }
+
+    if applied == 0 {
+        for (name, value) in [
+            ("router_updates", router_updates),
+            ("hierarchy_updates", hierarchy_updates),
+            ("router_threshold_mutations", router_threshold_mutations),
+            ("hierarchy_weight_mutations", hierarchy_weight_mutations),
+            ("reinforced", reinforced),
+            ("penalized", penalized),
+            ("touched_memories", touched_memories),
+            ("memory_reinforcements", memory_reinforcements),
+            ("memory_penalties", memory_penalties),
+            ("live_memory_feedback_items", live_memory_feedback_items),
+            ("live_memory_feedback_updates", live_memory_feedback_updates),
+            (
+                "live_memory_feedback_reinforcements",
+                live_memory_feedback_reinforcements,
+            ),
+            (
+                "live_memory_feedback_penalties",
+                live_memory_feedback_penalties,
+            ),
+            ("recursive_runtime_items", recursive_runtime_items),
+            ("recursive_runtime_calls", recursive_runtime_calls),
+        ] {
+            if value > 0 {
+                failures.push(format!("auto_replay {name} {value} requires applied > 0"));
+            }
+        }
+        if router_threshold_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay router_threshold_delta {router_threshold_delta:.6} requires applied > 0"
+            ));
+        }
+        if hierarchy_weight_delta > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay hierarchy_weight_delta {hierarchy_weight_delta:.6} requires applied > 0"
+            ));
+        }
+        if average_recursive_call_pressure > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay avg_recursive_call_pressure {average_recursive_call_pressure:.6} requires applied > 0"
+            ));
+        }
+        if max_recursive_call_pressure > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay max_recursive_call_pressure {max_recursive_call_pressure:.6} requires applied > 0"
+            ));
+        }
+    } else {
+        if router_updates != applied {
+            failures.push(format!(
+                "auto_replay router_updates {router_updates} does not match applied {applied}"
+            ));
+        }
+        if hierarchy_updates != applied {
+            failures.push(format!(
+                "auto_replay hierarchy_updates {hierarchy_updates} does not match applied {applied}"
+            ));
+        }
+        if live_memory_feedback_items > applied {
+            failures.push(format!(
+                "auto_replay live_memory_feedback_items {live_memory_feedback_items} exceeds applied {applied}"
+            ));
+        }
+        if recursive_runtime_items > applied {
+            failures.push(format!(
+                "auto_replay recursive_runtime_items {recursive_runtime_items} exceeds applied {applied}"
+            ));
+        }
+    }
+
+    if router_threshold_mutations > router_updates {
+        failures.push(format!(
+            "auto_replay router_threshold_mutations {router_threshold_mutations} exceeds router_updates {router_updates}"
+        ));
+    }
+    if hierarchy_weight_mutations > hierarchy_updates {
+        failures.push(format!(
+            "auto_replay hierarchy_weight_mutations {hierarchy_weight_mutations} exceeds hierarchy_updates {hierarchy_updates}"
+        ));
+    }
+    if router_threshold_delta > TRACE_FLOAT_EPSILON && router_threshold_mutations == 0 {
+        failures.push(format!(
+            "auto_replay router_threshold_delta {router_threshold_delta:.6} requires router_threshold_mutations > 0"
+        ));
+    }
+    if hierarchy_weight_delta > TRACE_FLOAT_EPSILON && hierarchy_weight_mutations == 0 {
+        failures.push(format!(
+            "auto_replay hierarchy_weight_delta {hierarchy_weight_delta:.6} requires hierarchy_weight_mutations > 0"
+        ));
+    }
+    if recursive_runtime_calls > 0 && recursive_runtime_items == 0 {
+        failures.push(format!(
+            "auto_replay recursive_runtime_calls {recursive_runtime_calls} requires recursive_runtime_items > 0"
+        ));
+    }
+    if average_recursive_call_pressure < -TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "auto_replay avg_recursive_call_pressure {average_recursive_call_pressure:.6} is negative"
+        ));
+    }
+    if max_recursive_call_pressure < -TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "auto_replay max_recursive_call_pressure {max_recursive_call_pressure:.6} is negative"
+        ));
+    }
+    if average_recursive_call_pressure > max_recursive_call_pressure + TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "auto_replay avg_recursive_call_pressure {average_recursive_call_pressure:.6} exceeds max_recursive_call_pressure {max_recursive_call_pressure:.6}"
+        ));
+    }
+
+    let replay_runs = extract_json_usize_field(line, "replay_runs").unwrap_or(0);
+    let replay_items = extract_json_usize_field(line, "replay_items").unwrap_or(0);
+    if applied > 0 {
+        require_usize_at_least(
+            &mut failures,
+            "replay_runs",
+            replay_runs,
+            "auto_replay_run",
+            1,
+        );
+        require_usize_at_least(
+            &mut failures,
+            "replay_items",
+            replay_items,
+            "auto_replay applied",
+            applied,
+        );
+    }
+
+    let cumulative_router_threshold_mutations =
+        extract_json_usize_field(line, "cumulative_router_threshold_mutations").unwrap_or(0);
+    let cumulative_hierarchy_weight_mutations =
+        extract_json_usize_field(line, "cumulative_hierarchy_weight_mutations").unwrap_or(0);
+    let cumulative_router_threshold_delta =
+        extract_json_f32_field(line, "cumulative_router_threshold_delta").unwrap_or(0.0);
+    let cumulative_hierarchy_weight_delta =
+        extract_json_f32_field(line, "cumulative_hierarchy_weight_delta").unwrap_or(0.0);
+    let cumulative_memory_reinforcements =
+        extract_json_usize_field(line, "cumulative_memory_reinforcements").unwrap_or(0);
+    let cumulative_memory_penalties =
+        extract_json_usize_field(line, "cumulative_memory_penalties").unwrap_or(0);
+    let cumulative_memory_updates =
+        extract_json_usize_field(line, "cumulative_memory_updates").unwrap_or(0);
+    let cumulative_replay_live_memory_feedback_items =
+        extract_json_usize_field(line, "cumulative_replay_live_memory_feedback_items").unwrap_or(0);
+    let cumulative_replay_live_memory_feedback_updates =
+        extract_json_usize_field(line, "cumulative_replay_live_memory_feedback_updates")
+            .unwrap_or(0);
+    let cumulative_replay_live_memory_feedback_reinforcements = extract_json_usize_field(
+        line,
+        "cumulative_replay_live_memory_feedback_reinforcements",
+    )
+    .unwrap_or(0);
+    let cumulative_replay_live_memory_feedback_penalties =
+        extract_json_usize_field(line, "cumulative_replay_live_memory_feedback_penalties")
+            .unwrap_or(0);
+    let cumulative_recursive_replay_items =
+        extract_json_usize_field(line, "cumulative_recursive_replay_items").unwrap_or(0);
+    let cumulative_recursive_runtime_calls =
+        extract_json_usize_field(line, "cumulative_recursive_runtime_calls").unwrap_or(0);
+
+    let expected_cumulative_memory_updates =
+        cumulative_memory_reinforcements.saturating_add(cumulative_memory_penalties);
+    if cumulative_memory_updates != expected_cumulative_memory_updates {
+        failures.push(format!(
+            "cumulative_memory_updates {cumulative_memory_updates} does not match cumulative_memory_reinforcements+cumulative_memory_penalties {expected_cumulative_memory_updates}"
+        ));
+    }
+    let expected_cumulative_live_feedback_updates =
+        cumulative_replay_live_memory_feedback_reinforcements
+            .saturating_add(cumulative_replay_live_memory_feedback_penalties);
+    if cumulative_replay_live_memory_feedback_updates != expected_cumulative_live_feedback_updates {
+        failures.push(format!(
+            "cumulative_replay_live_memory_feedback_updates {cumulative_replay_live_memory_feedback_updates} does not match cumulative replay live feedback components {expected_cumulative_live_feedback_updates}"
+        ));
+    }
+
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_router_threshold_mutations",
+        cumulative_router_threshold_mutations,
+        "auto_replay router_threshold_mutations",
+        router_threshold_mutations,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_hierarchy_weight_mutations",
+        cumulative_hierarchy_weight_mutations,
+        "auto_replay hierarchy_weight_mutations",
+        hierarchy_weight_mutations,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_router_threshold_delta",
+        cumulative_router_threshold_delta,
+        "auto_replay router_threshold_delta",
+        router_threshold_delta,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_hierarchy_weight_delta",
+        cumulative_hierarchy_weight_delta,
+        "auto_replay hierarchy_weight_delta",
+        hierarchy_weight_delta,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_memory_reinforcements",
+        cumulative_memory_reinforcements,
+        "auto_replay memory_reinforcements",
+        memory_reinforcements,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_memory_penalties",
+        cumulative_memory_penalties,
+        "auto_replay memory_penalties",
+        memory_penalties,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_memory_updates",
+        cumulative_memory_updates,
+        "auto_replay memory updates",
+        expected_memory_updates,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_memory_feedback_items",
+        cumulative_replay_live_memory_feedback_items,
+        "auto_replay live_memory_feedback_items",
+        live_memory_feedback_items,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_memory_feedback_updates",
+        cumulative_replay_live_memory_feedback_updates,
+        "auto_replay live_memory_feedback_updates",
+        live_memory_feedback_updates,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_memory_feedback_reinforcements",
+        cumulative_replay_live_memory_feedback_reinforcements,
+        "auto_replay live_memory_feedback_reinforcements",
+        live_memory_feedback_reinforcements,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_replay_live_memory_feedback_penalties",
+        cumulative_replay_live_memory_feedback_penalties,
+        "auto_replay live_memory_feedback_penalties",
+        live_memory_feedback_penalties,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_recursive_replay_items",
+        cumulative_recursive_replay_items,
+        "auto_replay recursive_runtime_items",
+        recursive_runtime_items,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_recursive_runtime_calls",
+        cumulative_recursive_runtime_calls,
+        "auto_replay recursive_runtime_calls",
+        recursive_runtime_calls,
+    );
 
     failures
 }
@@ -1875,6 +2208,47 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_accepts_auto_replay_ledger_consistency() {
+        let line = auto_replay_trace_line();
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_memory_mismatch() {
+        let line = auto_replay_trace_line().replacen(
+            "\"touched_memories\":",
+            "\"touched_memories\":99,\"_old_touched_memories\":",
+            1,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("auto_replay touched_memories 99")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_without_cumulative_ledger() {
+        let line = auto_replay_trace_line().replacen("\"replay_runs\":1", "\"replay_runs\":0", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("replay_runs 0")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_accepts_runtime_kv_storage_consistency() {
         let line = runtime_kv_trace_line()
             .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
@@ -2046,6 +2420,22 @@ mod tests {
                 .any(|failure| failure.contains("runtime_device_contract device=")),
             "{failures:?}"
         );
+    }
+
+    fn auto_replay_trace_line() -> String {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let _ = engine.infer(
+            InferenceRequest::new("trace auto replay seed", TaskProfile::Coding),
+            &mut backend,
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new("trace auto replay seed", TaskProfile::Coding),
+            &mut backend,
+        );
+
+        assert!(outcome.auto_replay_report.is_some());
+        trace_json_line("trace auto replay seed", TaskProfile::Coding, 5, &outcome)
     }
 
     fn runtime_kv_trace_line() -> String {
