@@ -1753,6 +1753,8 @@ struct Args {
     inspect_min_evolution_replay_items: Option<u64>,
     inspect_min_evolution_router_threshold_mutations: Option<u64>,
     inspect_min_evolution_hierarchy_weight_mutations: Option<u64>,
+    inspect_min_evolution_router_threshold_delta: Option<f32>,
+    inspect_min_evolution_hierarchy_weight_delta: Option<f32>,
     inspect_min_evolution_memory_updates: Option<u64>,
     inspect_min_evolution_recursive_runtime_calls: Option<u64>,
     inspect_max_evolution_drift_rollbacks: Option<u64>,
@@ -1897,6 +1899,8 @@ impl Args {
         let mut inspect_min_evolution_replay_items = None;
         let mut inspect_min_evolution_router_threshold_mutations = None;
         let mut inspect_min_evolution_hierarchy_weight_mutations = None;
+        let mut inspect_min_evolution_router_threshold_delta = None;
+        let mut inspect_min_evolution_hierarchy_weight_delta = None;
         let mut inspect_min_evolution_memory_updates = None;
         let mut inspect_min_evolution_recursive_runtime_calls = None;
         let mut inspect_max_evolution_drift_rollbacks = None;
@@ -2421,6 +2425,20 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-evolution-router-threshold-delta" if index + 1 < raw.len() => {
+                    inspect_min_evolution_router_threshold_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-min-evolution-hierarchy-weight-delta" if index + 1 < raw.len() => {
+                    inspect_min_evolution_hierarchy_weight_delta =
+                        Some(parse_f32(&raw[index + 1], 0.0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-min-evolution-memory-updates" if index + 1 < raw.len() => {
                     inspect_min_evolution_memory_updates = Some(parse_u64(&raw[index + 1], 0));
                     inspect_state = true;
@@ -2742,6 +2760,8 @@ impl Args {
             inspect_min_evolution_replay_items,
             inspect_min_evolution_router_threshold_mutations,
             inspect_min_evolution_hierarchy_weight_mutations,
+            inspect_min_evolution_router_threshold_delta,
+            inspect_min_evolution_hierarchy_weight_delta,
             inspect_min_evolution_memory_updates,
             inspect_min_evolution_recursive_runtime_calls,
             inspect_max_evolution_drift_rollbacks,
@@ -2947,6 +2967,12 @@ impl Args {
                 .inspect_min_evolution_router_threshold_mutations,
             min_evolution_hierarchy_weight_mutations: self
                 .inspect_min_evolution_hierarchy_weight_mutations,
+            min_evolution_router_threshold_delta: self
+                .inspect_min_evolution_router_threshold_delta
+                .map(|value| value.max(0.0)),
+            min_evolution_hierarchy_weight_delta: self
+                .inspect_min_evolution_hierarchy_weight_delta
+                .map(|value| value.max(0.0)),
             min_evolution_memory_updates: self.inspect_min_evolution_memory_updates,
             min_evolution_recursive_runtime_calls: self
                 .inspect_min_evolution_recursive_runtime_calls,
@@ -3128,7 +3154,7 @@ fn print_help_and_exit() -> ! {
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
         "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n\n",
-        "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-memory-updates n --inspect-require-runtime-kv-dimensions\n",
+        "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-require-runtime-kv-dimensions\n",
         "Device: --list-devices --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
     );
     println!("{usage}");
@@ -3330,6 +3356,10 @@ mod tests {
             "7".to_owned(),
             "--inspect-min-evolution-hierarchy-weight-mutations".to_owned(),
             "8".to_owned(),
+            "--inspect-min-evolution-router-threshold-delta".to_owned(),
+            "0.04".to_owned(),
+            "--inspect-min-evolution-hierarchy-weight-delta".to_owned(),
+            "0.05".to_owned(),
             "--inspect-min-evolution-memory-updates".to_owned(),
             "9".to_owned(),
             "--inspect-min-evolution-recursive-runtime-calls".to_owned(),
@@ -3654,6 +3684,14 @@ mod tests {
             args.inspect_min_evolution_hierarchy_weight_mutations,
             Some(8)
         );
+        assert_eq!(
+            args.inspect_min_evolution_router_threshold_delta,
+            Some(0.04)
+        );
+        assert_eq!(
+            args.inspect_min_evolution_hierarchy_weight_delta,
+            Some(0.05)
+        );
         assert_eq!(args.inspect_min_evolution_memory_updates, Some(9));
         assert_eq!(args.inspect_min_evolution_recursive_runtime_calls, Some(10));
         assert_eq!(args.inspect_max_evolution_drift_rollbacks, Some(0));
@@ -3691,6 +3729,16 @@ mod tests {
             args.state_inspection_gate()
                 .min_runtime_kv_export_experiences,
             Some(2)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_router_threshold_delta,
+            Some(0.04)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .min_evolution_hierarchy_weight_delta,
+            Some(0.05)
         );
         assert_eq!(
             args.state_inspection_gate().min_evolution_memory_updates,

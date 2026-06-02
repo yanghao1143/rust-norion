@@ -69,6 +69,8 @@ pub struct StateInspectionGate {
     pub min_evolution_replay_items: Option<u64>,
     pub min_evolution_router_threshold_mutations: Option<u64>,
     pub min_evolution_hierarchy_weight_mutations: Option<u64>,
+    pub min_evolution_router_threshold_delta: Option<f32>,
+    pub min_evolution_hierarchy_weight_delta: Option<f32>,
     pub min_evolution_memory_updates: Option<u64>,
     pub min_evolution_recursive_runtime_calls: Option<u64>,
     pub max_evolution_drift_rollbacks: Option<u64>,
@@ -493,6 +495,18 @@ impl StateInspectionReport {
             self.evolution_ledger.hierarchy_weight_mutations,
             gate.min_evolution_hierarchy_weight_mutations,
         );
+        require_min_f32(
+            &mut failures,
+            "evolution_router_threshold_delta",
+            self.evolution_ledger.router_threshold_delta,
+            gate.min_evolution_router_threshold_delta,
+        );
+        require_min_f32(
+            &mut failures,
+            "evolution_hierarchy_weight_delta",
+            self.evolution_ledger.hierarchy_weight_delta,
+            gate.min_evolution_hierarchy_weight_delta,
+        );
         require_min_u64(
             &mut failures,
             "evolution_memory_updates",
@@ -540,6 +554,14 @@ fn require_min_u64(failures: &mut Vec<String>, name: &str, actual: u64, required
     if let Some(required) = required {
         if actual < required {
             failures.push(format!("{name} {actual} below required {required}"));
+        }
+    }
+}
+
+fn require_min_f32(failures: &mut Vec<String>, name: &str, actual: f32, required: Option<f32>) {
+    if let Some(required) = required {
+        if actual < required {
+            failures.push(format!("{name} {actual:.6} below required {required:.6}"));
         }
     }
 }
@@ -902,6 +924,8 @@ mod tests {
             min_evolution_replay_items: Some(5),
             min_evolution_router_threshold_mutations: Some(3),
             min_evolution_hierarchy_weight_mutations: Some(4),
+            min_evolution_router_threshold_delta: Some(0.17),
+            min_evolution_hierarchy_weight_delta: Some(0.08),
             min_evolution_memory_updates: Some(7),
             min_evolution_recursive_runtime_calls: Some(9),
             max_evolution_drift_rollbacks: Some(2),
@@ -929,6 +953,8 @@ mod tests {
             min_evolution_replay_items: Some(6),
             min_evolution_router_threshold_mutations: Some(4),
             min_evolution_hierarchy_weight_mutations: Some(5),
+            min_evolution_router_threshold_delta: Some(0.18),
+            min_evolution_hierarchy_weight_delta: Some(0.09),
             min_evolution_memory_updates: Some(8),
             min_evolution_recursive_runtime_calls: Some(10),
             max_evolution_drift_rollbacks: Some(1),
@@ -961,6 +987,12 @@ mod tests {
                 .failures
                 .contains(&"runtime_kv_import_experience_count 1 below required 2".to_owned())
         );
+        assert!(failing_report.failures.contains(
+            &"evolution_router_threshold_delta 0.170000 below required 0.180000".to_owned()
+        ));
+        assert!(failing_report.failures.contains(
+            &"evolution_hierarchy_weight_delta 0.080000 below required 0.090000".to_owned()
+        ));
         assert!(
             failing_report
                 .failures
@@ -1094,6 +1126,8 @@ mod tests {
             min_evolution_replay_items: None,
             min_evolution_router_threshold_mutations: None,
             min_evolution_hierarchy_weight_mutations: None,
+            min_evolution_router_threshold_delta: None,
+            min_evolution_hierarchy_weight_delta: None,
             min_evolution_memory_updates: None,
             min_evolution_recursive_runtime_calls: None,
             max_evolution_drift_rollbacks: None,
