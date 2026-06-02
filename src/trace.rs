@@ -525,9 +525,119 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_device_contract(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
+    failures.extend(evaluate_trace_memory_governance(line));
     failures.extend(evaluate_trace_drift(line));
     failures.extend(evaluate_trace_auto_replay(line));
     failures.extend(evaluate_trace_live_evolution(line));
+
+    failures
+}
+
+fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if let Some(retention) = json_object_after_field(line, "retention") {
+        let stale_after = extract_json_usize_field(retention, "stale_after").unwrap_or(0);
+        let decay_rate = extract_json_f32_field(retention, "decay_rate").unwrap_or(f32::NAN);
+        let remove_below_strength =
+            extract_json_f32_field(retention, "remove_below_strength").unwrap_or(f32::NAN);
+        let remove_after_failures =
+            extract_json_usize_field(retention, "remove_after_failures").unwrap_or(0);
+        let before = extract_json_usize_field(retention, "before").unwrap_or(0);
+        let after = extract_json_usize_field(retention, "after").unwrap_or(0);
+        let decayed = extract_json_usize_field(retention, "decayed").unwrap_or(0);
+        let removed = extract_json_usize_field(retention, "removed").unwrap_or(0);
+
+        if stale_after == 0 {
+            failures.push("retention stale_after must be > 0".to_owned());
+        }
+        if !(0.0..=0.95).contains(&decay_rate) {
+            failures.push(format!(
+                "retention decay_rate {decay_rate:.6} must stay within 0.0..=0.95"
+            ));
+        }
+        if !(0.0..=3.0).contains(&remove_below_strength) {
+            failures.push(format!(
+                "retention remove_below_strength {remove_below_strength:.6} must stay within 0.0..=3.0"
+            ));
+        }
+        if remove_after_failures == 0 {
+            failures.push("retention remove_after_failures must be > 0".to_owned());
+        }
+        if decayed > before {
+            failures.push(format!(
+                "retention decayed {decayed} exceeds before {before}"
+            ));
+        }
+        if removed > before {
+            failures.push(format!(
+                "retention removed {removed} exceeds before {before}"
+            ));
+        }
+        if after > before {
+            failures.push(format!("retention after {after} exceeds before {before}"));
+        }
+        if after.saturating_add(removed) != before {
+            failures.push(format!(
+                "retention before {before} does not match after+removed {}",
+                after.saturating_add(removed)
+            ));
+        }
+    } else {
+        failures.push("retention object is missing or invalid".to_owned());
+    }
+
+    if let Some(compaction) = json_object_after_field(line, "memory_compaction") {
+        let similarity_threshold =
+            extract_json_f32_field(compaction, "similarity_threshold").unwrap_or(f32::NAN);
+        let max_candidates = extract_json_usize_field(compaction, "max_candidates").unwrap_or(0);
+        let max_merges = extract_json_usize_field(compaction, "max_merges").unwrap_or(0);
+        let before = extract_json_usize_field(compaction, "before").unwrap_or(0);
+        let after = extract_json_usize_field(compaction, "after").unwrap_or(0);
+        let merged = extract_json_usize_field(compaction, "merged").unwrap_or(0);
+        let removed = extract_json_usize_field(compaction, "removed").unwrap_or(0);
+
+        if !(0.10..=0.999).contains(&similarity_threshold) {
+            failures.push(format!(
+                "memory_compaction similarity_threshold {similarity_threshold:.6} must stay within 0.10..=0.999"
+            ));
+        }
+        if merged != removed {
+            failures.push(format!(
+                "memory_compaction merged {merged} does not match removed {removed}"
+            ));
+        }
+        if merged > max_merges {
+            failures.push(format!(
+                "memory_compaction merged {merged} exceeds max_merges {max_merges}"
+            ));
+        }
+        if removed > before {
+            failures.push(format!(
+                "memory_compaction removed {removed} exceeds before {before}"
+            ));
+        }
+        if after > before {
+            failures.push(format!(
+                "memory_compaction after {after} exceeds before {before}"
+            ));
+        }
+        if after.saturating_add(removed) != before {
+            failures.push(format!(
+                "memory_compaction before {before} does not match after+removed {}",
+                after.saturating_add(removed)
+            ));
+        }
+        if before < 2 || max_candidates < 2 || max_merges == 0 {
+            if merged > 0 || removed > 0 || after != before {
+                failures.push(format!(
+                    "memory_compaction skipped state requires merged=0 removed=0 after=before, got merged={merged} removed={removed} before={before} after={after}"
+                ));
+            }
+        }
+    } else {
+        failures.push("memory_compaction object is missing or invalid".to_owned());
+    }
 
     failures
 }
@@ -1705,6 +1815,52 @@ fn value_after_json_field<'a>(line: &'a str, field: &str) -> Option<&'a str> {
     Some(line[start..].trim_start())
 }
 
+fn json_object_after_field<'a>(line: &'a str, field: &str) -> Option<&'a str> {
+    let value = value_after_json_field(line, field)?;
+    if !value.starts_with('{') {
+        return None;
+    }
+
+    let mut depth = 0usize;
+    let mut inner_start = None;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, ch) in value.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match ch {
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    inner_start = Some(index + ch.len_utf8());
+                }
+                depth = depth.saturating_add(1);
+            }
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return inner_start.map(|start| &value[start..index]);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
 fn parse_json_string(value: &str) -> Option<(String, usize)> {
     let mut chars = value.char_indices();
     let (_, first) = chars.next()?;
@@ -2329,6 +2485,97 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_accepts_memory_governance_consistency() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace memory governance consistency", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace memory governance consistency",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_retention_count_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace retention count mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = replace_in_trace_object(
+            &trace_json_line(
+                "trace retention count mismatch",
+                TaskProfile::General,
+                5,
+                &outcome,
+            ),
+            "retention",
+            "\"removed\":0",
+            "\"removed\":2",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("retention") && failure.contains("after+removed")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_compaction_count_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace compaction count mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = replace_in_trace_object(
+            &trace_json_line(
+                "trace compaction count mismatch",
+                TaskProfile::General,
+                5,
+                &outcome,
+            ),
+            "memory_compaction",
+            "\"merged\":0",
+            "\"merged\":1",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("memory_compaction merged 1")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn scoped_json_object_extraction_keeps_duplicate_fields_separate() {
+        let line = "{\"retention\":{\"before\":1,\"after\":1},\"memory_compaction\":{\"before\":3,\"after\":2,\"note\":\"keeps {quoted} braces\"}}";
+        let retention = json_object_after_field(line, "retention").unwrap();
+        let compaction = json_object_after_field(line, "memory_compaction").unwrap();
+
+        assert_eq!(extract_json_usize_field(retention, "before"), Some(1));
+        assert_eq!(extract_json_usize_field(compaction, "before"), Some(3));
+        assert_eq!(extract_json_usize_field(compaction, "after"), Some(2));
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_live_evolution_mismatch() {
         let mut engine = NoironEngine::new();
         let mut backend = HeuristicBackend;
@@ -2691,6 +2938,50 @@ mod tests {
             5,
             &outcome,
         )
+    }
+
+    fn replace_in_trace_object(line: &str, object: &str, from: &str, to: &str) -> String {
+        let marker = format!("\"{object}\":{{");
+        let object_start = line.find(&marker).expect("trace object should exist");
+        let field_start = object_start + marker.len() - 1;
+        let rest = &line[field_start..];
+        let mut depth = 0usize;
+        let mut in_string = false;
+        let mut escaped = false;
+
+        for (offset, ch) in rest.char_indices() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+                match ch {
+                    '\\' => escaped = true,
+                    '"' => in_string = false,
+                    _ => {}
+                }
+                continue;
+            }
+
+            match ch {
+                '"' => in_string = true,
+                '{' => depth = depth.saturating_add(1),
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        let object_end = field_start + offset + ch.len_utf8();
+                        let mut out = String::new();
+                        out.push_str(&line[..field_start]);
+                        out.push_str(&line[field_start..object_end].replacen(from, to, 1));
+                        out.push_str(&line[object_end..]);
+                        return out;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        panic!("trace object should close");
     }
 
     #[test]
