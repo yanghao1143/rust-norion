@@ -260,7 +260,10 @@ modules, not external product dependencies:
   inference. The same inspection path should also provide threshold gates for
   persisted runtime KV, experience, router observations, and evolution-ledger
   evidence so local/CI checks can fail when durable self-evolution state is
-  missing.
+  missing. With all-device mode, the inspection gate should evaluate the
+  device-scoped state files emitted by persistence roundtrip runs so CPU,
+  mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
+  and multi-GPU profiles all prove durable local state independently.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -588,7 +591,9 @@ These are algorithmic references, not product dependencies:
   invoking a model runtime. The same CLI path can enforce state-inspection
   gates for minimum memory, runtime-KV, experience, router-observation, and
   self-evolution ledger counts, failing with a non-zero exit code when persisted
-  evidence is incomplete.
+  evidence is incomplete. In all-device mode, the gate loads every explicit
+  device profile's scoped state files and fails if any device is missing state
+  or lacks the required persisted evidence.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -659,6 +664,10 @@ These are algorithmic references, not product dependencies:
   roundtrip gate now runs once per explicit device profile with device-scoped
   state files, so all-device support has a persistence/reuse check rather than
   only a routing benchmark check.
+- With `--inspect-state --benchmark-all-devices --inspect-gate`, the same
+  device-scoped state files can now be checked after the roundtrip run for
+  minimum runtime-KV, experience, router-observation, and self-evolution ledger
+  evidence per explicit device profile.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
   `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps

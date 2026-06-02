@@ -233,6 +233,14 @@ Any `--inspect-min-*` threshold implies `--inspect-state --inspect-gate` and
 exits with code `2` when persisted runtime KV, experience, router observations,
 or self-evolution ledger counters are missing.
 
+Add `--benchmark-all-devices` to inspect the same device-scoped state files
+created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
+`memory.mobile.ndkv`, and `memory.server.ndkv`:
+
+```powershell
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
+```
+
 查看本地持久化状态，但不执行推理：
 
 ```powershell
@@ -254,6 +262,14 @@ cargo run -- --inspect-gate --inspect-min-runtime-kv-memories 1 --inspect-min-ex
 任意 `--inspect-min-*` 阈值都会隐式开启 `--inspect-state --inspect-gate`；如果
 持久化 runtime KV、experience、router observation 或自进化 ledger 证据不足，
 进程会用退出码 `2` 失败。
+
+加上 `--benchmark-all-devices` 后，会检查 all-device roundtrip 门禁写出的同一组
+device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
+`memory.server.ndkv`：
+
+```powershell
+cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-evolution-memory-updates 1 --inspect-require-runtime-kv-dimensions
+```
 
 Write one structured JSONL trace record for benchmark comparison:
 

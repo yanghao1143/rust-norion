@@ -15,8 +15,9 @@ use rust_norion::{
     RecursiveScheduler, ReferenceProductionForwardKernel, RewardAction, RouteBudget,
     RuntimeAssetPaths, RuntimeBackend, RuntimeDiagnostics, RuntimeError, RuntimeManifest,
     RuntimeManifestDeviceGateReport, RuntimeManifestValidation, RuntimeMetadata,
-    StateInspectionGate, StateInspectionGateReport, StateInspectionReport, TaskProfile,
-    TierMigrationAction, TraceSchemaGateReport, TransformerRuntimeArchitecture, append_trace_jsonl,
+    StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
+    StateInspectionMatrixGateReport, StateInspectionReport, TaskProfile, TierMigrationAction,
+    TraceSchemaGateReport, TransformerRuntimeArchitecture, append_trace_jsonl,
     append_trace_jsonl_with_case, default_benchmark_cases, evaluate_trace_schema_jsonl,
 };
 
@@ -94,19 +95,27 @@ fn main() -> std::io::Result<()> {
     }
 
     if args.inspect_state {
-        let mut engine = NoironEngine::load_full_state(
-            &args.memory_path,
-            &args.experience_path,
-            &args.adaptive_path,
-        )?;
-        configure_engine(&mut engine, &args);
-        let report = StateInspectionReport::from_engine(&engine, args.inspect_limit);
-        print_state_inspection_report(&args, &report);
-        if args.inspect_gate {
-            let gate_report = report.evaluate(&args.state_inspection_gate());
-            print_state_inspection_gate_report(&gate_report);
-            if !gate_report.passed() {
+        if args.benchmark_all_devices {
+            let report = run_state_inspection_all_devices(&args)?;
+            print_state_inspection_matrix_gate_report(&args, &report);
+            if !report.passed() {
                 std::process::exit(2);
+            }
+        } else {
+            let mut engine = NoironEngine::load_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )?;
+            configure_engine(&mut engine, &args);
+            let report = StateInspectionReport::from_engine(&engine, args.inspect_limit);
+            print_state_inspection_report(&args, &report);
+            if args.inspect_gate {
+                let gate_report = report.evaluate(&args.state_inspection_gate());
+                print_state_inspection_gate_report(&gate_report);
+                if !gate_report.passed() {
+                    std::process::exit(2);
+                }
             }
         }
         return Ok(());
@@ -843,6 +852,52 @@ fn run_persistent_roundtrip_all_devices(
     Ok(PersistentRoundtripMatrixReport::evaluate(device_reports))
 }
 
+fn run_state_inspection_all_devices(
+    args: &Args,
+) -> std::io::Result<StateInspectionMatrixGateReport> {
+    let mut device_reports = Vec::new();
+    let gate = args.state_inspection_gate();
+
+    for device in DeviceClass::explicit_profiles() {
+        let device_args = args.for_inspect_device(*device);
+        let mut state_file_failures = Vec::new();
+        if !device_args.memory_path.exists() {
+            state_file_failures.push(format!(
+                "memory file missing: {}",
+                device_args.memory_path.display()
+            ));
+        }
+        if !device_args.experience_path.exists() {
+            state_file_failures.push(format!(
+                "experience file missing: {}",
+                device_args.experience_path.display()
+            ));
+        }
+        if !device_args.adaptive_path.exists() {
+            state_file_failures.push(format!(
+                "adaptive file missing: {}",
+                device_args.adaptive_path.display()
+            ));
+        }
+        let mut engine = NoironEngine::load_full_state(
+            &device_args.memory_path,
+            &device_args.experience_path,
+            &device_args.adaptive_path,
+        )?;
+        configure_engine(&mut engine, &device_args);
+        let report = StateInspectionReport::from_engine(&engine, device_args.inspect_limit);
+        let mut gate_report = report.evaluate(&gate);
+        gate_report.failures.extend(state_file_failures);
+        gate_report.passed = gate_report.failures.is_empty();
+        device_reports.push(StateInspectionDeviceGateReport {
+            device: *device,
+            report: gate_report,
+        });
+    }
+
+    Ok(StateInspectionMatrixGateReport::evaluate(device_reports))
+}
+
 fn device_scoped_path(path: &std::path::Path, device: DeviceClass) -> PathBuf {
     let parent = path.parent();
     let stem = path
@@ -1183,6 +1238,37 @@ fn print_state_inspection_gate_report(report: &StateInspectionGateReport) {
     println!("{}", report.summary_line());
     for failure in &report.failures {
         println!("state_inspection_gate_failure: {failure}");
+    }
+}
+
+fn print_state_inspection_matrix_gate_report(
+    args: &Args,
+    report: &StateInspectionMatrixGateReport,
+) {
+    println!("Noiron state inspection all-device gate");
+    println!("memory_file_pattern: {}", args.memory_path.display());
+    println!(
+        "experience_file_pattern: {}",
+        args.experience_path.display()
+    );
+    println!("adaptive_file_pattern: {}", args.adaptive_path.display());
+    println!("{}", report.summary_line());
+    for device_report in &report.device_reports {
+        println!(
+            "device={} {}",
+            device_report.device.as_str(),
+            device_report.report.summary_line()
+        );
+        for failure in &device_report.report.failures {
+            println!(
+                "state_inspection_matrix_gate_failure: device={} {}",
+                device_report.device.as_str(),
+                failure
+            );
+        }
+    }
+    for failure in &report.failures {
+        println!("state_inspection_matrix_gate_failure: {failure}");
     }
 }
 
@@ -1656,6 +1742,15 @@ struct Args {
 }
 
 impl Args {
+    fn for_inspect_device(&self, device: DeviceClass) -> Self {
+        let mut args = self.clone();
+        args.device = device;
+        args.memory_path = device_scoped_path(&self.memory_path, device);
+        args.experience_path = device_scoped_path(&self.experience_path, device);
+        args.adaptive_path = device_scoped_path(&self.adaptive_path, device);
+        args
+    }
+
     fn for_roundtrip_device(&self, device: DeviceClass) -> Self {
         let mut args = self.clone();
         args.device = device;
@@ -1826,6 +1921,9 @@ impl Args {
                 }
                 "--benchmark-all-devices" => {
                     benchmark_all_devices = true;
+                    if inspect_state {
+                        inspect_gate = true;
+                    }
                     index += 1;
                 }
                 "--benchmark-min-quality" if index + 1 < raw.len() => {
@@ -2166,6 +2264,9 @@ impl Args {
                 }
                 "--inspect-state" => {
                     inspect_state = true;
+                    if benchmark_all_devices {
+                        inspect_gate = true;
+                    }
                     index += 1;
                 }
                 "--inspect-gate" => {
@@ -3477,6 +3578,18 @@ mod tests {
     }
 
     #[test]
+    fn inspect_all_devices_flag_implies_state_gate() {
+        let args = Args::parse(vec![
+            "--inspect-state".to_owned(),
+            "--benchmark-all-devices".to_owned(),
+        ]);
+
+        assert!(args.inspect_state);
+        assert!(args.inspect_gate);
+        assert!(args.benchmark_all_devices);
+    }
+
+    #[test]
     fn runtime_manifest_gate_builds_production_manifest_from_cli_assets() {
         let asset_dir = temp_asset_dir("runtime-manifest-cli-assets");
         fs::create_dir_all(&asset_dir).unwrap();
@@ -4171,6 +4284,125 @@ mod tests {
         );
         assert!(device_scoped_path(&args.memory_path, DeviceClass::CpuOnly).exists());
         assert!(device_scoped_path(&args.memory_path, DeviceClass::Mobile).exists());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn state_inspection_all_devices_gates_roundtrip_state_files() {
+        let asset_dir = temp_asset_dir("inspect-all-devices");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let roundtrip_args = Args::parse(vec![
+            "--benchmark-roundtrip".to_owned(),
+            "--benchmark-all-devices".to_owned(),
+            "--memory".to_owned(),
+            asset_dir.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            asset_dir.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            asset_dir.join("adaptive.ndkv").display().to_string(),
+            "--profile".to_owned(),
+            "coding".to_owned(),
+            "--runtime-kv-exchange".to_owned(),
+            "--runtime-layers".to_owned(),
+            "6".to_owned(),
+            "--runtime-hidden-size".to_owned(),
+            "64".to_owned(),
+            "--runtime-attention-heads".to_owned(),
+            "4".to_owned(),
+            "--runtime-kv-heads".to_owned(),
+            "2".to_owned(),
+            "--runtime-local-window".to_owned(),
+            "32".to_owned(),
+            "Create inspectable runtime KV state for every supported device".to_owned(),
+        ]);
+        let roundtrip = run_persistent_roundtrip_all_devices(&roundtrip_args).unwrap();
+        assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+
+        let inspect_args = Args::parse(vec![
+            "--inspect-state".to_owned(),
+            "--benchmark-all-devices".to_owned(),
+            "--memory".to_owned(),
+            asset_dir.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            asset_dir.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            asset_dir.join("adaptive.ndkv").display().to_string(),
+            "--inspect-min-memories".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-runtime-kv-memories".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-experiences".to_owned(),
+            "1".to_owned(),
+            "--inspect-min-evolution-memory-updates".to_owned(),
+            "1".to_owned(),
+            "--inspect-require-runtime-kv-dimensions".to_owned(),
+        ]);
+        let report = run_state_inspection_all_devices(&inspect_args).unwrap();
+
+        assert!(inspect_args.inspect_state);
+        assert!(inspect_args.inspect_gate);
+        assert!(inspect_args.benchmark_all_devices);
+        assert!(report.passed(), "{:?}", report.failures);
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.missing_devices().is_empty());
+        assert!(report.failed_devices().is_empty());
+        assert!(
+            report
+                .summary_line()
+                .contains("state_inspection_matrix_gate: passed=true")
+        );
+        assert!(report.device_reports.iter().all(|device_report| {
+            device_report.report.passed()
+                && device_report.report.summary_line().contains("passed=true")
+        }));
+        assert!(device_scoped_path(&inspect_args.memory_path, DeviceClass::Server).exists());
+
+        fs::remove_dir_all(asset_dir).unwrap();
+    }
+
+    #[test]
+    fn state_inspection_all_devices_fails_missing_scoped_state_files() {
+        let asset_dir = temp_asset_dir("inspect-missing-all-devices");
+        fs::create_dir_all(&asset_dir).unwrap();
+        let inspect_args = Args::parse(vec![
+            "--inspect-state".to_owned(),
+            "--benchmark-all-devices".to_owned(),
+            "--memory".to_owned(),
+            asset_dir.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            asset_dir.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            asset_dir.join("adaptive.ndkv").display().to_string(),
+        ]);
+
+        let report = run_state_inspection_all_devices(&inspect_args).unwrap();
+
+        assert!(!report.passed());
+        assert_eq!(
+            report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.failed_devices().len(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(report.device_reports.iter().all(|device_report| {
+            device_report
+                .report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("memory file missing"))
+        }));
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("device cpu state inspection failed"))
+        );
 
         fs::remove_dir_all(asset_dir).unwrap();
     }

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use crate::adaptive_state::EvolutionLedger;
 use crate::engine::NoironEngine;
 use crate::experience::recursive_runtime_calls_from_notes;
+use crate::hardware::DeviceClass;
 use crate::hierarchy::{
     HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
 };
@@ -86,6 +87,115 @@ impl StateInspectionGateReport {
             self.failures.len()
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateInspectionDeviceGateReport {
+    pub device: DeviceClass,
+    pub report: StateInspectionGateReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateInspectionMatrixGateReport {
+    pub passed: bool,
+    pub device_reports: Vec<StateInspectionDeviceGateReport>,
+    pub failures: Vec<String>,
+}
+
+impl StateInspectionMatrixGateReport {
+    pub fn evaluate(device_reports: Vec<StateInspectionDeviceGateReport>) -> Self {
+        let mut failures = Vec::new();
+
+        if device_reports.is_empty() {
+            failures.push("no state inspection device reports were recorded".to_owned());
+        }
+
+        let missing = missing_state_inspection_devices(&device_reports);
+        if !missing.is_empty() {
+            failures.push(format!(
+                "state_inspection_devices {} below expected {} missing={}",
+                explicit_state_inspection_devices(&device_reports),
+                DeviceClass::explicit_profiles().len(),
+                missing
+                    .iter()
+                    .map(|device| device.as_str())
+                    .collect::<Vec<_>>()
+                    .join("+")
+            ));
+        }
+
+        for device_report in &device_reports {
+            if !device_report.report.passed() {
+                failures.push(format!(
+                    "device {} state inspection failed with {} failures",
+                    device_report.device.as_str(),
+                    device_report.report.failures.len()
+                ));
+            }
+        }
+
+        Self {
+            passed: failures.is_empty(),
+            device_reports,
+            failures,
+        }
+    }
+
+    pub fn passed(&self) -> bool {
+        self.passed
+    }
+
+    pub fn covered_devices(&self) -> usize {
+        explicit_state_inspection_devices(&self.device_reports)
+    }
+
+    pub fn missing_devices(&self) -> Vec<DeviceClass> {
+        missing_state_inspection_devices(&self.device_reports)
+    }
+
+    pub fn failed_devices(&self) -> Vec<DeviceClass> {
+        self.device_reports
+            .iter()
+            .filter(|device_report| !device_report.report.passed())
+            .map(|device_report| device_report.device)
+            .collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} failures={}",
+            self.passed,
+            self.covered_devices(),
+            DeviceClass::explicit_profiles().len(),
+            self.failed_devices().len(),
+            self.failures.len()
+        )
+    }
+}
+
+fn explicit_state_inspection_devices(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .filter(|device| {
+            device_reports
+                .iter()
+                .any(|device_report| device_report.device == **device)
+        })
+        .count()
+}
+
+fn missing_state_inspection_devices(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> Vec<DeviceClass> {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .copied()
+        .filter(|device| {
+            !device_reports
+                .iter()
+                .any(|device_report| device_report.device == *device)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -694,6 +804,76 @@ mod tests {
             failing_report
                 .failures
                 .contains(&"evolution_drift_rollbacks 2 above maximum 1".to_owned())
+        );
+    }
+
+    #[test]
+    fn state_inspection_matrix_gate_requires_every_explicit_device_to_pass() {
+        let passing = StateInspectionGateReport {
+            passed: true,
+            failures: Vec::new(),
+        };
+        let failing = StateInspectionGateReport {
+            passed: false,
+            failures: vec!["runtime_kv_memory_count 0 below required 1".to_owned()],
+        };
+
+        let complete = StateInspectionMatrixGateReport::evaluate(
+            DeviceClass::explicit_profiles()
+                .iter()
+                .copied()
+                .map(|device| StateInspectionDeviceGateReport {
+                    device,
+                    report: passing.clone(),
+                })
+                .collect(),
+        );
+
+        assert!(complete.passed(), "{:?}", complete.failures);
+        assert_eq!(
+            complete.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert!(complete.missing_devices().is_empty());
+        assert!(complete.failed_devices().is_empty());
+        assert!(
+            complete
+                .summary_line()
+                .contains("state_inspection_matrix_gate: passed=true")
+        );
+
+        let incomplete = StateInspectionMatrixGateReport::evaluate(vec![
+            StateInspectionDeviceGateReport {
+                device: DeviceClass::CpuOnly,
+                report: passing,
+            },
+            StateInspectionDeviceGateReport {
+                device: DeviceClass::IntegratedGpu,
+                report: failing,
+            },
+        ]);
+
+        assert!(!incomplete.passed());
+        assert_eq!(incomplete.covered_devices(), 2);
+        assert_eq!(
+            incomplete.missing_devices().len(),
+            DeviceClass::explicit_profiles().len() - 2
+        );
+        assert_eq!(
+            incomplete.failed_devices(),
+            vec![DeviceClass::IntegratedGpu]
+        );
+        assert!(
+            incomplete
+                .failures
+                .iter()
+                .any(|failure| failure.contains("missing="))
+        );
+        assert!(
+            incomplete
+                .failures
+                .iter()
+                .any(|failure| failure.contains("device integrated state inspection failed"))
         );
     }
 }
