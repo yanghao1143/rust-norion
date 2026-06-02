@@ -215,6 +215,7 @@ pub struct BenchmarkGate {
     pub min_runtime_convolutional_fusion_layers: Option<usize>,
     pub min_runtime_uncertainty_cases: Option<usize>,
     pub min_runtime_uncertainty_tokens: Option<usize>,
+    pub min_runtime_uncertainty_device_profiles: Option<usize>,
     pub min_runtime_kv_import_cases: Option<usize>,
     pub min_runtime_kv_imported: Option<usize>,
     pub min_runtime_kv_import_device_profiles: Option<usize>,
@@ -341,6 +342,7 @@ impl Default for BenchmarkGate {
             min_runtime_convolutional_fusion_layers: None,
             min_runtime_uncertainty_cases: None,
             min_runtime_uncertainty_tokens: None,
+            min_runtime_uncertainty_device_profiles: None,
             min_runtime_kv_import_cases: None,
             min_runtime_kv_imported: None,
             min_runtime_kv_import_device_profiles: None,
@@ -1980,6 +1982,26 @@ impl BenchmarkSummary {
             .sum()
     }
 
+    pub fn runtime_uncertainty_device_profiles(&self) -> usize {
+        explicit_device_count(&self.runtime_uncertainty_devices())
+    }
+
+    pub fn runtime_uncertainty_devices_csv(&self) -> String {
+        devices_csv(self.runtime_uncertainty_devices())
+    }
+
+    fn runtime_uncertainty_devices(&self) -> Vec<DeviceClass> {
+        let mut devices = Vec::new();
+
+        for result in &self.results {
+            if result.runtime_uncertainty_signal {
+                push_unique_device(&mut devices, result.device);
+            }
+        }
+
+        devices
+    }
+
     pub fn runtime_kv_import_cases(&self) -> usize {
         self.results
             .iter()
@@ -3454,6 +3476,20 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_runtime_uncertainty_device_profiles) =
+            gate.min_runtime_uncertainty_device_profiles
+        {
+            let runtime_uncertainty_device_profiles = self.runtime_uncertainty_device_profiles();
+            if runtime_uncertainty_device_profiles < min_runtime_uncertainty_device_profiles {
+                failures.push(format!(
+                    "runtime_uncertainty_device_profiles {} below minimum {} devices={}",
+                    runtime_uncertainty_device_profiles,
+                    min_runtime_uncertainty_device_profiles,
+                    self.runtime_uncertainty_devices_csv()
+                ));
+            }
+        }
+
         if let Some(min_runtime_kv_import_cases) = gate.min_runtime_kv_import_cases {
             let runtime_kv_import_cases = self.runtime_kv_import_cases();
             if runtime_kv_import_cases < min_runtime_kv_import_cases {
@@ -3960,7 +3996,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_import_device_profiles={} runtime_kv_import_devices={} runtime_kv_exported={} runtime_kv_export_device_profiles={} runtime_kv_export_devices={} runtime_kv_stored={} runtime_kv_stored_device_profiles={} runtime_kv_stored_devices={} runtime_kv_hold_cases={} runtime_kv_held={} runtime_kv_hold_device_profiles={} runtime_kv_hold_devices={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta={:.6} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_replay_live_memory_feedback_detail_items={} evolution_replay_live_memory_feedback_applied={} evolution_replay_live_memory_feedback_removed={} evolution_replay_live_memory_feedback_missing={} evolution_replay_live_memory_feedback_strength_delta={:.6} evolution_replay_live_evolution_items={} evolution_replay_live_evolution_router_threshold_mutations={} evolution_replay_live_evolution_hierarchy_weight_mutations={} evolution_replay_live_evolution_router_threshold_delta={:.6} evolution_replay_live_evolution_hierarchy_weight_delta={:.6} evolution_replay_live_evolution_memory_updates={} evolution_replay_live_evolution_stored_memory_updates={} evolution_replay_live_evolution_reflection_issues={} evolution_replay_live_evolution_critical_reflection_issues={} evolution_replay_live_evolution_revision_actions={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_kv_precision_cases={} runtime_kv_precision_device_profiles={} runtime_kv_precision_devices={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_uncertainty_device_profiles={} runtime_uncertainty_devices={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_import_device_profiles={} runtime_kv_import_devices={} runtime_kv_exported={} runtime_kv_export_device_profiles={} runtime_kv_export_devices={} runtime_kv_stored={} runtime_kv_stored_device_profiles={} runtime_kv_stored_devices={} runtime_kv_hold_cases={} runtime_kv_held={} runtime_kv_hold_device_profiles={} runtime_kv_hold_devices={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_selection_mismatches={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -4106,6 +4142,8 @@ impl BenchmarkSummary {
             self.total_runtime_tokens(),
             self.runtime_uncertainty_cases(),
             self.total_runtime_uncertainty_tokens(),
+            self.runtime_uncertainty_device_profiles(),
+            self.runtime_uncertainty_devices_csv(),
             self.runtime_kv_import_cases(),
             self.total_runtime_kv_imported(),
             self.runtime_kv_import_device_profiles(),
@@ -4482,6 +4520,78 @@ mod tests {
                 )],
             )
             .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    fn runtime_uncertainty_result(device: DeviceClass) -> BenchmarkCaseResult {
+        BenchmarkCaseResult {
+            name: "runtime_uncertainty".to_owned(),
+            profile: TaskProfile::Coding,
+            device,
+            elapsed_ms: 1,
+            quality: 0.9,
+            process_reward: 0.9,
+            attention_fraction: 0.5,
+            requires_recursion: false,
+            recursive_chunks: 1,
+            recursive_waves: 1,
+            recursive_runtime_calls: 1,
+            auto_replay_applied: 0,
+            auto_replay_router_updates: 0,
+            auto_replay_hierarchy_updates: 0,
+            auto_replay_router_threshold_mutations: 0,
+            auto_replay_hierarchy_weight_mutations: 0,
+            auto_replay_router_threshold_delta: 0.0,
+            auto_replay_hierarchy_weight_delta: 0.0,
+            auto_replay_memory_reinforcements: 0,
+            auto_replay_memory_penalties: 0,
+            auto_replay_live_memory_feedback_items: 0,
+            auto_replay_live_memory_feedback_updates: 0,
+            auto_replay_live_memory_feedback_reinforcements: 0,
+            auto_replay_live_memory_feedback_penalties: 0,
+            auto_replay_live_memory_feedback_detail_items: 0,
+            auto_replay_live_memory_feedback_applied: 0,
+            auto_replay_live_memory_feedback_removed: 0,
+            auto_replay_live_memory_feedback_missing: 0,
+            auto_replay_live_memory_feedback_strength_delta: 0.0,
+            auto_replay_recursive_runtime_items: 0,
+            auto_replay_recursive_runtime_calls: 0,
+            auto_replay_avg_recursive_call_pressure: 0.0,
+            auto_replay_max_recursive_call_pressure: 0.0,
+            used_memories: 0,
+            infini_local_window: 0,
+            infini_global_memory: 0,
+            sparse_skipped: 0,
+            sparse_skipped_tokens: 0,
+            stored_memories: 0,
+            compacted_memories: 0,
+            runtime_forward_signal: true,
+            runtime_forward_energy_signal: false,
+            runtime_kv_influence_signal: false,
+            runtime_global_layers: 0,
+            runtime_local_window_layers: 0,
+            runtime_convolutional_fusion_layers: 0,
+            runtime_layer_mode_signal: false,
+            runtime_all_layer_modes_signal: false,
+            runtime_token_count: 4,
+            runtime_uncertainty_token_count: 4,
+            runtime_uncertainty_signal: true,
+            runtime_kv_imported: 1,
+            runtime_kv_exported: 1,
+            runtime_kv_stored: 1,
+            runtime_selected_adapter: Some("portable-rust".to_owned()),
+            runtime_adapter_contract_ok: true,
+            runtime_adapter_contract_violations: 0,
+            runtime_adapter_observations: 0,
+            runtime_adapter_best_score: None,
+            runtime_adapter_best_adapter: None,
+            runtime_adapter_selection_mismatches: 0,
+            query_embedding_source: "runtime".to_owned(),
+            query_embedding_dimensions: 64,
+            runtime_embedding_calls: 1,
+            fallback_embedding_calls: 0,
+            embedding_fallback_used: false,
+            drift_severity: DriftSeverity::Stable,
         }
     }
 
@@ -7218,6 +7328,7 @@ mod tests {
         let mut gate = BenchmarkGate::default();
         gate.min_runtime_uncertainty_cases = Some(1);
         gate.min_runtime_uncertainty_tokens = Some(2);
+        gate.min_runtime_uncertainty_device_profiles = Some(1);
 
         let report = summary.evaluate(&gate);
 
@@ -7226,6 +7337,7 @@ mod tests {
         assert_eq!(summary.total_runtime_tokens(), 3);
         assert_eq!(summary.runtime_uncertainty_cases(), 0);
         assert_eq!(summary.total_runtime_uncertainty_tokens(), 0);
+        assert_eq!(summary.runtime_uncertainty_device_profiles(), 0);
         assert!(
             report
                 .failures
@@ -7237,6 +7349,12 @@ mod tests {
                 .failures
                 .iter()
                 .any(|failure| failure.contains("runtime_uncertainty_tokens"))
+        );
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("runtime_uncertainty_device_profiles"))
         );
 
         let passing = BenchmarkSummary {
@@ -7258,6 +7376,8 @@ mod tests {
         assert!(passing_report.passed, "{:?}", passing_report.failures);
         assert_eq!(passing.runtime_uncertainty_cases(), 1);
         assert_eq!(passing.total_runtime_uncertainty_tokens(), 3);
+        assert_eq!(passing.runtime_uncertainty_device_profiles(), 1);
+        assert_eq!(passing.runtime_uncertainty_devices_csv(), "cpu");
         assert!(
             passing
                 .summary_line()
@@ -7267,6 +7387,63 @@ mod tests {
             passing
                 .summary_line()
                 .contains("runtime_uncertainty_tokens=3")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_uncertainty_device_profiles=1")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_uncertainty_devices=cpu")
+        );
+    }
+
+    #[test]
+    fn gate_reports_missing_runtime_uncertainty_device_profile_coverage() {
+        let base = runtime_uncertainty_result(DeviceClass::CpuOnly);
+        let summary = BenchmarkSummary {
+            results: vec![base.clone()],
+            ..BenchmarkSummary::default()
+        };
+        let mut gate = BenchmarkGate::default();
+        gate.min_runtime_uncertainty_device_profiles = Some(2);
+
+        let report = summary.evaluate(&gate);
+
+        assert!(!report.passed);
+        assert_eq!(summary.runtime_uncertainty_device_profiles(), 1);
+        assert_eq!(summary.runtime_uncertainty_devices_csv(), "cpu");
+        assert!(report.failures.iter().any(|failure| {
+            failure.contains("runtime_uncertainty_device_profiles 1 below minimum 2")
+                && failure.contains("devices=cpu")
+        }));
+
+        let passing = BenchmarkSummary {
+            results: vec![
+                base.clone(),
+                BenchmarkCaseResult {
+                    device: DeviceClass::IntegratedGpu,
+                    ..base
+                },
+            ],
+            ..BenchmarkSummary::default()
+        };
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert_eq!(passing.runtime_uncertainty_device_profiles(), 2);
+        assert_eq!(passing.runtime_uncertainty_devices_csv(), "cpu+integrated");
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_uncertainty_device_profiles=2")
+        );
+        assert!(
+            passing
+                .summary_line()
+                .contains("runtime_uncertainty_devices=cpu+integrated")
         );
     }
 

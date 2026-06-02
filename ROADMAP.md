@@ -611,7 +611,9 @@ These are algorithmic references, not product dependencies:
   aggregate runtime token counts, average entropy, average negative logprob, and
   derived uncertainty perplexity, and the schema gate requires that block.
   Benchmark gates can also require runtime uncertainty case coverage and
-  uncertainty-bearing token totals before production runtime sweeps pass.
+  uncertainty-bearing token totals, plus all-device uncertainty signal coverage
+  through `--benchmark-min-runtime-uncertainty-device-profiles`, before
+  production runtime sweeps pass.
 - Runtime forward diagnostics are observable: local and command runtimes can
   report model id, selected adapter, executed layer count, hidden size, local
   window, forward energy, KV influence, hot/cold KV precision, and runtime KV
@@ -821,8 +823,10 @@ These are algorithmic references, not product dependencies:
   from durable local state.
 - Benchmark summaries and gates expose runtime token uncertainty coverage
   through `--benchmark-min-runtime-uncertainty-cases` and
-  `--benchmark-min-runtime-uncertainty-tokens`, so local/CI production sweeps
-  can fail when a runtime stops returning token entropy/logprob signals.
+  `--benchmark-min-runtime-uncertainty-tokens`, plus
+  `--benchmark-min-runtime-uncertainty-device-profiles` for all-device sweeps,
+  so local/CI production sweeps can fail when a runtime stops returning token
+  entropy/logprob signals on any required device profile.
 - Benchmark summaries and gates expose stricter runtime forward diagnostic
   coverage through `--benchmark-min-runtime-forward-energy-cases` and
   `--benchmark-min-runtime-kv-influence-cases`, so local/CI production sweeps
@@ -945,7 +949,7 @@ These are algorithmic references, not product dependencies:
 - Benchmark gates can fail CI or local checks when quality, reward, latency,
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
-  runtime KV import/export device coverage, runtime KV precision, runtime KV
+  runtime token uncertainty device coverage, runtime KV import/export device coverage, runtime KV precision, runtime KV
   storage device coverage, runtime KV hold device coverage,
   runtime adapter contract coverage,
   runtime adapter observation reuse, runtime adapter selection consistency,
