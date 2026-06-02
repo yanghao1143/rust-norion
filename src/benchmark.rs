@@ -165,6 +165,9 @@ pub struct BenchmarkGate {
     pub min_critical_reflection_issues: Option<usize>,
     pub min_revision_action_cases: Option<usize>,
     pub min_revision_actions: Option<usize>,
+    pub min_reflection_issue_device_profiles: Option<usize>,
+    pub min_critical_reflection_issue_device_profiles: Option<usize>,
+    pub min_revision_action_device_profiles: Option<usize>,
     pub min_device_profiles: Option<usize>,
     pub min_recursive_device_profiles: Option<usize>,
     pub max_drift_blocks: Option<usize>,
@@ -224,6 +227,9 @@ impl Default for BenchmarkGate {
             min_critical_reflection_issues: None,
             min_revision_action_cases: None,
             min_revision_actions: None,
+            min_reflection_issue_device_profiles: None,
+            min_critical_reflection_issue_device_profiles: None,
+            min_revision_action_device_profiles: None,
             min_device_profiles: None,
             min_recursive_device_profiles: None,
             max_drift_blocks: Some(0),
@@ -734,7 +740,7 @@ fn missing_persistent_roundtrip_devices(
         .collect()
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BenchmarkReflectionEvidence {
     pub issue_cases: usize,
     pub total_issues: usize,
@@ -742,6 +748,9 @@ pub struct BenchmarkReflectionEvidence {
     pub total_critical_issues: usize,
     pub revision_action_cases: usize,
     pub total_revision_actions: usize,
+    issue_devices: Vec<DeviceClass>,
+    critical_issue_devices: Vec<DeviceClass>,
+    revision_action_devices: Vec<DeviceClass>,
 }
 
 impl BenchmarkReflectionEvidence {
@@ -756,7 +765,43 @@ impl BenchmarkReflectionEvidence {
         self.total_critical_issues += critical_issues;
         self.revision_action_cases += usize::from(revision_actions > 0);
         self.total_revision_actions += revision_actions;
+
+        let device = outcome.hardware_plan.device;
+        if issues > 0 {
+            push_unique_device(&mut self.issue_devices, device);
+        }
+        if critical_issues > 0 {
+            push_unique_device(&mut self.critical_issue_devices, device);
+        }
+        if revision_actions > 0 {
+            push_unique_device(&mut self.revision_action_devices, device);
+        }
     }
+
+    pub fn issue_device_profiles(&self) -> usize {
+        explicit_device_count(&self.issue_devices)
+    }
+
+    pub fn critical_issue_device_profiles(&self) -> usize {
+        explicit_device_count(&self.critical_issue_devices)
+    }
+
+    pub fn revision_action_device_profiles(&self) -> usize {
+        explicit_device_count(&self.revision_action_devices)
+    }
+}
+
+fn push_unique_device(devices: &mut Vec<DeviceClass>, device: DeviceClass) {
+    if device != DeviceClass::Auto && !devices.contains(&device) {
+        devices.push(device);
+    }
+}
+
+fn explicit_device_count(devices: &[DeviceClass]) -> usize {
+    DeviceClass::explicit_profiles()
+        .iter()
+        .filter(|device| devices.contains(device))
+        .count()
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1119,7 +1164,7 @@ impl BenchmarkSummary {
     }
 
     pub fn reflection_evidence(&self) -> BenchmarkReflectionEvidence {
-        self.reflection_evidence
+        self.reflection_evidence.clone()
     }
 
     pub fn total_stored_memories(&self) -> usize {
@@ -1843,6 +1888,41 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_reflection_issue_device_profiles) =
+            gate.min_reflection_issue_device_profiles
+        {
+            let observed = self.reflection_evidence.issue_device_profiles();
+            if observed < min_reflection_issue_device_profiles {
+                failures.push(format!(
+                    "reflection_issue_device_profiles {} below minimum {}",
+                    observed, min_reflection_issue_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_critical_reflection_issue_device_profiles) =
+            gate.min_critical_reflection_issue_device_profiles
+        {
+            let observed = self.reflection_evidence.critical_issue_device_profiles();
+            if observed < min_critical_reflection_issue_device_profiles {
+                failures.push(format!(
+                    "critical_reflection_issue_device_profiles {} below minimum {}",
+                    observed, min_critical_reflection_issue_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_revision_action_device_profiles) = gate.min_revision_action_device_profiles
+        {
+            let observed = self.reflection_evidence.revision_action_device_profiles();
+            if observed < min_revision_action_device_profiles {
+                failures.push(format!(
+                    "revision_action_device_profiles {} below minimum {}",
+                    observed, min_revision_action_device_profiles
+                ));
+            }
+        }
+
         if let Some(min_device_profiles) = gate.min_device_profiles {
             let device_profiles = self.explicit_device_profiles_covered();
             if device_profiles < min_device_profiles {
@@ -1903,7 +1983,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} critical_reflection_issue_cases={} critical_reflection_issues={} revision_action_cases={} revision_actions={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -1964,10 +2044,13 @@ impl BenchmarkSummary {
             option_f32_display(self.max_runtime_adapter_score()),
             self.reflection_evidence.issue_cases,
             self.reflection_evidence.total_issues,
+            self.reflection_evidence.issue_device_profiles(),
             self.reflection_evidence.critical_issue_cases,
             self.reflection_evidence.total_critical_issues,
+            self.reflection_evidence.critical_issue_device_profiles(),
             self.reflection_evidence.revision_action_cases,
             self.reflection_evidence.total_revision_actions,
+            self.reflection_evidence.revision_action_device_profiles(),
             self.drift_watches(),
             self.drift_blocks(),
             self.drift_rollbacks()
@@ -2269,6 +2352,9 @@ mod tests {
             min_critical_reflection_issues: None,
             min_revision_action_cases: None,
             min_revision_actions: None,
+            min_reflection_issue_device_profiles: None,
+            min_critical_reflection_issue_device_profiles: None,
+            min_revision_action_device_profiles: None,
             min_device_profiles: None,
             min_recursive_device_profiles: None,
             max_drift_blocks: Some(0),
@@ -2354,6 +2440,9 @@ mod tests {
         gate.min_critical_reflection_issues = Some(1);
         gate.min_revision_action_cases = Some(1);
         gate.min_revision_actions = Some(2);
+        gate.min_reflection_issue_device_profiles = Some(1);
+        gate.min_critical_reflection_issue_device_profiles = Some(1);
+        gate.min_revision_action_device_profiles = Some(1);
 
         let report = summary.evaluate(&gate);
 
@@ -2385,6 +2474,9 @@ mod tests {
             total_critical_issues: 1,
             revision_action_cases: 1,
             total_revision_actions: 2,
+            issue_devices: vec![DeviceClass::CpuOnly],
+            critical_issue_devices: vec![DeviceClass::CpuOnly],
+            revision_action_devices: vec![DeviceClass::CpuOnly],
         };
         let passing_report = passing.evaluate(&gate);
 
@@ -2406,6 +2498,11 @@ mod tests {
         assert!(
             passing
                 .summary_line()
+                .contains("reflection_issue_device_profiles=1")
+        );
+        assert!(
+            passing
+                .summary_line()
                 .contains("critical_reflection_issue_cases=1")
         );
         assert!(
@@ -2413,8 +2510,18 @@ mod tests {
                 .summary_line()
                 .contains("critical_reflection_issues=1")
         );
+        assert!(
+            passing
+                .summary_line()
+                .contains("critical_reflection_issue_device_profiles=1")
+        );
         assert!(passing.summary_line().contains("revision_action_cases=1"));
         assert!(passing.summary_line().contains("revision_actions=2"));
+        assert!(
+            passing
+                .summary_line()
+                .contains("revision_action_device_profiles=1")
+        );
     }
 
     #[test]

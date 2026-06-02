@@ -610,7 +610,11 @@ must prove that reflection diagnostics actually fired during the benchmark:
 `--benchmark-min-critical-reflection-issue-cases`,
 `--benchmark-min-critical-reflection-issues`,
 `--benchmark-min-revision-action-cases`, and
-`--benchmark-min-revision-actions`.
+`--benchmark-min-revision-actions`. With `--benchmark-all-devices`, the same
+audit can require explicit device-profile coverage through
+`--benchmark-min-reflection-issue-device-profiles`,
+`--benchmark-min-critical-reflection-issue-device-profiles`, and
+`--benchmark-min-revision-action-device-profiles`.
 
 当弱输出 / 修复审计必须证明 benchmark 中真实触发了反思诊断时，可以使用
 `--benchmark-min-reflection-issue-cases`、
@@ -618,7 +622,10 @@ must prove that reflection diagnostics actually fired during the benchmark:
 `--benchmark-min-critical-reflection-issue-cases`、
 `--benchmark-min-critical-reflection-issues`、
 `--benchmark-min-revision-action-cases` 和
-`--benchmark-min-revision-actions`。
+`--benchmark-min-revision-actions`。与 `--benchmark-all-devices` 组合时，还可以用
+`--benchmark-min-reflection-issue-device-profiles`、
+`--benchmark-min-critical-reflection-issue-device-profiles` 和
+`--benchmark-min-revision-action-device-profiles` 要求反思诊断覆盖到指定数量的显式设备 profile。
 
 The default benchmark gate also caps cumulative evolution-ledger drift
 rollbacks and rollback deltas at zero. Use

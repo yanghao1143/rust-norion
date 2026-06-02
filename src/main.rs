@@ -1040,13 +1040,16 @@ fn print_benchmark_summary(
     println!("{}", summary.summary_line());
     let reflection = summary.reflection_evidence();
     println!(
-        "reflection_evidence: issue_cases={} issues={} critical_issue_cases={} critical_issues={} revision_action_cases={} revision_actions={}",
+        "reflection_evidence: issue_cases={} issues={} issue_device_profiles={} critical_issue_cases={} critical_issues={} critical_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={}",
         reflection.issue_cases,
         reflection.total_issues,
+        reflection.issue_device_profiles(),
         reflection.critical_issue_cases,
         reflection.total_critical_issues,
+        reflection.critical_issue_device_profiles(),
         reflection.revision_action_cases,
-        reflection.total_revision_actions
+        reflection.total_revision_actions,
+        reflection.revision_action_device_profiles()
     );
 
     for result in summary.results() {
@@ -1733,6 +1736,9 @@ struct Args {
     benchmark_min_critical_reflection_issues: Option<usize>,
     benchmark_min_revision_action_cases: Option<usize>,
     benchmark_min_revision_actions: Option<usize>,
+    benchmark_min_reflection_issue_device_profiles: Option<usize>,
+    benchmark_min_critical_reflection_issue_device_profiles: Option<usize>,
+    benchmark_min_revision_action_device_profiles: Option<usize>,
     benchmark_min_device_profiles: Option<usize>,
     benchmark_min_recursive_device_profiles: Option<usize>,
     benchmark_max_drift_blocks: Option<usize>,
@@ -1891,6 +1897,9 @@ impl Args {
         let mut benchmark_min_critical_reflection_issues = None;
         let mut benchmark_min_revision_action_cases = None;
         let mut benchmark_min_revision_actions = None;
+        let mut benchmark_min_reflection_issue_device_profiles = None;
+        let mut benchmark_min_critical_reflection_issue_device_profiles = None;
+        let mut benchmark_min_revision_action_device_profiles = None;
         let mut benchmark_min_device_profiles = None;
         let mut benchmark_min_recursive_device_profiles = None;
         let mut benchmark_max_drift_blocks = None;
@@ -2299,6 +2308,26 @@ impl Args {
                 }
                 "--benchmark-min-revision-actions" if index + 1 < raw.len() => {
                     benchmark_min_revision_actions = Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-reflection-issue-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_reflection_issue_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-critical-reflection-issue-device-profiles"
+                    if index + 1 < raw.len() =>
+                {
+                    benchmark_min_critical_reflection_issue_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    benchmark_gate_enabled = true;
+                    index += 2;
+                }
+                "--benchmark-min-revision-action-device-profiles" if index + 1 < raw.len() => {
+                    benchmark_min_revision_action_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
                     benchmark_gate_enabled = true;
                     index += 2;
                 }
@@ -2841,6 +2870,9 @@ impl Args {
             benchmark_min_critical_reflection_issues,
             benchmark_min_revision_action_cases,
             benchmark_min_revision_actions,
+            benchmark_min_reflection_issue_device_profiles,
+            benchmark_min_critical_reflection_issue_device_profiles,
+            benchmark_min_revision_action_device_profiles,
             benchmark_min_device_profiles,
             benchmark_min_recursive_device_profiles,
             benchmark_max_drift_blocks,
@@ -3073,6 +3105,15 @@ impl Args {
         if let Some(value) = self.benchmark_min_revision_actions {
             gate.min_revision_actions = Some(value);
         }
+        if let Some(value) = self.benchmark_min_reflection_issue_device_profiles {
+            gate.min_reflection_issue_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_critical_reflection_issue_device_profiles {
+            gate.min_critical_reflection_issue_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_revision_action_device_profiles {
+            gate.min_revision_action_device_profiles = Some(value);
+        }
         if let Some(value) = self.benchmark_min_device_profiles {
             gate.min_device_profiles = Some(value);
         }
@@ -3302,7 +3343,7 @@ fn print_help_and_exit() -> ! {
         "\n",
         "Core: --profile coding|writing|long|general --memory path --experience path --adaptive path\n",
         "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip\n",
-        "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n\n",
+        "Benchmark reflection evidence: --benchmark-min-reflection-issue-cases n --benchmark-min-reflection-issues n --benchmark-min-critical-reflection-issue-cases n --benchmark-min-critical-reflection-issues n --benchmark-min-revision-action-cases n --benchmark-min-revision-actions n --benchmark-min-reflection-issue-device-profiles n --benchmark-min-critical-reflection-issue-device-profiles n --benchmark-min-revision-action-device-profiles n\n",
         "Runtime: --local-runtime --production-runtime --runtime-command path --runtime-json --runtime-kv-exchange\n",
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
@@ -3459,6 +3500,12 @@ mod tests {
             "2".to_owned(),
             "--benchmark-min-revision-actions".to_owned(),
             "4".to_owned(),
+            "--benchmark-min-reflection-issue-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--benchmark-min-critical-reflection-issue-device-profiles".to_owned(),
+            "6".to_owned(),
+            "--benchmark-min-revision-action-device-profiles".to_owned(),
+            "12".to_owned(),
             "--benchmark-min-device-profiles".to_owned(),
             "12".to_owned(),
             "--benchmark-min-recursive-device-profiles".to_owned(),
@@ -3776,6 +3823,15 @@ mod tests {
         assert_eq!(args.benchmark_min_critical_reflection_issues, Some(1));
         assert_eq!(args.benchmark_min_revision_action_cases, Some(2));
         assert_eq!(args.benchmark_min_revision_actions, Some(4));
+        assert_eq!(
+            args.benchmark_min_reflection_issue_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_min_critical_reflection_issue_device_profiles,
+            Some(6)
+        );
+        assert_eq!(args.benchmark_min_revision_action_device_profiles, Some(12));
         assert_eq!(args.benchmark_min_device_profiles, Some(12));
         assert_eq!(args.benchmark_min_recursive_device_profiles, Some(12));
         assert_eq!(args.benchmark_gate().min_runtime_forward_cases, Some(4));
@@ -3826,6 +3882,19 @@ mod tests {
         );
         assert_eq!(args.benchmark_gate().min_revision_action_cases, Some(2));
         assert_eq!(args.benchmark_gate().min_revision_actions, Some(4));
+        assert_eq!(
+            args.benchmark_gate().min_reflection_issue_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.benchmark_gate()
+                .min_critical_reflection_issue_device_profiles,
+            Some(6)
+        );
+        assert_eq!(
+            args.benchmark_gate().min_revision_action_device_profiles,
+            Some(12)
+        );
         assert_eq!(args.benchmark_gate().min_device_profiles, Some(12));
         assert_eq!(
             args.benchmark_gate().min_recursive_device_profiles,

@@ -712,7 +712,12 @@ These are algorithmic references, not product dependencies:
   `--benchmark-min-revision-action-cases`, and
   `--benchmark-min-revision-actions`, so weak-output or repair audits can fail
   when reflection diagnostics or revision actions stop firing during benchmark
-  execution.
+  execution. The same evidence can be required across explicit device profiles
+  with `--benchmark-min-reflection-issue-device-profiles`,
+  `--benchmark-min-critical-reflection-issue-device-profiles`, and
+  `--benchmark-min-revision-action-device-profiles`, so all-device sweeps can
+  fail when reflection evidence only appears on a subset of supported hardware
+  classes.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -773,6 +778,7 @@ These are algorithmic references, not product dependencies:
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
   runtime KV storage, runtime adapter contract coverage, runtime adapter observation reuse,
   reflection issue / critical issue coverage, revision-action coverage,
+  per-device reflection/revision coverage,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay recursive pressure coverage/bounds,
   Infini/SpeContext sparse filtering coverage, all-device execution coverage,
