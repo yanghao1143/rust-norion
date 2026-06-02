@@ -271,10 +271,15 @@ modules, not external product dependencies:
   observations, and evolution-ledger counts plus router-threshold,
   hierarchy-weight, and recursive-replay evidence, along with runtime
   model/adapter/forward-energy/KV-influence/KV-import/KV-export diagnostics and
-  live memory-feedback notes captured in persisted experiences, so local/CI
+  live memory-feedback notes captured in persisted experiences. It should also
+  expose live-inference evolution ledger gates for inference-run counts,
+  router-threshold mutations and deltas, hierarchy-weight mutations and deltas,
+  live KV feedback updates, durable semantic/gist/runtime-KV memory writes,
+  reflection issues, critical reflection issues, and revision actions, so local/CI
   checks can fail when durable self-evolution only records events without
   actually changing control-plane parameters, when closed-loop reflection or
-  live memory-feedback evidence is missing, when replay does not consume
+  live memory-feedback evidence is missing, when online inference itself does
+  not mutate the control plane before replay, when replay does not consume
   persisted live-feedback notes in the cumulative evolution ledger, when
   long-context replay evidence is missing, when persisted drift rollback
   magnitude exceeds local safety caps, or when runtime-boundary state is
@@ -285,8 +290,9 @@ modules, not external product dependencies:
   and multi-GPU profiles all prove durable local state independently. Matrix
   thresholds should also be able to require reflection-issue, critical
   reflection-issue, revision-action, live memory-feedback evidence, and
-  evolution-ledger replay live-feedback consumption across a minimum number of
-  explicit device profiles, not only inside individual state files.
+  live-inference evolution evidence plus evolution-ledger replay live-feedback
+  consumption across a minimum number of explicit device profiles, not only
+  inside individual state files.
 - Rust-native Transformer reconstruction:
   transformer planning should evolve into explicit templates and ABI contracts
   for self-developed model runtimes, including native window, embedding access,
@@ -626,19 +632,24 @@ These are algorithmic references, not product dependencies:
   hierarchy-weight deltas, recursive replay item evidence, and maximum drift
   rollback deltas for router/hierarchy state. It can also require persisted
   runtime evidence in experience records: model id, selected adapter, forward
-  energy, KV influence, imported KV, and exported KV. The gate fails with a
-  non-zero exit code when persisted evidence is incomplete, when reflection
-  diagnostics or revision actions are missing, when replay counters exist
-  without enough measurable control-parameter movement, when long-context
-  replay evidence is missing, or when persisted rollback magnitude exceeds the
-  configured safety cap. In all-device mode, the gate loads every explicit
-  device profile's scoped state files and fails if any device is missing state
-  or lacks the required persisted evidence. Matrix-level thresholds can also
-  require runtime-KV memory, runtime model id, selected adapter, forward
-  energy, KV influence, KV import/export, reflection-issue,
-  critical-reflection-issue, revision-action, and self-evolution ledger
-  replay/mutation/memory/recursive evidence to appear across enough device
-  profiles before the all-device state inspection passes.
+  energy, KV influence, imported KV, and exported KV. The same inspection gate
+  can require live-inference self-evolution evidence through
+  `--inspect-min-evolution-live-*`, including online inference counts,
+  router/hierarchy mutations and deltas, live memory feedback, durable memory
+  writes, reflection issues, critical reflection issues, and revision actions.
+  The gate fails with a non-zero exit code when persisted evidence is
+  incomplete, when reflection diagnostics or revision actions are missing, when
+  replay counters exist without enough measurable control-parameter movement,
+  when online inference itself did not produce live evolution evidence, when
+  long-context replay evidence is missing, or when persisted rollback magnitude
+  exceeds the configured safety cap. In all-device mode, the gate loads every
+  explicit device profile's scoped state files and fails if any device is
+  missing state or lacks the required persisted evidence. Matrix-level
+  thresholds can also require runtime-KV memory, runtime model id, selected
+  adapter, forward energy, KV influence, KV import/export, reflection-issue,
+  critical-reflection-issue, revision-action, live-inference evolution evidence,
+  and self-evolution ledger replay/mutation/memory/recursive evidence to appear
+  across enough device profiles before the all-device state inspection passes.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -786,7 +797,10 @@ These are algorithmic references, not product dependencies:
   reinforcement or penalty decisions. Use
   `--benchmark-min-evolution-replay-live-memory-feedback-updates` when the same
   replay live-feedback consumption must survive in adaptive state and be
-  visible after reload.
+  visible after reload. Use `--benchmark-min-evolution-live-*` when benchmark
+  runs must prove online inference itself changed router thresholds or
+  hierarchy weights, updated live KV feedback, stored durable memories, and
+  recorded reflection or revision evidence before replay is counted.
 - Toolsmith and Agent Team control surfaces stay local and constrained:
   Toolsmith accepts only Rust-source helper blueprints, and Agent Team lanes are
   read-only with single-writer isolation and trace/reward visibility.
@@ -848,6 +862,7 @@ These are algorithmic references, not product dependencies:
   runtime KV storage, runtime adapter contract coverage, runtime adapter observation reuse,
   reflection issue / critical issue coverage, revision-action coverage,
   per-device reflection/revision coverage,
+  live-inference router/hierarchy mutation and memory/reflection/revision coverage,
   auto-replay router-threshold/hierarchy-weight mutation coverage and memory update coverage,
   auto-replay live memory-feedback consumption,
   persisted evolution-ledger replay live memory-feedback consumption,

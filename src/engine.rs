@@ -135,6 +135,7 @@ pub struct InferenceOutcome {
     pub memory_compaction_report: MemoryCompactionReport,
     pub experience_id: u64,
     pub router_threshold_after: f32,
+    pub live_evolution: LiveInferenceEvolution,
     pub evolution_ledger: EvolutionLedger,
 }
 
@@ -754,19 +755,19 @@ impl NoironEngine {
             runtime_diagnostics: runtime_diagnostics.clone(),
             process_reward: experience_process_reward,
         });
-        self.evolution_ledger
-            .record_live_inference(LiveInferenceEvolution {
-                router_threshold_delta: live_router_threshold_delta,
-                hierarchy_weight_delta: live_hierarchy_weight_delta,
-                memory_reinforcements: memory_feedback.reinforced,
-                memory_penalties: memory_feedback.penalized,
-                stored_memory: stored_memory_id.is_some(),
-                stored_gist_memories: stored_gist_memory_ids.len(),
-                stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
-                reflection_issues: report.issues.len(),
-                critical_reflection_issues: report.critical_issue_count(),
-                revision_actions: report.revision_actions.len(),
-            });
+        let live_evolution = LiveInferenceEvolution {
+            router_threshold_delta: live_router_threshold_delta,
+            hierarchy_weight_delta: live_hierarchy_weight_delta,
+            memory_reinforcements: memory_feedback.reinforced,
+            memory_penalties: memory_feedback.penalized,
+            stored_memory: stored_memory_id.is_some(),
+            stored_gist_memories: stored_gist_memory_ids.len(),
+            stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            reflection_issues: report.issues.len(),
+            critical_reflection_issues: report.critical_issue_count(),
+            revision_actions: report.revision_actions.len(),
+        };
+        self.evolution_ledger.record_live_inference(live_evolution);
         let retention_report = self.cache.apply_retention(self.memory_retention_policy);
         let protected_memory_ids = protected_memory_ids(
             &used_memories,
@@ -818,6 +819,7 @@ impl NoironEngine {
             memory_compaction_report,
             experience_id,
             router_threshold_after,
+            live_evolution,
             evolution_ledger: self.evolution_ledger,
         }
     }

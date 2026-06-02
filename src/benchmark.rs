@@ -147,6 +147,14 @@ pub struct BenchmarkGate {
     pub min_evolution_live_reflection_issues: Option<u64>,
     pub min_evolution_live_critical_reflection_issues: Option<u64>,
     pub min_evolution_live_revision_actions: Option<u64>,
+    pub min_evolution_live_inference_device_profiles: Option<usize>,
+    pub min_evolution_live_router_threshold_mutation_device_profiles: Option<usize>,
+    pub min_evolution_live_hierarchy_weight_mutation_device_profiles: Option<usize>,
+    pub min_evolution_live_memory_update_device_profiles: Option<usize>,
+    pub min_evolution_live_stored_memory_update_device_profiles: Option<usize>,
+    pub min_evolution_live_reflection_issue_device_profiles: Option<usize>,
+    pub min_evolution_live_critical_reflection_issue_device_profiles: Option<usize>,
+    pub min_evolution_live_revision_action_device_profiles: Option<usize>,
     pub min_evolution_replay_runs: Option<u64>,
     pub min_evolution_replay_items: Option<u64>,
     pub min_evolution_router_threshold_mutations: Option<u64>,
@@ -222,6 +230,14 @@ impl Default for BenchmarkGate {
             min_evolution_live_reflection_issues: None,
             min_evolution_live_critical_reflection_issues: None,
             min_evolution_live_revision_actions: None,
+            min_evolution_live_inference_device_profiles: None,
+            min_evolution_live_router_threshold_mutation_device_profiles: None,
+            min_evolution_live_hierarchy_weight_mutation_device_profiles: None,
+            min_evolution_live_memory_update_device_profiles: None,
+            min_evolution_live_stored_memory_update_device_profiles: None,
+            min_evolution_live_reflection_issue_device_profiles: None,
+            min_evolution_live_critical_reflection_issue_device_profiles: None,
+            min_evolution_live_revision_action_device_profiles: None,
             min_evolution_replay_runs: None,
             min_evolution_replay_items: None,
             min_evolution_router_threshold_mutations: None,
@@ -829,6 +845,83 @@ impl BenchmarkReflectionEvidence {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BenchmarkLiveEvolutionEvidence {
+    inference_devices: Vec<DeviceClass>,
+    router_threshold_mutation_devices: Vec<DeviceClass>,
+    hierarchy_weight_mutation_devices: Vec<DeviceClass>,
+    memory_update_devices: Vec<DeviceClass>,
+    stored_memory_update_devices: Vec<DeviceClass>,
+    reflection_issue_devices: Vec<DeviceClass>,
+    critical_reflection_issue_devices: Vec<DeviceClass>,
+    revision_action_devices: Vec<DeviceClass>,
+}
+
+impl BenchmarkLiveEvolutionEvidence {
+    fn record(&mut self, outcome: &InferenceOutcome) {
+        let device = outcome.hardware_plan.device;
+        let live = outcome.live_evolution;
+
+        push_unique_device(&mut self.inference_devices, device);
+        if live.router_threshold_delta > 0.000001 {
+            push_unique_device(&mut self.router_threshold_mutation_devices, device);
+        }
+        if live.hierarchy_weight_delta > 0.000001 {
+            push_unique_device(&mut self.hierarchy_weight_mutation_devices, device);
+        }
+        if live.memory_reinforcements > 0 || live.memory_penalties > 0 {
+            push_unique_device(&mut self.memory_update_devices, device);
+        }
+        if live.stored_memory
+            || live.stored_gist_memories > 0
+            || live.stored_runtime_kv_memories > 0
+        {
+            push_unique_device(&mut self.stored_memory_update_devices, device);
+        }
+        if live.reflection_issues > 0 {
+            push_unique_device(&mut self.reflection_issue_devices, device);
+        }
+        if live.critical_reflection_issues > 0 {
+            push_unique_device(&mut self.critical_reflection_issue_devices, device);
+        }
+        if live.revision_actions > 0 {
+            push_unique_device(&mut self.revision_action_devices, device);
+        }
+    }
+
+    pub fn inference_device_profiles(&self) -> usize {
+        explicit_device_count(&self.inference_devices)
+    }
+
+    pub fn router_threshold_mutation_device_profiles(&self) -> usize {
+        explicit_device_count(&self.router_threshold_mutation_devices)
+    }
+
+    pub fn hierarchy_weight_mutation_device_profiles(&self) -> usize {
+        explicit_device_count(&self.hierarchy_weight_mutation_devices)
+    }
+
+    pub fn memory_update_device_profiles(&self) -> usize {
+        explicit_device_count(&self.memory_update_devices)
+    }
+
+    pub fn stored_memory_update_device_profiles(&self) -> usize {
+        explicit_device_count(&self.stored_memory_update_devices)
+    }
+
+    pub fn reflection_issue_device_profiles(&self) -> usize {
+        explicit_device_count(&self.reflection_issue_devices)
+    }
+
+    pub fn critical_reflection_issue_device_profiles(&self) -> usize {
+        explicit_device_count(&self.critical_reflection_issue_devices)
+    }
+
+    pub fn revision_action_device_profiles(&self) -> usize {
+        explicit_device_count(&self.revision_action_devices)
+    }
+}
+
 fn push_unique_device(devices: &mut Vec<DeviceClass>, device: DeviceClass) {
     if device != DeviceClass::Auto && !devices.contains(&device) {
         devices.push(device);
@@ -847,6 +940,7 @@ pub struct BenchmarkSummary {
     results: Vec<BenchmarkCaseResult>,
     evolution_ledger: EvolutionLedger,
     reflection_evidence: BenchmarkReflectionEvidence,
+    live_evolution_evidence: BenchmarkLiveEvolutionEvidence,
 }
 
 impl BenchmarkSummary {
@@ -974,6 +1068,7 @@ impl BenchmarkSummary {
         self.evolution_ledger =
             max_evolution_ledger(self.evolution_ledger, outcome.evolution_ledger);
         self.reflection_evidence.record(outcome);
+        self.live_evolution_evidence.record(outcome);
     }
 
     pub fn results(&self) -> &[BenchmarkCaseResult] {
@@ -1215,6 +1310,10 @@ impl BenchmarkSummary {
 
     pub fn reflection_evidence(&self) -> BenchmarkReflectionEvidence {
         self.reflection_evidence.clone()
+    }
+
+    pub fn live_evolution_evidence(&self) -> BenchmarkLiveEvolutionEvidence {
+        self.live_evolution_evidence.clone()
     }
 
     pub fn total_live_memory_feedback_reinforcements(&self) -> usize {
@@ -1759,6 +1858,114 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(min_evolution_live_inference_device_profiles) =
+            gate.min_evolution_live_inference_device_profiles
+        {
+            let observed = self.live_evolution_evidence.inference_device_profiles();
+            if observed < min_evolution_live_inference_device_profiles {
+                failures.push(format!(
+                    "evolution_live_inference_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_inference_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_router_threshold_mutation_device_profiles) =
+            gate.min_evolution_live_router_threshold_mutation_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .router_threshold_mutation_device_profiles();
+            if observed < min_evolution_live_router_threshold_mutation_device_profiles {
+                failures.push(format!(
+                    "evolution_live_router_threshold_mutation_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_router_threshold_mutation_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_hierarchy_weight_mutation_device_profiles) =
+            gate.min_evolution_live_hierarchy_weight_mutation_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .hierarchy_weight_mutation_device_profiles();
+            if observed < min_evolution_live_hierarchy_weight_mutation_device_profiles {
+                failures.push(format!(
+                    "evolution_live_hierarchy_weight_mutation_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_hierarchy_weight_mutation_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_memory_update_device_profiles) =
+            gate.min_evolution_live_memory_update_device_profiles
+        {
+            let observed = self.live_evolution_evidence.memory_update_device_profiles();
+            if observed < min_evolution_live_memory_update_device_profiles {
+                failures.push(format!(
+                    "evolution_live_memory_update_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_memory_update_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_stored_memory_update_device_profiles) =
+            gate.min_evolution_live_stored_memory_update_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .stored_memory_update_device_profiles();
+            if observed < min_evolution_live_stored_memory_update_device_profiles {
+                failures.push(format!(
+                    "evolution_live_stored_memory_update_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_stored_memory_update_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_reflection_issue_device_profiles) =
+            gate.min_evolution_live_reflection_issue_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .reflection_issue_device_profiles();
+            if observed < min_evolution_live_reflection_issue_device_profiles {
+                failures.push(format!(
+                    "evolution_live_reflection_issue_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_reflection_issue_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_critical_reflection_issue_device_profiles) =
+            gate.min_evolution_live_critical_reflection_issue_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .critical_reflection_issue_device_profiles();
+            if observed < min_evolution_live_critical_reflection_issue_device_profiles {
+                failures.push(format!(
+                    "evolution_live_critical_reflection_issue_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_critical_reflection_issue_device_profiles
+                ));
+            }
+        }
+
+        if let Some(min_evolution_live_revision_action_device_profiles) =
+            gate.min_evolution_live_revision_action_device_profiles
+        {
+            let observed = self
+                .live_evolution_evidence
+                .revision_action_device_profiles();
+            if observed < min_evolution_live_revision_action_device_profiles {
+                failures.push(format!(
+                    "evolution_live_revision_action_device_profiles {} below minimum {}",
+                    observed, min_evolution_live_revision_action_device_profiles
+                ));
+            }
+        }
+
         if let Some(min_evolution_replay_runs) = gate.min_evolution_replay_runs {
             let observed = self.evolution_ledger.replay_runs;
             if observed < min_evolution_replay_runs {
@@ -2226,7 +2433,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -2269,6 +2476,20 @@ impl BenchmarkSummary {
             self.evolution_ledger.live_reflection_issues,
             self.evolution_ledger.live_critical_reflection_issues,
             self.evolution_ledger.live_revision_actions,
+            self.live_evolution_evidence.inference_device_profiles(),
+            self.live_evolution_evidence
+                .router_threshold_mutation_device_profiles(),
+            self.live_evolution_evidence
+                .hierarchy_weight_mutation_device_profiles(),
+            self.live_evolution_evidence.memory_update_device_profiles(),
+            self.live_evolution_evidence
+                .stored_memory_update_device_profiles(),
+            self.live_evolution_evidence
+                .reflection_issue_device_profiles(),
+            self.live_evolution_evidence
+                .critical_reflection_issue_device_profiles(),
+            self.live_evolution_evidence
+                .revision_action_device_profiles(),
             self.evolution_ledger.replay_runs,
             self.evolution_ledger.replay_items,
             self.evolution_ledger.router_threshold_mutations,
@@ -2602,6 +2823,231 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_missing_live_evolution_device_profile_coverage() {
+        let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.35,
+            0.00,
+            0.45,
+            0.20,
+        ));
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new(
+            "live_evolution_cpu",
+            TaskProfile::General,
+            "Explain why live Noiron inference should update local memory and reflection state.",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+        summary.record(&case, 3, &outcome);
+
+        let mut gate = BenchmarkGate::default();
+        gate.min_evolution_live_inference_device_profiles = Some(2);
+
+        let failing = summary.evaluate(&gate);
+
+        assert!(!failing.passed);
+        assert_eq!(
+            summary
+                .live_evolution_evidence()
+                .inference_device_profiles(),
+            1
+        );
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "evolution_live_inference_device_profiles 1 below minimum 2"
+        }));
+
+        engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+            DeviceClass::IntegratedGpu,
+            0.35,
+            0.30,
+            0.45,
+            0.20,
+        ));
+        let gpu_case = BenchmarkCase::new(
+            "live_evolution_integrated",
+            TaskProfile::General,
+            "Explain why live Noiron inference should preserve reflection and memory evidence.",
+        );
+        let gpu_outcome = engine.infer(
+            InferenceRequest::new(gpu_case.prompt.clone(), gpu_case.profile),
+            &mut backend,
+        );
+        summary.record(&gpu_case, 4, &gpu_outcome);
+        gate.min_evolution_live_inference_device_profiles = Some(2);
+
+        let passing = summary.evaluate(&gate);
+
+        assert!(passing.passed, "{:?}", passing.failures);
+        assert_eq!(
+            summary
+                .live_evolution_evidence()
+                .inference_device_profiles(),
+            2
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("evolution_live_inference_device_profiles=2")
+        );
+    }
+
+    #[test]
+    fn gate_reports_missing_live_evolution_detail_device_profile_coverage() {
+        let base_result = BenchmarkCaseResult {
+            name: "live_detail".to_owned(),
+            profile: TaskProfile::General,
+            device: DeviceClass::CpuOnly,
+            elapsed_ms: 1,
+            quality: 0.9,
+            process_reward: 0.9,
+            attention_fraction: 0.5,
+            requires_recursion: false,
+            recursive_chunks: 1,
+            recursive_waves: 1,
+            recursive_runtime_calls: 1,
+            auto_replay_applied: 0,
+            auto_replay_router_updates: 0,
+            auto_replay_hierarchy_updates: 0,
+            auto_replay_router_threshold_mutations: 0,
+            auto_replay_hierarchy_weight_mutations: 0,
+            auto_replay_router_threshold_delta: 0.0,
+            auto_replay_hierarchy_weight_delta: 0.0,
+            auto_replay_memory_reinforcements: 0,
+            auto_replay_memory_penalties: 0,
+            auto_replay_live_memory_feedback_items: 0,
+            auto_replay_live_memory_feedback_updates: 0,
+            auto_replay_live_memory_feedback_reinforcements: 0,
+            auto_replay_live_memory_feedback_penalties: 0,
+            auto_replay_recursive_runtime_items: 0,
+            auto_replay_recursive_runtime_calls: 0,
+            auto_replay_avg_recursive_call_pressure: 0.0,
+            auto_replay_max_recursive_call_pressure: 0.0,
+            used_memories: 0,
+            infini_local_window: 0,
+            infini_global_memory: 0,
+            sparse_skipped: 0,
+            sparse_skipped_tokens: 0,
+            stored_memories: 0,
+            compacted_memories: 0,
+            runtime_forward_signal: false,
+            runtime_forward_energy_signal: false,
+            runtime_kv_influence_signal: false,
+            runtime_token_count: 0,
+            runtime_uncertainty_token_count: 0,
+            runtime_uncertainty_signal: false,
+            runtime_kv_imported: 0,
+            runtime_kv_exported: 0,
+            runtime_kv_stored: 0,
+            runtime_selected_adapter: None,
+            runtime_adapter_contract_ok: false,
+            runtime_adapter_contract_violations: 0,
+            runtime_adapter_observations: 0,
+            runtime_adapter_best_score: None,
+            drift_severity: DriftSeverity::Stable,
+        };
+        let summary = BenchmarkSummary {
+            reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence {
+                inference_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+                router_threshold_mutation_devices: vec![DeviceClass::CpuOnly],
+                hierarchy_weight_mutation_devices: vec![DeviceClass::CpuOnly],
+                memory_update_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+                stored_memory_update_devices: vec![DeviceClass::CpuOnly],
+                reflection_issue_devices: vec![DeviceClass::CpuOnly],
+                critical_reflection_issue_devices: vec![DeviceClass::CpuOnly],
+                revision_action_devices: vec![DeviceClass::CpuOnly],
+            },
+            evolution_ledger: EvolutionLedger::default(),
+            results: vec![base_result],
+        };
+        let gate = BenchmarkGate {
+            min_average_quality: 0.5,
+            min_average_reward: 0.45,
+            min_evolution_live_inference_device_profiles: Some(2),
+            min_evolution_live_router_threshold_mutation_device_profiles: Some(2),
+            min_evolution_live_hierarchy_weight_mutation_device_profiles: Some(2),
+            min_evolution_live_memory_update_device_profiles: Some(2),
+            min_evolution_live_stored_memory_update_device_profiles: Some(2),
+            min_evolution_live_reflection_issue_device_profiles: Some(2),
+            min_evolution_live_critical_reflection_issue_device_profiles: Some(2),
+            min_evolution_live_revision_action_device_profiles: Some(2),
+            ..BenchmarkGate::default()
+        };
+
+        let failing = summary.evaluate(&gate);
+
+        assert!(!failing.passed);
+        for marker in [
+            "evolution_live_router_threshold_mutation_device_profiles",
+            "evolution_live_hierarchy_weight_mutation_device_profiles",
+            "evolution_live_stored_memory_update_device_profiles",
+            "evolution_live_reflection_issue_device_profiles",
+            "evolution_live_critical_reflection_issue_device_profiles",
+            "evolution_live_revision_action_device_profiles",
+        ] {
+            assert!(
+                failing
+                    .failures
+                    .iter()
+                    .any(|failure| failure.contains(marker)),
+                "missing failure marker {marker}: {:?}",
+                failing.failures
+            );
+        }
+        assert!(
+            failing
+                .failures
+                .iter()
+                .all(|failure| !failure.contains("evolution_live_inference_device_profiles"))
+        );
+        assert!(
+            failing
+                .failures
+                .iter()
+                .all(|failure| !failure.contains("evolution_live_memory_update_device_profiles"))
+        );
+
+        let passing = BenchmarkSummary {
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence {
+                router_threshold_mutation_devices: vec![
+                    DeviceClass::CpuOnly,
+                    DeviceClass::IntegratedGpu,
+                ],
+                hierarchy_weight_mutation_devices: vec![
+                    DeviceClass::CpuOnly,
+                    DeviceClass::IntegratedGpu,
+                ],
+                stored_memory_update_devices: vec![
+                    DeviceClass::CpuOnly,
+                    DeviceClass::IntegratedGpu,
+                ],
+                reflection_issue_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+                critical_reflection_issue_devices: vec![
+                    DeviceClass::CpuOnly,
+                    DeviceClass::IntegratedGpu,
+                ],
+                revision_action_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+                ..summary.live_evolution_evidence.clone()
+            },
+            ..summary
+        };
+
+        let passing_report = passing.evaluate(&gate);
+
+        assert!(passing_report.passed, "{:?}", passing_report.failures);
+        assert!(
+            passing
+                .summary_line()
+                .contains("evolution_live_revision_action_device_profiles=2")
+        );
+    }
+
+    #[test]
     fn gate_reports_missing_live_memory_feedback_updates() {
         let mut engine = NoironEngine::new();
         let mut backend = HeuristicBackend;
@@ -2745,72 +3191,7 @@ mod tests {
             min_average_reward: 1.10,
             max_total_elapsed_ms: Some(1),
             max_case_recursive_chunks: Some(0),
-            min_recursive_cases: None,
-            min_recursive_runtime_calls: None,
-            min_auto_replay_router_updates: None,
-            min_auto_replay_hierarchy_updates: None,
-            min_auto_replay_router_threshold_mutations: None,
-            min_auto_replay_hierarchy_weight_mutations: None,
-            min_auto_replay_router_threshold_delta: None,
-            min_auto_replay_hierarchy_weight_delta: None,
-            min_auto_replay_memory_updates: None,
-            min_live_memory_feedback_updates: None,
-            min_auto_replay_live_memory_feedback_updates: None,
-            min_auto_replay_recursive_items: None,
-            min_auto_replay_recursive_call_pressure: None,
-            max_auto_replay_recursive_call_pressure: None,
-            min_evolution_live_inference_runs: None,
-            min_evolution_live_router_threshold_mutations: None,
-            min_evolution_live_hierarchy_weight_mutations: None,
-            min_evolution_live_router_threshold_delta: None,
-            min_evolution_live_hierarchy_weight_delta: None,
-            min_evolution_live_memory_updates: None,
-            min_evolution_live_stored_memory_updates: None,
-            min_evolution_live_reflection_issues: None,
-            min_evolution_live_critical_reflection_issues: None,
-            min_evolution_live_revision_actions: None,
-            min_evolution_replay_runs: None,
-            min_evolution_replay_items: None,
-            min_evolution_router_threshold_mutations: None,
-            min_evolution_hierarchy_weight_mutations: None,
-            min_evolution_router_threshold_delta: None,
-            min_evolution_hierarchy_weight_delta: None,
-            min_evolution_memory_updates: None,
-            min_evolution_replay_live_memory_feedback_updates: None,
-            min_evolution_recursive_replay_items: None,
-            min_evolution_recursive_runtime_calls: None,
-            max_evolution_drift_rollbacks: Some(0),
-            max_evolution_rollback_router_threshold_delta: Some(0.0),
-            max_evolution_rollback_hierarchy_weight_delta: Some(0.0),
-            min_sparse_skipped_cases: None,
-            min_sparse_skipped_tokens: None,
-            min_runtime_forward_cases: None,
-            min_runtime_forward_energy_cases: None,
-            min_runtime_kv_influence_cases: None,
-            min_runtime_uncertainty_cases: None,
-            min_runtime_uncertainty_tokens: None,
-            min_runtime_kv_import_cases: None,
-            min_runtime_kv_imported: None,
-            min_runtime_kv_exported: None,
-            min_runtime_kv_stored: None,
-            min_runtime_adapter_contract_cases: None,
-            min_runtime_adapter_kinds: None,
-            min_runtime_adapter_observations: None,
-            min_runtime_adapter_best_score: None,
-            max_runtime_adapter_contract_violations: Some(0),
-            min_reflection_issue_cases: None,
-            min_reflection_issues: None,
-            min_critical_reflection_issue_cases: None,
-            min_critical_reflection_issues: None,
-            min_revision_action_cases: None,
-            min_revision_actions: None,
-            min_reflection_issue_device_profiles: None,
-            min_critical_reflection_issue_device_profiles: None,
-            min_revision_action_device_profiles: None,
-            min_device_profiles: None,
-            min_recursive_device_profiles: None,
-            max_drift_blocks: Some(0),
-            max_drift_rollbacks: Some(0),
+            ..BenchmarkGate::default()
         };
 
         summary.record(&case, 7, &outcome);
@@ -2982,6 +3363,7 @@ mod tests {
     fn gate_reports_auto_replay_recursive_pressure_failures() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "replay_pressure".to_owned(),
@@ -3061,6 +3443,7 @@ mod tests {
     fn gate_reports_missing_auto_replay_recursive_pressure() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "missing_replay_pressure".to_owned(),
@@ -3139,6 +3522,7 @@ mod tests {
     fn gate_reports_missing_auto_replay_control_plane_coverage() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "auto_replay_control_plane".to_owned(),
@@ -3250,6 +3634,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 auto_replay_router_updates: 1,
@@ -3303,6 +3688,7 @@ mod tests {
     fn gate_reports_missing_evolution_ledger_coverage() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "evolution_ledger".to_owned(),
@@ -3419,6 +3805,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger {
                 live_inference_runs: 8,
                 live_router_threshold_mutations: 2,
@@ -3503,6 +3890,7 @@ mod tests {
     fn gate_reports_evolution_ledger_drift_rollback_failures() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger {
                 drift_rollbacks: 2,
                 rollback_router_threshold_delta: 0.03,
@@ -3586,6 +3974,7 @@ mod tests {
     fn gate_reports_missing_runtime_forward_and_kv_export() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_boundary".to_owned(),
@@ -3662,6 +4051,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_forward_signal: true,
@@ -3686,6 +4076,7 @@ mod tests {
     fn gate_reports_missing_runtime_forward_diagnostics() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_diagnostics".to_owned(),
@@ -3764,6 +4155,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_forward_energy_signal: true,
@@ -3792,6 +4184,7 @@ mod tests {
     fn gate_reports_missing_runtime_uncertainty_signal() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_uncertainty".to_owned(),
@@ -3872,6 +4265,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_uncertainty_token_count: 3,
@@ -3900,6 +4294,7 @@ mod tests {
     fn gate_reports_missing_runtime_kv_import() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_import".to_owned(),
@@ -3978,6 +4373,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_kv_imported: 3,
@@ -3997,6 +4393,7 @@ mod tests {
     fn gate_reports_missing_runtime_kv_storage() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_storage".to_owned(),
@@ -4067,6 +4464,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_kv_stored: 2,
@@ -4084,6 +4482,7 @@ mod tests {
     fn gate_reports_runtime_adapter_contract_failures() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![
                 BenchmarkCaseResult {
@@ -4238,6 +4637,7 @@ mod tests {
     fn gate_reports_runtime_adapter_kind_collapse() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![
                 BenchmarkCaseResult {
@@ -4366,6 +4766,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             results: vec![
                 summary.results[0].clone(),
                 BenchmarkCaseResult {
@@ -4384,6 +4785,7 @@ mod tests {
     fn gate_reports_missing_runtime_adapter_observations() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "runtime_adapter_observation".to_owned(),
@@ -4462,6 +4864,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 runtime_adapter_observations: 2,
@@ -4490,6 +4893,7 @@ mod tests {
     fn gate_reports_missing_sparse_filtering_coverage() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "sparse_filter".to_owned(),
@@ -4566,6 +4970,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 sparse_skipped: 2,
@@ -4638,6 +5043,7 @@ mod tests {
         };
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![base.clone()],
         };
@@ -4661,6 +5067,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
                 .iter()
@@ -4739,6 +5146,7 @@ mod tests {
         gate.min_recursive_device_profiles = Some(DeviceClass::explicit_profiles().len());
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
                 .iter()
@@ -4763,6 +5171,7 @@ mod tests {
 
         let passing = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: DeviceClass::explicit_profiles()
                 .iter()
@@ -4796,6 +5205,7 @@ mod tests {
     fn gate_reports_drift_failures() {
         let summary = BenchmarkSummary {
             reflection_evidence: BenchmarkReflectionEvidence::default(),
+            live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
             evolution_ledger: EvolutionLedger::default(),
             results: vec![BenchmarkCaseResult {
                 name: "drift".to_owned(),
