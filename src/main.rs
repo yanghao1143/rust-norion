@@ -1759,6 +1759,8 @@ struct Args {
     inspect_min_evolution_recursive_replay_items: Option<u64>,
     inspect_min_evolution_recursive_runtime_calls: Option<u64>,
     inspect_max_evolution_drift_rollbacks: Option<u64>,
+    inspect_max_evolution_rollback_router_threshold_delta: Option<f32>,
+    inspect_max_evolution_rollback_hierarchy_weight_delta: Option<f32>,
     inspect_require_runtime_kv_dimensions: bool,
     local_runtime: bool,
     production_runtime: bool,
@@ -1906,6 +1908,8 @@ impl Args {
         let mut inspect_min_evolution_recursive_replay_items = None;
         let mut inspect_min_evolution_recursive_runtime_calls = None;
         let mut inspect_max_evolution_drift_rollbacks = None;
+        let mut inspect_max_evolution_rollback_router_threshold_delta = None;
+        let mut inspect_max_evolution_rollback_hierarchy_weight_delta = None;
         let mut inspect_require_runtime_kv_dimensions = false;
         let mut local_runtime = false;
         let mut production_runtime = false;
@@ -2468,6 +2472,24 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-max-evolution-rollback-router-threshold-delta"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_max_evolution_rollback_router_threshold_delta =
+                        Some(parse_f32(&raw[index + 1], f32::MAX));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
+                "--inspect-max-evolution-rollback-hierarchy-weight-delta"
+                    if index + 1 < raw.len() =>
+                {
+                    inspect_max_evolution_rollback_hierarchy_weight_delta =
+                        Some(parse_f32(&raw[index + 1], f32::MAX));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    index += 2;
+                }
                 "--inspect-require-runtime-kv-dimensions" => {
                     inspect_require_runtime_kv_dimensions = true;
                     inspect_state = true;
@@ -2775,6 +2797,8 @@ impl Args {
             inspect_min_evolution_recursive_replay_items,
             inspect_min_evolution_recursive_runtime_calls,
             inspect_max_evolution_drift_rollbacks,
+            inspect_max_evolution_rollback_router_threshold_delta,
+            inspect_max_evolution_rollback_hierarchy_weight_delta,
             inspect_require_runtime_kv_dimensions,
             local_runtime,
             production_runtime,
@@ -2988,6 +3012,12 @@ impl Args {
             min_evolution_recursive_runtime_calls: self
                 .inspect_min_evolution_recursive_runtime_calls,
             max_evolution_drift_rollbacks: self.inspect_max_evolution_drift_rollbacks,
+            max_evolution_rollback_router_threshold_delta: self
+                .inspect_max_evolution_rollback_router_threshold_delta
+                .map(|value| value.max(0.0)),
+            max_evolution_rollback_hierarchy_weight_delta: self
+                .inspect_max_evolution_rollback_hierarchy_weight_delta
+                .map(|value| value.max(0.0)),
             require_runtime_kv_dimensions: self.inspect_require_runtime_kv_dimensions,
         }
     }
@@ -3165,7 +3195,7 @@ fn print_help_and_exit() -> ! {
         "Manifest: --runtime-manifest-gate --runtime-manifest-all-devices-gate --runtime-weights path --runtime-tokenizer-path path --runtime-config path\n",
         "Inspect: --inspect-state --inspect-limit n --inspect-gate --inspect-min-memories n --inspect-min-runtime-kv-memories n --inspect-min-experiences n\n",
         "Inspect runtime evidence: --inspect-min-runtime-model-experiences n --inspect-min-runtime-adapter-experiences n --inspect-min-runtime-forward-energy-experiences n --inspect-min-runtime-kv-influence-experiences n --inspect-min-runtime-kv-import-experiences n --inspect-min-runtime-kv-export-experiences n\n",
-        "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-recursive-replay-items n --inspect-require-runtime-kv-dimensions\n",
+        "Inspect evolution: --inspect-min-router-observations n --inspect-min-evolution-router-threshold-delta f --inspect-min-evolution-hierarchy-weight-delta f --inspect-min-evolution-memory-updates n --inspect-min-evolution-recursive-replay-items n --inspect-max-evolution-rollback-router-threshold-delta f --inspect-max-evolution-rollback-hierarchy-weight-delta f --inspect-require-runtime-kv-dimensions\n",
         "Device: --list-devices --device-gate --device auto|cpu|integrated|discrete|uma|mobile|embedded|browser-wasm|microcontroller|npu|multi-gpu|edge|server --cpu-load f --gpu-load f --ram-load f --disk-load f"
     );
     println!("{usage}");
@@ -3379,6 +3409,10 @@ mod tests {
             "11".to_owned(),
             "--inspect-max-evolution-drift-rollbacks".to_owned(),
             "0".to_owned(),
+            "--inspect-max-evolution-rollback-router-threshold-delta".to_owned(),
+            "0.0".to_owned(),
+            "--inspect-max-evolution-rollback-hierarchy-weight-delta".to_owned(),
+            "0.0".to_owned(),
             "--inspect-require-runtime-kv-dimensions".to_owned(),
             "--local-runtime".to_owned(),
             "--production-runtime".to_owned(),
@@ -3709,6 +3743,14 @@ mod tests {
         assert_eq!(args.inspect_min_evolution_recursive_replay_items, Some(10));
         assert_eq!(args.inspect_min_evolution_recursive_runtime_calls, Some(11));
         assert_eq!(args.inspect_max_evolution_drift_rollbacks, Some(0));
+        assert_eq!(
+            args.inspect_max_evolution_rollback_router_threshold_delta,
+            Some(0.0)
+        );
+        assert_eq!(
+            args.inspect_max_evolution_rollback_hierarchy_weight_delta,
+            Some(0.0)
+        );
         assert!(args.inspect_require_runtime_kv_dimensions);
         assert_eq!(args.state_inspection_gate().min_memories, Some(3));
         assert_eq!(
@@ -3767,6 +3809,16 @@ mod tests {
             args.state_inspection_gate()
                 .min_evolution_recursive_runtime_calls,
             Some(11)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .max_evolution_rollback_router_threshold_delta,
+            Some(0.0)
+        );
+        assert_eq!(
+            args.state_inspection_gate()
+                .max_evolution_rollback_hierarchy_weight_delta,
+            Some(0.0)
         );
         assert!(args.state_inspection_gate().require_runtime_kv_dimensions);
         assert!(args.local_runtime);

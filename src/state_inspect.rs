@@ -75,6 +75,8 @@ pub struct StateInspectionGate {
     pub min_evolution_recursive_replay_items: Option<u64>,
     pub min_evolution_recursive_runtime_calls: Option<u64>,
     pub max_evolution_drift_rollbacks: Option<u64>,
+    pub max_evolution_rollback_router_threshold_delta: Option<f32>,
+    pub max_evolution_rollback_hierarchy_weight_delta: Option<f32>,
     pub require_runtime_kv_dimensions: bool,
 }
 
@@ -535,6 +537,18 @@ impl StateInspectionReport {
             self.evolution_ledger.drift_rollbacks,
             gate.max_evolution_drift_rollbacks,
         );
+        require_max_f32(
+            &mut failures,
+            "evolution_rollback_router_threshold_delta",
+            self.evolution_ledger.rollback_router_threshold_delta,
+            gate.max_evolution_rollback_router_threshold_delta,
+        );
+        require_max_f32(
+            &mut failures,
+            "evolution_rollback_hierarchy_weight_delta",
+            self.evolution_ledger.rollback_hierarchy_weight_delta,
+            gate.max_evolution_rollback_hierarchy_weight_delta,
+        );
 
         if gate.require_runtime_kv_dimensions && self.runtime_kv_vector_dimensions.is_empty() {
             failures.push("runtime_kv_vector_dimensions missing required buckets".to_owned());
@@ -572,6 +586,14 @@ fn require_min_f32(failures: &mut Vec<String>, name: &str, actual: f32, required
     if let Some(required) = required {
         if actual < required {
             failures.push(format!("{name} {actual:.6} below required {required:.6}"));
+        }
+    }
+}
+
+fn require_max_f32(failures: &mut Vec<String>, name: &str, actual: f32, maximum: Option<f32>) {
+    if let Some(maximum) = maximum {
+        if actual > maximum {
+            failures.push(format!("{name} {actual:.6} above maximum {maximum:.6}"));
         }
     }
 }
@@ -966,6 +988,8 @@ mod tests {
             min_evolution_recursive_replay_items: Some(8),
             min_evolution_recursive_runtime_calls: Some(9),
             max_evolution_drift_rollbacks: Some(2),
+            max_evolution_rollback_router_threshold_delta: Some(0.03),
+            max_evolution_rollback_hierarchy_weight_delta: Some(0.04),
             require_runtime_kv_dimensions: true,
         };
         let passing_report = report.evaluate(&passing_gate);
@@ -996,6 +1020,8 @@ mod tests {
             min_evolution_recursive_replay_items: Some(9),
             min_evolution_recursive_runtime_calls: Some(10),
             max_evolution_drift_rollbacks: Some(1),
+            max_evolution_rollback_router_threshold_delta: Some(0.02),
+            max_evolution_rollback_hierarchy_weight_delta: Some(0.03),
             require_runtime_kv_dimensions: true,
         };
         let failing_report = report.evaluate(&failing_gate);
@@ -1046,6 +1072,12 @@ mod tests {
                 .failures
                 .contains(&"evolution_drift_rollbacks 2 above maximum 1".to_owned())
         );
+        assert!(failing_report.failures.contains(
+            &"evolution_rollback_router_threshold_delta 0.030000 above maximum 0.020000".to_owned()
+        ));
+        assert!(failing_report.failures.contains(
+            &"evolution_rollback_hierarchy_weight_delta 0.040000 above maximum 0.030000".to_owned()
+        ));
     }
 
     #[test]
@@ -1175,6 +1207,8 @@ mod tests {
             min_evolution_recursive_replay_items: None,
             min_evolution_recursive_runtime_calls: None,
             max_evolution_drift_rollbacks: None,
+            max_evolution_rollback_router_threshold_delta: None,
+            max_evolution_rollback_hierarchy_weight_delta: None,
             require_runtime_kv_dimensions: false,
         };
 

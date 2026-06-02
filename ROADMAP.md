@@ -264,7 +264,8 @@ modules, not external product dependencies:
   KV-import/KV-export diagnostics captured in persisted experiences, so
   local/CI checks can fail when durable self-evolution only records events
   without actually changing control-plane parameters, when long-context replay
-  evidence is missing, or when runtime-boundary state is missing.
+  evidence is missing, when persisted drift rollback magnitude exceeds local
+  safety caps, or when runtime-boundary state is missing.
   With all-device mode, the inspection gate should evaluate the
   device-scoped state files emitted by persistence roundtrip runs so CPU,
   mobile, embedded, browser-WASM, microcontroller, accelerator, edge, server,
@@ -596,14 +597,16 @@ These are algorithmic references, not product dependencies:
   invoking a model runtime. The same CLI path can enforce state-inspection
   gates for minimum memory, runtime-KV, experience, router-observation, and
   self-evolution ledger counts, minimum router-threshold/hierarchy-weight
-  deltas, and recursive replay item evidence. It can also require persisted
-  runtime evidence in experience records: model id, selected adapter, forward
-  energy, KV influence, imported KV, and exported KV. The gate fails with a
-  non-zero exit code when persisted evidence is incomplete, when replay counters
-  exist without enough measurable control-parameter movement, or when
-  long-context replay evidence is missing. In all-device mode, the gate loads
-  every explicit device profile's scoped state files and fails if any device is
-  missing state or lacks the required persisted evidence.
+  deltas, recursive replay item evidence, and maximum drift rollback deltas for
+  router/hierarchy state. It can also require persisted runtime evidence in
+  experience records: model id, selected adapter, forward energy, KV influence,
+  imported KV, and exported KV. The gate fails with a non-zero exit code when
+  persisted evidence is incomplete, when replay counters exist without enough
+  measurable control-parameter movement, when long-context replay evidence is
+  missing, or when persisted rollback magnitude exceeds the configured safety
+  cap. In all-device mode, the gate loads every explicit device profile's
+  scoped state files and fails if any device is missing state or lacks the
+  required persisted evidence.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -680,8 +683,8 @@ These are algorithmic references, not product dependencies:
 - With `--inspect-state --benchmark-all-devices --inspect-gate`, the same
   device-scoped state files can now be checked after the roundtrip run for
   minimum runtime-KV, experience, runtime-diagnostics, router-observation, and
-  self-evolution ledger count/delta/recursive-replay evidence per explicit
-  device profile.
+  self-evolution ledger count/delta/recursive-replay evidence plus rollback
+  delta safety caps per explicit device profile.
 - With `--benchmark-roundtrip --inspect-state`, the CLI now chains the write/
   reload runtime-KV roundtrip and persisted-state inspection in one run. Adding
   `--benchmark-all-devices` applies the same chain to every explicit device
