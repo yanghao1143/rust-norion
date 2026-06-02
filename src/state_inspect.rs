@@ -15,6 +15,8 @@ use crate::router::{ProfileObservations, ProfileThresholds};
 use crate::runtime::RuntimeAdapterObservation;
 use crate::tiered_cache::TierCounts;
 
+const STATE_INSPECTION_FLOAT_EPSILON: f32 = 0.000_001;
+
 #[derive(Debug, Clone)]
 pub struct StateMemorySummary {
     pub id: u64,
@@ -184,6 +186,7 @@ pub struct StateInspectionMatrixGate {
     pub min_evolution_live_router_threshold_mutation_device_profiles: Option<usize>,
     pub min_evolution_live_hierarchy_weight_mutation_device_profiles: Option<usize>,
     pub min_evolution_live_online_reward_device_profiles: Option<usize>,
+    pub min_evolution_live_online_reward_strength_device_profiles: Option<usize>,
     pub min_evolution_live_memory_update_device_profiles: Option<usize>,
     pub min_evolution_live_stored_memory_update_device_profiles: Option<usize>,
     pub min_evolution_live_reflection_issue_device_profiles: Option<usize>,
@@ -198,6 +201,7 @@ pub struct StateInspectionMatrixGate {
     pub min_evolution_replay_live_memory_feedback_detail_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_online_reward_device_profiles: Option<usize>,
+    pub min_evolution_replay_live_evolution_online_reward_strength_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_memory_update_device_profiles: Option<usize>,
     pub min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles:
         Option<usize>,
@@ -936,6 +940,12 @@ impl StateInspectionMatrixGateReport {
         );
         require_min_device_profiles(
             &mut failures,
+            "evolution_live_online_reward_strength_device_profiles",
+            evolution_live_online_reward_strength_device_profiles(&device_reports),
+            gate.min_evolution_live_online_reward_strength_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "evolution_live_memory_update_device_profiles",
             evolution_live_memory_update_device_profiles(&device_reports),
             gate.min_evolution_live_memory_update_device_profiles,
@@ -1017,6 +1027,12 @@ impl StateInspectionMatrixGateReport {
             "evolution_replay_live_evolution_online_reward_device_profiles",
             evolution_replay_live_evolution_online_reward_device_profiles(&device_reports),
             gate.min_evolution_replay_live_evolution_online_reward_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "evolution_replay_live_evolution_online_reward_strength_device_profiles",
+            evolution_replay_live_evolution_online_reward_strength_device_profiles(&device_reports),
+            gate.min_evolution_replay_live_evolution_online_reward_strength_device_profiles,
         );
         require_min_device_profiles(
             &mut failures,
@@ -1174,6 +1190,10 @@ impl StateInspectionMatrixGateReport {
         evolution_live_online_reward_device_profiles(&self.device_reports)
     }
 
+    pub fn evolution_live_online_reward_strength_device_profiles(&self) -> usize {
+        evolution_live_online_reward_strength_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_live_memory_update_device_profiles(&self) -> usize {
         evolution_live_memory_update_device_profiles(&self.device_reports)
     }
@@ -1230,6 +1250,10 @@ impl StateInspectionMatrixGateReport {
         evolution_replay_live_evolution_online_reward_device_profiles(&self.device_reports)
     }
 
+    pub fn evolution_replay_live_evolution_online_reward_strength_device_profiles(&self) -> usize {
+        evolution_replay_live_evolution_online_reward_strength_device_profiles(&self.device_reports)
+    }
+
     pub fn evolution_replay_live_evolution_memory_update_device_profiles(&self) -> usize {
         evolution_replay_live_evolution_memory_update_device_profiles(&self.device_reports)
     }
@@ -1256,7 +1280,7 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_uncertainty_device_profiles={} runtime_uncertainty_token_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} runtime_kv_hold_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_online_reward_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_online_reward_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_adapter_selection_mismatches={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_uncertainty_device_profiles={} runtime_uncertainty_token_device_profiles={} runtime_kv_precision_device_profiles={} runtime_kv_precision_mismatches={} runtime_device_execution_device_profiles={} runtime_layer_mode_device_profiles={} runtime_all_layer_mode_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} runtime_kv_hold_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} live_memory_feedback_device_profiles={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_online_reward_device_profiles={} evolution_live_online_reward_strength_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_run_device_profiles={} evolution_replay_item_device_profiles={} evolution_router_threshold_mutation_device_profiles={} evolution_hierarchy_weight_mutation_device_profiles={} evolution_memory_update_device_profiles={} evolution_replay_live_memory_feedback_device_profiles={} evolution_replay_live_memory_feedback_detail_device_profiles={} evolution_replay_live_evolution_device_profiles={} evolution_replay_live_evolution_online_reward_device_profiles={} evolution_replay_live_evolution_online_reward_strength_device_profiles={} evolution_replay_live_evolution_memory_update_device_profiles={} evolution_replay_live_evolution_critical_reflection_issue_device_profiles={} evolution_replay_live_evolution_revision_action_device_profiles={} evolution_recursive_replay_device_profiles={} evolution_recursive_runtime_call_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
@@ -1285,6 +1309,7 @@ impl StateInspectionMatrixGateReport {
             self.evolution_live_router_threshold_mutation_device_profiles(),
             self.evolution_live_hierarchy_weight_mutation_device_profiles(),
             self.evolution_live_online_reward_device_profiles(),
+            self.evolution_live_online_reward_strength_device_profiles(),
             self.evolution_live_memory_update_device_profiles(),
             self.evolution_live_stored_memory_update_device_profiles(),
             self.evolution_live_reflection_issue_device_profiles(),
@@ -1299,6 +1324,7 @@ impl StateInspectionMatrixGateReport {
             self.evolution_replay_live_memory_feedback_detail_device_profiles(),
             self.evolution_replay_live_evolution_device_profiles(),
             self.evolution_replay_live_evolution_online_reward_device_profiles(),
+            self.evolution_replay_live_evolution_online_reward_strength_device_profiles(),
             self.evolution_replay_live_evolution_memory_update_device_profiles(),
             self.evolution_replay_live_evolution_critical_reflection_issue_device_profiles(),
             self.evolution_replay_live_evolution_revision_action_device_profiles(),
@@ -1510,6 +1536,21 @@ fn evolution_live_online_reward_device_profiles(
     })
 }
 
+fn evolution_live_online_reward_strength_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        online_reward_strength_is_consistent(
+            device_report.evolution_live_online_reward_feedbacks,
+            device_report.evolution_live_online_reward_reinforcements,
+            device_report.evolution_live_online_reward_penalties,
+            device_report.evolution_live_online_reward_strength,
+            device_report.evolution_live_online_reward_reinforcement_strength,
+            device_report.evolution_live_online_reward_penalty_strength,
+        )
+    })
+}
+
 fn evolution_live_memory_update_device_profiles(
     device_reports: &[StateInspectionDeviceGateReport],
 ) -> usize {
@@ -1636,6 +1677,44 @@ fn evolution_replay_live_evolution_online_reward_device_profiles(
                         device_report.evolution_replay_live_evolution_online_reward_penalties,
                     )
     })
+}
+
+fn evolution_replay_live_evolution_online_reward_strength_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        online_reward_strength_is_consistent(
+            device_report.evolution_replay_live_evolution_online_reward_feedbacks,
+            device_report.evolution_replay_live_evolution_online_reward_reinforcements,
+            device_report.evolution_replay_live_evolution_online_reward_penalties,
+            device_report.evolution_replay_live_evolution_online_reward_strength,
+            device_report.evolution_replay_live_evolution_online_reward_reinforcement_strength,
+            device_report.evolution_replay_live_evolution_online_reward_penalty_strength,
+        )
+    })
+}
+
+fn online_reward_strength_is_consistent(
+    feedbacks: u64,
+    reinforcements: u64,
+    penalties: u64,
+    total: f32,
+    reinforcement: f32,
+    penalty: f32,
+) -> bool {
+    let has_reinforcement_strength = reinforcement > STATE_INSPECTION_FLOAT_EPSILON;
+    let has_penalty_strength = penalty > STATE_INSPECTION_FLOAT_EPSILON;
+    total.is_finite()
+        && reinforcement.is_finite()
+        && penalty.is_finite()
+        && feedbacks > 0
+        && feedbacks == reinforcements.saturating_add(penalties)
+        && total > STATE_INSPECTION_FLOAT_EPSILON
+        && reinforcement >= 0.0
+        && penalty >= 0.0
+        && (!has_reinforcement_strength || reinforcements > 0)
+        && (!has_penalty_strength || penalties > 0)
+        && (total - (reinforcement + penalty)).abs() <= STATE_INSPECTION_FLOAT_EPSILON
 }
 
 fn evolution_replay_live_evolution_memory_update_device_profiles(
@@ -4805,6 +4884,8 @@ mod tests {
             min_evolution_live_inference_device_profiles: Some(2),
             min_evolution_live_router_threshold_mutation_device_profiles: Some(1),
             min_evolution_live_hierarchy_weight_mutation_device_profiles: Some(1),
+            min_evolution_live_online_reward_device_profiles: Some(2),
+            min_evolution_live_online_reward_strength_device_profiles: Some(2),
             min_evolution_live_memory_update_device_profiles: Some(2),
             min_evolution_live_stored_memory_update_device_profiles: Some(2),
             min_evolution_live_reflection_issue_device_profiles: Some(2),
@@ -4818,6 +4899,8 @@ mod tests {
             min_evolution_replay_live_memory_feedback_device_profiles: Some(2),
             min_evolution_replay_live_memory_feedback_detail_device_profiles: Some(2),
             min_evolution_replay_live_evolution_device_profiles: Some(2),
+            min_evolution_replay_live_evolution_online_reward_device_profiles: Some(2),
+            min_evolution_replay_live_evolution_online_reward_strength_device_profiles: Some(2),
             min_evolution_replay_live_evolution_memory_update_device_profiles: Some(2),
             min_evolution_replay_live_evolution_critical_reflection_issue_device_profiles: Some(1),
             min_evolution_replay_live_evolution_revision_action_device_profiles: Some(2),
@@ -4837,20 +4920,28 @@ mod tests {
                         DeviceClass::CpuOnly => {
                             device_report = device_report
                                 .with_live_evolution_evidence(1, 1, 1, 3, 2, 1, 1, 1)
+                                .with_live_evolution_online_reward_evidence(2, 1, 1, 1.0, 0.6, 0.4)
                                 .with_evolution_evidence(1, 2, 1, 1, 3, 2, 1, 1)
                                 .with_evolution_replay_live_memory_feedback_detail_evidence(
                                     1, 1, 0, 1, 0.2,
                                 )
-                                .with_evolution_replay_live_evolution_evidence(1, 2, 1, 1, 1, 1);
+                                .with_evolution_replay_live_evolution_evidence(1, 2, 1, 1, 1, 1)
+                                .with_evolution_replay_live_evolution_online_reward_evidence(
+                                    2, 1, 1, 0.8, 0.5, 0.3,
+                                );
                         }
                         DeviceClass::IntegratedGpu => {
                             device_report = device_report
                                 .with_live_evolution_evidence(1, 0, 0, 2, 1, 1, 0, 1)
+                                .with_live_evolution_online_reward_evidence(1, 1, 0, 0.7, 0.7, 0.0)
                                 .with_evolution_evidence(1, 1, 0, 0, 2, 1, 0, 0)
                                 .with_evolution_replay_live_memory_feedback_detail_evidence(
                                     1, 1, 0, 0, 0.1,
                                 )
-                                .with_evolution_replay_live_evolution_evidence(1, 1, 0, 0, 0, 1);
+                                .with_evolution_replay_live_evolution_evidence(1, 1, 0, 0, 0, 1)
+                                .with_evolution_replay_live_evolution_online_reward_evidence(
+                                    1, 0, 1, 0.4, 0.0, 0.4,
+                                );
                         }
                         _ => {}
                     }
@@ -4869,6 +4960,11 @@ mod tests {
         assert_eq!(
             report.evolution_live_hierarchy_weight_mutation_device_profiles(),
             1
+        );
+        assert_eq!(report.evolution_live_online_reward_device_profiles(), 2);
+        assert_eq!(
+            report.evolution_live_online_reward_strength_device_profiles(),
+            2
         );
         assert_eq!(report.evolution_live_memory_update_device_profiles(), 2);
         assert_eq!(
@@ -4902,6 +4998,14 @@ mod tests {
         );
         assert_eq!(report.evolution_replay_live_evolution_device_profiles(), 2);
         assert_eq!(
+            report.evolution_replay_live_evolution_online_reward_device_profiles(),
+            2
+        );
+        assert_eq!(
+            report.evolution_replay_live_evolution_online_reward_strength_device_profiles(),
+            2
+        );
+        assert_eq!(
             report.evolution_replay_live_evolution_memory_update_device_profiles(),
             2
         );
@@ -4928,6 +5032,11 @@ mod tests {
         assert!(
             report
                 .summary_line()
+                .contains("evolution_live_online_reward_strength_device_profiles=2")
+        );
+        assert!(
+            report
+                .summary_line()
                 .contains("evolution_live_critical_reflection_issue_device_profiles=1")
         );
         assert!(
@@ -4944,6 +5053,11 @@ mod tests {
             report
                 .summary_line()
                 .contains("evolution_replay_live_evolution_device_profiles=2")
+        );
+        assert!(
+            report.summary_line().contains(
+                "evolution_replay_live_evolution_online_reward_strength_device_profiles=2"
+            )
         );
         assert!(
             report
@@ -4963,6 +5077,7 @@ mod tests {
             vec![
                 StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
                     .with_live_evolution_evidence(1, 0, 0, 0, 0, 0, 0, 0)
+                    .with_live_evolution_online_reward_evidence(1, 1, 0, 0.0, 0.0, 0.0)
                     .with_evolution_evidence(1, 0, 0, 0, 0, 0, 0, 0),
             ],
             &gate,
@@ -4974,6 +5089,9 @@ mod tests {
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "evolution_live_memory_update_device_profiles 0 below required 2"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "evolution_live_online_reward_strength_device_profiles 0 below required 2"
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "evolution_live_stored_memory_update_device_profiles 0 below required 2"
@@ -5011,6 +5129,14 @@ mod tests {
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure == "evolution_replay_live_evolution_device_profiles 0 below required 2"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure
+                == "evolution_replay_live_evolution_online_reward_device_profiles 0 below required 2"
+        }));
+        assert!(failing.failures.iter().any(|failure| {
+            failure
+                == "evolution_replay_live_evolution_online_reward_strength_device_profiles 0 below required 2"
         }));
         assert!(failing.failures.iter().any(|failure| {
             failure
