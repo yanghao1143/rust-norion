@@ -14,7 +14,7 @@ use crate::hierarchy::{HierarchyController, HierarchyWeights, TaskProfile};
 use crate::infini_memory::{InfiniMemoryPlan, InfiniMemoryPlanner};
 use crate::kv_cache::{
     KvFusionCache, MemoryCompactionPolicy, MemoryCompactionReport, MemoryMatch,
-    MemoryRetentionPolicy, RetentionReport,
+    MemoryRetentionPolicy, MemoryUpdateReport, RetentionReport,
 };
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::process_reward::{
@@ -236,12 +236,13 @@ pub struct InferenceOutcome {
     pub evolution_ledger: EvolutionLedger,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct MemoryFeedbackReport {
     pub reinforced: usize,
     pub penalized: usize,
     pub reinforcement_amount: f32,
     pub penalty_amount: f32,
+    pub updates: Vec<MemoryUpdateReport>,
 }
 
 impl MemoryFeedbackReport {
@@ -249,14 +250,41 @@ impl MemoryFeedbackReport {
         self.reinforced + self.penalized
     }
 
-    pub fn record_reinforcement(&mut self, amount: f32) {
+    pub fn record_reinforcement(&mut self, amount: f32, update: MemoryUpdateReport) {
         self.reinforced += 1;
         self.reinforcement_amount += amount;
+        self.updates.push(update);
     }
 
-    pub fn record_penalty(&mut self, amount: f32) {
+    pub fn record_penalty(&mut self, amount: f32, update: MemoryUpdateReport) {
         self.penalized += 1;
         self.penalty_amount += amount;
+        self.updates.push(update);
+    }
+
+    pub fn applied_updates(&self) -> usize {
+        self.updates
+            .iter()
+            .filter(|update| update.was_applied())
+            .count()
+    }
+
+    pub fn removed_updates(&self) -> usize {
+        self.updates.iter().filter(|update| update.removed).count()
+    }
+
+    pub fn strength_delta(&self) -> f32 {
+        self.updates
+            .iter()
+            .map(|update| update.strength_delta.abs())
+            .sum()
+    }
+
+    pub fn missing_updates(&self) -> usize {
+        self.updates
+            .iter()
+            .filter(|update| !update.was_applied())
+            .count()
     }
 }
 
@@ -519,18 +547,16 @@ impl NoironEngine {
                 RewardAction::Reinforce => {
                     let reinforcement = replay_reinforcement_amount(&item);
                     for memory_id in &item.memory_ids {
-                        self.cache.reinforce(*memory_id, reinforcement);
-                        report.touched_memories += 1;
-                        report.memory_reinforcements += 1;
+                        let update = self.cache.reinforce(*memory_id, reinforcement);
+                        report.record_memory_update(update);
                     }
                     report.reinforced += 1;
                 }
                 RewardAction::Penalize => {
                     let penalty = replay_penalty_amount(&item);
                     for memory_id in &item.memory_ids {
-                        self.cache.penalize(*memory_id, penalty);
-                        report.touched_memories += 1;
-                        report.memory_penalties += 1;
+                        let update = self.cache.penalize(*memory_id, penalty);
+                        report.record_memory_update(update);
                     }
                     report.penalized += 1;
                 }
@@ -753,12 +779,12 @@ impl NoironEngine {
         for memory in &used_memories {
             if admit_memory && !drift_report.penalize_used_memory {
                 let amount = used_memory_reinforcement_amount(&report);
-                self.cache.reinforce(memory.id, amount);
-                memory_feedback.record_reinforcement(amount);
+                let update = self.cache.reinforce(memory.id, amount);
+                memory_feedback.record_reinforcement(amount, update);
             } else {
                 let amount = used_memory_penalty_amount(&report, &drift_report, metrics);
-                self.cache.penalize(memory.id, amount);
-                memory_feedback.record_penalty(amount);
+                let update = self.cache.penalize(memory.id, amount);
+                memory_feedback.record_penalty(amount, update);
             }
         }
 
@@ -834,7 +860,7 @@ impl NoironEngine {
             agent_team_plan: agent_team_plan.clone(),
         });
         let mut experience_process_reward = process_reward.clone();
-        if let Some(note) = memory_feedback_note(memory_feedback) {
+        if let Some(note) = memory_feedback_note(&memory_feedback) {
             experience_process_reward.notes.push(note);
         }
         let experience_id = self.experience.record(ExperienceInput {
@@ -1254,14 +1280,18 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
         .unwrap_or(0.0)
 }
 
-fn memory_feedback_note(report: MemoryFeedbackReport) -> Option<String> {
+fn memory_feedback_note(report: &MemoryFeedbackReport) -> Option<String> {
     (report.total_updates() > 0).then(|| {
         format!(
-            "memory_feedback:reinforced={}:penalized={}:reinforcement_amount={:.6}:penalty_amount={:.6}",
+            "memory_feedback:reinforced={}:penalized={}:reinforcement_amount={:.6}:penalty_amount={:.6}:applied={}:removed={}:missing={}:strength_delta={:.6}",
             report.reinforced,
             report.penalized,
             report.reinforcement_amount,
-            report.penalty_amount
+            report.penalty_amount,
+            report.applied_updates(),
+            report.removed_updates(),
+            report.missing_updates(),
+            report.strength_delta()
         )
     })
 }
@@ -2335,12 +2365,24 @@ mod tests {
         assert_eq!(outcome.memory_feedback.penalized, 1);
         assert!(outcome.memory_feedback.penalty_amount > 0.10);
         assert_eq!(outcome.memory_feedback.total_updates(), 1);
+        assert_eq!(outcome.memory_feedback.applied_updates(), 1);
+        assert_eq!(outcome.memory_feedback.missing_updates(), 0);
+        assert_eq!(outcome.memory_feedback.removed_updates(), 0);
+        assert_eq!(outcome.memory_feedback.updates.len(), 1);
+        assert_eq!(outcome.memory_feedback.updates[0].id, memory_id);
+        assert!(outcome.memory_feedback.updates[0].strength_delta < 0.0);
+        assert!(outcome.memory_feedback.strength_delta() > 0.10);
         assert!(
             engine.experience.records()[0]
                 .process_reward
                 .notes
                 .iter()
-                .any(|note| note.starts_with("memory_feedback:") && note.contains("penalized=1"))
+                .any(|note| {
+                    note.starts_with("memory_feedback:")
+                        && note.contains("penalized=1")
+                        && note.contains("applied=1")
+                        && note.contains("strength_delta=")
+                })
         );
         assert!(outcome.report.critical_issue_count() > 0);
         assert!(memory_strength(&engine, memory_id) < before_strength - 0.10);
@@ -3073,6 +3115,11 @@ mod tests {
 
         assert_eq!(report.memory_reinforcements, 2);
         assert_eq!(report.memory_penalties, 1);
+        assert_eq!(report.touched_memories, 3);
+        assert_eq!(report.applied_memory_updates, 3);
+        assert_eq!(report.missing_memory_updates, 0);
+        assert_eq!(report.memory_update_reports.len(), 3);
+        assert!(report.memory_strength_delta > 0.0);
         assert!(
             memory_strength(&engine, live_memory_id) > memory_strength(&engine, plain_memory_id)
         );

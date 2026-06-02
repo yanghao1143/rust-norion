@@ -207,6 +207,7 @@ pub struct BenchmarkGate {
     pub min_runtime_device_execution_device_profiles: Option<usize>,
     pub max_runtime_device_execution_violations: Option<usize>,
     pub max_memory_governance_failures: Option<usize>,
+    pub max_memory_feedback_evidence_failures: Option<usize>,
     pub min_memory_governance_cases: Option<usize>,
     pub min_memory_governance_device_profiles: Option<usize>,
     pub min_memory_retention_activity_cases: Option<usize>,
@@ -307,6 +308,7 @@ impl Default for BenchmarkGate {
             min_runtime_device_execution_device_profiles: None,
             max_runtime_device_execution_violations: Some(0),
             max_memory_governance_failures: Some(0),
+            max_memory_feedback_evidence_failures: Some(0),
             min_memory_governance_cases: None,
             min_memory_governance_device_profiles: None,
             min_memory_retention_activity_cases: None,
@@ -830,7 +832,7 @@ fn missing_persistent_roundtrip_devices(
         .collect()
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct BenchmarkReflectionEvidence {
     pub issue_cases: usize,
     pub total_issues: usize,
@@ -840,6 +842,11 @@ pub struct BenchmarkReflectionEvidence {
     pub total_revision_actions: usize,
     pub live_memory_feedback_reinforcements: usize,
     pub live_memory_feedback_penalties: usize,
+    pub live_memory_feedback_applied: usize,
+    pub live_memory_feedback_removed: usize,
+    pub live_memory_feedback_missing: usize,
+    pub live_memory_feedback_strength_delta: f32,
+    pub memory_feedback_failures: Vec<String>,
     issue_devices: Vec<DeviceClass>,
     critical_issue_devices: Vec<DeviceClass>,
     revision_action_devices: Vec<DeviceClass>,
@@ -859,6 +866,59 @@ impl BenchmarkReflectionEvidence {
         self.total_revision_actions += revision_actions;
         self.live_memory_feedback_reinforcements += outcome.memory_feedback.reinforced;
         self.live_memory_feedback_penalties += outcome.memory_feedback.penalized;
+        self.live_memory_feedback_applied += outcome.memory_feedback.applied_updates();
+        self.live_memory_feedback_removed += outcome.memory_feedback.removed_updates();
+        self.live_memory_feedback_missing += outcome.memory_feedback.missing_updates();
+        self.live_memory_feedback_strength_delta += outcome.memory_feedback.strength_delta();
+        let expected_updates = outcome
+            .memory_feedback
+            .reinforced
+            .saturating_add(outcome.memory_feedback.penalized);
+        if outcome.memory_feedback.updates.len() != expected_updates {
+            self.memory_feedback_failures.push(format!(
+                "{}:{} memory feedback update reports {} do not match reinforced+penalized {}",
+                outcome.hardware_plan.device.as_str(),
+                outcome.experience_id,
+                outcome.memory_feedback.updates.len(),
+                expected_updates
+            ));
+        }
+        if outcome
+            .memory_feedback
+            .applied_updates()
+            .saturating_add(outcome.memory_feedback.missing_updates())
+            != expected_updates
+        {
+            self.memory_feedback_failures.push(format!(
+                "{}:{} memory feedback applied+missing {} does not match updates {}",
+                outcome.hardware_plan.device.as_str(),
+                outcome.experience_id,
+                outcome
+                    .memory_feedback
+                    .applied_updates()
+                    .saturating_add(outcome.memory_feedback.missing_updates()),
+                expected_updates
+            ));
+        }
+        if outcome.memory_feedback.removed_updates() > outcome.memory_feedback.applied_updates() {
+            self.memory_feedback_failures.push(format!(
+                "{}:{} memory feedback removed {} exceeds applied {}",
+                outcome.hardware_plan.device.as_str(),
+                outcome.experience_id,
+                outcome.memory_feedback.removed_updates(),
+                outcome.memory_feedback.applied_updates()
+            ));
+        }
+        if outcome.memory_feedback.total_updates() > 0
+            && outcome.memory_feedback.applied_updates() == 0
+            && outcome.memory_feedback.missing_updates() == 0
+        {
+            self.memory_feedback_failures.push(format!(
+                "{}:{} memory feedback has updates but no applied/missing evidence",
+                outcome.hardware_plan.device.as_str(),
+                outcome.experience_id
+            ));
+        }
 
         let device = outcome.hardware_plan.device;
         if issues > 0 {
@@ -886,6 +946,10 @@ impl BenchmarkReflectionEvidence {
 
     pub fn live_memory_feedback_updates(&self) -> usize {
         self.live_memory_feedback_reinforcements + self.live_memory_feedback_penalties
+    }
+
+    pub fn memory_feedback_evidence_failures(&self) -> usize {
+        self.memory_feedback_failures.len()
     }
 }
 
@@ -1864,6 +1928,26 @@ impl BenchmarkSummary {
 
     pub fn total_live_memory_feedback_updates(&self) -> usize {
         self.reflection_evidence.live_memory_feedback_updates()
+    }
+
+    pub fn total_live_memory_feedback_applied(&self) -> usize {
+        self.reflection_evidence.live_memory_feedback_applied
+    }
+
+    pub fn total_live_memory_feedback_removed(&self) -> usize {
+        self.reflection_evidence.live_memory_feedback_removed
+    }
+
+    pub fn total_live_memory_feedback_missing(&self) -> usize {
+        self.reflection_evidence.live_memory_feedback_missing
+    }
+
+    pub fn total_live_memory_feedback_strength_delta(&self) -> f32 {
+        self.reflection_evidence.live_memory_feedback_strength_delta
+    }
+
+    pub fn total_memory_feedback_evidence_failures(&self) -> usize {
+        self.reflection_evidence.memory_feedback_evidence_failures()
     }
 
     pub fn total_stored_memories(&self) -> usize {
@@ -2966,6 +3050,20 @@ impl BenchmarkSummary {
             }
         }
 
+        if let Some(max_memory_feedback_evidence_failures) =
+            gate.max_memory_feedback_evidence_failures
+        {
+            let memory_feedback_evidence_failures = self.total_memory_feedback_evidence_failures();
+            if memory_feedback_evidence_failures > max_memory_feedback_evidence_failures {
+                failures.push(format!(
+                    "memory_feedback_evidence_failures {} above maximum {}: {}",
+                    memory_feedback_evidence_failures,
+                    max_memory_feedback_evidence_failures,
+                    self.reflection_evidence.memory_feedback_failures.join("; ")
+                ));
+            }
+        }
+
         if let Some(min_memory_governance_cases) = gate.min_memory_governance_cases {
             let memory_governance_cases = self.memory_governance_cases();
             if memory_governance_cases < min_memory_governance_cases {
@@ -3167,7 +3265,7 @@ impl BenchmarkSummary {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
+            "cases={} total_elapsed_ms={} avg_quality={:.3} avg_reward={:.3} avg_attention_fraction={:.2} device_profiles={} devices={} recursive_device_profiles={} recursive_devices={} recursive_cases={} max_recursive_waves={} recursive_runtime_calls={} auto_replay_applied={} auto_replay_router_updates={} auto_replay_hierarchy_updates={} auto_replay_router_threshold_mutations={} auto_replay_hierarchy_weight_mutations={} auto_replay_router_threshold_delta={:.6} auto_replay_hierarchy_weight_delta={:.6} auto_replay_memory_updates={} auto_replay_memory_reinforcements={} auto_replay_memory_penalties={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={} live_memory_feedback_applied={} live_memory_feedback_removed={} live_memory_feedback_missing={} live_memory_feedback_strength_delta={:.6} memory_feedback_evidence_failures={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_recursive_items={} auto_replay_recursive_runtime_calls={} auto_replay_max_recursive_call_pressure={:.3} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta={:.6} evolution_live_hierarchy_weight_delta={:.6} evolution_live_memory_updates={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} evolution_live_inference_device_profiles={} evolution_live_router_threshold_mutation_device_profiles={} evolution_live_hierarchy_weight_mutation_device_profiles={} evolution_live_memory_update_device_profiles={} evolution_live_stored_memory_update_device_profiles={} evolution_live_reflection_issue_device_profiles={} evolution_live_critical_reflection_issue_device_profiles={} evolution_live_revision_action_device_profiles={} evolution_replay_runs={} evolution_replay_items={} evolution_router_threshold_mutations={} evolution_hierarchy_weight_mutations={} evolution_router_threshold_delta={:.6} evolution_hierarchy_weight_delta={:.6} evolution_memory_updates={} evolution_replay_live_memory_feedback_items={} evolution_replay_live_memory_feedback_updates={} evolution_replay_live_memory_feedback_reinforcements={} evolution_replay_live_memory_feedback_penalties={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={} evolution_drift_rollbacks={} evolution_rollback_router_threshold_delta={:.6} evolution_rollback_hierarchy_weight_delta={:.6} sparse_skipped_cases={} sparse_skipped={} sparse_skipped_tokens={} stored_memories={} compacted_memories={} memory_governance_cases={} memory_governance_device_profiles={} memory_governance_failures={} memory_retention_activity_cases={} memory_retention_decayed={} memory_retention_removed={} memory_compaction_activity_cases={} memory_compaction_merged={} memory_compaction_removed={} runtime_forward_cases={} runtime_forward_energy_cases={} runtime_kv_influence_cases={} runtime_layer_mode_cases={} runtime_all_layer_mode_cases={} runtime_global_layers={} runtime_local_window_layers={} runtime_convolutional_fusion_layers={} runtime_token_cases={} runtime_tokens={} runtime_uncertainty_cases={} runtime_uncertainty_tokens={} runtime_kv_import_cases={} runtime_kv_imported={} runtime_kv_exported={} runtime_kv_stored={} runtime_adapter_contract_cases={} runtime_adapter_kinds={} runtime_adapter_contract_violations={} runtime_adapter_observations={} runtime_adapter_best_score={} runtime_embedding_cases={} runtime_embedding_device_profiles={} runtime_embedding_devices={} runtime_embedding_calls={} embedding_fallback_cases={} embedding_fallback_calls={} embedding_evidence_failures={} runtime_device_execution_cases={} runtime_device_execution_matched_cases={} runtime_device_execution_device_profiles={} runtime_device_execution_devices={} runtime_device_execution_violations={} reflection_issue_cases={} reflection_issues={} reflection_issue_device_profiles={} critical_reflection_issue_cases={} critical_reflection_issues={} critical_reflection_issue_device_profiles={} revision_action_cases={} revision_actions={} revision_action_device_profiles={} drift_watch={} drift_block={} drift_rollback={}",
             self.len(),
             self.total_elapsed_ms(),
             self.average_quality(),
@@ -3193,6 +3291,11 @@ impl BenchmarkSummary {
             self.total_live_memory_feedback_updates(),
             self.total_live_memory_feedback_reinforcements(),
             self.total_live_memory_feedback_penalties(),
+            self.total_live_memory_feedback_applied(),
+            self.total_live_memory_feedback_removed(),
+            self.total_live_memory_feedback_missing(),
+            self.total_live_memory_feedback_strength_delta(),
+            self.total_memory_feedback_evidence_failures(),
             self.total_auto_replay_live_memory_feedback_items(),
             self.total_auto_replay_live_memory_feedback_updates(),
             self.total_auto_replay_live_memory_feedback_reinforcements(),
@@ -4328,6 +4431,45 @@ mod tests {
     }
 
     #[test]
+    fn gate_reports_memory_feedback_evidence_failures() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let case = BenchmarkCase::new(
+            "memory_feedback_evidence",
+            TaskProfile::Coding,
+            "Audit reinforced KV memory feedback evidence.",
+        );
+        let outcome = engine.infer(
+            InferenceRequest::new(case.prompt.clone(), case.profile),
+            &mut backend,
+        );
+        let mut summary = BenchmarkSummary::new();
+        summary.record(&case, 1, &outcome);
+        summary
+            .reflection_evidence
+            .memory_feedback_failures
+            .push("manual memory feedback evidence mismatch".to_owned());
+
+        let report = summary.evaluate(&BenchmarkGate::default());
+
+        assert!(!report.passed);
+        assert_eq!(summary.total_memory_feedback_evidence_failures(), 1);
+        assert!(
+            report
+                .failures
+                .iter()
+                .any(|failure| failure.contains("memory_feedback_evidence_failures")),
+            "{:?}",
+            report.failures
+        );
+        assert!(
+            summary
+                .summary_line()
+                .contains("memory_feedback_evidence_failures=1")
+        );
+    }
+
+    #[test]
     fn gate_reports_missing_auto_replay_live_memory_feedback_consumption() {
         let mut summary = BenchmarkSummary::new();
         let mut gate = BenchmarkGate::default();
@@ -4557,6 +4699,7 @@ mod tests {
             issue_devices: vec![DeviceClass::CpuOnly],
             critical_issue_devices: vec![DeviceClass::CpuOnly],
             revision_action_devices: vec![DeviceClass::CpuOnly],
+            ..BenchmarkReflectionEvidence::default()
         };
         let passing_report = passing.evaluate(&gate);
 

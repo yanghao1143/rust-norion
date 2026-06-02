@@ -1,5 +1,6 @@
 use crate::experience::{ExperienceRecord, recursive_runtime_calls_from_notes};
 use crate::hierarchy::TaskProfile;
+use crate::kv_cache::{MemoryUpdateAction, MemoryUpdateReport};
 use crate::process_reward::RewardAction;
 use crate::reflection::{ReflectionSeverity, RuntimeDiagnostics};
 use crate::router::RouteBudget;
@@ -348,6 +349,11 @@ pub struct ExperienceReplayReport {
     pub touched_memories: usize,
     pub memory_reinforcements: usize,
     pub memory_penalties: usize,
+    pub memory_update_reports: Vec<MemoryUpdateReport>,
+    pub applied_memory_updates: usize,
+    pub removed_memory_updates: usize,
+    pub missing_memory_updates: usize,
+    pub memory_strength_delta: f32,
     pub average_reward: f32,
     pub recursive_runtime_items: usize,
     pub recursive_runtime_calls: usize,
@@ -429,7 +435,7 @@ impl ExperienceReplayReport {
 
     pub fn summary(&self) -> String {
         format!(
-            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={}",
+            "planned={} applied={} router_updates={} hierarchy_updates={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} reinforced={} penalized={} touched_memories={} memory_reinforcements={} memory_penalties={} applied_memory_updates={} removed_memory_updates={} missing_memory_updates={} memory_strength_delta={:.6} average_reward={:.3} recursive_runtime_items={} recursive_runtime_calls={} avg_recursive_call_pressure={:.3} max_recursive_call_pressure={:.3} live_memory_feedback_items={} live_memory_feedback_updates={} live_memory_feedback_reinforcements={} live_memory_feedback_penalties={}",
             self.planned,
             self.applied,
             self.router_updates,
@@ -443,6 +449,10 @@ impl ExperienceReplayReport {
             self.touched_memories,
             self.memory_reinforcements,
             self.memory_penalties,
+            self.applied_memory_updates,
+            self.removed_memory_updates,
+            self.missing_memory_updates,
+            self.memory_strength_delta,
             self.average_reward,
             self.recursive_runtime_items,
             self.recursive_runtime_calls,
@@ -453,6 +463,24 @@ impl ExperienceReplayReport {
             self.live_memory_feedback_reinforcements,
             self.live_memory_feedback_penalties
         )
+    }
+
+    pub fn record_memory_update(&mut self, update: MemoryUpdateReport) {
+        self.touched_memories += 1;
+        match update.action {
+            MemoryUpdateAction::Reinforce => self.memory_reinforcements += 1,
+            MemoryUpdateAction::Penalize => self.memory_penalties += 1,
+        }
+        if update.was_applied() {
+            self.applied_memory_updates += 1;
+        } else {
+            self.missing_memory_updates += 1;
+        }
+        if update.removed {
+            self.removed_memory_updates += 1;
+        }
+        self.memory_strength_delta += update.strength_delta.abs();
+        self.memory_update_reports.push(update);
     }
 }
 

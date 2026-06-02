@@ -99,6 +99,69 @@ pub struct RetentionReport {
     pub removed: Vec<u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryUpdateAction {
+    Reinforce,
+    Penalize,
+}
+
+impl MemoryUpdateAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Reinforce => "reinforce",
+            Self::Penalize => "penalize",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MemoryUpdateReport {
+    pub id: u64,
+    pub action: MemoryUpdateAction,
+    pub requested_amount: f32,
+    pub strength_before: Option<f32>,
+    pub strength_after: Option<f32>,
+    pub strength_delta: f32,
+    pub removed: bool,
+}
+
+impl MemoryUpdateReport {
+    pub fn missing(id: u64, action: MemoryUpdateAction, requested_amount: f32) -> Self {
+        Self {
+            id,
+            action,
+            requested_amount,
+            strength_before: None,
+            strength_after: None,
+            strength_delta: 0.0,
+            removed: false,
+        }
+    }
+
+    pub fn applied(
+        id: u64,
+        action: MemoryUpdateAction,
+        requested_amount: f32,
+        strength_before: f32,
+        strength_after: f32,
+        removed: bool,
+    ) -> Self {
+        Self {
+            id,
+            action,
+            requested_amount,
+            strength_before: Some(strength_before),
+            strength_after: Some(strength_after),
+            strength_delta: strength_after - strength_before,
+            removed,
+        }
+    }
+
+    pub fn was_applied(self) -> bool {
+        self.strength_before.is_some()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct KvFusionCache {
     entries: Vec<MemoryEntry>,
@@ -212,26 +275,53 @@ impl KvFusionCache {
         id
     }
 
-    pub fn reinforce(&mut self, id: u64, amount: f32) {
+    pub fn reinforce(&mut self, id: u64, amount: f32) -> MemoryUpdateReport {
+        let amount = amount.clamp(0.0, 1.0);
         if let Some(index) = self.entries.iter().position(|entry| entry.id == id) {
             let now = self.tick();
             let entry = &mut self.entries[index];
-            entry.strength = (entry.strength + amount.clamp(0.0, 1.0) * 0.18).clamp(0.01, 3.0);
+            let strength_before = entry.strength;
+            entry.strength = (entry.strength + amount * 0.18).clamp(0.01, 3.0);
             entry.hits += 1;
             entry.last_access = now;
+            return MemoryUpdateReport::applied(
+                id,
+                MemoryUpdateAction::Reinforce,
+                amount,
+                strength_before,
+                entry.strength,
+                false,
+            );
         }
+
+        MemoryUpdateReport::missing(id, MemoryUpdateAction::Reinforce, amount)
     }
 
-    pub fn penalize(&mut self, id: u64, amount: f32) {
+    pub fn penalize(&mut self, id: u64, amount: f32) -> MemoryUpdateReport {
+        let amount = amount.clamp(0.0, 1.0);
+        let mut report = MemoryUpdateReport::missing(id, MemoryUpdateAction::Penalize, amount);
         if let Some(index) = self.entries.iter().position(|entry| entry.id == id) {
             let now = self.tick();
             let entry = &mut self.entries[index];
-            entry.strength = (entry.strength - amount.clamp(0.0, 1.0) * 0.22).clamp(0.0, 3.0);
+            let strength_before = entry.strength;
+            entry.strength = (entry.strength - amount * 0.22).clamp(0.0, 3.0);
             entry.failures += 1;
             entry.last_access = now;
+            report = MemoryUpdateReport::applied(
+                id,
+                MemoryUpdateAction::Penalize,
+                amount,
+                strength_before,
+                entry.strength,
+                false,
+            );
         }
         self.entries
             .retain(|entry| entry.strength > 0.03 || entry.hits > entry.failures);
+        if report.was_applied() && self.entries.iter().all(|entry| entry.id != id) {
+            report.removed = true;
+        }
+        report
     }
 
     pub fn apply_retention(&mut self, policy: MemoryRetentionPolicy) -> RetentionReport {
@@ -880,11 +970,42 @@ mod tests {
         let mut cache = KvFusionCache::new();
         let id = cache.store_or_fuse("bad memory", vec![0.1, 0.2], 0.05);
 
-        for _ in 0..3 {
-            cache.penalize(id, 1.0);
-        }
+        let first = cache.penalize(id, 1.0);
+        let second = cache.penalize(id, 1.0);
+        let third = cache.penalize(id, 1.0);
 
+        assert_eq!(first.action, MemoryUpdateAction::Penalize);
+        assert_eq!(first.id, id);
+        assert!(first.was_applied());
+        assert!(first.strength_delta < 0.0);
+        assert!(first.removed || second.removed || third.removed);
+        if first.removed {
+            assert!(!second.was_applied());
+            assert!(!third.was_applied());
+        }
         assert!(cache.entries().iter().all(|entry| entry.id != id));
+    }
+
+    #[test]
+    fn memory_update_reports_record_reinforcement_strength_delta() {
+        let mut cache = KvFusionCache::new();
+        let id = cache.store_or_fuse("useful memory", vec![0.4, 0.6], 0.6);
+        let before = cache.entries()[0].strength;
+
+        let report = cache.reinforce(id, 0.5);
+
+        assert_eq!(report.action, MemoryUpdateAction::Reinforce);
+        assert_eq!(report.id, id);
+        assert_eq!(report.requested_amount, 0.5);
+        assert_eq!(report.strength_before, Some(before));
+        assert_eq!(report.strength_after, Some(cache.entries()[0].strength));
+        assert!(report.was_applied());
+        assert!(!report.removed);
+        assert!(report.strength_delta > 0.0);
+
+        let missing = cache.reinforce(id + 1000, 0.8);
+        assert!(!missing.was_applied());
+        assert_eq!(missing.strength_delta, 0.0);
     }
 
     #[test]

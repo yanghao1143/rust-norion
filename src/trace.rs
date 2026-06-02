@@ -237,6 +237,30 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"feedback_penalty_amount\":",
     },
     TraceRequiredField {
+        name: "memory_feedback_updates",
+        marker: "\"feedback_updates\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_applied",
+        marker: "\"feedback_applied\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_removed",
+        marker: "\"feedback_removed\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_missing",
+        marker: "\"feedback_missing\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_strength_delta",
+        marker: "\"feedback_strength_delta\":",
+    },
+    TraceRequiredField {
+        name: "memory_feedback_update_summaries",
+        marker: "\"feedback_update_summaries\":",
+    },
+    TraceRequiredField {
         name: "drift",
         marker: "\"drift\":{",
     },
@@ -543,10 +567,118 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_runtime_device_execution(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
+    failures.extend(evaluate_trace_memory_feedback(line));
     failures.extend(evaluate_trace_memory_governance(line));
     failures.extend(evaluate_trace_drift(line));
     failures.extend(evaluate_trace_auto_replay(line));
     failures.extend(evaluate_trace_live_evolution(line));
+
+    failures
+}
+
+fn evaluate_trace_memory_feedback(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(memory) = json_object_after_field(line, "memory") else {
+        failures.push("memory object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let reinforced = extract_json_usize_field(memory, "feedback_reinforced").unwrap_or(0);
+    let penalized = extract_json_usize_field(memory, "feedback_penalized").unwrap_or(0);
+    let updates = extract_json_usize_field(memory, "feedback_updates").unwrap_or(0);
+    let applied = extract_json_usize_field(memory, "feedback_applied").unwrap_or(0);
+    let removed = extract_json_usize_field(memory, "feedback_removed").unwrap_or(0);
+    let missing = extract_json_usize_field(memory, "feedback_missing").unwrap_or(0);
+    let strength_delta =
+        extract_json_f32_field(memory, "feedback_strength_delta").unwrap_or(f32::NAN);
+    let summaries =
+        extract_json_string_array_field(memory, "feedback_update_summaries").unwrap_or_default();
+
+    let expected_updates = reinforced.saturating_add(penalized);
+    if updates != expected_updates {
+        failures.push(format!(
+            "memory feedback_updates {updates} does not match reinforced+penalized {expected_updates}"
+        ));
+    }
+    if summaries.len() != updates {
+        failures.push(format!(
+            "memory feedback_update_summaries {} does not match feedback_updates {updates}",
+            summaries.len()
+        ));
+    }
+    if applied.saturating_add(missing) != updates {
+        failures.push(format!(
+            "memory feedback applied+missing {} does not match feedback_updates {updates}",
+            applied.saturating_add(missing)
+        ));
+    }
+    if removed > applied {
+        failures.push(format!(
+            "memory feedback_removed {removed} exceeds feedback_applied {applied}"
+        ));
+    }
+    if !strength_delta.is_finite() || strength_delta < 0.0 {
+        failures.push(format!(
+            "memory feedback_strength_delta {strength_delta:.6} must be finite and >= 0"
+        ));
+    }
+
+    let summary_applied = summaries
+        .iter()
+        .filter(|summary| summary.contains("applied=true"))
+        .count();
+    let summary_missing = summaries
+        .iter()
+        .filter(|summary| summary.contains("applied=false"))
+        .count();
+    let summary_removed = summaries
+        .iter()
+        .filter(|summary| summary.contains("removed=true"))
+        .count();
+    let summary_reinforced = summaries
+        .iter()
+        .filter(|summary| summary.starts_with("reinforce#"))
+        .count();
+    let summary_penalized = summaries
+        .iter()
+        .filter(|summary| summary.starts_with("penalize#"))
+        .count();
+    let summary_delta = summaries
+        .iter()
+        .filter_map(|summary| trace_note_f32(summary, "delta="))
+        .map(f32::abs)
+        .sum::<f32>();
+
+    if summary_reinforced != reinforced {
+        failures.push(format!(
+            "memory feedback reinforce summaries {summary_reinforced} do not match feedback_reinforced {reinforced}"
+        ));
+    }
+    if summary_penalized != penalized {
+        failures.push(format!(
+            "memory feedback penalize summaries {summary_penalized} do not match feedback_penalized {penalized}"
+        ));
+    }
+    if summary_applied != applied {
+        failures.push(format!(
+            "memory feedback applied summaries {summary_applied} do not match feedback_applied {applied}"
+        ));
+    }
+    if summary_missing != missing {
+        failures.push(format!(
+            "memory feedback missing summaries {summary_missing} do not match feedback_missing {missing}"
+        ));
+    }
+    if summary_removed != removed {
+        failures.push(format!(
+            "memory feedback removed summaries {summary_removed} do not match feedback_removed {removed}"
+        ));
+    }
+    if (summary_delta - strength_delta).abs() > 0.000_010 {
+        failures.push(format!(
+            "memory feedback strength delta summaries {summary_delta:.6} do not match feedback_strength_delta {strength_delta:.6}"
+        ));
+    }
 
     failures
 }
@@ -2121,6 +2253,13 @@ fn parse_json_string(value: &str) -> Option<(String, usize)> {
     None
 }
 
+fn trace_note_f32(note: &str, key: &str) -> Option<f32> {
+    note.split(':')
+        .find_map(|part| part.strip_prefix(key))
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite())
+}
+
 pub fn trace_json_line(
     prompt: &str,
     profile: TaskProfile,
@@ -2128,6 +2267,27 @@ pub fn trace_json_line(
     outcome: &InferenceOutcome,
 ) -> String {
     trace_json_line_with_case(None, prompt, profile, elapsed_ms, outcome)
+}
+
+fn memory_feedback_summaries(outcome: &InferenceOutcome) -> Vec<String> {
+    outcome
+        .memory_feedback
+        .updates
+        .iter()
+        .map(|update| {
+            format!(
+                "{}#{}:amount={:.6}:before={}:after={}:delta={:.6}:applied={}:removed={}",
+                update.action.as_str(),
+                update.id,
+                update.requested_amount,
+                option_f32_json(update.strength_before),
+                option_f32_json(update.strength_after),
+                update.strength_delta,
+                update.was_applied(),
+                update.removed
+            )
+        })
+        .collect()
 }
 
 pub fn trace_json_line_with_case(
@@ -2186,7 +2346,7 @@ pub fn trace_json_line_with_case(
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
          \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
          \"stream_windows\":{},\
-         \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6}}},\
+         \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
@@ -2352,6 +2512,12 @@ pub fn trace_json_line_with_case(
         outcome.memory_feedback.penalized,
         outcome.memory_feedback.reinforcement_amount,
         outcome.memory_feedback.penalty_amount,
+        outcome.memory_feedback.total_updates(),
+        outcome.memory_feedback.applied_updates(),
+        outcome.memory_feedback.removed_updates(),
+        outcome.memory_feedback.missing_updates(),
+        outcome.memory_feedback.strength_delta(),
+        string_array_json(&memory_feedback_summaries(outcome)),
         outcome.drift_report.severity.as_str(),
         outcome.drift_report.allow_memory_write,
         outcome.drift_report.allow_runtime_kv_write,
@@ -2693,6 +2859,12 @@ mod tests {
         assert!(line.contains("\"feedback_penalized\":"));
         assert!(line.contains("\"feedback_reinforcement_amount\":"));
         assert!(line.contains("\"feedback_penalty_amount\":"));
+        assert!(line.contains("\"feedback_updates\":"));
+        assert!(line.contains("\"feedback_applied\":"));
+        assert!(line.contains("\"feedback_removed\":"));
+        assert!(line.contains("\"feedback_missing\":"));
+        assert!(line.contains("\"feedback_strength_delta\":"));
+        assert!(line.contains("\"feedback_update_summaries\":"));
         assert!(line.contains("\"stale_after\":"));
         assert!(line.contains("\"decay_rate\":"));
         assert!(line.contains("\"similarity_threshold\":"));
@@ -2844,6 +3016,36 @@ mod tests {
         let failures = evaluate_trace_schema_line(&line);
 
         assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_memory_feedback_count_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace memory feedback mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = replace_in_trace_object(
+            &trace_json_line(
+                "trace memory feedback mismatch",
+                TaskProfile::General,
+                5,
+                &outcome,
+            ),
+            "memory",
+            "\"feedback_updates\":0",
+            "\"feedback_updates\":1",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("memory feedback_updates")),
+            "{failures:?}"
+        );
     }
 
     #[test]
