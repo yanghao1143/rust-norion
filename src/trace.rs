@@ -105,6 +105,10 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"best_adapter\":",
     },
     TraceRequiredField {
+        name: "runtime_adapter_selection_mismatch",
+        marker: "\"selection_mismatch\":",
+    },
+    TraceRequiredField {
         name: "runtime_adapter_best_score",
         marker: "\"best_score\":",
     },
@@ -1914,12 +1918,22 @@ fn evaluate_trace_embedding(line: &str) -> Vec<String> {
 
 fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
-    let observation_count = extract_json_usize_field(line, "observation_count").unwrap_or(0);
-    let best_adapter = extract_json_nullable_string_field(line, "best_adapter");
-    let best_score = extract_json_nullable_f32_field(line, "best_score");
-    let best_reward = extract_json_nullable_f32_field(line, "best_reward");
-    let best_quality = extract_json_nullable_f32_field(line, "best_quality");
-    let best_experience_id = extract_json_nullable_u64_field(line, "best_experience_id");
+    let observations =
+        json_object_after_field(line, "runtime_adapter_observations").unwrap_or(line);
+    let runtime_diagnostics = json_object_after_field(line, "runtime_diagnostics").unwrap_or(line);
+    let observation_count =
+        extract_json_usize_field(observations, "observation_count").unwrap_or(0);
+    let best_adapter = extract_json_nullable_string_field(observations, "best_adapter");
+    let best_score = extract_json_nullable_f32_field(observations, "best_score");
+    let best_reward = extract_json_nullable_f32_field(observations, "best_reward");
+    let best_quality = extract_json_nullable_f32_field(observations, "best_quality");
+    let best_experience_id = extract_json_nullable_u64_field(observations, "best_experience_id");
+    let selection_mismatch = extract_json_bool_field(observations, "selection_mismatch");
+    let selected_adapter = extract_json_string_field(runtime_diagnostics, "selected_adapter");
+
+    if selection_mismatch.is_none() {
+        failures.push("runtime_adapter_observations selection_mismatch is missing".to_owned());
+    }
 
     if observation_count == 0 {
         if best_adapter.is_some()
@@ -1931,6 +1945,11 @@ fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
             failures.push(
                 "runtime_adapter_observations count is zero but best observation fields are populated"
                     .to_owned(),
+            );
+        }
+        if selection_mismatch == Some(true) {
+            failures.push(
+                "runtime_adapter_observations count is zero but selection_mismatch=true".to_owned(),
             );
         }
         return failures;
@@ -1964,6 +1983,18 @@ fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
             "runtime_adapter_observations count is positive but best_experience_id is missing"
                 .to_owned(),
         );
+    }
+
+    let expected_selection_mismatch = selected_adapter
+        .as_deref()
+        .map(|selected_adapter| selected_adapter != best_adapter.as_str())
+        .unwrap_or(false);
+    if let Some(selection_mismatch) = selection_mismatch {
+        if selection_mismatch != expected_selection_mismatch {
+            failures.push(format!(
+                "runtime_adapter_observations selection_mismatch {selection_mismatch} does not match best_adapter/selected_adapter comparison {expected_selection_mismatch}"
+            ));
+        }
     }
 
     let adapter_hints = extract_json_string_array_field(line, "adapter_hints").unwrap_or_default();
@@ -2577,6 +2608,13 @@ pub fn trace_json_line_with_case(
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = outcome.auto_replay_report.as_ref();
     let best_adapter_observation = outcome.runtime_adapter_observations.first();
+    let runtime_adapter_selection_mismatch = match (
+        best_adapter_observation.map(|observation| observation.adapter.as_str()),
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+    ) {
+        (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
+        _ => false,
+    };
     let toolsmith_blueprints = outcome
         .toolsmith_plan
         .blueprints
@@ -2603,7 +2641,7 @@ pub fn trace_json_line_with_case(
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
-         \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
+         \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{},\"runtime_calls\":{}}},\
@@ -2693,6 +2731,7 @@ pub fn trace_json_line_with_case(
         option_owned_string_json(
             best_adapter_observation.map(|observation| observation.adapter.as_str())
         ),
+        runtime_adapter_selection_mismatch,
         option_f32_json(best_adapter_observation.map(|observation| observation.score)),
         option_f32_json(best_adapter_observation.map(|observation| observation.reward)),
         option_f32_json(best_adapter_observation.map(|observation| observation.quality)),
@@ -3126,6 +3165,7 @@ mod tests {
         assert!(line.contains("\"runtime_adapter_observations\":"));
         assert!(line.contains("\"observation_count\":"));
         assert!(line.contains("\"best_adapter\":"));
+        assert!(line.contains("\"selection_mismatch\":"));
         assert!(line.contains("\"best_score\":"));
         assert!(line.contains("\"forward_energy\":"));
         assert!(line.contains("\"kv_influence\":"));
@@ -4166,6 +4206,77 @@ mod tests {
         let failures = evaluate_trace_schema_line(&line);
 
         assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_accepts_runtime_adapter_selection_mismatch_evidence() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RuntimePrecisionBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace adapter selection evidence", TaskProfile::Coding),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace adapter selection evidence",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
+        .replacen("\"observation_count\":0", "\"observation_count\":1", 1)
+        .replacen("\"best_adapter\":null", "\"best_adapter\":\"cpu-simd\"", 1)
+        .replacen(
+            "\"selection_mismatch\":false",
+            "\"selection_mismatch\":true",
+            1,
+        )
+        .replacen("\"best_score\":null", "\"best_score\":0.510000", 1)
+        .replacen("\"best_reward\":null", "\"best_reward\":0.500000", 1)
+        .replacen("\"best_quality\":null", "\"best_quality\":0.800000", 1)
+        .replacen("\"best_experience_id\":null", "\"best_experience_id\":7", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_runtime_adapter_selection_mismatch_flag_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RuntimePrecisionBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace adapter selection flag mismatch", TaskProfile::Coding),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace adapter selection flag mismatch",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        )
+        .replacen("\"observation_count\":0", "\"observation_count\":1", 1)
+        .replacen(
+            "\"best_adapter\":null",
+            "\"best_adapter\":\"portable-rust\"",
+            1,
+        )
+        .replacen(
+            "\"selection_mismatch\":false",
+            "\"selection_mismatch\":true",
+            1,
+        )
+        .replacen("\"best_score\":null", "\"best_score\":0.510000", 1)
+        .replacen("\"best_reward\":null", "\"best_reward\":0.500000", 1)
+        .replacen("\"best_quality\":null", "\"best_quality\":0.800000", 1)
+        .replacen("\"best_experience_id\":null", "\"best_experience_id\":7", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("selection_mismatch true")),
+            "{failures:?}"
+        );
     }
 
     #[test]

@@ -479,13 +479,16 @@ hardware device, execution lanes, KV budgets, adapter hints, and selected
 runtime adapter agree with the single-line runtime device contract. Runtime
 adapter observations are schema-checked as well: a positive observation count
 must carry a bounded best score/reward/quality, an experience id, and a best
-adapter allowed by the current device contract:
+adapter allowed by the current device contract. The same observation block also
+emits `selection_mismatch`, and the schema gate verifies that this flag matches
+the trace's `best_adapter` versus `runtime_diagnostics.selected_adapter`
+comparison:
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
 ```
 
-检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract`、累计 `evolution_ledger` 计数与设备推导出的硬件 KV budget。门禁还会检查 trace 里的设备、执行通道、KV budget、adapter hints 和实际 selected runtime adapter 是否与单行 runtime device contract 一致。runtime adapter observation 也会做语义检查：只要 observation count 为正，就必须带有有界 best score/reward/quality、experience id，并且 best adapter 必须被当前设备契约允许：
+检查已有 trace JSONL 是否仍包含本地控制平面要求的核心字段，包括 runtime token 不确定性、稳定的 `runtime_device_contract`、累计 `evolution_ledger` 计数与设备推导出的硬件 KV budget。门禁还会检查 trace 里的设备、执行通道、KV budget、adapter hints 和实际 selected runtime adapter 是否与单行 runtime device contract 一致。runtime adapter observation 也会做语义检查：只要 observation count 为正，就必须带有有界 best score/reward/quality、experience id，并且 best adapter 必须被当前设备契约允许。同一个 observation block 还会输出 `selection_mismatch`，schema gate 会校验它是否真实反映 `best_adapter` 与 `runtime_diagnostics.selected_adapter` 的对比结果：
 
 ```powershell
 cargo run -- --trace-schema-gate target/noiron-benchmark.jsonl
@@ -930,6 +933,10 @@ checked against the requested model id, architecture envelope, and device
 adapter hints; violations are traced as low-confidence contract issues and
 exported runtime KV is discarded so an invalid adapter path cannot pollute
 durable memory.
+Trace JSONL now carries `runtime_adapter_observations.selection_mismatch` as
+the per-line audit fact for whether the selected adapter differs from the best
+compatible observation; policy gates can then decide whether a mismatch is
+allowed for ABI validation or forbidden for local-runtime selection.
 Benchmark gates can cap `runtime_adapter_selection_mismatches` with
 `--benchmark-max-runtime-adapter-selection-mismatches`, proving the runtime did
 not merely receive historical adapter observations but actually selected the
@@ -941,6 +948,7 @@ runtime response 也可以返回结构化 `diagnostics`，让本地或命令行 
 同一组 diagnostics 也会持久化进 experience 记录，因此后续经验回放能知道是哪一个自研 runtime、adapter、forward energy 和 KV influence 产生了有效或较弱的控制路径。runtime KV influence 和持久化的 live memory-feedback notes 会加强有用记忆的回放强化；critical reflection issue、revision action、在线惩罚反馈和过高的 recursive runtime call 成本会削弱强化或加大惩罚。在线推理时，drift 严重度、反思矛盾、critical issue、perplexity / consistency 指标也会放大被 block 或 rollback 答案用过的记忆惩罚，并把这次反馈写入 experience，供后续 replay 继续使用。
 runtime request 还会从这些经验匹配中提炼有边界的 adapter observation。自研 runtime manifest 会先遵守当前设备执行计划，然后只在 adapter 同时被设备计划和 runtime manifest 支持时，才优先选择历史表现更强的 adapter。
 发送请求前，backend 会按当前设备执行计划过滤历史 adapter observation；同一组受设备约束的 observation 也会暴露在每次 inference outcome、trace JSONL 和 benchmark summary 中，因此高分但当前不可用的 CUDA / Metal / NPU 历史路径不会影响 CPU、移动端、浏览器或边缘设备运行。生成后，response diagnostics 会按请求的 model id、架构边界和设备 adapter hints 做契约检查。违反契约会被记录为低置信 runtime contract issue，并丢弃导出的 runtime KV，避免无效 adapter 路径污染长期记忆。
+trace JSONL 现在会在 `runtime_adapter_observations.selection_mismatch` 中记录逐行审计事实：实际 selected adapter 是否偏离当前设备兼容范围内的最佳 observation；之后由策略门禁决定 ABI 验证场景是否允许 mismatch，或 local runtime 选择一致性场景是否必须禁止 mismatch。
 benchmark gate 还可以通过 `--benchmark-max-runtime-adapter-selection-mismatches`
 限制 `runtime_adapter_selection_mismatches`，证明 runtime 不只是收到了历史
 adapter observation，而是真的为当前设备执行计划选择了兼容范围内评分最高的 adapter。
