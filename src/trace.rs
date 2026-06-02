@@ -4366,6 +4366,67 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_live_online_reward_count_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace live online reward mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = increment_trace_object_usize(
+            &trace_json_line(
+                "trace live online reward mismatch",
+                TaskProfile::General,
+                5,
+                &outcome,
+            ),
+            "live_evolution",
+            "live_online_reward_feedbacks",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("live_online_reward_feedbacks")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_cumulative_live_online_reward_count_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace cumulative live online reward mismatch",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = increment_trace_object_usize(
+            &trace_json_line(
+                "trace cumulative live online reward mismatch",
+                TaskProfile::General,
+                5,
+                &outcome,
+            ),
+            "evolution_ledger",
+            "cumulative_live_online_reward_feedbacks",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("cumulative_live_online_reward_feedbacks")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_accepts_drift_rollback_ledger_consistency() {
         let line = rollback_trace_line();
 
@@ -4501,6 +4562,42 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| { failure.contains("cumulative_replay_live_evolution_items") }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_auto_replay_live_evolution_online_reward_count_mismatch() {
+        let line = increment_trace_object_usize(
+            &auto_replay_trace_line(),
+            "auto_replay",
+            "live_evolution_online_reward_feedbacks",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("auto_replay live_evolution_online_reward_feedbacks")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_cumulative_replay_live_evolution_online_reward_count_mismatch() {
+        let line = increment_trace_object_usize(
+            &auto_replay_trace_line(),
+            "evolution_ledger",
+            "cumulative_replay_live_evolution_online_reward_feedbacks",
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_replay_live_evolution_online_reward_feedbacks")
+            }),
             "{failures:?}"
         );
     }
@@ -5029,6 +5126,18 @@ mod tests {
         }
 
         panic!("trace object should close");
+    }
+
+    fn increment_trace_object_usize(line: &str, object: &str, field: &str) -> String {
+        let object_json = json_object_after_field(line, object).expect("trace object should exist");
+        let value =
+            extract_json_usize_field(object_json, field).expect("trace usize field should exist");
+        replace_in_trace_object(
+            line,
+            object,
+            &format!("\"{field}\":{value}"),
+            &format!("\"{field}\":{}", value.saturating_add(1)),
+        )
     }
 
     #[test]
