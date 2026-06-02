@@ -1127,7 +1127,7 @@ impl HardwarePlan {
             .collect::<Vec<_>>()
             .join("+");
         format!(
-            "device={} tier={} pressure={:.3} compute_headroom={:.2} primary={} fallback={} memory={} adapters={} parallel_chunks={} kv_prefetch={} kv_bits={}/{} disk_spill={} local_kv_tokens={} global_kv_tokens={} latency_budget_ms={}",
+            "device={} tier={} pressure={:.3} compute_headroom={:.2} primary={} fallback={} memory={} adapters={} parallel_chunks={} kv_prefetch={} kv_bits={}/{} hot_kv_bits={} cold_kv_bits={} disk_spill={} local_kv_tokens={} global_kv_tokens={} latency_budget_ms={}",
             self.device.as_str(),
             self.tier.as_str(),
             self.pressure,
@@ -1138,6 +1138,8 @@ impl HardwarePlan {
             adapters,
             self.execution.max_parallel_chunks,
             self.execution.kv_prefetch_blocks,
+            self.execution.hot_kv_precision_bits,
+            self.execution.cold_kv_precision_bits,
             self.execution.hot_kv_precision_bits,
             self.execution.cold_kv_precision_bits,
             self.execution.allow_disk_spill,
@@ -1218,6 +1220,10 @@ pub struct DevicePlanGateRow {
     pub runtime_max_export_blocks: usize,
     pub runtime_hot_kv_precision_bits: u8,
     pub runtime_cold_kv_precision_bits: u8,
+    pub hot_quant_policy_covered: bool,
+    pub cold_quant_policy_covered: bool,
+    pub runtime_quant_policy_covered: bool,
+    pub kv_precision_order_valid: bool,
     pub runtime_device_contract: String,
     pub failures: Vec<String>,
 }
@@ -1270,6 +1276,14 @@ impl DevicePlanGateRow {
             runtime_max_export_blocks: runtime_manifest.kv_policy.max_export_blocks,
             runtime_hot_kv_precision_bits: runtime_manifest.quantization.hot_kv.width(),
             runtime_cold_kv_precision_bits: runtime_manifest.quantization.cold_kv.width(),
+            hot_quant_policy_covered: matches!(plan.execution.hot_kv_precision_bits, 4 | 8),
+            cold_quant_policy_covered: matches!(plan.execution.cold_kv_precision_bits, 4 | 8),
+            runtime_quant_policy_covered: plan.execution.hot_kv_precision_bits
+                <= runtime_manifest.quantization.hot_kv.width()
+                && plan.execution.cold_kv_precision_bits
+                    <= runtime_manifest.quantization.cold_kv.width(),
+            kv_precision_order_valid: plan.execution.cold_kv_precision_bits
+                <= plan.execution.hot_kv_precision_bits,
             runtime_device_contract,
             failures,
         }
@@ -1360,13 +1374,82 @@ impl DevicePlanGateReport {
         self.rows.iter().map(|row| row.alias_count).sum()
     }
 
+    pub fn hot_q4_profiles(&self) -> usize {
+        self.rows
+            .iter()
+            .filter(|row| row.hot_kv_precision_bits == 4)
+            .count()
+    }
+
+    pub fn hot_q8_profiles(&self) -> usize {
+        self.rows
+            .iter()
+            .filter(|row| row.hot_kv_precision_bits == 8)
+            .count()
+    }
+
+    pub fn cold_q4_profiles(&self) -> usize {
+        self.rows
+            .iter()
+            .filter(|row| row.cold_kv_precision_bits == 4)
+            .count()
+    }
+
+    pub fn runtime_quant_covered_profiles(&self) -> usize {
+        self.rows
+            .iter()
+            .filter(|row| row.runtime_quant_policy_covered)
+            .count()
+    }
+
+    pub fn kv_precision_policy_summary(&self) -> KvPrecisionPolicySummary {
+        KvPrecisionPolicySummary {
+            profiles: self.rows.len(),
+            hot_q4_profiles: self.hot_q4_profiles(),
+            hot_q8_profiles: self.hot_q8_profiles(),
+            cold_q4_profiles: self.cold_q4_profiles(),
+            runtime_covered_profiles: self.runtime_quant_covered_profiles(),
+            order_valid_profiles: self
+                .rows
+                .iter()
+                .filter(|row| row.kv_precision_order_valid)
+                .count(),
+        }
+    }
+
     pub fn summary_line(&self) -> String {
+        let kv_summary = self.kv_precision_policy_summary();
         format!(
-            "device_gate: passed={} profiles={} aliases={} failures={}",
+            "device_gate: passed={} profiles={} aliases={} failures={} kv_precision=({})",
             self.passed(),
             self.rows.len(),
             self.alias_count(),
-            self.failure_count()
+            self.failure_count(),
+            kv_summary.summary_line()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KvPrecisionPolicySummary {
+    pub profiles: usize,
+    pub hot_q4_profiles: usize,
+    pub hot_q8_profiles: usize,
+    pub cold_q4_profiles: usize,
+    pub runtime_covered_profiles: usize,
+    pub order_valid_profiles: usize,
+}
+
+impl KvPrecisionPolicySummary {
+    pub fn summary_line(self) -> String {
+        format!(
+            "profiles={} hot_q4={} hot_q8={} cold_q4={} runtime_covered={} order_valid={}",
+            self.profiles,
+            self.hot_q4_profiles,
+            self.hot_q8_profiles,
+            self.cold_q4_profiles,
+            self.runtime_covered_profiles,
+            self.order_valid_profiles
         )
     }
 }
@@ -2231,6 +2314,12 @@ fn validate_device_plan(plan: &HardwarePlan) -> Vec<String> {
             plan.execution.cold_kv_precision_bits
         ));
     }
+    if plan.execution.cold_kv_precision_bits > plan.execution.hot_kv_precision_bits {
+        failures.push(format!(
+            "cold_kv_precision_bits {} must not exceed hot_kv_precision_bits {}",
+            plan.execution.cold_kv_precision_bits, plan.execution.hot_kv_precision_bits
+        ));
+    }
     if plan.execution.adapter_hints.is_empty() {
         failures.push("adapter_hints must not be empty".to_owned());
     }
@@ -2277,6 +2366,8 @@ fn validate_runtime_device_contract(plan: &HardwarePlan, contract: &str) -> Vec<
             "kv_bits={}/{}",
             plan.execution.hot_kv_precision_bits, plan.execution.cold_kv_precision_bits
         ),
+        format!("hot_kv_bits={}", plan.execution.hot_kv_precision_bits),
+        format!("cold_kv_bits={}", plan.execution.cold_kv_precision_bits),
         format!("disk_spill={}", plan.execution.allow_disk_spill),
         format!("local_kv_tokens={}", plan.local_kv_token_budget),
         format!("global_kv_tokens={}", plan.global_kv_token_budget),
@@ -2899,6 +2990,7 @@ mod tests {
             assert!(!plan.execution.adapter_hints.is_empty());
             assert!(matches!(plan.execution.hot_kv_precision_bits, 4 | 8));
             assert_eq!(plan.execution.cold_kv_precision_bits, 4);
+            assert!(plan.execution.cold_kv_precision_bits <= plan.execution.hot_kv_precision_bits);
             assert!((hierarchy_total - 1.0).abs() < 0.001);
             assert!(plan.notes.iter().any(|note| note.starts_with("device:")));
             assert!(plan.notes.iter().any(|note| note.starts_with("tier:")));
@@ -2928,6 +3020,14 @@ mod tests {
         assert_eq!(report.rows.len(), DeviceClass::explicit_profiles().len());
         assert!(report.alias_count() >= 175);
         assert!(report.summary_line().contains("passed=true"));
+        assert!(report.summary_line().contains("kv_precision=("));
+        let kv_summary = report.kv_precision_policy_summary();
+        assert_eq!(kv_summary.profiles, DeviceClass::explicit_profiles().len());
+        assert!(kv_summary.hot_q4_profiles >= 3);
+        assert!(kv_summary.hot_q8_profiles >= 1);
+        assert_eq!(kv_summary.cold_q4_profiles, kv_summary.profiles);
+        assert_eq!(kv_summary.runtime_covered_profiles, kv_summary.profiles);
+        assert_eq!(kv_summary.order_valid_profiles, kv_summary.profiles);
         let tiny = report
             .rows
             .iter()
@@ -2946,6 +3046,10 @@ mod tests {
         assert_eq!(tiny.runtime_cold_kv_precision_bits, 4);
         assert!(tiny.kv_prefetch_blocks <= tiny.runtime_max_import_blocks);
         assert!(tiny.hot_kv_precision_bits <= tiny.runtime_hot_kv_precision_bits);
+        assert!(tiny.hot_quant_policy_covered);
+        assert!(tiny.cold_quant_policy_covered);
+        assert!(tiny.runtime_quant_policy_covered);
+        assert!(tiny.kv_precision_order_valid);
         assert!(
             tiny.runtime_device_contract
                 .contains("device=microcontroller")
@@ -3077,6 +3181,24 @@ mod tests {
 
         assert!(failures.iter().any(|failure| failure.contains("prefetch")));
         assert!(failures.iter().any(|failure| failure.contains("hot KV")));
+    }
+
+    #[test]
+    fn device_plan_gate_rejects_cold_precision_above_hot_precision() {
+        let mut plan = HardwareAllocator::new().plan(
+            HardwareSnapshot::new(DeviceClass::Embedded, 0.35, 0.20, 0.70, 0.20),
+            TaskProfile::General,
+            2048,
+            HierarchyWeights::default(),
+        );
+        plan.execution.hot_kv_precision_bits = 4;
+        plan.execution.cold_kv_precision_bits = 8;
+
+        let failures = validate_device_plan(&plan);
+
+        assert!(failures.iter().any(|failure| {
+            failure.contains("cold_kv_precision_bits") && failure.contains("hot_kv_precision_bits")
+        }));
     }
 
     #[test]

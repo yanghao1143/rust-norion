@@ -55,8 +55,8 @@ pub use gist_memory::{GistGenerator, GistLevel, GistRecord};
 pub use hardware::{
     ComputeLane, DeviceClass, DeviceExecutionPlan, DeviceMemoryMode, DevicePlanGateReport,
     DevicePlanGateRow, DeviceProfileDescriptor, DeviceTier, HardwareAllocator, HardwarePlan,
-    HardwareProbe, HardwareSnapshot, MemoryGovernancePlan, RuntimeAdapterHint,
-    RuntimeManifestDeviceGateReport,
+    HardwareProbe, HardwareSnapshot, KvPrecisionPolicySummary, MemoryGovernancePlan,
+    RuntimeAdapterHint, RuntimeManifestDeviceGateReport,
 };
 pub use hierarchy::{
     HierarchyController, HierarchyState, HierarchyWeights, ProfileHierarchyObservations,

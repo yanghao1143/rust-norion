@@ -189,6 +189,9 @@ impl RuntimeManifest {
         if self.metadata.supports_kv_export != self.kv_policy.export_enabled {
             warnings.push("metadata supports_kv_export differs from manifest kv_policy".to_owned());
         }
+        if self.quantization.cold_kv.width() > self.quantization.hot_kv.width() {
+            errors.push("cold_kv quantization width must not exceed hot_kv width".to_owned());
+        }
 
         RuntimeManifestValidation { errors, warnings }
     }
@@ -603,6 +606,26 @@ mod tests {
         assert!(manifest.runtime_metadata().supports_kv_import);
         assert!(manifest.runtime_metadata().supports_kv_export);
         assert!(manifest.validate().passed());
+    }
+
+    #[test]
+    fn manifest_rejects_cold_kv_width_above_hot_kv_width() {
+        let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+            .with_quantization(RuntimeQuantizationPolicy {
+                hot_kv: QuantizationBits::Four,
+                cold_kv: QuantizationBits::Eight,
+                weights: None,
+            });
+
+        let validation = manifest.validate();
+
+        assert!(!validation.passed());
+        assert!(
+            validation
+                .errors
+                .iter()
+                .any(|error| { error.contains("cold_kv") && error.contains("hot_kv") })
+        );
     }
 
     #[test]
