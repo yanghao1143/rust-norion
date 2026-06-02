@@ -1368,9 +1368,16 @@ fn print_state_inspection_matrix_gate_report(
     println!("{}", report.summary_line());
     for device_report in &report.device_reports {
         println!(
-            "device={} {} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={}",
+            "device={} {} runtime_kv_memories={} runtime_model_experiences={} runtime_adapter_experiences={} runtime_forward_energy_experiences={} runtime_kv_influence_experiences={} runtime_kv_import_experiences={} runtime_kv_export_experiences={} reflection_issue_experiences={} critical_reflection_issue_experiences={} revision_action_experiences={}",
             device_report.device.as_str(),
             device_report.report.summary_line(),
+            device_report.runtime_kv_memories,
+            device_report.runtime_model_experiences,
+            device_report.runtime_adapter_experiences,
+            device_report.runtime_forward_energy_experiences,
+            device_report.runtime_kv_influence_experiences,
+            device_report.runtime_kv_import_experiences,
+            device_report.runtime_kv_export_experiences,
             device_report.reflection_issue_experiences,
             device_report.critical_reflection_issue_experiences,
             device_report.revision_action_experiences
@@ -1833,6 +1840,13 @@ struct Args {
     inspect_min_runtime_kv_influence_experiences: Option<usize>,
     inspect_min_runtime_kv_import_experiences: Option<usize>,
     inspect_min_runtime_kv_export_experiences: Option<usize>,
+    inspect_min_runtime_kv_memory_device_profiles: Option<usize>,
+    inspect_min_runtime_model_device_profiles: Option<usize>,
+    inspect_min_runtime_adapter_device_profiles: Option<usize>,
+    inspect_min_runtime_forward_energy_device_profiles: Option<usize>,
+    inspect_min_runtime_kv_influence_device_profiles: Option<usize>,
+    inspect_min_runtime_kv_import_device_profiles: Option<usize>,
+    inspect_min_runtime_kv_export_device_profiles: Option<usize>,
     inspect_min_reflection_issue_experiences: Option<usize>,
     inspect_min_critical_reflection_issue_experiences: Option<usize>,
     inspect_min_revision_action_experiences: Option<usize>,
@@ -1997,6 +2011,13 @@ impl Args {
         let mut inspect_min_runtime_kv_influence_experiences = None;
         let mut inspect_min_runtime_kv_import_experiences = None;
         let mut inspect_min_runtime_kv_export_experiences = None;
+        let mut inspect_min_runtime_kv_memory_device_profiles = None;
+        let mut inspect_min_runtime_model_device_profiles = None;
+        let mut inspect_min_runtime_adapter_device_profiles = None;
+        let mut inspect_min_runtime_forward_energy_device_profiles = None;
+        let mut inspect_min_runtime_kv_influence_device_profiles = None;
+        let mut inspect_min_runtime_kv_import_device_profiles = None;
+        let mut inspect_min_runtime_kv_export_device_profiles = None;
         let mut inspect_min_reflection_issue_experiences = None;
         let mut inspect_min_critical_reflection_issue_experiences = None;
         let mut inspect_min_revision_action_experiences = None;
@@ -2557,6 +2578,62 @@ impl Args {
                     inspect_gate = true;
                     index += 2;
                 }
+                "--inspect-min-runtime-kv-memory-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_memory_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-model-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_model_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-adapter-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_adapter_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-forward-energy-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_forward_energy_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-kv-influence-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_influence_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-kv-import-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_import_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
+                "--inspect-min-runtime-kv-export-device-profiles" if index + 1 < raw.len() => {
+                    inspect_min_runtime_kv_export_device_profiles =
+                        Some(parse_usize(&raw[index + 1], 0));
+                    inspect_state = true;
+                    inspect_gate = true;
+                    benchmark_all_devices = true;
+                    index += 2;
+                }
                 "--inspect-min-reflection-issue-experiences" if index + 1 < raw.len() => {
                     inspect_min_reflection_issue_experiences =
                         Some(parse_usize(&raw[index + 1], 0));
@@ -2999,6 +3076,13 @@ impl Args {
             inspect_min_runtime_kv_influence_experiences,
             inspect_min_runtime_kv_import_experiences,
             inspect_min_runtime_kv_export_experiences,
+            inspect_min_runtime_kv_memory_device_profiles,
+            inspect_min_runtime_model_device_profiles,
+            inspect_min_runtime_adapter_device_profiles,
+            inspect_min_runtime_forward_energy_device_profiles,
+            inspect_min_runtime_kv_influence_device_profiles,
+            inspect_min_runtime_kv_import_device_profiles,
+            inspect_min_runtime_kv_export_device_profiles,
             inspect_min_reflection_issue_experiences,
             inspect_min_critical_reflection_issue_experiences,
             inspect_min_revision_action_experiences,
@@ -3274,6 +3358,18 @@ impl Args {
 
     fn state_inspection_matrix_gate(&self) -> StateInspectionMatrixGate {
         StateInspectionMatrixGate {
+            min_runtime_kv_memory_device_profiles: self
+                .inspect_min_runtime_kv_memory_device_profiles,
+            min_runtime_model_device_profiles: self.inspect_min_runtime_model_device_profiles,
+            min_runtime_adapter_device_profiles: self.inspect_min_runtime_adapter_device_profiles,
+            min_runtime_forward_energy_device_profiles: self
+                .inspect_min_runtime_forward_energy_device_profiles,
+            min_runtime_kv_influence_device_profiles: self
+                .inspect_min_runtime_kv_influence_device_profiles,
+            min_runtime_kv_import_device_profiles: self
+                .inspect_min_runtime_kv_import_device_profiles,
+            min_runtime_kv_export_device_profiles: self
+                .inspect_min_runtime_kv_export_device_profiles,
             min_reflection_issue_device_profiles: self.inspect_min_reflection_issue_device_profiles,
             min_critical_reflection_issue_device_profiles: self
                 .inspect_min_critical_reflection_issue_device_profiles,
@@ -3666,6 +3762,20 @@ mod tests {
             "2".to_owned(),
             "--inspect-min-runtime-kv-export-experiences".to_owned(),
             "2".to_owned(),
+            "--inspect-min-runtime-kv-memory-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-model-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-adapter-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-forward-energy-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-kv-influence-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-kv-import-device-profiles".to_owned(),
+            "12".to_owned(),
+            "--inspect-min-runtime-kv-export-device-profiles".to_owned(),
+            "12".to_owned(),
             "--inspect-min-reflection-issue-experiences".to_owned(),
             "3".to_owned(),
             "--inspect-min-critical-reflection-issue-experiences".to_owned(),
@@ -4051,6 +4161,19 @@ mod tests {
         assert_eq!(args.inspect_min_runtime_kv_influence_experiences, Some(2));
         assert_eq!(args.inspect_min_runtime_kv_import_experiences, Some(2));
         assert_eq!(args.inspect_min_runtime_kv_export_experiences, Some(2));
+        assert_eq!(args.inspect_min_runtime_kv_memory_device_profiles, Some(12));
+        assert_eq!(args.inspect_min_runtime_model_device_profiles, Some(12));
+        assert_eq!(args.inspect_min_runtime_adapter_device_profiles, Some(12));
+        assert_eq!(
+            args.inspect_min_runtime_forward_energy_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.inspect_min_runtime_kv_influence_device_profiles,
+            Some(12)
+        );
+        assert_eq!(args.inspect_min_runtime_kv_import_device_profiles, Some(12));
+        assert_eq!(args.inspect_min_runtime_kv_export_device_profiles, Some(12));
         assert_eq!(args.inspect_min_reflection_issue_experiences, Some(3));
         assert_eq!(
             args.inspect_min_critical_reflection_issue_experiences,
@@ -4142,6 +4265,41 @@ mod tests {
         assert_eq!(
             args.state_inspection_gate().min_revision_action_experiences,
             Some(2)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_kv_memory_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_model_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_adapter_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_forward_energy_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_kv_influence_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_kv_import_device_profiles,
+            Some(12)
+        );
+        assert_eq!(
+            args.state_inspection_matrix_gate()
+                .min_runtime_kv_export_device_profiles,
+            Some(12)
         );
         assert_eq!(
             args.state_inspection_matrix_gate()
@@ -5009,6 +5167,20 @@ mod tests {
             "1".to_owned(),
             "--inspect-min-runtime-kv-export-experiences".to_owned(),
             "1".to_owned(),
+            "--inspect-min-runtime-kv-memory-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-model-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-adapter-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-forward-energy-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-kv-influence-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-kv-import-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-kv-export-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
             "--inspect-min-reflection-issue-device-profiles".to_owned(),
             DeviceClass::explicit_profiles().len().to_string(),
             "--inspect-min-revision-action-device-profiles".to_owned(),
@@ -5025,6 +5197,34 @@ mod tests {
         assert!(report.passed(), "{:?}", report.failures);
         assert_eq!(
             report.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_kv_memory_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_model_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_adapter_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_forward_energy_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_kv_influence_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_kv_import_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            report.runtime_kv_export_device_profiles(),
             DeviceClass::explicit_profiles().len()
         );
         assert_eq!(
@@ -5163,6 +5363,20 @@ mod tests {
             "1".to_owned(),
             "--inspect-min-runtime-kv-export-experiences".to_owned(),
             "1".to_owned(),
+            "--inspect-min-runtime-kv-memory-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-model-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-adapter-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-forward-energy-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-kv-influence-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-kv-import-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
+            "--inspect-min-runtime-kv-export-device-profiles".to_owned(),
+            DeviceClass::explicit_profiles().len().to_string(),
             "--inspect-min-evolution-memory-updates".to_owned(),
             "1".to_owned(),
             "--inspect-require-runtime-kv-dimensions".to_owned(),
@@ -5180,6 +5394,34 @@ mod tests {
         assert!(inspect.passed(), "{:?}", inspect.failures);
         assert_eq!(
             inspect.covered_devices(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_kv_memory_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_model_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_adapter_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_forward_energy_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_kv_influence_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_kv_import_device_profiles(),
+            DeviceClass::explicit_profiles().len()
+        );
+        assert_eq!(
+            inspect.runtime_kv_export_device_profiles(),
             DeviceClass::explicit_profiles().len()
         );
         assert_eq!(

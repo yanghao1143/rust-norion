@@ -85,6 +85,13 @@ pub struct StateInspectionGate {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StateInspectionMatrixGate {
+    pub min_runtime_kv_memory_device_profiles: Option<usize>,
+    pub min_runtime_model_device_profiles: Option<usize>,
+    pub min_runtime_adapter_device_profiles: Option<usize>,
+    pub min_runtime_forward_energy_device_profiles: Option<usize>,
+    pub min_runtime_kv_influence_device_profiles: Option<usize>,
+    pub min_runtime_kv_import_device_profiles: Option<usize>,
+    pub min_runtime_kv_export_device_profiles: Option<usize>,
     pub min_reflection_issue_device_profiles: Option<usize>,
     pub min_critical_reflection_issue_device_profiles: Option<usize>,
     pub min_revision_action_device_profiles: Option<usize>,
@@ -114,6 +121,13 @@ impl StateInspectionGateReport {
 pub struct StateInspectionDeviceGateReport {
     pub device: DeviceClass,
     pub report: StateInspectionGateReport,
+    pub runtime_kv_memories: usize,
+    pub runtime_model_experiences: usize,
+    pub runtime_adapter_experiences: usize,
+    pub runtime_forward_energy_experiences: usize,
+    pub runtime_kv_influence_experiences: usize,
+    pub runtime_kv_import_experiences: usize,
+    pub runtime_kv_export_experiences: usize,
     pub reflection_issue_experiences: usize,
     pub critical_reflection_issue_experiences: usize,
     pub revision_action_experiences: usize,
@@ -124,6 +138,13 @@ impl StateInspectionDeviceGateReport {
         Self {
             device,
             report,
+            runtime_kv_memories: 0,
+            runtime_model_experiences: 0,
+            runtime_adapter_experiences: 0,
+            runtime_forward_energy_experiences: 0,
+            runtime_kv_influence_experiences: 0,
+            runtime_kv_import_experiences: 0,
+            runtime_kv_export_experiences: 0,
             reflection_issue_experiences: 0,
             critical_reflection_issue_experiences: 0,
             revision_action_experiences: 0,
@@ -138,11 +159,38 @@ impl StateInspectionDeviceGateReport {
         Self {
             device,
             report,
+            runtime_kv_memories: inspection.runtime_kv_memory_count,
+            runtime_model_experiences: inspection.runtime_model_experience_count,
+            runtime_adapter_experiences: inspection.runtime_adapter_experience_count,
+            runtime_forward_energy_experiences: inspection.runtime_forward_energy_experience_count,
+            runtime_kv_influence_experiences: inspection.runtime_kv_influence_experience_count,
+            runtime_kv_import_experiences: inspection.runtime_kv_import_experience_count,
+            runtime_kv_export_experiences: inspection.runtime_kv_export_experience_count,
             reflection_issue_experiences: inspection.reflection_issue_experience_count,
             critical_reflection_issue_experiences: inspection
                 .critical_reflection_issue_experience_count,
             revision_action_experiences: inspection.revision_action_experience_count,
         }
+    }
+
+    pub fn with_runtime_evidence(
+        mut self,
+        runtime_kv_memories: usize,
+        runtime_model_experiences: usize,
+        runtime_adapter_experiences: usize,
+        runtime_forward_energy_experiences: usize,
+        runtime_kv_influence_experiences: usize,
+        runtime_kv_import_experiences: usize,
+        runtime_kv_export_experiences: usize,
+    ) -> Self {
+        self.runtime_kv_memories = runtime_kv_memories;
+        self.runtime_model_experiences = runtime_model_experiences;
+        self.runtime_adapter_experiences = runtime_adapter_experiences;
+        self.runtime_forward_energy_experiences = runtime_forward_energy_experiences;
+        self.runtime_kv_influence_experiences = runtime_kv_influence_experiences;
+        self.runtime_kv_import_experiences = runtime_kv_import_experiences;
+        self.runtime_kv_export_experiences = runtime_kv_export_experiences;
+        self
     }
 
     pub fn with_reflection_evidence(
@@ -206,6 +254,48 @@ impl StateInspectionMatrixGateReport {
 
         require_min_device_profiles(
             &mut failures,
+            "runtime_kv_memory_device_profiles",
+            runtime_kv_memory_device_profiles(&device_reports),
+            gate.min_runtime_kv_memory_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_model_device_profiles",
+            runtime_model_device_profiles(&device_reports),
+            gate.min_runtime_model_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_adapter_device_profiles",
+            runtime_adapter_device_profiles(&device_reports),
+            gate.min_runtime_adapter_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_forward_energy_device_profiles",
+            runtime_forward_energy_device_profiles(&device_reports),
+            gate.min_runtime_forward_energy_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_influence_device_profiles",
+            runtime_kv_influence_device_profiles(&device_reports),
+            gate.min_runtime_kv_influence_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_import_device_profiles",
+            runtime_kv_import_device_profiles(&device_reports),
+            gate.min_runtime_kv_import_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_export_device_profiles",
+            runtime_kv_export_device_profiles(&device_reports),
+            gate.min_runtime_kv_export_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "reflection_issue_device_profiles",
             reflection_issue_device_profiles(&device_reports),
             gate.min_reflection_issue_device_profiles,
@@ -250,6 +340,34 @@ impl StateInspectionMatrixGateReport {
             .collect()
     }
 
+    pub fn runtime_kv_memory_device_profiles(&self) -> usize {
+        runtime_kv_memory_device_profiles(&self.device_reports)
+    }
+
+    pub fn runtime_model_device_profiles(&self) -> usize {
+        runtime_model_device_profiles(&self.device_reports)
+    }
+
+    pub fn runtime_adapter_device_profiles(&self) -> usize {
+        runtime_adapter_device_profiles(&self.device_reports)
+    }
+
+    pub fn runtime_forward_energy_device_profiles(&self) -> usize {
+        runtime_forward_energy_device_profiles(&self.device_reports)
+    }
+
+    pub fn runtime_kv_influence_device_profiles(&self) -> usize {
+        runtime_kv_influence_device_profiles(&self.device_reports)
+    }
+
+    pub fn runtime_kv_import_device_profiles(&self) -> usize {
+        runtime_kv_import_device_profiles(&self.device_reports)
+    }
+
+    pub fn runtime_kv_export_device_profiles(&self) -> usize {
+        runtime_kv_export_device_profiles(&self.device_reports)
+    }
+
     pub fn reflection_issue_device_profiles(&self) -> usize {
         reflection_issue_device_profiles(&self.device_reports)
     }
@@ -264,17 +382,70 @@ impl StateInspectionMatrixGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} failures={}",
+            "state_inspection_matrix_gate: passed={} devices={} expected_devices={} failed_devices={} runtime_kv_memory_device_profiles={} runtime_model_device_profiles={} runtime_adapter_device_profiles={} runtime_forward_energy_device_profiles={} runtime_kv_influence_device_profiles={} runtime_kv_import_device_profiles={} runtime_kv_export_device_profiles={} reflection_issue_device_profiles={} critical_reflection_issue_device_profiles={} revision_action_device_profiles={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
             self.failed_devices().len(),
+            self.runtime_kv_memory_device_profiles(),
+            self.runtime_model_device_profiles(),
+            self.runtime_adapter_device_profiles(),
+            self.runtime_forward_energy_device_profiles(),
+            self.runtime_kv_influence_device_profiles(),
+            self.runtime_kv_import_device_profiles(),
+            self.runtime_kv_export_device_profiles(),
             self.reflection_issue_device_profiles(),
             self.critical_reflection_issue_device_profiles(),
             self.revision_action_device_profiles(),
             self.failures.len()
         )
     }
+}
+
+fn runtime_kv_memory_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_memories > 0
+    })
+}
+
+fn runtime_model_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_model_experiences > 0
+    })
+}
+
+fn runtime_adapter_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_adapter_experiences > 0
+    })
+}
+
+fn runtime_forward_energy_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_forward_energy_experiences > 0
+    })
+}
+
+fn runtime_kv_influence_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_influence_experiences > 0
+    })
+}
+
+fn runtime_kv_import_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_import_experiences > 0
+    })
+}
+
+fn runtime_kv_export_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_export_experiences > 0
+    })
 }
 
 fn reflection_issue_device_profiles(device_reports: &[StateInspectionDeviceGateReport]) -> usize {
@@ -1363,6 +1534,7 @@ mod tests {
                 .copied()
                 .map(|device| {
                     StateInspectionDeviceGateReport::new(device, passing.clone())
+                        .with_runtime_evidence(1, 1, 1, 1, 1, 1, 1)
                         .with_reflection_evidence(1, 1, 1)
                 })
                 .collect(),
@@ -1383,6 +1555,7 @@ mod tests {
 
         let incomplete = StateInspectionMatrixGateReport::evaluate(vec![
             StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
+                .with_runtime_evidence(1, 1, 1, 1, 1, 1, 1)
                 .with_reflection_evidence(1, 1, 1),
             StateInspectionDeviceGateReport::new(DeviceClass::IntegratedGpu, failing),
         ]);
@@ -1412,6 +1585,96 @@ mod tests {
     }
 
     #[test]
+    fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
+        let passing = StateInspectionGateReport {
+            passed: true,
+            failures: Vec::new(),
+        };
+        let gate = StateInspectionMatrixGate {
+            min_runtime_kv_memory_device_profiles: Some(2),
+            min_runtime_model_device_profiles: Some(2),
+            min_runtime_adapter_device_profiles: Some(2),
+            min_runtime_forward_energy_device_profiles: Some(1),
+            min_runtime_kv_influence_device_profiles: Some(1),
+            min_runtime_kv_import_device_profiles: Some(1),
+            min_runtime_kv_export_device_profiles: Some(1),
+            ..StateInspectionMatrixGate::default()
+        };
+
+        let report = StateInspectionMatrixGateReport::evaluate_with_gate(
+            DeviceClass::explicit_profiles()
+                .iter()
+                .copied()
+                .map(|device| {
+                    let mut device_report =
+                        StateInspectionDeviceGateReport::new(device, passing.clone());
+                    match device {
+                        DeviceClass::CpuOnly => {
+                            device_report =
+                                device_report.with_runtime_evidence(1, 1, 1, 1, 1, 1, 1);
+                        }
+                        DeviceClass::IntegratedGpu => {
+                            device_report =
+                                device_report.with_runtime_evidence(2, 1, 1, 0, 0, 0, 0);
+                        }
+                        _ => {}
+                    }
+                    device_report
+                })
+                .collect(),
+            &gate,
+        );
+
+        assert!(report.passed(), "{:?}", report.failures);
+        assert_eq!(report.runtime_kv_memory_device_profiles(), 2);
+        assert_eq!(report.runtime_model_device_profiles(), 2);
+        assert_eq!(report.runtime_adapter_device_profiles(), 2);
+        assert_eq!(report.runtime_forward_energy_device_profiles(), 1);
+        assert_eq!(report.runtime_kv_influence_device_profiles(), 1);
+        assert_eq!(report.runtime_kv_import_device_profiles(), 1);
+        assert_eq!(report.runtime_kv_export_device_profiles(), 1);
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_kv_memory_device_profiles=2")
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("runtime_model_device_profiles=2")
+        );
+
+        let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
+            vec![
+                StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
+                    .with_runtime_evidence(1, 1, 0, 0, 0, 0, 0),
+            ],
+            &gate,
+        );
+
+        assert!(!failing.passed());
+        assert!(
+            failing.failures.iter().any(|failure| {
+                failure == "runtime_kv_memory_device_profiles 1 below required 2"
+            })
+        );
+        assert!(
+            failing
+                .failures
+                .iter()
+                .any(|failure| { failure == "runtime_adapter_device_profiles 0 below required 2" })
+        );
+        assert!(failing.failures.iter().any(|failure| {
+            failure == "runtime_forward_energy_device_profiles 0 below required 1"
+        }));
+        assert!(
+            failing.failures.iter().any(|failure| {
+                failure == "runtime_kv_export_device_profiles 0 below required 1"
+            })
+        );
+    }
+
+    #[test]
     fn state_inspection_matrix_gate_can_require_reflection_evidence_per_device() {
         let passing = StateInspectionGateReport {
             passed: true,
@@ -1421,6 +1684,7 @@ mod tests {
             min_reflection_issue_device_profiles: Some(2),
             min_critical_reflection_issue_device_profiles: Some(1),
             min_revision_action_device_profiles: Some(2),
+            ..StateInspectionMatrixGate::default()
         };
 
         let report = StateInspectionMatrixGateReport::evaluate_with_gate(

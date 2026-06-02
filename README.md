@@ -247,12 +247,20 @@ created by the all-device roundtrip gate, for example `memory.cpu.ndkv`,
 cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
-All-device inspection can also require matrix-level reflection/revision
-coverage with `--inspect-min-reflection-issue-device-profiles`,
+All-device inspection can also require matrix-level runtime and
+reflection/revision coverage. Runtime ABI evidence is gated with
+`--inspect-min-runtime-kv-memory-device-profiles`,
+`--inspect-min-runtime-model-device-profiles`,
+`--inspect-min-runtime-adapter-device-profiles`,
+`--inspect-min-runtime-forward-energy-device-profiles`,
+`--inspect-min-runtime-kv-influence-device-profiles`,
+`--inspect-min-runtime-kv-import-device-profiles`, and
+`--inspect-min-runtime-kv-export-device-profiles`. Closed-loop evidence is
+gated with `--inspect-min-reflection-issue-device-profiles`,
 `--inspect-min-critical-reflection-issue-device-profiles`, and
 `--inspect-min-revision-action-device-profiles`. These flags imply
 `--inspect-state --inspect-gate --benchmark-all-devices` and fail when
-persisted reflection or revision evidence only exists in a subset of
+persisted runtime, reflection, or revision evidence only exists in a subset of
 device-scoped state files.
 
 For a single CI smoke gate that writes fresh runtime KV state and immediately
@@ -293,13 +301,19 @@ device-scoped 状态文件，例如 `memory.cpu.ndkv`、`memory.mobile.ndkv` 和
 cargo run -- --inspect-state --benchmark-all-devices --memory target/roundtrip-memory.ndkv --experience target/roundtrip-experience.ndkv --adaptive target/roundtrip-adaptive.ndkv --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-reflection-issue-experiences 1 --inspect-min-critical-reflection-issue-experiences 1 --inspect-min-revision-action-experiences 1 --inspect-min-evolution-router-threshold-delta 0.001 --inspect-min-evolution-hierarchy-weight-delta 0.001 --inspect-min-evolution-memory-updates 1 --inspect-min-evolution-recursive-replay-items 1 --inspect-max-evolution-rollback-router-threshold-delta 0 --inspect-max-evolution-rollback-hierarchy-weight-delta 0 --inspect-require-runtime-kv-dimensions
 ```
 
-全设备 inspection 还可以通过
+全设备 inspection 还可以要求矩阵级 runtime 与反思 / 修订覆盖。runtime ABI
+证据通过 `--inspect-min-runtime-kv-memory-device-profiles`、
+`--inspect-min-runtime-model-device-profiles`、
+`--inspect-min-runtime-adapter-device-profiles`、
+`--inspect-min-runtime-forward-energy-device-profiles`、
+`--inspect-min-runtime-kv-influence-device-profiles`、
+`--inspect-min-runtime-kv-import-device-profiles` 和
+`--inspect-min-runtime-kv-export-device-profiles` 门禁；闭环证据通过
 `--inspect-min-reflection-issue-device-profiles`、
 `--inspect-min-critical-reflection-issue-device-profiles` 和
-`--inspect-min-revision-action-device-profiles` 要求矩阵级反思 / 修订覆盖。
-这些参数会隐式开启 `--inspect-state --inspect-gate --benchmark-all-devices`；
-如果持久化 reflection 或 revision 证据只存在于部分 device-scoped 状态文件中，
-门禁会失败。
+`--inspect-min-revision-action-device-profiles` 门禁。这些参数会隐式开启
+`--inspect-state --inspect-gate --benchmark-all-devices`；如果持久化 runtime、
+reflection 或 revision 证据只存在于部分 device-scoped 状态文件中，门禁会失败。
 
 如果希望一条 CI 命令先写入新的 runtime KV 状态，再立刻检查持久化证据，可以组合
 roundtrip 和 inspection：

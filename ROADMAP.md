@@ -614,9 +614,10 @@ These are algorithmic references, not product dependencies:
   configured safety cap. In all-device mode, the gate loads every explicit
   device profile's scoped state files and fails if any device is missing state
   or lacks the required persisted evidence. Matrix-level thresholds can also
-  require reflection-issue, critical-reflection-issue, and revision-action
-  evidence to appear across enough device profiles before the all-device state
-  inspection passes.
+  require runtime-KV memory, runtime model id, selected adapter, forward
+  energy, KV influence, KV import/export, reflection-issue,
+  critical-reflection-issue, and revision-action evidence to appear across
+  enough device profiles before the all-device state inspection passes.
 - Adaptive state persistence covers router thresholds, hierarchy weights, tier
   placement, memory governance policies, and the cumulative self-evolution
   ledger, while legacy adaptive files without policy keys still load with
@@ -700,7 +701,16 @@ These are algorithmic references, not product dependencies:
   `--inspect-min-revision-action-device-profiles` lift those reflection and
   revision checks to the matrix level, so all-device inspection can fail when
   durable self-evolution evidence is present only on a subset of supported
-  hardware classes.
+  hardware classes. Runtime evidence has the same matrix-level coverage gates:
+  `--inspect-min-runtime-kv-memory-device-profiles`,
+  `--inspect-min-runtime-model-device-profiles`,
+  `--inspect-min-runtime-adapter-device-profiles`,
+  `--inspect-min-runtime-forward-energy-device-profiles`,
+  `--inspect-min-runtime-kv-influence-device-profiles`,
+  `--inspect-min-runtime-kv-import-device-profiles`, and
+  `--inspect-min-runtime-kv-export-device-profiles`, so all-device state
+  inspection can fail when a supported hardware class stops persisting runtime
+  ABI feedback even though its files exist.
 - With `--benchmark-roundtrip --inspect-state`, the CLI now chains the write/
   reload runtime-KV roundtrip and persisted-state inspection in one run. Adding
   `--benchmark-all-devices` applies the same chain to every explicit device
