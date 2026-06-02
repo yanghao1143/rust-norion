@@ -747,8 +747,10 @@ These are algorithmic references, not product dependencies:
   fail when a backend exports KV only on one hardware class even if aggregate
   exported-block counts still look healthy.
 - Benchmark summaries and gates expose runtime KV long-term admission through
-  `--benchmark-min-runtime-kv-stored`, so local/CI production sweeps can fail
-  when exported runtime KV is never written back into reinforced memory.
+  `--benchmark-min-runtime-kv-stored`, plus
+  `--benchmark-min-runtime-kv-stored-device-profiles`, so local/CI production
+  sweeps can fail when exported runtime KV is never written back into
+  reinforced memory or durable admission only happens on one hardware class.
 - Benchmark summaries and gates also expose runtime KV hold evidence through
   `--benchmark-min-runtime-kv-hold-cases` and
   `--benchmark-min-runtime-kv-held`, so fast-path watch cases can prove the
@@ -944,7 +946,7 @@ These are algorithmic references, not product dependencies:
   recursive scheduling coverage, recursive scheduling budgets, runtime
   forward diagnostics, runtime token uncertainty, runtime KV import/export,
   runtime KV import/export device coverage, runtime KV precision, runtime KV
-  storage, runtime KV hold device coverage,
+  storage device coverage, runtime KV hold device coverage,
   runtime adapter contract coverage,
   runtime adapter observation reuse, runtime adapter selection consistency,
   reflection issue / critical issue coverage, revision-action coverage,
