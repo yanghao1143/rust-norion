@@ -1917,6 +1917,13 @@ mod tests {
             .with_kernel(EngineForwardKernel);
         let mut backend = RuntimeBackend::new(runtime);
         let mut engine = NoironEngine::new();
+        engine.set_hardware_snapshot(HardwareSnapshot::new(
+            DeviceClass::CpuOnly,
+            0.20,
+            0.10,
+            0.25,
+            0.10,
+        ));
 
         let outcome = engine.infer(
             InferenceRequest::new(

@@ -423,6 +423,34 @@ impl ProductionForwardKernel for ReferenceProductionForwardKernel {
                 .device_gate
                 .runtime_adapter
                 .map(|adapter| adapter.as_str().to_owned()),
+            device_profile: Some(context.device_gate.device.as_str().to_owned()),
+            primary_lane: Some(
+                context
+                    .request
+                    .hardware_plan
+                    .execution
+                    .primary_lane
+                    .as_str()
+                    .to_owned(),
+            ),
+            fallback_lane: Some(
+                context
+                    .request
+                    .hardware_plan
+                    .execution
+                    .fallback_lane
+                    .as_str()
+                    .to_owned(),
+            ),
+            memory_mode: Some(
+                context
+                    .request
+                    .hardware_plan
+                    .execution
+                    .memory_mode
+                    .as_str()
+                    .to_owned(),
+            ),
             layer_count: forward.layer_summaries.len(),
             global_layers: counts.global,
             local_window_layers: counts.local,
@@ -748,6 +776,7 @@ impl ModelRuntime for ProductionTransformerRuntime {
                     output.diagnostics,
                     &self.manifest,
                     &self.device_gate,
+                    &request.hardware_plan,
                     self.imported_kv_blocks.len(),
                     self.exported_kv_blocks.len(),
                 ));
@@ -913,6 +942,7 @@ fn normalize_kernel_diagnostics(
     mut diagnostics: RuntimeDiagnostics,
     manifest: &RuntimeManifest,
     device_gate: &RuntimeManifestDeviceGateReport,
+    hardware_plan: &HardwarePlan,
     imported_kv_blocks: usize,
     exported_kv_blocks: usize,
 ) -> RuntimeDiagnostics {
@@ -925,6 +955,18 @@ fn normalize_kernel_diagnostics(
         diagnostics.selected_adapter = device_gate
             .runtime_adapter
             .map(|adapter| adapter.as_str().to_owned());
+    }
+    if diagnostics.device_profile.is_none() {
+        diagnostics.device_profile = Some(device_gate.device.as_str().to_owned());
+    }
+    if diagnostics.primary_lane.is_none() {
+        diagnostics.primary_lane = Some(hardware_plan.execution.primary_lane.as_str().to_owned());
+    }
+    if diagnostics.fallback_lane.is_none() {
+        diagnostics.fallback_lane = Some(hardware_plan.execution.fallback_lane.as_str().to_owned());
+    }
+    if diagnostics.memory_mode.is_none() {
+        diagnostics.memory_mode = Some(hardware_plan.execution.memory_mode.as_str().to_owned());
     }
     if diagnostics.layer_count == 0 {
         diagnostics.layer_count = manifest.architecture.layer_count;

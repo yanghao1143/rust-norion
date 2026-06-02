@@ -642,6 +642,10 @@ mod tests {
             runtime_diagnostics: RuntimeDiagnostics {
                 model_id: Some("replay-runtime".to_owned()),
                 selected_adapter: Some("portable-rust".to_owned()),
+                device_profile: Some("cpu".to_owned()),
+                primary_lane: Some("cpu-vector".to_owned()),
+                fallback_lane: Some("cpu-portable".to_owned()),
+                memory_mode: Some("tiered-disk".to_owned()),
                 layer_count: 12,
                 global_layers: 3,
                 local_window_layers: 6,

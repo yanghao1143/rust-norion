@@ -7,7 +7,9 @@ use std::process::{Command, Stdio};
 use crate::agent_team::AgentTeamPlan;
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::experience::ExperienceMatch;
-use crate::hardware::{HardwarePlan, RuntimeAdapterHint};
+use crate::hardware::{
+    ComputeLane, DeviceClass, DeviceMemoryMode, HardwarePlan, RuntimeAdapterHint,
+};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::infini_memory::InfiniMemoryItem;
 use crate::kv_exchange::RuntimeKvBlock;
@@ -359,6 +361,13 @@ impl RuntimeAdapterObservation {
                     .execution
                     .adapter_hints
                     .contains(&observation.adapter)
+            })
+            .filter(|observation| {
+                experiences
+                    .iter()
+                    .find(|experience| experience.id == observation.experience_id)
+                    .map(|experience| experience_matches_hardware_plan(experience, hardware_plan))
+                    .unwrap_or(false)
             })
             .collect()
     }
@@ -1111,6 +1120,10 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
     RuntimeDiagnostics {
         model_id: extract_json_string_field(payload, "model_id"),
         selected_adapter: extract_json_string_field(payload, "selected_adapter"),
+        device_profile: extract_json_string_field(payload, "device_profile"),
+        primary_lane: extract_json_string_field(payload, "primary_lane"),
+        fallback_lane: extract_json_string_field(payload, "fallback_lane"),
+        memory_mode: extract_json_string_field(payload, "memory_mode"),
         layer_count: extract_json_usize_field(payload, "layer_count").unwrap_or(0),
         global_layers: extract_json_usize_field(payload, "global_layers").unwrap_or(0),
         local_window_layers: extract_json_usize_field(payload, "local_window_layers").unwrap_or(0),
@@ -1464,6 +1477,49 @@ fn parse_runtime_adapter_hint(value: &str) -> Option<RuntimeAdapterHint> {
     }
 }
 
+fn experience_matches_hardware_plan(
+    experience: &ExperienceMatch,
+    hardware_plan: &HardwarePlan,
+) -> bool {
+    if let Some(device_profile) = experience.runtime_device_profile.as_deref() {
+        let Some(device) = parse_runtime_device_class(device_profile) else {
+            return false;
+        };
+        if device != hardware_plan.device {
+            return false;
+        }
+    }
+
+    if let Some(primary_lane) = experience.runtime_primary_lane.as_deref() {
+        let Some(lane) = parse_runtime_compute_lane(primary_lane) else {
+            return false;
+        };
+        if lane != hardware_plan.execution.primary_lane {
+            return false;
+        }
+    }
+
+    if let Some(fallback_lane) = experience.runtime_fallback_lane.as_deref() {
+        let Some(lane) = parse_runtime_compute_lane(fallback_lane) else {
+            return false;
+        };
+        if lane != hardware_plan.execution.fallback_lane {
+            return false;
+        }
+    }
+
+    if let Some(memory_mode) = experience.runtime_memory_mode.as_deref() {
+        let Some(mode) = parse_runtime_memory_mode(memory_mode) else {
+            return false;
+        };
+        if mode != hardware_plan.execution.memory_mode {
+            return false;
+        }
+    }
+
+    true
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeBackend<R> {
     runtime: R,
@@ -1549,12 +1605,14 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
         match self.runtime.generate(request) {
             Ok(response) => {
                 self.last_error = None;
+                let mut diagnostics = response.diagnostics;
                 let runtime_contract_violations = validate_runtime_response_contract(
-                    &response.diagnostics,
+                    &diagnostics,
                     &runtime_metadata,
                     runtime_architecture,
                     &context.hardware_plan,
                 );
+                populate_runtime_device_execution(&mut diagnostics, &context.hardware_plan);
                 let trace = if response.trace.is_empty() {
                     trace_from_tokens(&response.tokens)
                 } else {
@@ -1609,9 +1667,9 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
                 } else {
                     Vec::new()
                 };
-                let mut diagnostics = response.diagnostics;
                 if !runtime_contract_violations.is_empty() {
                     diagnostics.selected_adapter = None;
+                    diagnostics = diagnostics.clear_device_execution();
                 }
                 diagnostics.imported_kv_blocks = imported_kv_blocks;
                 diagnostics.exported_kv_blocks = exported_kv_blocks.len();
@@ -1768,6 +1826,82 @@ fn validate_runtime_response_contract(
         ));
     }
 
+    if let Some(device) = diagnostics
+        .device_profile
+        .as_deref()
+        .and_then(parse_runtime_device_class)
+    {
+        if device != hardware_plan.device {
+            violations.push(format!(
+                "runtime diagnostics device_profile {} differs from request device {}",
+                device.as_str(),
+                hardware_plan.device.as_str()
+            ));
+        }
+    } else if diagnostics.device_profile.is_some() {
+        violations.push(format!(
+            "runtime diagnostics unknown device_profile {}",
+            diagnostics.device_profile.as_deref().unwrap_or_default()
+        ));
+    }
+
+    if let Some(primary_lane) = diagnostics
+        .primary_lane
+        .as_deref()
+        .and_then(parse_runtime_compute_lane)
+    {
+        if primary_lane != hardware_plan.execution.primary_lane {
+            violations.push(format!(
+                "runtime diagnostics primary_lane {} differs from request primary {}",
+                primary_lane.as_str(),
+                hardware_plan.execution.primary_lane.as_str()
+            ));
+        }
+    } else if diagnostics.primary_lane.is_some() {
+        violations.push(format!(
+            "runtime diagnostics unknown primary_lane {}",
+            diagnostics.primary_lane.as_deref().unwrap_or_default()
+        ));
+    }
+
+    if let Some(fallback_lane) = diagnostics
+        .fallback_lane
+        .as_deref()
+        .and_then(parse_runtime_compute_lane)
+    {
+        if fallback_lane != hardware_plan.execution.fallback_lane {
+            violations.push(format!(
+                "runtime diagnostics fallback_lane {} differs from request fallback {}",
+                fallback_lane.as_str(),
+                hardware_plan.execution.fallback_lane.as_str()
+            ));
+        }
+    } else if diagnostics.fallback_lane.is_some() {
+        violations.push(format!(
+            "runtime diagnostics unknown fallback_lane {}",
+            diagnostics.fallback_lane.as_deref().unwrap_or_default()
+        ));
+    }
+
+    if let Some(memory_mode) = diagnostics
+        .memory_mode
+        .as_deref()
+        .and_then(parse_runtime_memory_mode)
+    {
+        if memory_mode != hardware_plan.execution.memory_mode {
+            violations.push(format!(
+                "runtime diagnostics memory_mode {} differs from request memory {}",
+                memory_mode.as_str(),
+                hardware_plan.execution.memory_mode.as_str()
+            ));
+        }
+    } else if diagnostics.memory_mode.is_some() {
+        violations.push(format!(
+            "runtime diagnostics unknown memory_mode {}",
+            diagnostics.memory_mode.as_deref().unwrap_or_default()
+        ));
+    }
+
     if let Some(model_id) = diagnostics.model_id.as_deref() {
         if !metadata.model_id.is_empty() && model_id != metadata.model_id {
             violations.push(format!(
@@ -1798,6 +1932,53 @@ fn validate_runtime_response_contract(
     }
 
     violations
+}
+
+fn populate_runtime_device_execution(
+    diagnostics: &mut RuntimeDiagnostics,
+    hardware_plan: &HardwarePlan,
+) {
+    if diagnostics.device_profile.is_none() {
+        diagnostics.device_profile = Some(hardware_plan.device.as_str().to_owned());
+    }
+    if diagnostics.primary_lane.is_none() {
+        diagnostics.primary_lane = Some(hardware_plan.execution.primary_lane.as_str().to_owned());
+    }
+    if diagnostics.fallback_lane.is_none() {
+        diagnostics.fallback_lane = Some(hardware_plan.execution.fallback_lane.as_str().to_owned());
+    }
+    if diagnostics.memory_mode.is_none() {
+        diagnostics.memory_mode = Some(hardware_plan.execution.memory_mode.as_str().to_owned());
+    }
+}
+
+fn parse_runtime_device_class(value: &str) -> Option<DeviceClass> {
+    value.parse::<DeviceClass>().ok()
+}
+
+fn parse_runtime_compute_lane(value: &str) -> Option<ComputeLane> {
+    match value {
+        "cpu-portable" => Some(ComputeLane::CpuPortable),
+        "cpu-vector" => Some(ComputeLane::CpuVector),
+        "integrated-gpu" => Some(ComputeLane::IntegratedGpu),
+        "discrete-gpu" => Some(ComputeLane::DiscreteGpu),
+        "unified-memory-gpu" => Some(ComputeLane::UnifiedMemoryGpu),
+        "neural-accelerator" => Some(ComputeLane::NeuralAccelerator),
+        "multi-accelerator" => Some(ComputeLane::MultiAccelerator),
+        "disk-backed-streaming" => Some(ComputeLane::DiskBackedStreaming),
+        _ => None,
+    }
+}
+
+fn parse_runtime_memory_mode(value: &str) -> Option<DeviceMemoryMode> {
+    match value {
+        "minimal-disk" => Some(DeviceMemoryMode::MinimalDisk),
+        "tiered-disk" => Some(DeviceMemoryMode::TieredDisk),
+        "unified-memory" => Some(DeviceMemoryMode::UnifiedMemory),
+        "gpu-resident" => Some(DeviceMemoryMode::GpuResident),
+        "distributed-sharded" => Some(DeviceMemoryMode::DistributedSharded),
+        _ => None,
+    }
 }
 
 fn fit_runtime_vector(vector: &[f32], dimensions: Option<usize>) -> Vec<f32> {
@@ -1837,6 +2018,7 @@ fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {
 mod tests {
     use super::*;
     use crate::experience::ExperienceMatch;
+    use crate::hardware::{HardwareAllocator, HardwareSnapshot};
     use crate::infini_memory::{InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryScope};
     use crate::kv_cache::MemoryMatch;
     use crate::tiered_cache::TieredCachePlan;
@@ -1938,6 +2120,10 @@ mod tests {
             reward_action: crate::process_reward::RewardAction::Reinforce,
             runtime_model_id: Some("mock-self-transformer".to_owned()),
             runtime_selected_adapter: Some("portable-rust".to_owned()),
+            runtime_device_profile: None,
+            runtime_primary_lane: None,
+            runtime_fallback_lane: None,
+            runtime_memory_mode: None,
             runtime_forward_energy: Some(0.2),
             runtime_kv_influence: Some(0.1),
             recursive_runtime_calls: None,
@@ -2025,6 +2211,10 @@ mod tests {
                 reward_action: crate::process_reward::RewardAction::Reinforce,
                 runtime_model_id: Some("mock-self-transformer".to_owned()),
                 runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_device_profile: None,
+                runtime_primary_lane: None,
+                runtime_fallback_lane: None,
+                runtime_memory_mode: None,
                 runtime_forward_energy: Some(0.2),
                 runtime_kv_influence: Some(0.1),
                 recursive_runtime_calls: None,
@@ -2042,6 +2232,10 @@ mod tests {
                 reward_action: crate::process_reward::RewardAction::Reinforce,
                 runtime_model_id: Some("mock-self-transformer".to_owned()),
                 runtime_selected_adapter: Some("cuda".to_owned()),
+                runtime_device_profile: None,
+                runtime_primary_lane: None,
+                runtime_fallback_lane: None,
+                runtime_memory_mode: None,
                 runtime_forward_energy: Some(0.1),
                 runtime_kv_influence: Some(0.9),
                 recursive_runtime_calls: None,
@@ -2072,6 +2266,69 @@ mod tests {
             seen.runtime_adapter_observations[0].adapter,
             RuntimeAdapterHint::PortableRust
         );
+    }
+
+    #[test]
+    fn runtime_request_filters_adapter_observations_to_device_execution_contract() {
+        let cpu_plan = HardwareAllocator::new().plan(
+            HardwareSnapshot::new(DeviceClass::CpuOnly, 0.30, 0.10, 0.40, 0.20),
+            TaskProfile::Coding,
+            2048,
+            HierarchyWeights::default(),
+        );
+        let experiences = vec![
+            ExperienceMatch {
+                id: 1,
+                prompt: "prompt".to_owned(),
+                lesson: "cpu portable lesson".to_owned(),
+                quality: 0.8,
+                score: 0.8,
+                gist_hints: Vec::new(),
+                reflection_issue_codes: Vec::new(),
+                revision_actions: Vec::new(),
+                process_reward: 0.8,
+                reward_action: crate::process_reward::RewardAction::Reinforce,
+                runtime_model_id: Some("mock-self-transformer".to_owned()),
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_device_profile: Some(cpu_plan.device.as_str().to_owned()),
+                runtime_primary_lane: Some(cpu_plan.execution.primary_lane.as_str().to_owned()),
+                runtime_fallback_lane: Some(cpu_plan.execution.fallback_lane.as_str().to_owned()),
+                runtime_memory_mode: Some(cpu_plan.execution.memory_mode.as_str().to_owned()),
+                runtime_forward_energy: Some(0.2),
+                runtime_kv_influence: Some(0.2),
+                recursive_runtime_calls: None,
+            },
+            ExperienceMatch {
+                id: 2,
+                prompt: "prompt".to_owned(),
+                lesson: "gpu portable lesson should not leak to cpu".to_owned(),
+                quality: 0.99,
+                score: 0.99,
+                gist_hints: Vec::new(),
+                reflection_issue_codes: Vec::new(),
+                revision_actions: Vec::new(),
+                process_reward: 0.99,
+                reward_action: crate::process_reward::RewardAction::Reinforce,
+                runtime_model_id: Some("mock-self-transformer".to_owned()),
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_device_profile: Some(DeviceClass::DiscreteGpu.as_str().to_owned()),
+                runtime_primary_lane: Some(ComputeLane::DiscreteGpu.as_str().to_owned()),
+                runtime_fallback_lane: Some(ComputeLane::CpuPortable.as_str().to_owned()),
+                runtime_memory_mode: Some(DeviceMemoryMode::GpuResident.as_str().to_owned()),
+                runtime_forward_energy: Some(0.1),
+                runtime_kv_influence: Some(0.9),
+                recursive_runtime_calls: None,
+            },
+        ];
+
+        let observations = RuntimeAdapterObservation::from_experiences_for_hardware(
+            &experiences,
+            "mock-self-transformer",
+            &cpu_plan,
+        );
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].experience_id, 1);
     }
 
     #[derive(Debug, Default, Clone)]

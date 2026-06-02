@@ -68,6 +68,10 @@ pub struct ExperienceMatch {
     pub reward_action: RewardAction,
     pub runtime_model_id: Option<String>,
     pub runtime_selected_adapter: Option<String>,
+    pub runtime_device_profile: Option<String>,
+    pub runtime_primary_lane: Option<String>,
+    pub runtime_fallback_lane: Option<String>,
+    pub runtime_memory_mode: Option<String>,
     pub runtime_forward_energy: Option<f32>,
     pub runtime_kv_influence: Option<f32>,
     pub recursive_runtime_calls: Option<usize>,
@@ -238,6 +242,10 @@ impl ExperienceStore {
                     reward_action: record.process_reward.action,
                     runtime_model_id: record.runtime_diagnostics.model_id.clone(),
                     runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
+                    runtime_device_profile: record.runtime_diagnostics.device_profile.clone(),
+                    runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
+                    runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),
+                    runtime_memory_mode: record.runtime_diagnostics.memory_mode.clone(),
                     runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                     runtime_kv_influence: record.runtime_diagnostics.kv_influence,
                     recursive_runtime_calls,
@@ -588,6 +596,26 @@ fn serialize_runtime_diagnostics(diagnostics: &RuntimeDiagnostics) -> String {
             .as_deref()
             .map(sanitize_control_part)
             .unwrap_or_default(),
+        diagnostics
+            .device_profile
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics
+            .primary_lane
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics
+            .fallback_lane
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics
+            .memory_mode
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
         diagnostics.layer_count.to_string(),
         diagnostics.global_layers.to_string(),
         diagnostics.local_window_layers.to_string(),
@@ -612,6 +640,10 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
         9 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
+            device_profile: None,
+            primary_lane: None,
+            fallback_lane: None,
+            memory_mode: None,
             layer_count: fields[2].parse::<usize>().ok()?,
             global_layers: 0,
             local_window_layers: 0,
@@ -626,6 +658,10 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
         12 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
+            device_profile: None,
+            primary_lane: None,
+            fallback_lane: None,
+            memory_mode: None,
             layer_count: fields[2].parse::<usize>().ok()?,
             global_layers: fields[3].parse::<usize>().ok()?,
             local_window_layers: fields[4].parse::<usize>().ok()?,
@@ -637,6 +673,24 @@ fn deserialize_runtime_diagnostics(value: &str) -> Option<RuntimeDiagnostics> {
             imported_kv_blocks: fields[10].parse::<usize>().ok()?,
             exported_kv_blocks: fields[11].parse::<usize>().ok()?,
         }),
+        16 => Some(RuntimeDiagnostics {
+            model_id: non_empty_string(fields[0]),
+            selected_adapter: non_empty_string(fields[1]),
+            device_profile: non_empty_string(fields[2]),
+            primary_lane: non_empty_string(fields[3]),
+            fallback_lane: non_empty_string(fields[4]),
+            memory_mode: non_empty_string(fields[5]),
+            layer_count: fields[6].parse::<usize>().ok()?,
+            global_layers: fields[7].parse::<usize>().ok()?,
+            local_window_layers: fields[8].parse::<usize>().ok()?,
+            convolutional_fusion_layers: fields[9].parse::<usize>().ok()?,
+            hidden_size: fields[10].parse::<usize>().ok()?,
+            local_window_tokens: fields[11].parse::<usize>().ok()?,
+            forward_energy: field_to_finite_f32(fields[12]),
+            kv_influence: field_to_finite_f32(fields[13]),
+            imported_kv_blocks: fields[14].parse::<usize>().ok()?,
+            exported_kv_blocks: fields[15].parse::<usize>().ok()?,
+        }),
         _ => None,
     }
 }
@@ -645,6 +699,10 @@ fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
     [
         diagnostics.model_id.as_deref().unwrap_or_default(),
         diagnostics.selected_adapter.as_deref().unwrap_or_default(),
+        diagnostics.device_profile.as_deref().unwrap_or_default(),
+        diagnostics.primary_lane.as_deref().unwrap_or_default(),
+        diagnostics.fallback_lane.as_deref().unwrap_or_default(),
+        diagnostics.memory_mode.as_deref().unwrap_or_default(),
     ]
     .into_iter()
     .filter(|item| !item.is_empty())
@@ -910,6 +968,34 @@ mod tests {
                 .as_deref(),
             Some("portable-rust")
         );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .device_profile
+                .as_deref(),
+            Some("cpu")
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .primary_lane
+                .as_deref(),
+            Some("cpu-vector")
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .fallback_lane
+                .as_deref(),
+            Some("cpu-portable")
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .runtime_diagnostics
+                .memory_mode
+                .as_deref(),
+            Some("tiered-disk")
+        );
         assert_eq!(loaded.records()[0].runtime_diagnostics.layer_count, 8);
         assert_eq!(
             loaded.records()[0].runtime_diagnostics.forward_energy,
@@ -994,6 +1080,10 @@ mod tests {
             runtime_diagnostics: RuntimeDiagnostics {
                 model_id: Some("noiron-runtime-v2".to_owned()),
                 selected_adapter: Some("portable-rust".to_owned()),
+                device_profile: Some("cpu".to_owned()),
+                primary_lane: Some("cpu-vector".to_owned()),
+                fallback_lane: Some("cpu-portable".to_owned()),
+                memory_mode: Some("tiered-disk".to_owned()),
                 layer_count: 16,
                 global_layers: 4,
                 local_window_layers: 8,
@@ -1018,6 +1108,19 @@ mod tests {
         assert_eq!(
             matches[0].runtime_selected_adapter.as_deref(),
             Some("portable-rust")
+        );
+        assert_eq!(matches[0].runtime_device_profile.as_deref(), Some("cpu"));
+        assert_eq!(
+            matches[0].runtime_primary_lane.as_deref(),
+            Some("cpu-vector")
+        );
+        assert_eq!(
+            matches[0].runtime_fallback_lane.as_deref(),
+            Some("cpu-portable")
+        );
+        assert_eq!(
+            matches[0].runtime_memory_mode.as_deref(),
+            Some("tiered-disk")
         );
         assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
         assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
@@ -1078,6 +1181,10 @@ mod tests {
             runtime_diagnostics: RuntimeDiagnostics {
                 model_id: Some("noiron-test-runtime".to_owned()),
                 selected_adapter: Some("portable-rust".to_owned()),
+                device_profile: Some("cpu".to_owned()),
+                primary_lane: Some("cpu-vector".to_owned()),
+                fallback_lane: Some("cpu-portable".to_owned()),
+                memory_mode: Some("tiered-disk".to_owned()),
                 layer_count: 8,
                 global_layers: 2,
                 local_window_layers: 4,

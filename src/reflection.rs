@@ -76,6 +76,10 @@ impl InferenceDraft {
 pub struct RuntimeDiagnostics {
     pub model_id: Option<String>,
     pub selected_adapter: Option<String>,
+    pub device_profile: Option<String>,
+    pub primary_lane: Option<String>,
+    pub fallback_lane: Option<String>,
+    pub memory_mode: Option<String>,
     pub layer_count: usize,
     pub global_layers: usize,
     pub local_window_layers: usize,
@@ -96,6 +100,7 @@ impl RuntimeDiagnostics {
     pub fn has_forward_signal(&self) -> bool {
         self.layer_count > 0
             || self.has_layer_mode_signal()
+            || self.has_device_execution_signal()
             || self.forward_energy.is_some()
             || self.kv_influence.is_some()
     }
@@ -116,6 +121,17 @@ impl RuntimeDiagnostics {
             && self.convolutional_fusion_layers > 0
     }
 
+    pub fn has_device_profile_signal(&self) -> bool {
+        has_text(self.device_profile.as_deref())
+    }
+
+    pub fn has_device_execution_signal(&self) -> bool {
+        self.has_device_profile_signal()
+            && has_text(self.primary_lane.as_deref())
+            && has_text(self.fallback_lane.as_deref())
+            && has_text(self.memory_mode.as_deref())
+    }
+
     pub fn with_layer_modes(
         mut self,
         global: usize,
@@ -127,6 +143,28 @@ impl RuntimeDiagnostics {
         self.convolutional_fusion_layers = convolutional_fusion;
         self
     }
+
+    pub fn with_device_execution(
+        mut self,
+        device_profile: impl Into<String>,
+        primary_lane: impl Into<String>,
+        fallback_lane: impl Into<String>,
+        memory_mode: impl Into<String>,
+    ) -> Self {
+        self.device_profile = non_empty_string(device_profile.into());
+        self.primary_lane = non_empty_string(primary_lane.into());
+        self.fallback_lane = non_empty_string(fallback_lane.into());
+        self.memory_mode = non_empty_string(memory_mode.into());
+        self
+    }
+
+    pub fn clear_device_execution(mut self) -> Self {
+        self.device_profile = None;
+        self.primary_lane = None;
+        self.fallback_lane = None;
+        self.memory_mode = None;
+        self
+    }
 }
 
 impl Default for RuntimeDiagnostics {
@@ -134,6 +172,10 @@ impl Default for RuntimeDiagnostics {
         Self {
             model_id: None,
             selected_adapter: None,
+            device_profile: None,
+            primary_lane: None,
+            fallback_lane: None,
+            memory_mode: None,
             layer_count: 0,
             global_layers: 0,
             local_window_layers: 0,
@@ -146,6 +188,15 @@ impl Default for RuntimeDiagnostics {
             exported_kv_blocks: 0,
         }
     }
+}
+
+fn has_text(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
+fn non_empty_string(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
 #[derive(Debug, Clone)]

@@ -189,6 +189,31 @@ impl ModelRuntime for LocalTransformerRuntime {
             RuntimeResponse::new(answer.clone()).with_diagnostics(RuntimeDiagnostics {
                 model_id: Some(self.manifest.metadata.model_id.clone()),
                 selected_adapter: selected_adapter.clone(),
+                device_profile: Some(request.hardware_plan.device.as_str().to_owned()),
+                primary_lane: Some(
+                    request
+                        .hardware_plan
+                        .execution
+                        .primary_lane
+                        .as_str()
+                        .to_owned(),
+                ),
+                fallback_lane: Some(
+                    request
+                        .hardware_plan
+                        .execution
+                        .fallback_lane
+                        .as_str()
+                        .to_owned(),
+                ),
+                memory_mode: Some(
+                    request
+                        .hardware_plan
+                        .execution
+                        .memory_mode
+                        .as_str()
+                        .to_owned(),
+                ),
                 layer_count: forward.layer_summaries.len(),
                 global_layers: transformer_counts.global,
                 local_window_layers: transformer_counts.local,
