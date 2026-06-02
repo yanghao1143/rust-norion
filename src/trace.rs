@@ -5,6 +5,8 @@ use std::path::Path;
 use crate::engine::InferenceOutcome;
 use crate::hierarchy::TaskProfile;
 
+const TRACE_FLOAT_EPSILON: f32 = 0.000_001;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceSchemaGateReport {
     pub passed: bool,
@@ -359,12 +361,60 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"live_inference_runs\":",
     },
     TraceRequiredField {
+        name: "evolution_live_router_threshold_mutations",
+        marker: "\"cumulative_live_router_threshold_mutations\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_hierarchy_weight_mutations",
+        marker: "\"cumulative_live_hierarchy_weight_mutations\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_router_threshold_delta",
+        marker: "\"cumulative_live_router_threshold_delta\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_hierarchy_weight_delta",
+        marker: "\"cumulative_live_hierarchy_weight_delta\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_memory_reinforcements",
+        marker: "\"cumulative_live_memory_reinforcements\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_memory_penalties",
+        marker: "\"cumulative_live_memory_penalties\":",
+    },
+    TraceRequiredField {
         name: "evolution_live_memory_updates",
         marker: "\"cumulative_live_memory_updates\":",
     },
     TraceRequiredField {
+        name: "evolution_live_stored_memories",
+        marker: "\"cumulative_live_stored_memories\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_stored_gist_memories",
+        marker: "\"cumulative_live_stored_gist_memories\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_stored_runtime_kv_memories",
+        marker: "\"cumulative_live_stored_runtime_kv_memories\":",
+    },
+    TraceRequiredField {
         name: "evolution_live_stored_memory_updates",
         marker: "\"cumulative_live_stored_memory_updates\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_reflection_issues",
+        marker: "\"cumulative_live_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_critical_reflection_issues",
+        marker: "\"cumulative_live_critical_reflection_issues\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_revision_actions",
+        marker: "\"cumulative_live_revision_actions\":",
     },
     TraceRequiredField {
         name: "evolution_router_threshold_mutations",
@@ -571,7 +621,195 @@ fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
         ));
     }
 
+    let cumulative_live_inference_runs =
+        extract_json_usize_field(line, "live_inference_runs").unwrap_or(0);
+    require_usize_at_least(
+        &mut failures,
+        "live_inference_runs",
+        cumulative_live_inference_runs,
+        "live_inference_recorded",
+        usize::from(live_inference_recorded),
+    );
+
+    let live_router_threshold_delta =
+        extract_json_f32_field(line, "live_router_threshold_delta").unwrap_or(0.0);
+    let cumulative_live_router_threshold_delta =
+        extract_json_f32_field(line, "cumulative_live_router_threshold_delta").unwrap_or(0.0);
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_live_router_threshold_delta",
+        cumulative_live_router_threshold_delta,
+        "live_router_threshold_delta",
+        live_router_threshold_delta,
+    );
+    let cumulative_live_router_threshold_mutations =
+        extract_json_usize_field(line, "cumulative_live_router_threshold_mutations").unwrap_or(0);
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_router_threshold_mutations",
+        cumulative_live_router_threshold_mutations,
+        "live_router_threshold_mutation",
+        usize::from(live_router_threshold_delta > TRACE_FLOAT_EPSILON),
+    );
+
+    let live_hierarchy_weight_delta =
+        extract_json_f32_field(line, "live_hierarchy_weight_delta").unwrap_or(0.0);
+    let cumulative_live_hierarchy_weight_delta =
+        extract_json_f32_field(line, "cumulative_live_hierarchy_weight_delta").unwrap_or(0.0);
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_live_hierarchy_weight_delta",
+        cumulative_live_hierarchy_weight_delta,
+        "live_hierarchy_weight_delta",
+        live_hierarchy_weight_delta,
+    );
+    let cumulative_live_hierarchy_weight_mutations =
+        extract_json_usize_field(line, "cumulative_live_hierarchy_weight_mutations").unwrap_or(0);
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_hierarchy_weight_mutations",
+        cumulative_live_hierarchy_weight_mutations,
+        "live_hierarchy_weight_mutation",
+        usize::from(live_hierarchy_weight_delta > TRACE_FLOAT_EPSILON),
+    );
+
+    let cumulative_live_reinforcements =
+        extract_json_usize_field(line, "cumulative_live_memory_reinforcements").unwrap_or(0);
+    let cumulative_live_penalties =
+        extract_json_usize_field(line, "cumulative_live_memory_penalties").unwrap_or(0);
+    let cumulative_live_memory_updates =
+        extract_json_usize_field(line, "cumulative_live_memory_updates").unwrap_or(0);
+    let expected_cumulative_live_memory_updates =
+        cumulative_live_reinforcements.saturating_add(cumulative_live_penalties);
+    if cumulative_live_memory_updates != expected_cumulative_live_memory_updates {
+        failures.push(format!(
+            "cumulative_live_memory_updates {cumulative_live_memory_updates} does not match cumulative_live_memory_reinforcements+cumulative_live_memory_penalties {expected_cumulative_live_memory_updates}"
+        ));
+    }
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_memory_reinforcements",
+        cumulative_live_reinforcements,
+        "live_memory_reinforcements",
+        live_reinforcements,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_memory_penalties",
+        cumulative_live_penalties,
+        "live_memory_penalties",
+        live_penalties,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_memory_updates",
+        cumulative_live_memory_updates,
+        "live_memory_updates",
+        live_memory_updates,
+    );
+
+    let cumulative_live_stored_memories =
+        extract_json_usize_field(line, "cumulative_live_stored_memories").unwrap_or(0);
+    let cumulative_live_stored_gist_memories =
+        extract_json_usize_field(line, "cumulative_live_stored_gist_memories").unwrap_or(0);
+    let cumulative_live_stored_runtime_kv_memories =
+        extract_json_usize_field(line, "cumulative_live_stored_runtime_kv_memories").unwrap_or(0);
+    let cumulative_live_stored_memory_updates =
+        extract_json_usize_field(line, "cumulative_live_stored_memory_updates").unwrap_or(0);
+    let expected_cumulative_live_stored_memory_updates = cumulative_live_stored_memories
+        .saturating_add(cumulative_live_stored_gist_memories)
+        .saturating_add(cumulative_live_stored_runtime_kv_memories);
+    if cumulative_live_stored_memory_updates != expected_cumulative_live_stored_memory_updates {
+        failures.push(format!(
+            "cumulative_live_stored_memory_updates {cumulative_live_stored_memory_updates} does not match cumulative live stored memory components {expected_cumulative_live_stored_memory_updates}"
+        ));
+    }
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_stored_memories",
+        cumulative_live_stored_memories,
+        "live_stored_memory",
+        live_stored_memory,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_stored_gist_memories",
+        cumulative_live_stored_gist_memories,
+        "live_stored_gist_memories",
+        live_stored_gist_memories,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_stored_runtime_kv_memories",
+        cumulative_live_stored_runtime_kv_memories,
+        "live_stored_runtime_kv_memories",
+        live_stored_runtime_kv_memories,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_stored_memory_updates",
+        cumulative_live_stored_memory_updates,
+        "live_stored_memory_updates",
+        live_stored_memory_updates,
+    );
+
+    let cumulative_live_reflection_issues =
+        extract_json_usize_field(line, "cumulative_live_reflection_issues").unwrap_or(0);
+    let cumulative_live_critical_reflection_issues =
+        extract_json_usize_field(line, "cumulative_live_critical_reflection_issues").unwrap_or(0);
+    let cumulative_live_revision_actions =
+        extract_json_usize_field(line, "cumulative_live_revision_actions").unwrap_or(0);
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_reflection_issues",
+        cumulative_live_reflection_issues,
+        "live_reflection_issues",
+        live_reflection_issues,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_critical_reflection_issues",
+        cumulative_live_critical_reflection_issues,
+        "live_critical_reflection_issues",
+        live_critical_reflection_issues,
+    );
+    require_usize_at_least(
+        &mut failures,
+        "cumulative_live_revision_actions",
+        cumulative_live_revision_actions,
+        "live_revision_actions",
+        live_revision_actions,
+    );
+
     failures
+}
+
+fn require_usize_at_least(
+    failures: &mut Vec<String>,
+    cumulative_name: &str,
+    cumulative: usize,
+    live_name: &str,
+    live: usize,
+) {
+    if cumulative < live {
+        failures.push(format!(
+            "{cumulative_name} {cumulative} is below {live_name} {live}"
+        ));
+    }
+}
+
+fn require_f32_at_least(
+    failures: &mut Vec<String>,
+    cumulative_name: &str,
+    cumulative: f32,
+    live_name: &str,
+    live: f32,
+) {
+    if cumulative + TRACE_FLOAT_EPSILON < live {
+        failures.push(format!(
+            "{cumulative_name} {cumulative:.6} is below {live_name} {live:.6}"
+        ));
+    }
 }
 
 fn evaluate_trace_runtime_kv(line: &str) -> Vec<String> {
@@ -916,6 +1154,10 @@ fn extract_json_nullable_f32_field(line: &str, field: &str) -> Option<f32> {
         return None;
     }
     number.parse::<f32>().ok().filter(|value| value.is_finite())
+}
+
+fn extract_json_f32_field(line: &str, field: &str) -> Option<f32> {
+    extract_json_nullable_f32_field(line, field)
 }
 
 fn extract_json_bool_field(line: &str, field: &str) -> Option<bool> {
@@ -1607,6 +1849,32 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_live_evolution_without_cumulative_ledger() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("trace live evolution ledger mismatch", TaskProfile::General),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace live evolution ledger mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        )
+        .replacen("\"live_inference_runs\":1", "\"live_inference_runs\":0", 1);
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("live_inference_runs 0")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_accepts_runtime_kv_storage_consistency() {
         let line = runtime_kv_trace_line()
             .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
@@ -1620,6 +1888,16 @@ mod tests {
             .replacen(
                 "\"live_stored_memory_updates\":2",
                 "\"live_stored_memory_updates\":3",
+                1,
+            )
+            .replacen(
+                "\"cumulative_live_stored_runtime_kv_memories\":0",
+                "\"cumulative_live_stored_runtime_kv_memories\":1",
+                1,
+            )
+            .replacen(
+                "\"cumulative_live_stored_memory_updates\":2",
+                "\"cumulative_live_stored_memory_updates\":3",
                 1,
             )
             .replacen("\"memory_write\":false", "\"memory_write\":true", 1)
