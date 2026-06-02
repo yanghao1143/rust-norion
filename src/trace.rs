@@ -1375,7 +1375,7 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
     }
     check_online_reward_strength(
         &mut failures,
-        "auto_replay live_evolution",
+        "auto_replay live_evolution_online_reward",
         live_evolution_online_reward_feedbacks,
         live_evolution_online_reward_reinforcements,
         live_evolution_online_reward_penalties,
@@ -2462,12 +2462,10 @@ fn check_online_reward_strength(
         }
     }
 
-    if total_strength + TRACE_FLOAT_EPSILON
-        < reinforcement_strength.max(0.0) + penalty_strength.max(0.0)
-    {
+    let component_strength = reinforcement_strength + penalty_strength;
+    if (total_strength - component_strength).abs() > TRACE_FLOAT_EPSILON {
         failures.push(format!(
-            "{label}_strength {total_strength:.6} is below reinforcement+penalty strength {:.6}",
-            reinforcement_strength.max(0.0) + penalty_strength.max(0.0)
+            "{label}_strength {total_strength:.6} does not match reinforcement+penalty strength {component_strength:.6}"
         ));
     }
     if total_strength > TRACE_FLOAT_EPSILON && feedbacks == 0 {
@@ -4655,6 +4653,43 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_live_online_reward_strength_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace live online reward strength mismatch",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace live online reward strength mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let original_strength =
+            extract_json_f32_field(&line, "live_online_reward_strength").unwrap();
+        let line = replace_trace_object_f32(
+            &line,
+            "live_evolution",
+            "live_online_reward_strength",
+            original_strength + 1.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("live_online_reward_strength")
+                    && failure.contains("does not match reinforcement+penalty strength")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_cumulative_live_online_reward_count_mismatch() {
         let mut engine = NoironEngine::new();
         let mut backend = HeuristicBackend;
@@ -4682,6 +4717,43 @@ mod tests {
             failures
                 .iter()
                 .any(|failure| failure.contains("cumulative_live_online_reward_feedbacks")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_cumulative_live_online_reward_strength_mismatch() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new(
+                "trace cumulative live online reward strength mismatch",
+                TaskProfile::General,
+            ),
+            &mut backend,
+        );
+        let line = trace_json_line(
+            "trace cumulative live online reward strength mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        );
+        let original_strength =
+            extract_json_f32_field(&line, "cumulative_live_online_reward_strength").unwrap();
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_live_online_reward_strength",
+            original_strength + 1.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_live_online_reward_strength")
+                    && failure.contains("does not match reinforcement+penalty strength")
+            }),
             "{failures:?}"
         );
     }
@@ -4845,6 +4917,29 @@ mod tests {
     }
 
     #[test]
+    fn trace_schema_gate_rejects_auto_replay_live_evolution_online_reward_strength_mismatch() {
+        let line = auto_replay_trace_line();
+        let original_strength =
+            extract_json_f32_field(&line, "live_evolution_online_reward_strength").unwrap();
+        let line = replace_trace_object_f32(
+            &line,
+            "auto_replay",
+            "live_evolution_online_reward_strength",
+            original_strength + 1.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("auto_replay live_evolution_online_reward_strength")
+                    && failure.contains("does not match reinforcement+penalty strength")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
     fn trace_schema_gate_rejects_cumulative_replay_live_evolution_online_reward_count_mismatch() {
         let line = increment_trace_object_usize(
             &auto_replay_trace_line(),
@@ -4857,6 +4952,33 @@ mod tests {
         assert!(
             failures.iter().any(|failure| {
                 failure.contains("cumulative_replay_live_evolution_online_reward_feedbacks")
+            }),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn trace_schema_gate_rejects_cumulative_replay_live_evolution_online_reward_strength_mismatch()
+    {
+        let line = auto_replay_trace_line();
+        let original_strength = extract_json_f32_field(
+            &line,
+            "cumulative_replay_live_evolution_online_reward_strength",
+        )
+        .unwrap();
+        let line = replace_trace_object_f32(
+            &line,
+            "evolution_ledger",
+            "cumulative_replay_live_evolution_online_reward_strength",
+            original_strength + 1.0,
+        );
+
+        let failures = evaluate_trace_schema_line(&line);
+
+        assert!(
+            failures.iter().any(|failure| {
+                failure.contains("cumulative_replay_live_evolution_online_reward_strength")
+                    && failure.contains("does not match reinforcement+penalty strength")
             }),
             "{failures:?}"
         );
@@ -5397,6 +5519,17 @@ mod tests {
             object,
             &format!("\"{field}\":{value}"),
             &format!("\"{field}\":{}", value.saturating_add(1)),
+        )
+    }
+
+    fn replace_trace_object_f32(line: &str, object: &str, field: &str, value: f32) -> String {
+        let object_json = json_object_after_field(line, object).expect("trace object should exist");
+        let old = extract_json_f32_field(object_json, field).expect("trace f32 field should exist");
+        replace_in_trace_object(
+            line,
+            object,
+            &format!("\"{field}\":{old:.6}"),
+            &format!("\"{field}\":{value:.6}"),
         )
     }
 
