@@ -563,6 +563,9 @@ fn serialize_live_evolution(report: LiveInferenceEvolution) -> String {
         report.online_reward_feedbacks.to_string(),
         report.online_reward_reinforcements.to_string(),
         report.online_reward_penalties.to_string(),
+        finite_f32_to_field(report.online_reward_strength.max(0.0)),
+        finite_f32_to_field(report.online_reward_reinforcement_strength.max(0.0)),
+        finite_f32_to_field(report.online_reward_penalty_strength.max(0.0)),
         report.memory_reinforcements.to_string(),
         report.memory_penalties.to_string(),
         bool_to_field(report.stored_memory).to_owned(),
@@ -581,11 +584,18 @@ fn deserialize_live_evolution(value: &str) -> Option<LiveInferenceEvolution> {
     }
 
     let fields = value.split(',').collect::<Vec<_>>();
-    if fields.len() != 10 && fields.len() != 13 {
+    if fields.len() != 10 && fields.len() != 13 && fields.len() != 16 {
         return None;
     }
-    let has_online_reward_feedback = fields.len() == 13;
-    let memory_index = if has_online_reward_feedback { 5 } else { 2 };
+    let has_online_reward_feedback = fields.len() >= 13;
+    let has_online_reward_strength = fields.len() == 16;
+    let memory_index = if has_online_reward_strength {
+        8
+    } else if has_online_reward_feedback {
+        5
+    } else {
+        2
+    };
 
     Some(LiveInferenceEvolution {
         router_threshold_delta: field_to_finite_f32(fields[0])?.max(0.0),
@@ -604,6 +614,21 @@ fn deserialize_live_evolution(value: &str) -> Option<LiveInferenceEvolution> {
             fields[4].parse::<usize>().ok()?
         } else {
             0
+        },
+        online_reward_strength: if has_online_reward_strength {
+            field_to_finite_f32(fields[5])?.max(0.0)
+        } else {
+            0.0
+        },
+        online_reward_reinforcement_strength: if has_online_reward_strength {
+            field_to_finite_f32(fields[6])?.max(0.0)
+        } else {
+            0.0
+        },
+        online_reward_penalty_strength: if has_online_reward_strength {
+            field_to_finite_f32(fields[7])?.max(0.0)
+        } else {
+            0.0
         },
         memory_reinforcements: fields[memory_index].parse::<usize>().ok()?,
         memory_penalties: fields[memory_index + 1].parse::<usize>().ok()?,
@@ -1266,6 +1291,21 @@ mod tests {
             loaded.records()[0].live_evolution.online_reward_penalties,
             0
         );
+        assert!((loaded.records()[0].live_evolution.online_reward_strength - 0.72).abs() < 0.0001);
+        assert!(
+            (loaded.records()[0]
+                .live_evolution
+                .online_reward_reinforcement_strength
+                - 0.72)
+                .abs()
+                < 0.0001
+        );
+        assert_eq!(
+            loaded.records()[0]
+                .live_evolution
+                .online_reward_penalty_strength,
+            0.0
+        );
         assert_eq!(loaded.records()[0].live_evolution.memory_reinforcements, 1);
         assert_eq!(loaded.records()[0].live_evolution.memory_penalties, 0);
         assert!(loaded.records()[0].live_evolution.stored_memory);
@@ -1294,8 +1334,26 @@ mod tests {
         assert_eq!(loaded.online_reward_feedbacks, 0);
         assert_eq!(loaded.online_reward_reinforcements, 0);
         assert_eq!(loaded.online_reward_penalties, 0);
+        assert_eq!(loaded.online_reward_strength, 0.0);
+        assert_eq!(loaded.online_reward_reinforcement_strength, 0.0);
+        assert_eq!(loaded.online_reward_penalty_strength, 0.0);
         assert_eq!(loaded.memory_reinforcements, 1);
         assert_eq!(loaded.stored_gist_memories, 2);
+        assert_eq!(loaded.revision_actions, 1);
+    }
+
+    #[test]
+    fn legacy_live_evolution_without_online_reward_strength_loads_defaults() {
+        let loaded = deserialize_live_evolution("0.030000,0.040000,1,1,0,1,0,1,2,1,1,0,1").unwrap();
+
+        assert_eq!(loaded.online_reward_feedbacks, 1);
+        assert_eq!(loaded.online_reward_reinforcements, 1);
+        assert_eq!(loaded.online_reward_penalties, 0);
+        assert_eq!(loaded.online_reward_strength, 0.0);
+        assert_eq!(loaded.online_reward_reinforcement_strength, 0.0);
+        assert_eq!(loaded.online_reward_penalty_strength, 0.0);
+        assert_eq!(loaded.memory_reinforcements, 1);
+        assert_eq!(loaded.stored_runtime_kv_memories, 1);
         assert_eq!(loaded.revision_actions, 1);
     }
 
@@ -1552,6 +1610,9 @@ mod tests {
                 online_reward_feedbacks: 1,
                 online_reward_reinforcements: 1,
                 online_reward_penalties: 0,
+                online_reward_strength: 0.72,
+                online_reward_reinforcement_strength: 0.72,
+                online_reward_penalty_strength: 0.0,
                 memory_reinforcements: 1,
                 memory_penalties: 0,
                 stored_memory: true,

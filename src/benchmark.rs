@@ -4435,6 +4435,15 @@ fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> Evolut
         live_online_reward_penalties: left
             .live_online_reward_penalties
             .max(right.live_online_reward_penalties),
+        live_online_reward_strength: left
+            .live_online_reward_strength
+            .max(right.live_online_reward_strength),
+        live_online_reward_reinforcement_strength: left
+            .live_online_reward_reinforcement_strength
+            .max(right.live_online_reward_reinforcement_strength),
+        live_online_reward_penalty_strength: left
+            .live_online_reward_penalty_strength
+            .max(right.live_online_reward_penalty_strength),
         live_memory_reinforcements: left
             .live_memory_reinforcements
             .max(right.live_memory_reinforcements),
@@ -4517,6 +4526,15 @@ fn max_evolution_ledger(left: EvolutionLedger, right: EvolutionLedger) -> Evolut
         replay_live_evolution_online_reward_penalties: left
             .replay_live_evolution_online_reward_penalties
             .max(right.replay_live_evolution_online_reward_penalties),
+        replay_live_evolution_online_reward_strength: left
+            .replay_live_evolution_online_reward_strength
+            .max(right.replay_live_evolution_online_reward_strength),
+        replay_live_evolution_online_reward_reinforcement_strength: left
+            .replay_live_evolution_online_reward_reinforcement_strength
+            .max(right.replay_live_evolution_online_reward_reinforcement_strength),
+        replay_live_evolution_online_reward_penalty_strength: left
+            .replay_live_evolution_online_reward_penalty_strength
+            .max(right.replay_live_evolution_online_reward_penalty_strength),
         replay_live_evolution_memory_updates: left
             .replay_live_evolution_memory_updates
             .max(right.replay_live_evolution_memory_updates),
@@ -6700,6 +6718,9 @@ mod tests {
                 live_online_reward_feedbacks: 3,
                 live_online_reward_reinforcements: 2,
                 live_online_reward_penalties: 1,
+                live_online_reward_strength: 1.80,
+                live_online_reward_reinforcement_strength: 1.20,
+                live_online_reward_penalty_strength: 0.60,
                 live_memory_reinforcements: 3,
                 live_memory_penalties: 2,
                 live_stored_memories: 1,
@@ -6732,6 +6753,9 @@ mod tests {
                 replay_live_evolution_online_reward_feedbacks: 2,
                 replay_live_evolution_online_reward_reinforcements: 1,
                 replay_live_evolution_online_reward_penalties: 1,
+                replay_live_evolution_online_reward_strength: 1.30,
+                replay_live_evolution_online_reward_reinforcement_strength: 0.80,
+                replay_live_evolution_online_reward_penalty_strength: 0.50,
                 replay_live_evolution_memory_updates: 3,
                 replay_live_evolution_stored_memory_updates: 2,
                 replay_live_evolution_reflection_issues: 2,

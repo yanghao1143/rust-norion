@@ -856,6 +856,9 @@ impl NoironEngine {
         let mut online_reward_feedbacks = 0;
         let mut online_reward_reinforcements = 0;
         let mut online_reward_penalties = 0;
+        let mut online_reward_strength = 0.0;
+        let mut online_reward_reinforcement_strength = 0.0;
+        let mut online_reward_penalty_strength = 0.0;
         if let Some(reward_metrics) =
             process_reward_feedback_metrics(&process_reward, metrics, &report, &drift_report)
         {
@@ -863,9 +866,16 @@ impl NoironEngine {
                 .observe_with_profile(request.profile, reward_metrics);
             hierarchy = self.hierarchy.observe(request.profile, reward_metrics);
             online_reward_feedbacks = 1;
+            online_reward_strength = process_reward_feedback_strength(&process_reward);
             match process_reward.action {
-                RewardAction::Reinforce => online_reward_reinforcements = 1,
-                RewardAction::Penalize => online_reward_penalties = 1,
+                RewardAction::Reinforce => {
+                    online_reward_reinforcements = 1;
+                    online_reward_reinforcement_strength = online_reward_strength;
+                }
+                RewardAction::Penalize => {
+                    online_reward_penalties = 1;
+                    online_reward_penalty_strength = online_reward_strength;
+                }
                 RewardAction::Hold => {}
             }
             let feedback_note = process_reward_feedback_note(&process_reward, reward_metrics);
@@ -896,6 +906,9 @@ impl NoironEngine {
             online_reward_feedbacks,
             online_reward_reinforcements,
             online_reward_penalties,
+            online_reward_strength,
+            online_reward_reinforcement_strength,
+            online_reward_penalty_strength,
             memory_reinforcements: memory_feedback.reinforced,
             memory_penalties: memory_feedback.penalized,
             stored_memory: stored_memory_id.is_some(),
@@ -1313,10 +1326,13 @@ fn replay_live_evolution_reinforcement_bonus(item: &ExperienceReplayItem) -> f32
         ((live.router_threshold_delta + live.hierarchy_weight_delta).clamp(0.0, 0.25)) * 0.16;
     let memory_bonus = (live.memory_reinforcements as f32 * 0.018).min(0.06);
     let stored_bonus = (live.stored_memory_updates() as f32 * 0.012).min(0.05);
+    let online_reward_bonus =
+        nonnegative_f32(live.online_reward_reinforcement_strength).clamp(0.0, 1.0) * 0.05;
     let reflection_drag =
         (live.reflection_issues as f32 * 0.010 + live.revision_actions as f32 * 0.008).min(0.05);
 
-    (mutation_bonus + memory_bonus + stored_bonus - reflection_drag).clamp(0.0, 0.12)
+    (mutation_bonus + memory_bonus + stored_bonus + online_reward_bonus - reflection_drag)
+        .clamp(0.0, 0.14)
 }
 
 fn replay_live_evolution_penalty_pressure(item: &ExperienceReplayItem) -> f32 {
@@ -1326,9 +1342,20 @@ fn replay_live_evolution_penalty_pressure(item: &ExperienceReplayItem) -> f32 {
         + live.revision_actions as f32 * 0.018)
         .min(0.16);
     let memory_penalty_pressure = (live.memory_penalties as f32 * 0.024).min(0.08);
+    let online_reward_pressure =
+        nonnegative_f32(live.online_reward_penalty_strength).clamp(0.0, 1.0) * 0.07;
     let stored_memory_drag = (live.stored_memory_updates() as f32 * 0.006).min(0.04);
 
-    (reflection_pressure + memory_penalty_pressure - stored_memory_drag).clamp(0.0, 0.18)
+    (reflection_pressure + memory_penalty_pressure + online_reward_pressure - stored_memory_drag)
+        .clamp(0.0, 0.22)
+}
+
+fn nonnegative_f32(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
+    }
 }
 
 fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
@@ -2665,12 +2692,26 @@ mod tests {
         assert_eq!(outcome.live_evolution.online_reward_feedbacks, 1);
         assert_eq!(outcome.live_evolution.online_reward_reinforcements, 0);
         assert_eq!(outcome.live_evolution.online_reward_penalties, 1);
+        assert!(outcome.live_evolution.online_reward_strength > 0.0);
+        assert_eq!(
+            outcome.live_evolution.online_reward_reinforcement_strength,
+            0.0
+        );
+        assert!(outcome.live_evolution.online_reward_penalty_strength > 0.0);
         assert_eq!(outcome.evolution_ledger.live_online_reward_feedbacks, 1);
         assert_eq!(
             outcome.evolution_ledger.live_online_reward_reinforcements,
             0
         );
         assert_eq!(outcome.evolution_ledger.live_online_reward_penalties, 1);
+        assert!(outcome.evolution_ledger.live_online_reward_strength > 0.0);
+        assert_eq!(
+            outcome
+                .evolution_ledger
+                .live_online_reward_reinforcement_strength,
+            0.0
+        );
+        assert!(outcome.evolution_ledger.live_online_reward_penalty_strength > 0.0);
         assert_eq!(
             engine.router.observations(),
             outcome.stream_reports.len() as u64 + 2
@@ -2688,6 +2729,22 @@ mod tests {
                 .notes
                 .iter()
                 .any(|note| note.starts_with("online_reward_feedback:action=penalize"))
+        );
+        assert!(
+            (engine.experience.records()[0]
+                .live_evolution
+                .online_reward_strength
+                - outcome.live_evolution.online_reward_strength)
+                .abs()
+                < 0.0001
+        );
+        assert!(
+            (engine.experience.records()[0]
+                .live_evolution
+                .online_reward_penalty_strength
+                - outcome.live_evolution.online_reward_penalty_strength)
+                .abs()
+                < 0.0001
         );
         assert!(
             (engine.experience.records()[0]
@@ -3521,6 +3578,9 @@ mod tests {
                     online_reward_feedbacks: 1,
                     online_reward_reinforcements: 1,
                     online_reward_penalties: 0,
+                    online_reward_strength: 0.90,
+                    online_reward_reinforcement_strength: 0.90,
+                    online_reward_penalty_strength: 0.0,
                     memory_reinforcements: 3,
                     memory_penalties: 0,
                     stored_memory: true,
@@ -3554,6 +3614,9 @@ mod tests {
                     online_reward_feedbacks: 1,
                     online_reward_reinforcements: 0,
                     online_reward_penalties: 1,
+                    online_reward_strength: 0.85,
+                    online_reward_reinforcement_strength: 0.0,
+                    online_reward_penalty_strength: 0.85,
                     memory_reinforcements: 0,
                     memory_penalties: 3,
                     stored_memory: false,

@@ -393,6 +393,18 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         marker: "\"live_evolution_online_reward_penalties\":",
     },
     TraceRequiredField {
+        name: "auto_replay_live_evolution_online_reward_strength",
+        marker: "\"live_evolution_online_reward_strength\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_evolution_online_reward_reinforcement_strength",
+        marker: "\"live_evolution_online_reward_reinforcement_strength\":",
+    },
+    TraceRequiredField {
+        name: "auto_replay_live_evolution_online_reward_penalty_strength",
+        marker: "\"live_evolution_online_reward_penalty_strength\":",
+    },
+    TraceRequiredField {
         name: "auto_replay_live_evolution_memory_updates",
         marker: "\"live_evolution_memory_updates\":",
     },
@@ -447,6 +459,18 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     TraceRequiredField {
         name: "live_online_reward_penalties",
         marker: "\"live_online_reward_penalties\":",
+    },
+    TraceRequiredField {
+        name: "live_online_reward_strength",
+        marker: "\"live_online_reward_strength\":",
+    },
+    TraceRequiredField {
+        name: "live_online_reward_reinforcement_strength",
+        marker: "\"live_online_reward_reinforcement_strength\":",
+    },
+    TraceRequiredField {
+        name: "live_online_reward_penalty_strength",
+        marker: "\"live_online_reward_penalty_strength\":",
     },
     TraceRequiredField {
         name: "live_memory_updates",
@@ -527,6 +551,18 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     TraceRequiredField {
         name: "evolution_live_online_reward_penalties",
         marker: "\"cumulative_live_online_reward_penalties\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_online_reward_strength",
+        marker: "\"cumulative_live_online_reward_strength\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_online_reward_reinforcement_strength",
+        marker: "\"cumulative_live_online_reward_reinforcement_strength\":",
+    },
+    TraceRequiredField {
+        name: "evolution_live_online_reward_penalty_strength",
+        marker: "\"cumulative_live_online_reward_penalty_strength\":",
     },
     TraceRequiredField {
         name: "evolution_live_memory_reinforcements",
@@ -619,6 +655,18 @@ const TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     TraceRequiredField {
         name: "evolution_replay_live_evolution_online_reward_penalties",
         marker: "\"cumulative_replay_live_evolution_online_reward_penalties\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_online_reward_strength",
+        marker: "\"cumulative_replay_live_evolution_online_reward_strength\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_online_reward_reinforcement_strength",
+        marker: "\"cumulative_replay_live_evolution_online_reward_reinforcement_strength\":",
+    },
+    TraceRequiredField {
+        name: "evolution_replay_live_evolution_online_reward_penalty_strength",
+        marker: "\"cumulative_replay_live_evolution_online_reward_penalty_strength\":",
     },
     TraceRequiredField {
         name: "evolution_replay_live_evolution_memory_updates",
@@ -1206,6 +1254,14 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         extract_json_usize_field(line, "live_evolution_online_reward_reinforcements").unwrap_or(0);
     let live_evolution_online_reward_penalties =
         extract_json_usize_field(line, "live_evolution_online_reward_penalties").unwrap_or(0);
+    let live_evolution_online_reward_strength =
+        extract_json_f32_field(line, "live_evolution_online_reward_strength").unwrap_or(0.0);
+    let live_evolution_online_reward_reinforcement_strength =
+        extract_json_f32_field(line, "live_evolution_online_reward_reinforcement_strength")
+            .unwrap_or(0.0);
+    let live_evolution_online_reward_penalty_strength =
+        extract_json_f32_field(line, "live_evolution_online_reward_penalty_strength")
+            .unwrap_or(0.0);
     let live_evolution_memory_updates =
         extract_json_usize_field(line, "live_evolution_memory_updates").unwrap_or(0);
     let live_evolution_stored_memory_updates =
@@ -1317,6 +1373,16 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
             "auto_replay live_evolution_online_reward_feedbacks {live_evolution_online_reward_feedbacks} does not match live_evolution_online_reward_reinforcements+live_evolution_online_reward_penalties {expected_live_evolution_online_reward_feedbacks}"
         ));
     }
+    check_online_reward_strength(
+        &mut failures,
+        "auto_replay live_evolution",
+        live_evolution_online_reward_feedbacks,
+        live_evolution_online_reward_reinforcements,
+        live_evolution_online_reward_penalties,
+        live_evolution_online_reward_strength,
+        live_evolution_online_reward_reinforcement_strength,
+        live_evolution_online_reward_penalty_strength,
+    );
     let live_evolution_activity = live_evolution_router_threshold_mutations
         .saturating_add(live_evolution_hierarchy_weight_mutations)
         .saturating_add(live_evolution_online_reward_feedbacks)
@@ -1440,6 +1506,11 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         if live_evolution_hierarchy_weight_delta > TRACE_FLOAT_EPSILON {
             failures.push(format!(
                 "auto_replay live_evolution_hierarchy_weight_delta {live_evolution_hierarchy_weight_delta:.6} requires applied > 0"
+            ));
+        }
+        if live_evolution_online_reward_strength > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay live_evolution_online_reward_strength {live_evolution_online_reward_strength:.6} requires applied > 0"
             ));
         }
     } else {
@@ -1616,6 +1687,22 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         "cumulative_replay_live_evolution_online_reward_penalties",
     )
     .unwrap_or(0);
+    let cumulative_replay_live_evolution_online_reward_strength = extract_json_f32_field(
+        line,
+        "cumulative_replay_live_evolution_online_reward_strength",
+    )
+    .unwrap_or(0.0);
+    let cumulative_replay_live_evolution_online_reward_reinforcement_strength =
+        extract_json_f32_field(
+            line,
+            "cumulative_replay_live_evolution_online_reward_reinforcement_strength",
+        )
+        .unwrap_or(0.0);
+    let cumulative_replay_live_evolution_online_reward_penalty_strength = extract_json_f32_field(
+        line,
+        "cumulative_replay_live_evolution_online_reward_penalty_strength",
+    )
+    .unwrap_or(0.0);
     let cumulative_replay_live_evolution_memory_updates =
         extract_json_usize_field(line, "cumulative_replay_live_evolution_memory_updates")
             .unwrap_or(0);
@@ -1856,6 +1943,16 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
             "cumulative_replay_live_evolution_online_reward_feedbacks {cumulative_replay_live_evolution_online_reward_feedbacks} does not match cumulative replay live evolution online reward components {expected_cumulative_replay_online_reward_feedbacks}"
         ));
     }
+    check_online_reward_strength(
+        &mut failures,
+        "cumulative_replay_live_evolution_online_reward",
+        cumulative_replay_live_evolution_online_reward_feedbacks,
+        cumulative_replay_live_evolution_online_reward_reinforcements,
+        cumulative_replay_live_evolution_online_reward_penalties,
+        cumulative_replay_live_evolution_online_reward_strength,
+        cumulative_replay_live_evolution_online_reward_reinforcement_strength,
+        cumulative_replay_live_evolution_online_reward_penalty_strength,
+    );
     require_usize_at_least(
         &mut failures,
         "cumulative_replay_live_evolution_online_reward_feedbacks",
@@ -1876,6 +1973,27 @@ fn evaluate_trace_auto_replay(line: &str) -> Vec<String> {
         cumulative_replay_live_evolution_online_reward_penalties,
         "auto_replay live_evolution_online_reward_penalties",
         live_evolution_online_reward_penalties,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_online_reward_strength",
+        cumulative_replay_live_evolution_online_reward_strength,
+        "auto_replay live_evolution_online_reward_strength",
+        live_evolution_online_reward_strength,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_online_reward_reinforcement_strength",
+        cumulative_replay_live_evolution_online_reward_reinforcement_strength,
+        "auto_replay live_evolution_online_reward_reinforcement_strength",
+        live_evolution_online_reward_reinforcement_strength,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_replay_live_evolution_online_reward_penalty_strength",
+        cumulative_replay_live_evolution_online_reward_penalty_strength,
+        "auto_replay live_evolution_online_reward_penalty_strength",
+        live_evolution_online_reward_penalty_strength,
     );
     require_usize_at_least(
         &mut failures,
@@ -2079,6 +2197,12 @@ fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
         extract_json_usize_field(line, "live_online_reward_reinforcements").unwrap_or(0);
     let live_online_reward_penalties =
         extract_json_usize_field(line, "live_online_reward_penalties").unwrap_or(0);
+    let live_online_reward_strength =
+        extract_json_f32_field(line, "live_online_reward_strength").unwrap_or(0.0);
+    let live_online_reward_reinforcement_strength =
+        extract_json_f32_field(line, "live_online_reward_reinforcement_strength").unwrap_or(0.0);
+    let live_online_reward_penalty_strength =
+        extract_json_f32_field(line, "live_online_reward_penalty_strength").unwrap_or(0.0);
     let expected_live_online_reward_feedbacks =
         live_online_reward_reinforcements.saturating_add(live_online_reward_penalties);
     if live_online_reward_feedbacks != expected_live_online_reward_feedbacks {
@@ -2086,6 +2210,16 @@ fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
             "live_online_reward_feedbacks {live_online_reward_feedbacks} does not match live_online_reward_reinforcements+live_online_reward_penalties {expected_live_online_reward_feedbacks}"
         ));
     }
+    check_online_reward_strength(
+        &mut failures,
+        "live_online_reward",
+        live_online_reward_feedbacks,
+        live_online_reward_reinforcements,
+        live_online_reward_penalties,
+        live_online_reward_strength,
+        live_online_reward_reinforcement_strength,
+        live_online_reward_penalty_strength,
+    );
     if live_online_reward_feedbacks > 0 {
         let has_online_reward_note = line.contains("online_reward_feedback:");
         if !has_online_reward_note {
@@ -2100,6 +2234,14 @@ fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
         extract_json_usize_field(line, "cumulative_live_online_reward_reinforcements").unwrap_or(0);
     let cumulative_live_online_reward_penalties =
         extract_json_usize_field(line, "cumulative_live_online_reward_penalties").unwrap_or(0);
+    let cumulative_live_online_reward_strength =
+        extract_json_f32_field(line, "cumulative_live_online_reward_strength").unwrap_or(0.0);
+    let cumulative_live_online_reward_reinforcement_strength =
+        extract_json_f32_field(line, "cumulative_live_online_reward_reinforcement_strength")
+            .unwrap_or(0.0);
+    let cumulative_live_online_reward_penalty_strength =
+        extract_json_f32_field(line, "cumulative_live_online_reward_penalty_strength")
+            .unwrap_or(0.0);
     let expected_cumulative_live_online_reward_feedbacks =
         cumulative_live_online_reward_reinforcements
             .saturating_add(cumulative_live_online_reward_penalties);
@@ -2108,6 +2250,16 @@ fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
             "cumulative_live_online_reward_feedbacks {cumulative_live_online_reward_feedbacks} does not match cumulative live online reward components {expected_cumulative_live_online_reward_feedbacks}"
         ));
     }
+    check_online_reward_strength(
+        &mut failures,
+        "cumulative_live_online_reward",
+        cumulative_live_online_reward_feedbacks,
+        cumulative_live_online_reward_reinforcements,
+        cumulative_live_online_reward_penalties,
+        cumulative_live_online_reward_strength,
+        cumulative_live_online_reward_reinforcement_strength,
+        cumulative_live_online_reward_penalty_strength,
+    );
     require_usize_at_least(
         &mut failures,
         "cumulative_live_online_reward_feedbacks",
@@ -2128,6 +2280,27 @@ fn evaluate_trace_live_evolution(line: &str) -> Vec<String> {
         cumulative_live_online_reward_penalties,
         "live_online_reward_penalties",
         live_online_reward_penalties,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_live_online_reward_strength",
+        cumulative_live_online_reward_strength,
+        "live_online_reward_strength",
+        live_online_reward_strength,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_live_online_reward_reinforcement_strength",
+        cumulative_live_online_reward_reinforcement_strength,
+        "live_online_reward_reinforcement_strength",
+        live_online_reward_reinforcement_strength,
+    );
+    require_f32_at_least(
+        &mut failures,
+        "cumulative_live_online_reward_penalty_strength",
+        cumulative_live_online_reward_penalty_strength,
+        "live_online_reward_penalty_strength",
+        live_online_reward_penalty_strength,
     );
 
     let cumulative_live_reinforcements =
@@ -2265,6 +2438,51 @@ fn require_f32_at_least(
     if cumulative + TRACE_FLOAT_EPSILON < live {
         failures.push(format!(
             "{cumulative_name} {cumulative:.6} is below {live_name} {live:.6}"
+        ));
+    }
+}
+
+fn check_online_reward_strength(
+    failures: &mut Vec<String>,
+    label: &str,
+    feedbacks: usize,
+    reinforcements: usize,
+    penalties: usize,
+    total_strength: f32,
+    reinforcement_strength: f32,
+    penalty_strength: f32,
+) {
+    for (name, value) in [
+        ("strength", total_strength),
+        ("reinforcement_strength", reinforcement_strength),
+        ("penalty_strength", penalty_strength),
+    ] {
+        if value < -TRACE_FLOAT_EPSILON {
+            failures.push(format!("{label}_{name} {value:.6} is negative"));
+        }
+    }
+
+    if total_strength + TRACE_FLOAT_EPSILON
+        < reinforcement_strength.max(0.0) + penalty_strength.max(0.0)
+    {
+        failures.push(format!(
+            "{label}_strength {total_strength:.6} is below reinforcement+penalty strength {:.6}",
+            reinforcement_strength.max(0.0) + penalty_strength.max(0.0)
+        ));
+    }
+    if total_strength > TRACE_FLOAT_EPSILON && feedbacks == 0 {
+        failures.push(format!(
+            "{label}_strength {total_strength:.6} requires feedbacks > 0"
+        ));
+    }
+    if reinforcement_strength > TRACE_FLOAT_EPSILON && reinforcements == 0 {
+        failures.push(format!(
+            "{label}_reinforcement_strength {reinforcement_strength:.6} requires reinforcements > 0"
+        ));
+    }
+    if penalty_strength > TRACE_FLOAT_EPSILON && penalties == 0 {
+        failures.push(format!(
+            "{label}_penalty_strength {penalty_strength:.6} requires penalties > 0"
         ));
     }
 }
@@ -3172,9 +3390,9 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_online_reward_reinforcements\":{},\"live_evolution_online_reward_penalties\":{},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
-         \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
-         \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_online_reward_feedbacks\":{},\"cumulative_live_online_reward_reinforcements\":{},\"cumulative_live_online_reward_penalties\":{},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_replay_live_memory_feedback_detail_items\":{},\"cumulative_replay_live_memory_feedback_applied\":{},\"cumulative_replay_live_memory_feedback_removed\":{},\"cumulative_replay_live_memory_feedback_missing\":{},\"cumulative_replay_live_memory_feedback_strength_delta\":{:.6},\"cumulative_replay_live_evolution_items\":{},\"cumulative_replay_live_evolution_router_threshold_mutations\":{},\"cumulative_replay_live_evolution_hierarchy_weight_mutations\":{},\"cumulative_replay_live_evolution_router_threshold_delta\":{:.6},\"cumulative_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"cumulative_replay_live_evolution_online_reward_feedbacks\":{},\"cumulative_replay_live_evolution_online_reward_reinforcements\":{},\"cumulative_replay_live_evolution_online_reward_penalties\":{},\"cumulative_replay_live_evolution_memory_updates\":{},\"cumulative_replay_live_evolution_stored_memory_updates\":{},\"cumulative_replay_live_evolution_reflection_issues\":{},\"cumulative_replay_live_evolution_critical_reflection_issues\":{},\"cumulative_replay_live_evolution_revision_actions\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_online_reward_reinforcements\":{},\"live_evolution_online_reward_penalties\":{},\"live_evolution_online_reward_strength\":{:.6},\"live_evolution_online_reward_reinforcement_strength\":{:.6},\"live_evolution_online_reward_penalty_strength\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_online_reward_strength\":{:.6},\"live_online_reward_reinforcement_strength\":{:.6},\"live_online_reward_penalty_strength\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
+         \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_online_reward_feedbacks\":{},\"cumulative_live_online_reward_reinforcements\":{},\"cumulative_live_online_reward_penalties\":{},\"cumulative_live_online_reward_strength\":{:.6},\"cumulative_live_online_reward_reinforcement_strength\":{:.6},\"cumulative_live_online_reward_penalty_strength\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_replay_live_memory_feedback_detail_items\":{},\"cumulative_replay_live_memory_feedback_applied\":{},\"cumulative_replay_live_memory_feedback_removed\":{},\"cumulative_replay_live_memory_feedback_missing\":{},\"cumulative_replay_live_memory_feedback_strength_delta\":{:.6},\"cumulative_replay_live_evolution_items\":{},\"cumulative_replay_live_evolution_router_threshold_mutations\":{},\"cumulative_replay_live_evolution_hierarchy_weight_mutations\":{},\"cumulative_replay_live_evolution_router_threshold_delta\":{:.6},\"cumulative_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"cumulative_replay_live_evolution_online_reward_feedbacks\":{},\"cumulative_replay_live_evolution_online_reward_reinforcements\":{},\"cumulative_replay_live_evolution_online_reward_penalties\":{},\"cumulative_replay_live_evolution_online_reward_strength\":{:.6},\"cumulative_replay_live_evolution_online_reward_reinforcement_strength\":{:.6},\"cumulative_replay_live_evolution_online_reward_penalty_strength\":{:.6},\"cumulative_replay_live_evolution_memory_updates\":{},\"cumulative_replay_live_evolution_stored_memory_updates\":{},\"cumulative_replay_live_evolution_reflection_issues\":{},\"cumulative_replay_live_evolution_critical_reflection_issues\":{},\"cumulative_replay_live_evolution_revision_actions\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
          \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
          \"experience_id\":{}\
@@ -3442,6 +3660,15 @@ pub fn trace_json_line_with_case(
             .map(|report| report.live_evolution_online_reward_penalties)
             .unwrap_or(0),
         auto_replay
+            .map(|report| report.live_evolution_online_reward_strength)
+            .unwrap_or(0.0),
+        auto_replay
+            .map(|report| report.live_evolution_online_reward_reinforcement_strength)
+            .unwrap_or(0.0),
+        auto_replay
+            .map(|report| report.live_evolution_online_reward_penalty_strength)
+            .unwrap_or(0.0),
+        auto_replay
             .map(|report| report.live_evolution_memory_updates)
             .unwrap_or(0),
         auto_replay
@@ -3473,6 +3700,9 @@ pub fn trace_json_line_with_case(
         outcome.live_evolution.online_reward_feedbacks,
         outcome.live_evolution.online_reward_reinforcements,
         outcome.live_evolution.online_reward_penalties,
+        outcome.live_evolution.online_reward_strength,
+        outcome.live_evolution.online_reward_reinforcement_strength,
+        outcome.live_evolution.online_reward_penalty_strength,
         outcome.live_evolution.memory_reinforcements,
         outcome.live_evolution.memory_penalties,
         outcome
@@ -3496,6 +3726,11 @@ pub fn trace_json_line_with_case(
         outcome.evolution_ledger.live_online_reward_feedbacks,
         outcome.evolution_ledger.live_online_reward_reinforcements,
         outcome.evolution_ledger.live_online_reward_penalties,
+        outcome.evolution_ledger.live_online_reward_strength,
+        outcome
+            .evolution_ledger
+            .live_online_reward_reinforcement_strength,
+        outcome.evolution_ledger.live_online_reward_penalty_strength,
         outcome.evolution_ledger.live_memory_reinforcements,
         outcome.evolution_ledger.live_memory_penalties,
         outcome.evolution_ledger.live_memory_updates(),
@@ -3556,6 +3791,15 @@ pub fn trace_json_line_with_case(
         outcome
             .evolution_ledger
             .replay_live_evolution_online_reward_penalties,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_online_reward_strength,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_online_reward_reinforcement_strength,
+        outcome
+            .evolution_ledger
+            .replay_live_evolution_online_reward_penalty_strength,
         outcome
             .evolution_ledger
             .replay_live_evolution_memory_updates,
@@ -3842,6 +4086,9 @@ mod tests {
         assert!(line.contains("\"live_evolution_online_reward_feedbacks\":"));
         assert!(line.contains("\"live_evolution_online_reward_reinforcements\":"));
         assert!(line.contains("\"live_evolution_online_reward_penalties\":"));
+        assert!(line.contains("\"live_evolution_online_reward_strength\":"));
+        assert!(line.contains("\"live_evolution_online_reward_reinforcement_strength\":"));
+        assert!(line.contains("\"live_evolution_online_reward_penalty_strength\":"));
         assert!(line.contains("\"live_evolution_memory_updates\":"));
         assert!(line.contains("\"live_evolution_stored_memory_updates\":"));
         assert!(line.contains("\"live_evolution_reflection_issues\":"));
@@ -3858,6 +4105,9 @@ mod tests {
         assert!(line.contains("\"live_online_reward_feedbacks\":"));
         assert!(line.contains("\"live_online_reward_reinforcements\":"));
         assert!(line.contains("\"live_online_reward_penalties\":"));
+        assert!(line.contains("\"live_online_reward_strength\":"));
+        assert!(line.contains("\"live_online_reward_reinforcement_strength\":"));
+        assert!(line.contains("\"live_online_reward_penalty_strength\":"));
         assert!(line.contains("\"live_memory_updates\":"));
         assert!(line.contains("\"live_stored_memory_updates\":"));
         assert!(line.contains("\"live_reflection_issues\":"));
@@ -3868,6 +4118,9 @@ mod tests {
         assert!(line.contains("\"cumulative_live_online_reward_feedbacks\":"));
         assert!(line.contains("\"cumulative_live_online_reward_reinforcements\":"));
         assert!(line.contains("\"cumulative_live_online_reward_penalties\":"));
+        assert!(line.contains("\"cumulative_live_online_reward_strength\":"));
+        assert!(line.contains("\"cumulative_live_online_reward_reinforcement_strength\":"));
+        assert!(line.contains("\"cumulative_live_online_reward_penalty_strength\":"));
         assert!(line.contains("\"cumulative_live_memory_updates\":"));
         assert!(line.contains("\"cumulative_live_stored_memory_updates\":"));
         assert!(line.contains("\"cumulative_router_threshold_mutations\":"));
@@ -3885,6 +4138,13 @@ mod tests {
             line.contains("\"cumulative_replay_live_evolution_online_reward_reinforcements\":")
         );
         assert!(line.contains("\"cumulative_replay_live_evolution_online_reward_penalties\":"));
+        assert!(line.contains("\"cumulative_replay_live_evolution_online_reward_strength\":"));
+        assert!(line.contains(
+            "\"cumulative_replay_live_evolution_online_reward_reinforcement_strength\":"
+        ));
+        assert!(
+            line.contains("\"cumulative_replay_live_evolution_online_reward_penalty_strength\":")
+        );
         assert!(line.contains("\"cumulative_replay_live_evolution_memory_updates\":"));
         assert!(line.contains("\"cumulative_replay_live_evolution_stored_memory_updates\":"));
         assert!(line.contains("\"cumulative_replay_live_evolution_reflection_issues\":"));

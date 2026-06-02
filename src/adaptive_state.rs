@@ -27,6 +27,9 @@ pub struct LiveInferenceEvolution {
     pub online_reward_feedbacks: usize,
     pub online_reward_reinforcements: usize,
     pub online_reward_penalties: usize,
+    pub online_reward_strength: f32,
+    pub online_reward_reinforcement_strength: f32,
+    pub online_reward_penalty_strength: f32,
     pub memory_reinforcements: usize,
     pub memory_penalties: usize,
     pub stored_memory: bool,
@@ -53,6 +56,7 @@ impl LiveInferenceEvolution {
         self.router_threshold_delta > 0.000001
             || self.hierarchy_weight_delta > 0.000001
             || self.online_reward_feedbacks > 0
+            || nonnegative_f32(self.online_reward_strength) > 0.000001
             || self.memory_updates() > 0
             || self.stored_memory_updates() > 0
             || self.reflection_issues > 0
@@ -71,6 +75,9 @@ pub struct EvolutionLedger {
     pub live_online_reward_feedbacks: u64,
     pub live_online_reward_reinforcements: u64,
     pub live_online_reward_penalties: u64,
+    pub live_online_reward_strength: f32,
+    pub live_online_reward_reinforcement_strength: f32,
+    pub live_online_reward_penalty_strength: f32,
     pub live_memory_reinforcements: u64,
     pub live_memory_penalties: u64,
     pub live_stored_memories: u64,
@@ -103,6 +110,9 @@ pub struct EvolutionLedger {
     pub replay_live_evolution_online_reward_feedbacks: u64,
     pub replay_live_evolution_online_reward_reinforcements: u64,
     pub replay_live_evolution_online_reward_penalties: u64,
+    pub replay_live_evolution_online_reward_strength: f32,
+    pub replay_live_evolution_online_reward_reinforcement_strength: f32,
+    pub replay_live_evolution_online_reward_penalty_strength: f32,
     pub replay_live_evolution_memory_updates: u64,
     pub replay_live_evolution_stored_memory_updates: u64,
     pub replay_live_evolution_reflection_issues: u64,
@@ -137,6 +147,11 @@ impl EvolutionLedger {
         self.live_online_reward_penalties = self
             .live_online_reward_penalties
             .saturating_add(report.online_reward_penalties as u64);
+        self.live_online_reward_strength += nonnegative_f32(report.online_reward_strength);
+        self.live_online_reward_reinforcement_strength +=
+            nonnegative_f32(report.online_reward_reinforcement_strength);
+        self.live_online_reward_penalty_strength +=
+            nonnegative_f32(report.online_reward_penalty_strength);
         self.live_memory_reinforcements = self
             .live_memory_reinforcements
             .saturating_add(report.memory_reinforcements as u64);
@@ -229,6 +244,12 @@ impl EvolutionLedger {
         self.replay_live_evolution_online_reward_penalties = self
             .replay_live_evolution_online_reward_penalties
             .saturating_add(report.live_evolution_online_reward_penalties as u64);
+        self.replay_live_evolution_online_reward_strength +=
+            nonnegative_f32(report.live_evolution_online_reward_strength);
+        self.replay_live_evolution_online_reward_reinforcement_strength +=
+            nonnegative_f32(report.live_evolution_online_reward_reinforcement_strength);
+        self.replay_live_evolution_online_reward_penalty_strength +=
+            nonnegative_f32(report.live_evolution_online_reward_penalty_strength);
         self.replay_live_evolution_memory_updates = self
             .replay_live_evolution_memory_updates
             .saturating_add(report.live_evolution_memory_updates as u64);
@@ -290,7 +311,7 @@ impl EvolutionLedger {
 
     pub fn summary_line(self) -> String {
         format!(
-            "evolution: live_inference_runs={} live_router_threshold_mutations={} live_hierarchy_weight_mutations={} live_router_threshold_delta={:.6} live_hierarchy_weight_delta={:.6} live_online_reward_feedbacks={} live_online_reward_reinforcements={} live_online_reward_penalties={} live_memory_updates={} live_stored_memory_updates={} live_reflection_issues={} live_critical_reflection_issues={} live_revision_actions={} replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} replay_live_memory_feedback_items={} replay_live_memory_feedback_updates={} replay_live_memory_feedback_reinforcements={} replay_live_memory_feedback_penalties={} replay_live_memory_feedback_detail_items={} replay_live_memory_feedback_applied={} replay_live_memory_feedback_removed={} replay_live_memory_feedback_missing={} replay_live_memory_feedback_strength_delta={:.6} replay_live_evolution_items={} replay_live_evolution_router_threshold_mutations={} replay_live_evolution_hierarchy_weight_mutations={} replay_live_evolution_router_threshold_delta={:.6} replay_live_evolution_hierarchy_weight_delta={:.6} replay_live_evolution_online_reward_feedbacks={} replay_live_evolution_online_reward_reinforcements={} replay_live_evolution_online_reward_penalties={} replay_live_evolution_memory_updates={} replay_live_evolution_stored_memory_updates={} replay_live_evolution_reflection_issues={} replay_live_evolution_critical_reflection_issues={} replay_live_evolution_revision_actions={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
+            "evolution: live_inference_runs={} live_router_threshold_mutations={} live_hierarchy_weight_mutations={} live_router_threshold_delta={:.6} live_hierarchy_weight_delta={:.6} live_online_reward_feedbacks={} live_online_reward_reinforcements={} live_online_reward_penalties={} live_online_reward_strength={:.6} live_online_reward_reinforcement_strength={:.6} live_online_reward_penalty_strength={:.6} live_memory_updates={} live_stored_memory_updates={} live_reflection_issues={} live_critical_reflection_issues={} live_revision_actions={} replay_runs={} replay_items={} router_threshold_mutations={} hierarchy_weight_mutations={} router_threshold_delta={:.6} hierarchy_weight_delta={:.6} memory_updates={} replay_live_memory_feedback_items={} replay_live_memory_feedback_updates={} replay_live_memory_feedback_reinforcements={} replay_live_memory_feedback_penalties={} replay_live_memory_feedback_detail_items={} replay_live_memory_feedback_applied={} replay_live_memory_feedback_removed={} replay_live_memory_feedback_missing={} replay_live_memory_feedback_strength_delta={:.6} replay_live_evolution_items={} replay_live_evolution_router_threshold_mutations={} replay_live_evolution_hierarchy_weight_mutations={} replay_live_evolution_router_threshold_delta={:.6} replay_live_evolution_hierarchy_weight_delta={:.6} replay_live_evolution_online_reward_feedbacks={} replay_live_evolution_online_reward_reinforcements={} replay_live_evolution_online_reward_penalties={} replay_live_evolution_online_reward_strength={:.6} replay_live_evolution_online_reward_reinforcement_strength={:.6} replay_live_evolution_online_reward_penalty_strength={:.6} replay_live_evolution_memory_updates={} replay_live_evolution_stored_memory_updates={} replay_live_evolution_reflection_issues={} replay_live_evolution_critical_reflection_issues={} replay_live_evolution_revision_actions={} recursive_replay_items={} recursive_runtime_calls={} drift_rollbacks={} rollback_router_threshold_delta={:.6} rollback_hierarchy_weight_delta={:.6}",
             self.live_inference_runs,
             self.live_router_threshold_mutations,
             self.live_hierarchy_weight_mutations,
@@ -299,6 +320,9 @@ impl EvolutionLedger {
             self.live_online_reward_feedbacks,
             self.live_online_reward_reinforcements,
             self.live_online_reward_penalties,
+            self.live_online_reward_strength,
+            self.live_online_reward_reinforcement_strength,
+            self.live_online_reward_penalty_strength,
             self.live_memory_updates(),
             self.live_stored_memory_updates(),
             self.live_reflection_issues,
@@ -328,6 +352,9 @@ impl EvolutionLedger {
             self.replay_live_evolution_online_reward_feedbacks,
             self.replay_live_evolution_online_reward_reinforcements,
             self.replay_live_evolution_online_reward_penalties,
+            self.replay_live_evolution_online_reward_strength,
+            self.replay_live_evolution_online_reward_reinforcement_strength,
+            self.replay_live_evolution_online_reward_penalty_strength,
             self.replay_live_evolution_memory_updates,
             self.replay_live_evolution_stored_memory_updates,
             self.replay_live_evolution_reflection_issues,
@@ -690,6 +717,18 @@ fn serialize_evolution_ledger(ledger: EvolutionLedger) -> String {
         ledger.drift_rollbacks.to_string(),
         format!("{:.6}", ledger.rollback_router_threshold_delta),
         format!("{:.6}", ledger.rollback_hierarchy_weight_delta),
+        format!("{:.6}", ledger.live_online_reward_strength),
+        format!("{:.6}", ledger.live_online_reward_reinforcement_strength),
+        format!("{:.6}", ledger.live_online_reward_penalty_strength),
+        format!("{:.6}", ledger.replay_live_evolution_online_reward_strength),
+        format!(
+            "{:.6}",
+            ledger.replay_live_evolution_online_reward_reinforcement_strength
+        ),
+        format!(
+            "{:.6}",
+            ledger.replay_live_evolution_online_reward_penalty_strength
+        ),
     ]
     .join("\t")
 }
@@ -703,20 +742,37 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
         && fields.len() != 34
         && fields.len() != 44
         && fields.len() != 50
+        && fields.len() != 56
     {
         return None;
     }
 
-    if fields.len() == 50 {
+    if fields.len() == 50 || fields.len() == 56 {
+        let has_online_reward_strength = fields.len() == 56;
         return Some(EvolutionLedger {
             live_inference_runs: fields[0].parse::<u64>().ok()?,
             live_router_threshold_mutations: fields[1].parse::<u64>().ok()?,
             live_hierarchy_weight_mutations: fields[2].parse::<u64>().ok()?,
-            live_router_threshold_delta: fields[3].parse::<f32>().ok()?.max(0.0),
-            live_hierarchy_weight_delta: fields[4].parse::<f32>().ok()?.max(0.0),
+            live_router_threshold_delta: parse_nonnegative_f32(fields[3])?,
+            live_hierarchy_weight_delta: parse_nonnegative_f32(fields[4])?,
             live_online_reward_feedbacks: fields[5].parse::<u64>().ok()?,
             live_online_reward_reinforcements: fields[6].parse::<u64>().ok()?,
             live_online_reward_penalties: fields[7].parse::<u64>().ok()?,
+            live_online_reward_strength: if has_online_reward_strength {
+                parse_nonnegative_f32(fields[50])?
+            } else {
+                0.0
+            },
+            live_online_reward_reinforcement_strength: if has_online_reward_strength {
+                parse_nonnegative_f32(fields[51])?
+            } else {
+                0.0
+            },
+            live_online_reward_penalty_strength: if has_online_reward_strength {
+                parse_nonnegative_f32(fields[52])?
+            } else {
+                0.0
+            },
             live_memory_reinforcements: fields[8].parse::<u64>().ok()?,
             live_memory_penalties: fields[9].parse::<u64>().ok()?,
             live_stored_memories: fields[10].parse::<u64>().ok()?,
@@ -729,8 +785,8 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             replay_items: fields[17].parse::<u64>().ok()?,
             router_threshold_mutations: fields[18].parse::<u64>().ok()?,
             hierarchy_weight_mutations: fields[19].parse::<u64>().ok()?,
-            router_threshold_delta: fields[20].parse::<f32>().ok()?.max(0.0),
-            hierarchy_weight_delta: fields[21].parse::<f32>().ok()?.max(0.0),
+            router_threshold_delta: parse_nonnegative_f32(fields[20])?,
+            hierarchy_weight_delta: parse_nonnegative_f32(fields[21])?,
             memory_reinforcements: fields[22].parse::<u64>().ok()?,
             memory_penalties: fields[23].parse::<u64>().ok()?,
             replay_live_memory_feedback_items: fields[24].parse::<u64>().ok()?,
@@ -740,15 +796,31 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             replay_live_memory_feedback_applied: fields[28].parse::<u64>().ok()?,
             replay_live_memory_feedback_removed: fields[29].parse::<u64>().ok()?,
             replay_live_memory_feedback_missing: fields[30].parse::<u64>().ok()?,
-            replay_live_memory_feedback_strength_delta: fields[31].parse::<f32>().ok()?.max(0.0),
+            replay_live_memory_feedback_strength_delta: parse_nonnegative_f32(fields[31])?,
             replay_live_evolution_items: fields[32].parse::<u64>().ok()?,
             replay_live_evolution_router_threshold_mutations: fields[33].parse::<u64>().ok()?,
             replay_live_evolution_hierarchy_weight_mutations: fields[34].parse::<u64>().ok()?,
-            replay_live_evolution_router_threshold_delta: fields[35].parse::<f32>().ok()?.max(0.0),
-            replay_live_evolution_hierarchy_weight_delta: fields[36].parse::<f32>().ok()?.max(0.0),
+            replay_live_evolution_router_threshold_delta: parse_nonnegative_f32(fields[35])?,
+            replay_live_evolution_hierarchy_weight_delta: parse_nonnegative_f32(fields[36])?,
             replay_live_evolution_online_reward_feedbacks: fields[37].parse::<u64>().ok()?,
             replay_live_evolution_online_reward_reinforcements: fields[38].parse::<u64>().ok()?,
             replay_live_evolution_online_reward_penalties: fields[39].parse::<u64>().ok()?,
+            replay_live_evolution_online_reward_strength: if has_online_reward_strength {
+                parse_nonnegative_f32(fields[53])?
+            } else {
+                0.0
+            },
+            replay_live_evolution_online_reward_reinforcement_strength:
+                if has_online_reward_strength {
+                    parse_nonnegative_f32(fields[54])?
+                } else {
+                    0.0
+                },
+            replay_live_evolution_online_reward_penalty_strength: if has_online_reward_strength {
+                parse_nonnegative_f32(fields[55])?
+            } else {
+                0.0
+            },
             replay_live_evolution_memory_updates: fields[40].parse::<u64>().ok()?,
             replay_live_evolution_stored_memory_updates: fields[41].parse::<u64>().ok()?,
             replay_live_evolution_reflection_issues: fields[42].parse::<u64>().ok()?,
@@ -757,8 +829,8 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             recursive_replay_items: fields[45].parse::<u64>().ok()?,
             recursive_runtime_calls: fields[46].parse::<u64>().ok()?,
             drift_rollbacks: fields[47].parse::<u64>().ok()?,
-            rollback_router_threshold_delta: fields[48].parse::<f32>().ok()?.max(0.0),
-            rollback_hierarchy_weight_delta: fields[49].parse::<f32>().ok()?.max(0.0),
+            rollback_router_threshold_delta: parse_nonnegative_f32(fields[48])?,
+            rollback_hierarchy_weight_delta: parse_nonnegative_f32(fields[49])?,
         });
     }
 
@@ -781,11 +853,14 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             live_inference_runs: fields[0].parse::<u64>().ok()?,
             live_router_threshold_mutations: fields[1].parse::<u64>().ok()?,
             live_hierarchy_weight_mutations: fields[2].parse::<u64>().ok()?,
-            live_router_threshold_delta: fields[3].parse::<f32>().ok()?.max(0.0),
-            live_hierarchy_weight_delta: fields[4].parse::<f32>().ok()?.max(0.0),
+            live_router_threshold_delta: parse_nonnegative_f32(fields[3])?,
+            live_hierarchy_weight_delta: parse_nonnegative_f32(fields[4])?,
             live_online_reward_feedbacks: 0,
             live_online_reward_reinforcements: 0,
             live_online_reward_penalties: 0,
+            live_online_reward_strength: 0.0,
+            live_online_reward_reinforcement_strength: 0.0,
+            live_online_reward_penalty_strength: 0.0,
             live_memory_reinforcements: fields[5].parse::<u64>().ok()?,
             live_memory_penalties: fields[6].parse::<u64>().ok()?,
             live_stored_memories: fields[7].parse::<u64>().ok()?,
@@ -798,8 +873,8 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             replay_items: fields[14].parse::<u64>().ok()?,
             router_threshold_mutations: fields[15].parse::<u64>().ok()?,
             hierarchy_weight_mutations: fields[16].parse::<u64>().ok()?,
-            router_threshold_delta: fields[17].parse::<f32>().ok()?.max(0.0),
-            hierarchy_weight_delta: fields[18].parse::<f32>().ok()?.max(0.0),
+            router_threshold_delta: parse_nonnegative_f32(fields[17])?,
+            hierarchy_weight_delta: parse_nonnegative_f32(fields[18])?,
             memory_reinforcements: fields[19].parse::<u64>().ok()?,
             memory_penalties: fields[20].parse::<u64>().ok()?,
             replay_live_memory_feedback_items: fields[21].parse::<u64>().ok()?,
@@ -850,6 +925,9 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             replay_live_evolution_online_reward_feedbacks: 0,
             replay_live_evolution_online_reward_reinforcements: 0,
             replay_live_evolution_online_reward_penalties: 0,
+            replay_live_evolution_online_reward_strength: 0.0,
+            replay_live_evolution_online_reward_reinforcement_strength: 0.0,
+            replay_live_evolution_online_reward_penalty_strength: 0.0,
             replay_live_evolution_memory_updates: replay_live_evolution_index
                 .and_then(|index| fields[index + 5].parse::<u64>().ok())
                 .unwrap_or(0),
@@ -906,6 +984,9 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
         live_online_reward_feedbacks: 0,
         live_online_reward_reinforcements: 0,
         live_online_reward_penalties: 0,
+        live_online_reward_strength: 0.0,
+        live_online_reward_reinforcement_strength: 0.0,
+        live_online_reward_penalty_strength: 0.0,
         live_memory_reinforcements: 0,
         live_memory_penalties: 0,
         live_stored_memories: 0,
@@ -918,8 +999,8 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
         replay_items: fields[1].parse::<u64>().ok()?,
         router_threshold_mutations: fields[2].parse::<u64>().ok()?,
         hierarchy_weight_mutations: fields[3].parse::<u64>().ok()?,
-        router_threshold_delta: fields[4].parse::<f32>().ok()?.max(0.0),
-        hierarchy_weight_delta: fields[5].parse::<f32>().ok()?.max(0.0),
+        router_threshold_delta: parse_nonnegative_f32(fields[4])?,
+        hierarchy_weight_delta: parse_nonnegative_f32(fields[5])?,
         memory_reinforcements: fields[6].parse::<u64>().ok()?,
         memory_penalties: fields[7].parse::<u64>().ok()?,
         replay_live_memory_feedback_items,
@@ -938,6 +1019,9 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
         replay_live_evolution_online_reward_feedbacks: 0,
         replay_live_evolution_online_reward_reinforcements: 0,
         replay_live_evolution_online_reward_penalties: 0,
+        replay_live_evolution_online_reward_strength: 0.0,
+        replay_live_evolution_online_reward_reinforcement_strength: 0.0,
+        replay_live_evolution_online_reward_penalty_strength: 0.0,
         replay_live_evolution_memory_updates: 0,
         replay_live_evolution_stored_memory_updates: 0,
         replay_live_evolution_reflection_issues: 0,
@@ -960,6 +1044,22 @@ fn parse_evolution_ledger(value: &str) -> Option<EvolutionLedger> {
             .unwrap_or(0.0)
             .max(0.0),
     })
+}
+
+fn parse_nonnegative_f32(value: &str) -> Option<f32> {
+    value
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite())
+        .map(|value| value.max(0.0))
+}
+
+fn nonnegative_f32(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
+    }
 }
 
 fn parse_memory_placement(value: &str) -> Option<MemoryPlacement> {
@@ -1077,6 +1177,9 @@ mod tests {
                 live_online_reward_feedbacks: 6,
                 live_online_reward_reinforcements: 4,
                 live_online_reward_penalties: 2,
+                live_online_reward_strength: 3.25,
+                live_online_reward_reinforcement_strength: 2.15,
+                live_online_reward_penalty_strength: 1.10,
                 live_memory_reinforcements: 9,
                 live_memory_penalties: 4,
                 live_stored_memories: 3,
@@ -1109,6 +1212,9 @@ mod tests {
                 replay_live_evolution_online_reward_feedbacks: 3,
                 replay_live_evolution_online_reward_reinforcements: 2,
                 replay_live_evolution_online_reward_penalties: 1,
+                replay_live_evolution_online_reward_strength: 1.75,
+                replay_live_evolution_online_reward_reinforcement_strength: 1.20,
+                replay_live_evolution_online_reward_penalty_strength: 0.55,
                 replay_live_evolution_memory_updates: 6,
                 replay_live_evolution_stored_memory_updates: 3,
                 replay_live_evolution_reflection_issues: 5,
@@ -1148,6 +1254,21 @@ mod tests {
         assert_eq!(loaded.evolution_ledger.live_hierarchy_weight_mutations, 6);
         assert!((loaded.evolution_ledger.live_router_threshold_delta - 0.19).abs() < 0.0001);
         assert!((loaded.evolution_ledger.live_hierarchy_weight_delta - 0.13).abs() < 0.0001);
+        assert_eq!(loaded.evolution_ledger.live_online_reward_feedbacks, 6);
+        assert_eq!(loaded.evolution_ledger.live_online_reward_reinforcements, 4);
+        assert_eq!(loaded.evolution_ledger.live_online_reward_penalties, 2);
+        assert!((loaded.evolution_ledger.live_online_reward_strength - 3.25).abs() < 0.0001);
+        assert!(
+            (loaded
+                .evolution_ledger
+                .live_online_reward_reinforcement_strength
+                - 2.15)
+                .abs()
+                < 0.0001
+        );
+        assert!(
+            (loaded.evolution_ledger.live_online_reward_penalty_strength - 1.10).abs() < 0.0001
+        );
         assert_eq!(loaded.evolution_ledger.live_memory_updates(), 13);
         assert_eq!(loaded.evolution_ledger.live_stored_memory_updates(), 10);
         assert_eq!(loaded.evolution_ledger.live_reflection_issues, 7);
@@ -1240,6 +1361,48 @@ mod tests {
                 < 0.0001
         );
         assert_eq!(
+            loaded
+                .evolution_ledger
+                .replay_live_evolution_online_reward_feedbacks,
+            3
+        );
+        assert_eq!(
+            loaded
+                .evolution_ledger
+                .replay_live_evolution_online_reward_reinforcements,
+            2
+        );
+        assert_eq!(
+            loaded
+                .evolution_ledger
+                .replay_live_evolution_online_reward_penalties,
+            1
+        );
+        assert!(
+            (loaded
+                .evolution_ledger
+                .replay_live_evolution_online_reward_strength
+                - 1.75)
+                .abs()
+                < 0.0001
+        );
+        assert!(
+            (loaded
+                .evolution_ledger
+                .replay_live_evolution_online_reward_reinforcement_strength
+                - 1.20)
+                .abs()
+                < 0.0001
+        );
+        assert!(
+            (loaded
+                .evolution_ledger
+                .replay_live_evolution_online_reward_penalty_strength
+                - 0.55)
+                .abs()
+                < 0.0001
+        );
+        assert_eq!(
             loaded.evolution_ledger.replay_live_evolution_memory_updates,
             6
         );
@@ -1286,6 +1449,18 @@ mod tests {
         assert_eq!(ledger.replay_live_memory_feedback_updates(), 0);
         assert_eq!(ledger.replay_live_memory_feedback_detail_items, 0);
         assert_eq!(ledger.replay_live_memory_feedback_detail_updates(), 0);
+        assert_eq!(ledger.live_online_reward_strength, 0.0);
+        assert_eq!(ledger.live_online_reward_reinforcement_strength, 0.0);
+        assert_eq!(ledger.live_online_reward_penalty_strength, 0.0);
+        assert_eq!(ledger.replay_live_evolution_online_reward_strength, 0.0);
+        assert_eq!(
+            ledger.replay_live_evolution_online_reward_reinforcement_strength,
+            0.0
+        );
+        assert_eq!(
+            ledger.replay_live_evolution_online_reward_penalty_strength,
+            0.0
+        );
         assert_eq!(ledger.recursive_runtime_calls, 8);
         assert_eq!(ledger.drift_rollbacks, 0);
         assert_eq!(ledger.rollback_router_threshold_delta, 0.0);
