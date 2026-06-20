@@ -1,0 +1,267 @@
+{
+  "current_status": {
+    "daemon": {
+      "schema_version": 1,
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 199264,
+      "pid_file_exists": true,
+      "stale_pid_file": false,
+      "stale_pid": null
+    },
+    "loop": {
+      "schema_version": 1,
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "backend_endpoint": "127.0.0.1:7979",
+      "ledger": {
+        "total_records": 370,
+        "invalid_records": 0,
+        "duplicate_rounds": 0,
+        "round_gaps": 0,
+        "success_count": 370,
+        "feedback_applied_total": 1480,
+        "runtime_tokens_total": 23680,
+        "latest": {
+          "round": 370,
+          "case": "smartsteam-evolution-loop-0370",
+          "success": true,
+          "runtime_tokens": 64,
+          "feedback_applied": 4
+        }
+      },
+      "report": {
+        "path": "missing-r39-report.json",
+        "exists": false
+      },
+      "readiness": {
+        "ready": true,
+        "failures": []
+      },
+      "live_status_bundle": {
+        "schema": "daemon_live_status_bundle_v1",
+        "read_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "report_only": true,
+        "daemon_round_transition_status_v1": {
+          "read_only": true,
+          "starts_process": false,
+          "sends_prompt": false,
+          "report_only": true,
+          "transition_kind": "round_done_waiting_ledger_commit",
+          "active_round": 371,
+          "latest_done_round": 371,
+          "ledger_latest_round": 370,
+          "round_in_progress": false,
+          "ledger_commit_pending": true,
+          "ledger_lag_rounds": 1,
+          "reason_codes": [
+            "latest_done_round_waiting_ledger_commit"
+          ],
+          "evidence_ids": [
+            "active-round:371",
+            "done-round:371",
+            "ledger:latest-round-370"
+          ],
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "mutates_active_round": false,
+          "writes_ndkv": false
+        },
+        "next_round_decision_report_v1": {
+          "schema": "next_round_decision_report_v1",
+          "status_shape": "live_status_bundle.next_round_decision_report_v1",
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "starts_process": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "writes_ndkv": false,
+          "next_round_decision": {
+            "schema": "next_round_decision_evidence_v1",
+            "display_state": "safe-to-continue-after-current-round",
+            "decision_status": "safe_to_continue_after_current_round",
+            "current_round_active": false,
+            "active_round": 371,
+            "latest_done_round": 371,
+            "ledger_latest_round": 370,
+            "readiness_can_schedule_next_round": true,
+            "report_gate_ready": true,
+            "context_hygiene_passed": true,
+            "read_only": true,
+            "report_only": true,
+            "no_side_effects": true,
+            "dispatch_work_allowed": false,
+            "prompt_replay_allowed": false,
+            "process_start_allowed": false,
+            "memory_write_allowed": false,
+            "ndkv_write_allowed": false,
+            "operator_attention_required": false,
+            "side_effects": {
+              "starts_daemon": false,
+              "stops_daemon": false,
+              "touches_remote": false,
+              "sends_prompt": false,
+              "starts_stream": false,
+              "replays_prompt": false,
+              "writes_ndkv": false
+            },
+            "reason_codes": [
+              "latest_done_round_waiting_ledger_commit"
+            ],
+            "evidence_ids": [
+              "active-round:371",
+              "done-round:371",
+              "ledger:latest-round-370"
+            ],
+            "failure_reasons": []
+          }
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-wait",
+          "decision_status": "safe_to_wait",
+          "current_round_active": true,
+          "active_round": 999,
+          "latest_done_round": 998,
+          "ledger_latest_round": 998,
+          "read_only": true,
+          "report_only": true,
+          "no_side_effects": true,
+          "dispatch_work_allowed": false,
+          "prompt_replay_allowed": false,
+          "process_start_allowed": false,
+          "memory_write_allowed": false,
+          "ndkv_write_allowed": false,
+          "operator_attention_required": false,
+          "reason_codes": [
+            "legacy_decision_should_not_win_when_report_v1_is_present"
+          ],
+          "evidence_ids": [
+            "legacy:stale"
+          ],
+          "failure_reasons": []
+        }
+      },
+      "next_step": "safe-to-continue-after-current-round: latest done round is waiting for ledger commit"
+    },
+    "next_round_decision_report_v1": {
+      "schema": "next_round_decision_report_v1",
+      "status_shape": "top_level.next_round_decision_report_v1",
+      "read_only": true,
+      "report_only": true,
+      "side_effects": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "starts_stream": false,
+      "writes_ndkv": false,
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-continue-after-current-round",
+        "decision_status": "safe_to_continue_after_current_round",
+        "current_round_active": false,
+        "active_round": 371,
+        "latest_done_round": 371,
+        "ledger_latest_round": 370,
+        "readiness_can_schedule_next_round": true,
+        "report_gate_ready": true,
+        "context_hygiene_passed": true,
+        "read_only": true,
+        "report_only": true,
+        "no_side_effects": true,
+        "dispatch_work_allowed": false,
+        "prompt_replay_allowed": false,
+        "process_start_allowed": false,
+        "memory_write_allowed": false,
+        "ndkv_write_allowed": false,
+        "operator_attention_required": false,
+        "side_effects": {
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "writes_ndkv": false
+        },
+        "reason_codes": [
+          "latest_done_round_waiting_ledger_commit"
+        ],
+        "evidence_ids": [
+          "active-round:371",
+          "done-round:371",
+          "ledger:latest-round-370"
+        ],
+        "failure_reasons": []
+      }
+    }
+  },
+  "top_level_report_only_status": {
+    "daemon": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 199264
+    },
+    "loop": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "readiness": {
+        "ready": true,
+        "failures": []
+      }
+    },
+    "next_round_decision_report_v1": {
+      "schema": "next_round_decision_report_v1",
+      "status_shape": "top_level.next_round_decision_report_v1",
+      "read_only": true,
+      "report_only": true,
+      "side_effects": false,
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-continue-after-current-round",
+        "decision_status": "safe_to_continue_after_current_round",
+        "active_round": 371,
+        "latest_done_round": 371,
+        "ledger_latest_round": 370,
+        "read_only": true,
+        "report_only": true,
+        "dispatch_work_allowed": false,
+        "prompt_replay_allowed": false,
+        "process_start_allowed": false,
+        "memory_write_allowed": false,
+        "ndkv_write_allowed": false,
+        "side_effects": {
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "writes_ndkv": false
+        },
+        "reason_codes": [
+          "latest_done_round_waiting_ledger_commit"
+        ],
+        "evidence_ids": [
+          "active-round:371",
+          "done-round:371",
+          "ledger:latest-round-370"
+        ],
+        "failure_reasons": []
+      }
+    }
+  }
+}

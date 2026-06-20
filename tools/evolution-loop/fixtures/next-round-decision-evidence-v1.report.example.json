@@ -1,0 +1,216 @@
+{
+  "schema": "next_round_decision_evidence_surface_v1.report_fixture",
+  "fixture_version": 1,
+  "consumer_surface": "evolution_loop_report_only_next_round_decision",
+  "report_only": true,
+  "read_only": true,
+  "side_effects": false,
+  "starts_process": false,
+  "sends_prompt": false,
+  "changes_daemon_loop_behavior": false,
+  "changes_prompt_content": false,
+  "changes_report_gate_stop_semantics": false,
+  "changes_runtime_calls": false,
+  "changes_model_pool_behavior": false,
+  "consumes": {
+    "live_status_bundle_schema": "live_status_bundle_v1",
+    "transition_fixture_schema": "daemon_round_transition_status_v1.consumer_fixture",
+    "transition_status_path": "live_status_bundle.daemon.daemon_round_transition_status",
+    "report_gate_path": "live_status_bundle.report_gate",
+    "requires_log_prose": false,
+    "requires_operator_summary": false
+  },
+  "display_states": [
+    "safe-to-wait",
+    "safe-to-continue-after-current-round",
+    "blocked-operator-attention"
+  ],
+  "examples": [
+    {
+      "name": "active_busy_normal_in_progress_report_gate_passed",
+      "input_refs": {
+        "transition_fixture_example": "normal_in_progress"
+      },
+      "live_status_bundle": {
+        "schema": "live_status_bundle_v1",
+        "daemon": {
+          "state": "active_busy",
+          "daemon_round_transition_status": {
+            "schema": "daemon_round_transition_status_v1",
+            "transition_kind": "normal_in_progress",
+            "activity_state": "active",
+            "activity_ok": true,
+            "activity_reason": "round_in_progress_stdout_recent",
+            "active_round": 365,
+            "ledger_latest_round": 364,
+            "ledger_lag_rounds": 1,
+            "latest_round_state": "in_progress",
+            "latest_done_round": 364,
+            "round_in_progress": true,
+            "read_only": true,
+            "starts_process": false,
+            "sends_prompt": false
+          }
+        },
+        "report_gate": {
+          "passed": true,
+          "failure_count": 0
+        },
+        "remote_pool": {
+          "healthy": true,
+          "healthy_workers": 6,
+          "required_workers": 6
+        }
+      },
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-wait",
+        "safe_to_wait_current_round_active": true,
+        "safe_to_continue_after_current_round": false,
+        "operator_attention_blocked": false,
+        "read_only": true,
+        "report_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "operator_attention_required": false,
+        "may_display_unattended_continuation": true,
+        "wait_for_current_round": true,
+        "continue_after_current_round": false,
+        "reason_code": "active_round_in_progress_wait_for_completion",
+        "side_effects": false,
+        "evidence": {
+          "transition_kind": "normal_in_progress",
+          "report_gate_passed": true,
+          "report_gate_failure_count": 0,
+          "active_busy": true,
+          "round_in_progress": true
+        }
+      }
+    },
+    {
+      "name": "round_done_waiting_ledger_commit_report_gate_passed",
+      "input_refs": {
+        "transition_fixture_example": "round_done_waiting_ledger_commit"
+      },
+      "live_status_bundle": {
+        "schema": "live_status_bundle_v1",
+        "daemon": {
+          "state": "round_done_waiting_ledger_commit",
+          "daemon_round_transition_status": {
+            "schema": "daemon_round_transition_status_v1",
+            "transition_kind": "round_done_waiting_ledger_commit",
+            "activity_state": "round_done_waiting_ledger_commit",
+            "activity_ok": true,
+            "activity_reason": "stdout_done_marker_seen_waiting_for_ledger_commit",
+            "active_round": 365,
+            "ledger_latest_round": 364,
+            "ledger_lag_rounds": 1,
+            "latest_round_state": "round_done_waiting_ledger_commit",
+            "latest_done_round": 365,
+            "round_in_progress": false,
+            "read_only": true,
+            "starts_process": false,
+            "sends_prompt": false
+          }
+        },
+        "report_gate": {
+          "passed": true,
+          "failure_count": 0
+        },
+        "remote_pool": {
+          "healthy": true,
+          "healthy_workers": 6,
+          "required_workers": 6
+        }
+      },
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-continue-after-current-round",
+        "safe_to_wait_current_round_active": false,
+        "safe_to_continue_after_current_round": true,
+        "operator_attention_blocked": false,
+        "read_only": true,
+        "report_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "operator_attention_required": false,
+        "may_display_unattended_continuation": true,
+        "wait_for_current_round": false,
+        "continue_after_current_round": true,
+        "reason_code": "done_marker_seen_wait_for_ledger_commit_then_continue",
+        "side_effects": false,
+        "evidence": {
+          "transition_kind": "round_done_waiting_ledger_commit",
+          "report_gate_passed": true,
+          "report_gate_failure_count": 0,
+          "active_busy": false,
+          "round_in_progress": false
+        }
+      }
+    },
+    {
+      "name": "active_busy_normal_in_progress_report_gate_blocked",
+      "input_refs": {
+        "transition_fixture_example": "normal_in_progress"
+      },
+      "live_status_bundle": {
+        "schema": "live_status_bundle_v1",
+        "daemon": {
+          "state": "active_busy",
+          "daemon_round_transition_status": {
+            "schema": "daemon_round_transition_status_v1",
+            "transition_kind": "normal_in_progress",
+            "activity_state": "active",
+            "activity_ok": true,
+            "activity_reason": "round_in_progress_stdout_recent",
+            "active_round": 365,
+            "ledger_latest_round": 364,
+            "ledger_lag_rounds": 1,
+            "latest_round_state": "in_progress",
+            "latest_done_round": 364,
+            "round_in_progress": true,
+            "read_only": true,
+            "starts_process": false,
+            "sends_prompt": false
+          }
+        },
+        "report_gate": {
+          "passed": false,
+          "failure_count": 1,
+          "failures": [
+            "latest_report_gate_failure_requires_operator_attention"
+          ]
+        },
+        "remote_pool": {
+          "healthy": true,
+          "healthy_workers": 6,
+          "required_workers": 6
+        }
+      },
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "blocked-operator-attention",
+        "safe_to_wait_current_round_active": false,
+        "safe_to_continue_after_current_round": false,
+        "operator_attention_blocked": true,
+        "read_only": true,
+        "report_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "operator_attention_required": true,
+        "may_display_unattended_continuation": false,
+        "wait_for_current_round": false,
+        "continue_after_current_round": false,
+        "reason_code": "report_gate_failed_operator_attention_required",
+        "side_effects": false,
+        "evidence": {
+          "transition_kind": "normal_in_progress",
+          "report_gate_passed": false,
+          "report_gate_failure_count": 1,
+          "active_busy": true,
+          "round_in_progress": true
+        }
+      }
+    }
+  ]
+}

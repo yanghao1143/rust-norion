@@ -2,5 +2,32 @@
 name = "rust-norion"
 version = "0.1.0"
 edition = "2024"
+license-file = "LICENSE"
+
+[workspace]
+members = [
+    ".",
+    "crates/norion-agent",
+    "crates/norion-cli",
+    "crates/norion-core",
+    "crates/norion-eval",
+    "crates/norion-memory",
+    "crates/norion-service",
+    "crates/norion-test",
+    "tools/model-pool-advice-core",
+]
+exclude = [
+    "tools/evolution-loop",
+    "tools/rustgpt-lab",
+    "tools/smartsteam-forge",
+]
+resolver = "3"
 
 [dependencies]
+model-pool-advice-core = { path = "tools/model-pool-advice-core" }
+norion-agent = { path = "crates/norion-agent" }
+norion-cli = { path = "crates/norion-cli" }
+norion-core = { path = "crates/norion-core" }
+norion-eval = { path = "crates/norion-eval" }
+norion-memory = { path = "crates/norion-memory" }
+norion-service = { path = "crates/norion-service" }

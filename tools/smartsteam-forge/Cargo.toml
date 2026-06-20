@@ -1,0 +1,12 @@
+[package]
+name = "smartsteam-forge"
+version = "0.1.0"
+edition = "2024"
+license-file = "../../LICENSE"
+
+[workspace]
+
+[dependencies]
+crossterm = "0.28"
+model-pool-advice-core = { path = "../model-pool-advice-core" }
+ratatui = "0.29"

@@ -1,0 +1,51 @@
+use super::{TraceRequiredField, required_field};
+
+pub(in crate::trace) const RUST_CHECK_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
+    required_field("schema", "\"schema\":\"rust-norion-rust-check-v1\""),
+    required_field("case", "\"case\":"),
+    required_field("rust_check", "\"rust_check\":{"),
+    required_field("passed", "\"passed\":"),
+    required_field("label", "\"label\":"),
+    required_field("edition", "\"edition\":"),
+    required_field("status_code", "\"status_code\":"),
+    required_field("diagnostic_chars", "\"diagnostic_chars\":"),
+    required_field("source_path", "\"source_path\":"),
+    required_field("metadata_path", "\"metadata_path\":"),
+    required_field("feedback", "\"feedback\":{"),
+    required_field("action", "\"action\":"),
+    required_field("amount", "\"amount\":"),
+    required_field("experience_id", "\"experience_id\":"),
+    required_field("memory_id", "\"memory_id\":"),
+    required_field("memory_ids", "\"memory_ids\":"),
+    required_field("applied", "\"applied\":"),
+    required_field("missing", "\"missing\":"),
+    required_field("removed", "\"removed\":"),
+    required_field("strength_delta", "\"strength_delta\":"),
+];
+
+pub(in crate::trace) const BUSINESS_CONTRACT_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
+    required_field("schema", "\"schema\":\"rust-norion-business-contract-v1\""),
+    required_field("case", "\"case\":"),
+    required_field("experience_id", "\"experience_id\":"),
+    required_field("business_contract", "\"business_contract\":{"),
+    required_field("passed", "\"passed\":"),
+    required_field("required_signals", "\"required_signals\":"),
+    required_field("matched_signals", "\"matched_signals\":"),
+    required_field("missing_signal_count", "\"missing_signal_count\":"),
+    required_field("missing_signals", "\"missing_signals\":"),
+    required_field(
+        "has_runtime_model_experiences",
+        "\"has_runtime_model_experiences\":",
+    ),
+    required_field("protocol_leak", "\"protocol_leak\":"),
+    required_field(
+        "substituted_runtime_model_experiences",
+        "\"substituted_runtime_model_experiences\":",
+    ),
+    required_field("evasive_denial", "\"evasive_denial\":"),
+    required_field("handling_signal", "\"handling_signal\":"),
+    required_field("raw_passed", "\"raw_passed\":"),
+    required_field("normalization", "\"normalization\":"),
+    required_field("response_normalized", "\"response_normalized\":"),
+    required_field("canonical_fallback", "\"canonical_fallback\":"),
+];

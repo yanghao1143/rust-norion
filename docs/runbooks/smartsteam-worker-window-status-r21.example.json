@@ -1,0 +1,59 @@
+{
+  "schema": "worker_window_status_v1",
+  "source": "docs/runbooks/smartsteam-parallel-coordination.md tail evidence",
+  "source_round": "R21",
+  "read_only": true,
+  "side_effects_allowed": false,
+  "windows": [
+    {
+      "window_id": "019ee199-7ecc-7e63-b210-63b838c283b4",
+      "label": "R20 eval/test original",
+      "status": "paused",
+      "polluted": true,
+      "clean_room_replacement_required": true,
+      "original_window_blocks_assignment": true,
+      "assignment_allowed": false,
+      "evidence": "R21 tail marks the R20 eval/test worker as PAUSED polluted? and advisory-only until revalidated from current files."
+    },
+    {
+      "window_id": "019ee1a6-c250-7f31-97ed-15cd8e8cd159",
+      "label": "R21 eval/test strict unattended acceptance replacement",
+      "status": "clean-room-replacement",
+      "clean_room_replacement": true,
+      "replaces_window_id": "019ee199-7ecc-7e63-b210-63b838c283b4",
+      "assignment_allowed": true,
+      "result": "completed",
+      "verified_tests": "norion-test 92 passed; norion-eval 328 passed"
+    },
+    {
+      "window_id": "019ee1a7-3f04-7880-9e13-1d6a32a7ffe5",
+      "label": "R21 agent polluted-window isolation contract",
+      "status": "clean-room-replacement",
+      "clean_room_replacement": true,
+      "assignment_allowed": true,
+      "result": "completed",
+      "verified_tests": "norion-agent 948 passed"
+    },
+    {
+      "window_id": "019ee1a7-63ba-78c3-8439-dc3043c25cc7",
+      "label": "R21 service/CLI read-only pollution status surface",
+      "status": "clean-room-replacement",
+      "clean_room_replacement": true,
+      "assignment_allowed": true,
+      "result": "completed",
+      "verified_tests": "norion-service 136 passed; norion-cli 217 passed; cli_smoke 5 passed"
+    }
+  ],
+  "side_effects": {
+    "starts_clean_room_replacement": false,
+    "mutates_worker_window_status": false,
+    "starts_daemon": false,
+    "stops_daemon": false,
+    "touches_remote": false,
+    "downloads_model": false,
+    "warms_model_cache": false,
+    "sends_prompt": false,
+    "starts_stream": false,
+    "replays_prompt": false
+  }
+}

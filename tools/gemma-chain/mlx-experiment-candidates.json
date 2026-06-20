@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "contract_version": "smartsteam.gemma-chain.mlx-experiment-candidates.v1",
+  "read_only": true,
+  "download_allowed": false,
+  "starts_process": false,
+  "sends_prompt": false,
+  "writes_model_weights": false,
+  "pool_policy": "experimental_not_gguf_pool",
+  "gguf_pool_policy": "do_not_mix_with_llama_cpp_gguf_pool",
+  "requires_runtime": "mlx_lm.server",
+  "runtime_preflight_required": true,
+  "runtime_preflight_status": "not_verified",
+  "notes": [
+    "Manifest is an offline planning artifact only.",
+    "Candidates are MLX/4bit and must not be inserted into the llama.cpp GGUF worker pool.",
+    "Download, process start, prompt smoke, SSH, and model weight writes require explicit main-window authorization."
+  ],
+  "candidates": [
+    {
+      "model_id": "shuhulx/Qwopus3.5-4B-Coder-Fable5-v1-MLX-4bit",
+      "format": "mlx",
+      "suggested_role": "single_slot_coder_experiment",
+      "priority": 1,
+      "expected_memory_class": "small_mlx_4b_first_probe",
+      "requires_runtime": "mlx_lm.server",
+      "download_allowed": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "pool_policy": "experimental_not_gguf_pool",
+      "recommended_gate": "mlx_runtime_inventory_then_4b_single_slot_startcheck",
+      "authorization_required_for_download": true,
+      "authorization_required_for_live_smoke": true
+    },
+    {
+      "model_id": "usermma/Qwable-9B-Claude-Fable-5-mlx-4Bit",
+      "format": "mlx",
+      "suggested_role": "single_slot_assistant_experiment",
+      "priority": 2,
+      "expected_memory_class": "medium_mlx_9b_after_4b_passes",
+      "requires_runtime": "mlx_lm.server",
+      "download_allowed": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "pool_policy": "experimental_not_gguf_pool",
+      "recommended_gate": "mlx_9b_preflight_after_4b_resource_window",
+      "authorization_required_for_download": true,
+      "authorization_required_for_live_smoke": true
+    },
+    {
+      "model_id": "usermma/Qwable-v1-mlx-4Bit",
+      "format": "mlx",
+      "suggested_role": "unsized_candidate_research",
+      "priority": 3,
+      "expected_memory_class": "unknown_until_model_card_and_size_verified",
+      "requires_runtime": "mlx_lm.server",
+      "download_allowed": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "pool_policy": "experimental_not_gguf_pool",
+      "recommended_gate": "model_card_size_license_runtime_preflight",
+      "authorization_required_for_download": true,
+      "authorization_required_for_live_smoke": true
+    }
+  ]
+}

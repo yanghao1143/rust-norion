@@ -1,0 +1,54 @@
+{
+  "workers": [
+    {
+      "role": "quality",
+      "base_url": "http://127.0.0.1:8686",
+      "enabled_by_default": true,
+      "model_class": "Gemma 12B Q8 or best local quality model",
+      "suggested_quant": "Q8",
+      "default_context_tokens": 262144,
+      "default_max_tokens": 262144,
+      "low_priority": false
+    },
+    {
+      "role": "summary",
+      "base_url": "http://127.0.0.1:8687",
+      "enabled_by_default": true,
+      "model_class": "small Gemma or low-quant local model",
+      "suggested_quant": "Q4 or Q5",
+      "default_context_tokens": 8192,
+      "default_max_tokens": 768,
+      "low_priority": true
+    },
+    {
+      "role": "review",
+      "base_url": "http://127.0.0.1:8688",
+      "enabled_by_default": true,
+      "model_class": "small Gemma or low-quant local model",
+      "suggested_quant": "Q4 or Q5",
+      "default_context_tokens": 8192,
+      "default_max_tokens": 1024,
+      "low_priority": true
+    },
+    {
+      "role": "test-gate",
+      "base_url": "http://127.0.0.1:8689",
+      "enabled_by_default": true,
+      "model_class": "small Gemma or low-quant local model",
+      "suggested_quant": "Q4",
+      "default_context_tokens": 4096,
+      "default_max_tokens": 512,
+      "low_priority": true
+    },
+    {
+      "role": "index",
+      "base_url": "http://127.0.0.1:8690",
+      "enabled_by_default": true,
+      "model_class": "small Gemma, embedding-capable helper, or low-quant local index model",
+      "suggested_quant": "Q4",
+      "default_context_tokens": 4096,
+      "default_max_tokens": 512,
+      "low_priority": true
+    }
+  ]
+}

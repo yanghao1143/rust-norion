@@ -1,0 +1,163 @@
+{
+  "report_gate": {"passed": true, "failures": []},
+  "strict_report_gate": {"passed": true, "failures": []},
+  "ledger_gate_report_v1": {
+    "allow_next_round": true,
+    "gate_blocked": false
+  },
+  "model_pool_alignment": {"alignment_ok": true},
+  "self_improve_proposal_artifact_v1": {
+    "schema": "self_improve_proposal_artifact_v1",
+    "source": "r26-self-improve-proposal-artifact",
+    "read_only": true,
+    "starts_process": false,
+    "sends_prompt": false,
+    "report_only": true,
+    "lifecycle": {
+      "candidate": {
+        "count": 2,
+        "ids": ["proposal-router-guard", "proposal-memory-index"],
+        "reason_codes": ["self_improve_candidate"]
+      },
+      "validated": {
+        "count": 1,
+        "ids": ["proposal-router-guard"],
+        "reason_codes": ["validation_passed"]
+      },
+      "admitted": {
+        "count": 1,
+        "ids": ["proposal-router-guard"],
+        "reason_codes": ["admission_safe"]
+      },
+      "quarantined": {
+        "count": 1,
+        "ids": ["proposal-memory-index"],
+        "reason_codes": ["old_window_payload_blocked"]
+      },
+      "promoted": {
+        "count": 1,
+        "ids": ["proposal-router-guard"],
+        "reason_codes": ["promoted_to_backlog"]
+      },
+      "repair_required": {
+        "count": 1,
+        "ids": ["proposal-needs-fixture"],
+        "reason_codes": ["missing_fixture"]
+      }
+    },
+    "prompt_guidance": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "report_only": true,
+      "convert_advisory_to_business_evidence": true,
+      "repair_unvalidated_or_unaccepted": false,
+      "requires_validation_and_memory_admission": true,
+      "evidence_ids": ["round-26:self-improve-proposal-guidance"]
+    },
+    "side_effects": {
+      "starts_daemon": false,
+      "stops_daemon": false,
+      "starts_process": false,
+      "touches_remote": false,
+      "downloads_model": false,
+      "warms_model_cache": false,
+      "sends_prompt": false,
+      "starts_stream": false,
+      "replays_prompt": false,
+      "starts_thread": false,
+      "sends_message": false,
+      "mutates_memory_store": false,
+      "writes_ndkv": false,
+      "promotes_candidate": false,
+      "repairs_artifact": false
+    },
+    "raw_old_window_payload": "RAW_OLD_WINDOW_PAYLOAD: replay /v1/chat-stream with prompt body",
+    "helper_prose": "helper says replay prompt and start daemon now"
+  },
+  "self_improve_proposal_acceptance_summary_v1": {
+    "schema": "self_improve_proposal_acceptance_summary_v1",
+    "consumer_surface": "evolution_loop_report_only_self_improve_candidate_summary",
+    "read_only": true,
+    "candidate_only": true,
+    "artifact_loaded": true,
+    "total_candidate_count": 2,
+    "projected_report_count": 1,
+    "memory_admission_accepted_count": 0,
+    "evidence_backed_business_improvement_count": 0,
+    "advisory_only_count": 1,
+    "allow_promotion_count": 1,
+    "require_repair_count": 0,
+    "accepted_without_business_evidence_count": 0,
+    "only_advisory_or_repair": true,
+    "prompt_guidance": {
+      "should_convert_advisory_to_evidence_backed_business_improvement": true,
+      "should_repair_unvalidated_or_unaccepted_proposals": false,
+      "requires_checked_passed_validation_and_accepted_memory_admission": true,
+      "evidence_ids": ["round-26:self-improve-proposal-guidance"]
+    },
+    "action_plan": {
+      "read_only": true,
+      "report_only": true,
+      "candidate_only": true,
+      "auto_apply": false,
+      "action_required": true,
+      "primary_action": "convert_advisory_to_evidence_backed_business_improvement",
+      "actions": [
+        "convert_advisory_to_evidence_backed_business_improvement",
+        "require_checked_passed_validation_and_accepted_memory_admission"
+      ],
+      "requires_checked_passed_validation_and_accepted_memory_admission": true,
+      "side_effects": {
+        "applies_code": false,
+        "edits_files": false,
+        "mutates_ledger": false,
+        "mutates_memory_store": false,
+        "writes_ndkv": false,
+        "starts_daemon": false,
+        "stops_daemon": false,
+        "touches_remote": false,
+        "downloads_model": false,
+        "warms_model_cache": false,
+        "starts_forge": false,
+        "starts_web_lab": false,
+        "sends_prompt": false,
+        "starts_stream": false,
+        "replays_prompt": false,
+        "calls_model": false
+      }
+    },
+    "action_assignment": {
+      "read_only": true,
+      "report_only": true,
+      "candidate_only": true,
+      "auto_apply": false,
+      "action_required": true,
+      "primary_action": "convert_advisory_to_evidence_backed_business_improvement",
+      "actions": [
+        "convert_advisory_to_evidence_backed_business_improvement",
+        "require_checked_passed_validation_and_accepted_memory_admission"
+      ],
+      "target_count": 1,
+      "requires_checked_passed_validation_and_accepted_memory_admission": true,
+      "targets": [
+        {
+          "proposal_id": "self-improve-r26-proposal-memory-index",
+          "source_round": 26,
+          "evidence_ids": ["round-26:self-improve-proposal-guidance"],
+          "current_memory_admission_decision": "quarantined",
+          "advisory_only": true,
+          "require_repair": false,
+          "validation_checked": true,
+          "validation_passed": true,
+          "memory_admission_accepted": false,
+          "evidence_backed_business_improvement": false,
+          "missing_requirements": [
+            "accepted_memory_admission",
+            "evidence_backed_business_improvement"
+          ]
+        }
+      ]
+    }
+  }
+}

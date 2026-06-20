@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "contract_version": "smartsteam.gemma-chain.mlx-experiment-execution-checklist.v1",
+  "read_only": true,
+  "executes_commands": false,
+  "default_decision": "documentation_only_blocked_until_authorized",
+  "candidate_manifest": "tools/gemma-chain/mlx-experiment-candidates.json",
+  "preflight_contract": "tools/gemma-chain/mlx-experiment-preflight-contract.json",
+  "pool_policy": "experimental_not_gguf_pool",
+  "production_pool_constraints": [
+    "Do not modify llama.cpp GGUF worker manifest.",
+    "Do not reuse ports 8686-8690.",
+    "Do not write GGUF model cache or production model weights.",
+    "Do not route unattended daemon prompts to MLX until a separate gate exists.",
+    "Always recheck GGUF pool health after MLX smoke or teardown."
+  ],
+  "stages": [
+    {
+      "id": "preflight_pass",
+      "order": 1,
+      "goal": "Prove MLX runtime/toolchain/port/GGUF baseline/resource headroom are ready before any download or process start.",
+      "requires_authorization": true,
+      "ssh": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "candidate_commands": [
+        "authorized owner flow reads tools/gemma-chain/mlx-experiment-preflight-contract.json",
+        "authorized owner flow verifies mlx_lm.server, Python/venv, experiment port, GGUF daemon freshness, memory headroom"
+      ],
+      "pass_condition": "All required preflight_items pass and GGUF daemon baseline remains stale=false ledger_lag=0 gate_failures=0.",
+      "rollback_on_failure": [
+        "Do not download models.",
+        "Do not start MLX runtime.",
+        "Record failed preflight item and keep GGUF pool unchanged."
+      ]
+    },
+    {
+      "id": "download_cache_hash",
+      "order": 2,
+      "goal": "Download candidate MLX model into an isolated experiment cache and record hash/size metadata.",
+      "requires_authorization": true,
+      "ssh": true,
+      "downloads": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "candidate_commands": [
+        "huggingface-cli download <model_id> --local-dir <mlx_experiment_cache>",
+        "find <mlx_experiment_cache> -type f -maxdepth 3",
+        "shasum -a 256 <downloaded_files>"
+      ],
+      "pass_condition": "Files are downloaded only to the MLX experiment cache, hashes are recorded, and disk headroom remains green.",
+      "rollback_on_failure": [
+        "Do not modify GGUF cache.",
+        "Delete only the failed isolated experiment cache if authorized.",
+        "Record partial download paths before cleanup."
+      ]
+    },
+    {
+      "id": "single_slot_start",
+      "order": 3,
+      "goal": "Start one MLX experiment slot on a non-production port.",
+      "requires_authorization": true,
+      "ssh": true,
+      "downloads": false,
+      "starts_process": true,
+      "sends_prompt": false,
+      "candidate_commands": [
+        "mlx_lm.server --model <mlx_experiment_cache> --host 127.0.0.1 --port <experiment_port>",
+        "lsof -nP -iTCP:<experiment_port> -sTCP:LISTEN"
+      ],
+      "pass_condition": "Exactly one MLX process listens on the experiment port, no GGUF worker port changes, and GGUF daemon remains fresh.",
+      "rollback_on_failure": [
+        "Stop only the MLX experiment process if it started.",
+        "Do not stop llama.cpp GGUF workers.",
+        "Recheck GGUF pool health and daemon report freshness."
+      ]
+    },
+    {
+      "id": "smoke_prompt",
+      "order": 4,
+      "goal": "Send one bounded smoke prompt to the MLX experiment slot.",
+      "requires_authorization": true,
+      "ssh": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": true,
+      "candidate_commands": [
+        "curl -s http://127.0.0.1:<experiment_port>/v1/models",
+        "curl -s http://127.0.0.1:<experiment_port>/v1/chat/completions -d <bounded_smoke_payload>"
+      ],
+      "pass_condition": "Smoke returns a valid response under token/time limits and is not routed through unattended daemon.",
+      "rollback_on_failure": [
+        "Do not retry unbounded prompts.",
+        "Capture MLX logs and resource sample.",
+        "Stop MLX experiment process if authorized."
+      ]
+    },
+    {
+      "id": "resource_sample",
+      "order": 5,
+      "goal": "Record resource and GGUF health after the MLX smoke.",
+      "requires_authorization": true,
+      "ssh": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "candidate_commands": [
+        "vm_stat",
+        "memory_pressure",
+        "ps -Ao pid,rss,comm | sort -nr -k2 | head",
+        "read GGUF daemon status and status-with-model-cache.json"
+      ],
+      "pass_condition": "Memory pressure remains green, no swap pressure regression, GGUF workers remain 6/6 healthy and Metal.",
+      "rollback_on_failure": [
+        "Mark MLX candidate unsafe for residency.",
+        "Stop MLX experiment process if authorized.",
+        "Keep GGUF pool unchanged and recheck daemon freshness."
+      ]
+    },
+    {
+      "id": "teardown_or_keep_decision",
+      "order": 6,
+      "goal": "Decide whether to tear down the MLX slot or keep it as an explicitly experimental non-production service.",
+      "requires_authorization": true,
+      "ssh": true,
+      "downloads": false,
+      "starts_process": true,
+      "sends_prompt": false,
+      "candidate_commands": [
+        "stop MLX experiment process",
+        "or record explicit keep-alive owner, port, PID, resource limits, and monitoring"
+      ],
+      "pass_condition": "Either no MLX process remains, or a documented experimental owner/monitoring plan exists.",
+      "rollback_on_failure": [
+        "Prefer teardown if ownership/monitoring is unclear.",
+        "Do not attach experiment slot to Web Lab/Forge/CLI production routing.",
+        "Record final PID/port state."
+      ]
+    },
+    {
+      "id": "gguf_pool_health_recheck",
+      "order": 7,
+      "goal": "Confirm GGUF production pool and daemon remained healthy after the MLX experiment.",
+      "requires_authorization": true,
+      "ssh": false,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "candidate_commands": [
+        "read target/remote-gemma-chain/status-with-model-cache.json",
+        "read target/remote-gemma-chain/model-cache-status.json",
+        "read daemon status/report artifacts"
+      ],
+      "pass_condition": "GGUF pool remains 6/6 healthy, all Metal, model cache 5/5 ok, daemon stale=false ledger_lag=0 gate_failures=0.",
+      "rollback_on_failure": [
+        "Mark experiment as production-impacting.",
+        "Do not run further MLX candidates.",
+        "Escalate to main window for GGUF recovery decision."
+      ]
+    }
+  ],
+  "minimum_authorized_first_command_boundary": {
+    "description": "The first execution after authorization should be a read-only preflight inventory, not a download, process start, or prompt.",
+    "example_command": "ssh smartsteam-mac 'command -v mlx_lm.server; python3 --version'",
+    "ssh": true,
+    "downloads": false,
+    "starts_process": false,
+    "sends_prompt": false,
+    "requires_authorization": true
+  }
+}

@@ -6,6 +6,17 @@ inference control layer for self-developed Transformer runtimes.
 `rust-norion` 是一个用 Rust 编写的本地 Noiron 风格自进化推理控制层原型，默认面向自主训练的
 Transformer 运行时。
 
+## License and Collaboration / 许可与协作
+
+This repository is public for non-commercial research, education, evaluation,
+benchmarking, and experimental deployment. Commercial use requires explicit
+written permission from the copyright holder. See [LICENSE](LICENSE).
+
+Public issues and pull requests are welcome, but merges require maintainer
+review and approval. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过维护者审核批准。
+
 ## Project Goal / 项目目标
 
 The goal is to build a practical, sovereignty-first local inference control
@@ -139,6 +150,15 @@ does not yet include a trained production inference kernel.
 
 当前仓库已经包含一个可运行的控制层原型、确定性的本地 Transformer 风格运行时原型，以及基于 manifest 的生产运行时边界；同时提供了一个确定性的 Rust reference production kernel，用来端到端验证生产边界，但还没有接入训练好的生产级推理内核。
 
+For local experience-memory hygiene checks, run `cargo run -- --inspect-state
+--inspect-limit 5`. This only reads persisted state and does not start a local
+model. Chinese notes: [docs/memory-hygiene-cn.md](docs/memory-hygiene-cn.md).
+To preview which experience records a prompt would retrieve without inference,
+run `cargo run -- --experience-retrieval --profile coding "..."`.
+
+本地经验库卫生检查可运行 `cargo run -- --inspect-state --inspect-limit 5`。该命令只读取持久化状态，不会启动本地模型。中文说明见：[docs/memory-hygiene-cn.md](docs/memory-hygiene-cn.md)。
+也可以用 `cargo run -- --experience-retrieval --profile coding "..."` 只读预览某个 prompt 会召回哪些经验。
+
 Implemented modules:
 
 已实现模块：
@@ -210,6 +230,53 @@ Use `--auto-replay 0` to disable it or `--auto-replay n` to change the limit.
 
 默认情况下，只要已有历史经验且本地硬件压力不高，引擎会在推理前自动执行一次小规模 experience replay。
 可以用 `--auto-replay 0` 关闭，或用 `--auto-replay n` 调整上限。
+
+For split Web Lab streaming tests, see
+[`tools/rustgpt-lab/README.md`](tools/rustgpt-lab/README.md) or
+[`tools/rustgpt-lab/README.zh-CN.md`](tools/rustgpt-lab/README.zh-CN.md).
+Start with the built-in backend path to validate the frontend/proxy without
+Gemma, then run the real Gemma CheckOnly command before starting Gemma 12B.
+One-command safe start:
+`.\tools\rustgpt-lab\start-built-in-lab.cmd`.
+
+For the Rust CLI/TUI test harness, use SmartSteam Forge. The safe command
+starts a built-in `rust-norion` backend and optional Web Lab, then opens the
+Forge chat UI without starting Gemma or `mistralrs`. It defaults to isolated
+state under `target\manual-forge-service\forge-state`:
+`.\tools\smartsteam-forge\start-forge-stack.cmd`.
+To keep local development resources free while testing real Gemma, use the
+remote model-box chain:
+
+```powershell
+.\tools\smartsteam-forge\start-remote-gemma-chain.cmd -BackendPort 7979 -LabPort 8789
+.\tools\smartsteam-forge\smoke-remote-gemma-chain.cmd -SkipBuild
+```
+
+The Mac only needs `llama-server` and the GGUF model; Rust source and state
+stay local.
+The remote smoke command sends tiny real prompts through Web Lab SSE and
+SmartSteam Forge CLI, so it validates the interactive test chain end to end.
+
+前后端分离的 Web Lab 流式测试见
+[`tools/rustgpt-lab/README.zh-CN.md`](tools/rustgpt-lab/README.zh-CN.md)。
+建议先用 built-in 后端路径验证前端和代理，不启动 Gemma；真实 Gemma 12B
+联调前先运行 CheckOnly，再用隔离 `-StateDir` 启动。
+安全一键启动：`.\tools\rustgpt-lab\start-built-in-lab.cmd`。
+
+Rust CLI/TUI 测试入口是 SmartSteam Forge。安全命令会启动 built-in
+`rust-norion` 后端和可选 Web Lab，然后进入 Forge 对话 UI；不会启动 Gemma 或
+`mistralrs`，默认状态目录是 `target\manual-forge-service\forge-state`：
+`.\tools\smartsteam-forge\start-forge-stack.cmd`。
+真实 Gemma 又不想占本机开发资源时，用远端模型盒链路：
+
+```powershell
+.\tools\smartsteam-forge\start-remote-gemma-chain.cmd -BackendPort 7979 -LabPort 8789
+.\tools\smartsteam-forge\smoke-remote-gemma-chain.cmd -SkipBuild
+```
+
+Mac 只需要 `llama-server` 二进制和 GGUF 模型；Rust 源码和经验状态仍留在本机。
+remote smoke 会通过 Web Lab SSE 和 SmartSteam Forge CLI 发送极短真实 prompt，
+用于端到端确认交互式测试链路。
 
 Inspect persisted local state without running inference:
 
@@ -1207,8 +1274,32 @@ global default.
 ## Test / 测试
 
 ```powershell
-cargo test
+cargo check -q --workspace
+cargo test -q --workspace
+cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+cargo test -q --manifest-path tools\rustgpt-lab\Cargo.toml
+cargo test -q --manifest-path tools\smartsteam-forge\Cargo.toml
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\gemma-chain\scripts\gemma-chain.ps1 -Action selftest -RepoRoot D:\rust-norion
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\evolution-loop\test-evolution-loop-launcher.ps1 -RepoRoot D:\rust-norion
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\smartsteam-forge\scripts\test-remote-gemma-evolution-loop.ps1 -RepoRoot D:\rust-norion
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\smartsteam-forge\scripts\test-remote-model-pool-guards.ps1 -RepoRoot D:\rust-norion
 ```
+
+These commands are local compile/test gates only. They do not start Gemma,
+SSH to a remote model box, send prompts, or touch the live model runtime. The
+workspace command covers the root crate, `crates/norion-*`, and
+`tools/model-pool-advice-core`; `evolution-loop`, `rustgpt-lab`, and
+`smartsteam-forge` are intentionally excluded from the workspace and should be
+tested with their own manifests. The PowerShell self-tests only validate
+Gemma-chain read-only contracts, command assembly, model-pool guard policy, and
+`CheckOnly` safety markers.
+
+这些命令只做本地编译和测试门禁，不会启动 Gemma、不会 SSH 到远端模型盒、不会发送
+prompt，也不会操作正在运行的模型服务。workspace 命令覆盖根 crate、
+`crates/norion-*` 和 `tools/model-pool-advice-core`；`evolution-loop`、
+`rustgpt-lab`、`smartsteam-forge` 被有意排除在 workspace 外，需要用各自的
+manifest 单独测试。PowerShell 自测只验证 Gemma chain 只读契约、命令拼装、模型池
+guard 策略和 `CheckOnly` 安全标记。
 
 ## Architecture / 架构
 

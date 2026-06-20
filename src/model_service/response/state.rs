@@ -1,0 +1,170 @@
+use rust_norion::{
+    StateExperienceHygieneFinding, StateExperienceIndexFinding, StateInspectionGateReport,
+    StateInspectionReport, TraceSchemaGateReport,
+};
+
+use super::super::json::service_json_string;
+use super::gates::{option_state_gate_service_json, option_trace_gate_service_json};
+
+pub(crate) fn model_service_state_response_json(
+    request_id: usize,
+    report: &StateInspectionReport,
+    state_gate_report: Option<&StateInspectionGateReport>,
+    trace_gate_report: Option<&TraceSchemaGateReport>,
+) -> String {
+    format!(
+        "{{\"ok\":true,\"request_id\":{},\"state\":{},\"state_gate\":{},\"trace_gate\":{}}}",
+        request_id,
+        model_service_state_json(report),
+        option_state_gate_service_json(state_gate_report),
+        option_trace_gate_service_json(trace_gate_report)
+    )
+}
+
+pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String {
+    format!(
+        "{{\"summary\":{},\"memories\":{},\"runtime_kv_memories\":{},\"experiences\":{},\"experience_hygiene_findings\":{},\"experience_hygiene_watch\":{},\"experience_hygiene_quarantine_candidates\":{},\"experience_hygiene_legacy_metadata_lessons\":{},\"experience_hygiene_legacy_metadata_without_clean_gist\":{},\"experience_repairable_legacy_metadata_lessons\":{},\"experience_repairable_index_records\":{},\"experience_repair_projected_findings\":{},\"experience_repair_projected_watch\":{},\"experience_repair_projected_quarantine_candidates\":{},\"experience_repair_projected_legacy_metadata_lessons\":{},\"experience_repair_projected_legacy_metadata_without_clean_gist\":{},\"experience_repair_skipped_quarantine_candidates\":{},\"experience_repair_skipped_missing_clean_gist\":{},\"experience_hygiene_clean\":{},\"experience_hygiene_samples\":{},\"experience_index_compacted_records\":{},\"experience_index_noisy_records\":{},\"experience_index_max_noise_penalty\":{:.6},\"experience_index_samples\":{},\"runtime_model_experiences\":{},\"runtime_tokens\":{},\"runtime_architecture_experiences\":{},\"runtime_kv_precision_experiences\":{},\"runtime_device_execution_experiences\":{},\"runtime_error_experiences\":{},\"runtime_errors\":{},\"runtime_timeout_experiences\":{},\"runtime_timeouts\":{},\"runtime_error_message_chars\":{},\"rust_check_experiences\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"business_contract_experiences\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_required_signals\":{},\"business_contract_matched_signals\":{},\"business_contract_missing_signals\":{},\"business_contract_protocol_leaks\":{},\"business_contract_substitutions\":{},\"business_contract_evasive_denials\":{},\"business_contract_missing_handling_signals\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_experiences\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"evolution_live_inference_runs\":{},\"evolution_replay_runs\":{},\"evolution_replay_items\":{},\"evolution_external_feedbacks\":{},\"evolution_external_feedback_memory_updates\":{},\"evolution_external_feedback_strength_delta\":{:.6},\"evolution_replay_rust_check_items\":{},\"evolution_replay_rust_check_passed\":{},\"evolution_replay_rust_check_failed\":{},\"evolution_replay_rust_check_live_memory_feedback_updates\":{},\"evolution_replay_rust_check_live_memory_feedback_applied\":{},\"evolution_replay_rust_check_live_memory_feedback_strength_delta\":{:.6},\"evolution_replay_business_contract_items\":{},\"evolution_replay_business_contract_passed\":{},\"evolution_replay_business_contract_failed\":{},\"evolution_replay_business_contract_raw_passed\":{},\"evolution_replay_business_contract_raw_failed\":{},\"evolution_replay_business_contract_response_normalized\":{},\"evolution_replay_business_contract_sanitized\":{},\"evolution_replay_business_contract_canonical_fallbacks\":{},\"router_threshold\":{:.6}}}",
+        service_json_string(&report.summary_line()),
+        report.memory_count,
+        report.runtime_kv_memory_count,
+        report.experience_count,
+        report.experience_hygiene_finding_count,
+        report.experience_hygiene_watch_count,
+        report.experience_hygiene_quarantine_candidate_count,
+        report.experience_hygiene_legacy_metadata_lesson_count,
+        report.experience_hygiene_legacy_metadata_without_clean_gist_count,
+        report.experience_repairable_legacy_metadata_lesson_count,
+        report.experience_repairable_index_record_count,
+        report.experience_repair_projected_hygiene_finding_count,
+        report.experience_repair_projected_hygiene_watch_count,
+        report.experience_repair_projected_hygiene_quarantine_candidate_count,
+        report.experience_repair_projected_legacy_metadata_lesson_count,
+        report.experience_repair_projected_legacy_metadata_without_clean_gist_count,
+        report.experience_repair_skipped_quarantine_candidate_count,
+        report.experience_repair_skipped_missing_clean_gist_count,
+        report.experience_hygiene_quarantine_candidate_count == 0,
+        experience_hygiene_samples_json(&report.experience_hygiene_findings),
+        report.experience_index_compacted_record_count,
+        report.experience_index_noisy_record_count,
+        report.experience_index_max_noise_penalty,
+        experience_index_samples_json(&report.experience_index_findings),
+        report.runtime_model_experience_count,
+        report.runtime_token_count,
+        report.runtime_architecture_experience_count,
+        report.runtime_kv_precision_experience_count,
+        report.runtime_device_execution_experience_count,
+        report.runtime_error_experience_count,
+        report.runtime_error_count,
+        report.runtime_timeout_experience_count,
+        report.runtime_timeout_count,
+        report.runtime_error_message_chars,
+        report.rust_check_experience_count,
+        report.rust_check_passed_count,
+        report.rust_check_failed_count,
+        report.rust_check_diagnostic_chars,
+        report.business_contract_experience_count,
+        report.business_contract_passed_count,
+        report.business_contract_failed_count,
+        report.business_contract_required_signals,
+        report.business_contract_matched_signals,
+        report.business_contract_missing_signals,
+        report.business_contract_protocol_leaks,
+        report.business_contract_substitutions,
+        report.business_contract_evasive_denials,
+        report.business_contract_missing_handling_signals,
+        report.business_contract_raw_passed_count,
+        report.business_contract_raw_failed_count,
+        report.business_contract_response_normalized_count,
+        report.business_contract_sanitized_count,
+        report.business_contract_canonical_fallback_count,
+        report.pool_dispatch_experience_count,
+        report.pool_dispatch_item_count,
+        report.pool_dispatch_forwarded_count,
+        report.pool_dispatch_clamped_count,
+        report.pool_dispatch_low_priority_count,
+        report.evolution_ledger.live_inference_runs,
+        report.evolution_ledger.replay_runs,
+        report.evolution_ledger.replay_items,
+        report.evolution_ledger.external_feedbacks,
+        report.evolution_ledger.external_feedback_memory_updates,
+        report.evolution_ledger.external_feedback_strength_delta,
+        report.evolution_ledger.replay_rust_check_items,
+        report.evolution_ledger.replay_rust_check_passed,
+        report.evolution_ledger.replay_rust_check_failed,
+        report
+            .evolution_ledger
+            .replay_rust_check_live_memory_feedback_updates,
+        report
+            .evolution_ledger
+            .replay_rust_check_live_memory_feedback_applied,
+        report
+            .evolution_ledger
+            .replay_rust_check_live_memory_feedback_strength_delta,
+        report.evolution_ledger.replay_business_contract_items,
+        report.evolution_ledger.replay_business_contract_passed,
+        report.evolution_ledger.replay_business_contract_failed,
+        report.evolution_ledger.replay_business_contract_raw_passed,
+        report.evolution_ledger.replay_business_contract_raw_failed,
+        report
+            .evolution_ledger
+            .replay_business_contract_response_normalized,
+        report.evolution_ledger.replay_business_contract_sanitized,
+        report
+            .evolution_ledger
+            .replay_business_contract_canonical_fallbacks,
+        report.router_threshold
+    )
+}
+
+fn experience_hygiene_samples_json(findings: &[StateExperienceHygieneFinding]) -> String {
+    let samples = findings
+        .iter()
+        .map(experience_hygiene_finding_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{samples}]")
+}
+
+fn experience_hygiene_finding_json(finding: &StateExperienceHygieneFinding) -> String {
+    format!(
+        "{{\"experience_id\":{},\"severity\":\"{}\",\"reason\":{},\"markers\":{},\"prompt_preview\":{},\"lesson_preview\":{}}}",
+        finding.experience_id,
+        finding.severity.as_str(),
+        service_json_string(&finding.reason),
+        string_array_json(&finding.markers),
+        service_json_string(&finding.prompt_preview),
+        service_json_string(&finding.lesson_preview)
+    )
+}
+
+fn experience_index_samples_json(findings: &[StateExperienceIndexFinding]) -> String {
+    let samples = findings
+        .iter()
+        .map(experience_index_finding_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{samples}]")
+}
+
+fn experience_index_finding_json(finding: &StateExperienceIndexFinding) -> String {
+    format!(
+        "{{\"experience_id\":{},\"reason\":{},\"compacted\":{},\"noise_penalty\":{:.6},\"prompt_chars\":{},\"lesson_chars\":{},\"prompt_preview\":{},\"lesson_preview\":{}}}",
+        finding.experience_id,
+        service_json_string(&finding.reason),
+        finding.compacted,
+        finding.noise_penalty,
+        finding.prompt_chars,
+        finding.lesson_chars,
+        service_json_string(&finding.prompt_preview),
+        service_json_string(&finding.lesson_preview)
+    )
+}
+
+fn string_array_json(items: &[String]) -> String {
+    let items = items
+        .iter()
+        .map(|item| service_json_string(item))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
+}

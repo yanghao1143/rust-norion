@@ -1,0 +1,70 @@
+{
+  "schema": "daemon_round_transition_status_v1.consumer_fixture",
+  "fixture_version": 1,
+  "read_only": true,
+  "starts_process": false,
+  "sends_prompt": false,
+  "consumer_contract": {
+    "status_json_path": "daemon.daemon_round_transition_status",
+    "daemon_json_path": "daemon.daemon_round_transition_status",
+    "for_consumers": [
+      "cli",
+      "forge",
+      "main_window"
+    ],
+    "log_prose_required": false,
+    "operator_summary_required": false
+  },
+  "examples": [
+    {
+      "name": "normal_in_progress",
+      "daemon": {
+        "daemon_round_transition_status": {
+          "schema": "daemon_round_transition_status_v1",
+          "transition_kind": "normal_in_progress",
+          "activity_state": "active",
+          "activity_ok": true,
+          "activity_reason": "round_in_progress_stdout_recent",
+          "active_round": 337,
+          "ledger_latest_round": 336,
+          "ledger_lag_rounds": 1,
+          "latest_round_state": "in_progress",
+          "latest_done_round": 336,
+          "round_in_progress": true,
+          "stdout_age_seconds": 16,
+          "ledger_age_seconds": 189,
+          "max_in_progress_stdout_age_seconds": 300,
+          "max_idle_ledger_age_seconds": 900,
+          "read_only": true,
+          "starts_process": false,
+          "sends_prompt": false
+        }
+      }
+    },
+    {
+      "name": "round_done_waiting_ledger_commit",
+      "daemon": {
+        "daemon_round_transition_status": {
+          "schema": "daemon_round_transition_status_v1",
+          "transition_kind": "round_done_waiting_ledger_commit",
+          "activity_state": "round_done_waiting_ledger_commit",
+          "activity_ok": true,
+          "activity_reason": "stdout_done_marker_seen_waiting_for_ledger_commit",
+          "active_round": 338,
+          "ledger_latest_round": 337,
+          "ledger_lag_rounds": 1,
+          "latest_round_state": "round_done_waiting_ledger_commit",
+          "latest_done_round": 338,
+          "round_in_progress": false,
+          "stdout_age_seconds": 4,
+          "ledger_age_seconds": 42,
+          "max_in_progress_stdout_age_seconds": 300,
+          "max_idle_ledger_age_seconds": 900,
+          "read_only": true,
+          "starts_process": false,
+          "sends_prompt": false
+        }
+      }
+    }
+  ]
+}

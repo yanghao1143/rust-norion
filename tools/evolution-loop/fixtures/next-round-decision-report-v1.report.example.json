@@ -1,0 +1,301 @@
+{
+  "schema": "next_round_decision_report_v1.report_fixture",
+  "fixture_version": 1,
+  "consumer_surface": "evolution_loop_status_report_next_round_decision",
+  "report_only": true,
+  "read_only": true,
+  "side_effects": false,
+  "starts_process": false,
+  "sends_prompt": false,
+  "consumes": {
+    "decision_schema": "next_round_decision_evidence_v1",
+    "decision_path": "next_round_decision",
+    "live_bundle_decision_path": "live_status_bundle.next_round_decision"
+  },
+  "emits": {
+    "schema": "next_round_decision_report_v1",
+    "status_path": "next_round_decision_report_v1",
+    "live_bundle_path": "live_status_bundle.next_round_decision_report_v1"
+  },
+  "examples": [
+    {
+      "name": "safe_to_wait_report",
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-wait",
+        "safe_to_wait_current_round_active": true,
+        "safe_to_continue_after_current_round": false,
+        "operator_attention_blocked": false,
+        "operator_attention_required": false,
+        "may_display_unattended_continuation": true,
+        "wait_for_current_round": true,
+        "continue_after_current_round": false,
+        "reason_code": "active_round_in_progress_wait_for_completion",
+        "evidence": {
+          "transition_kind": "normal_in_progress",
+          "report_gate_passed": true,
+          "report_gate_failure_count": 0
+        }
+      },
+      "next_round_decision_report_v1": {
+        "schema": "next_round_decision_report_v1",
+        "consumer_surface": "evolution_loop_status_report_next_round_decision",
+        "source_schema": "next_round_decision_evidence_v1",
+        "report_only": true,
+        "read_only": true,
+        "side_effects": false,
+        "starts_process": false,
+        "sends_prompt": false,
+        "changes_daemon_loop_behavior": false,
+        "changes_prompt_content": false,
+        "changes_report_gate_stop_semantics": false,
+        "changes_runtime_calls": false,
+        "changes_model_pool_behavior": false,
+        "display_state": "safe-to-wait",
+        "safe_to_wait_current_round_active": true,
+        "safe_to_continue_after_current_round": false,
+        "operator_attention_blocked": false,
+        "operator_attention_required": false,
+        "may_display_unattended_continuation": true,
+        "wait_for_current_round": true,
+        "continue_after_current_round": false,
+        "reason_code": "active_round_in_progress_wait_for_completion",
+        "evidence": {
+          "transition_kind": "normal_in_progress",
+          "report_gate_passed": true,
+          "report_gate_failure_count": 0
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-wait"
+        }
+      },
+      "live_status_bundle": {
+        "schema": "live_status_bundle_v1",
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-wait"
+        },
+        "next_round_decision_report_v1": {
+          "schema": "next_round_decision_report_v1",
+          "consumer_surface": "evolution_loop_status_report_next_round_decision",
+          "source_schema": "next_round_decision_evidence_v1",
+          "report_only": true,
+          "read_only": true,
+          "side_effects": false,
+          "starts_process": false,
+          "sends_prompt": false,
+          "changes_daemon_loop_behavior": false,
+          "changes_prompt_content": false,
+          "changes_report_gate_stop_semantics": false,
+          "changes_runtime_calls": false,
+          "changes_model_pool_behavior": false,
+          "display_state": "safe-to-wait",
+          "safe_to_wait_current_round_active": true,
+          "safe_to_continue_after_current_round": false,
+          "operator_attention_blocked": false,
+          "operator_attention_required": false,
+          "may_display_unattended_continuation": true,
+          "wait_for_current_round": true,
+          "continue_after_current_round": false,
+          "reason_code": "active_round_in_progress_wait_for_completion",
+          "evidence": {
+            "transition_kind": "normal_in_progress",
+            "report_gate_passed": true,
+            "report_gate_failure_count": 0
+          },
+          "next_round_decision": {
+            "schema": "next_round_decision_evidence_v1",
+            "display_state": "safe-to-wait"
+          }
+        }
+      }
+    },
+    {
+      "name": "safe_to_continue_report",
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-continue-after-current-round",
+        "safe_to_wait_current_round_active": false,
+        "safe_to_continue_after_current_round": true,
+        "operator_attention_blocked": false,
+        "operator_attention_required": false,
+        "may_display_unattended_continuation": true,
+        "wait_for_current_round": false,
+        "continue_after_current_round": true,
+        "reason_code": "done_marker_seen_wait_for_ledger_commit_then_continue",
+        "evidence": {
+          "transition_kind": "round_done_waiting_ledger_commit",
+          "report_gate_passed": true,
+          "report_gate_failure_count": 0
+        }
+      },
+      "next_round_decision_report_v1": {
+        "schema": "next_round_decision_report_v1",
+        "consumer_surface": "evolution_loop_status_report_next_round_decision",
+        "source_schema": "next_round_decision_evidence_v1",
+        "report_only": true,
+        "read_only": true,
+        "side_effects": false,
+        "starts_process": false,
+        "sends_prompt": false,
+        "changes_daemon_loop_behavior": false,
+        "changes_prompt_content": false,
+        "changes_report_gate_stop_semantics": false,
+        "changes_runtime_calls": false,
+        "changes_model_pool_behavior": false,
+        "display_state": "safe-to-continue-after-current-round",
+        "safe_to_wait_current_round_active": false,
+        "safe_to_continue_after_current_round": true,
+        "operator_attention_blocked": false,
+        "operator_attention_required": false,
+        "may_display_unattended_continuation": true,
+        "wait_for_current_round": false,
+        "continue_after_current_round": true,
+        "reason_code": "done_marker_seen_wait_for_ledger_commit_then_continue",
+        "evidence": {
+          "transition_kind": "round_done_waiting_ledger_commit",
+          "report_gate_passed": true,
+          "report_gate_failure_count": 0
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-continue-after-current-round"
+        }
+      },
+      "live_status_bundle": {
+        "schema": "live_status_bundle_v1",
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-continue-after-current-round"
+        },
+        "next_round_decision_report_v1": {
+          "schema": "next_round_decision_report_v1",
+          "consumer_surface": "evolution_loop_status_report_next_round_decision",
+          "source_schema": "next_round_decision_evidence_v1",
+          "report_only": true,
+          "read_only": true,
+          "side_effects": false,
+          "starts_process": false,
+          "sends_prompt": false,
+          "changes_daemon_loop_behavior": false,
+          "changes_prompt_content": false,
+          "changes_report_gate_stop_semantics": false,
+          "changes_runtime_calls": false,
+          "changes_model_pool_behavior": false,
+          "display_state": "safe-to-continue-after-current-round",
+          "safe_to_wait_current_round_active": false,
+          "safe_to_continue_after_current_round": true,
+          "operator_attention_blocked": false,
+          "operator_attention_required": false,
+          "may_display_unattended_continuation": true,
+          "wait_for_current_round": false,
+          "continue_after_current_round": true,
+          "reason_code": "done_marker_seen_wait_for_ledger_commit_then_continue",
+          "evidence": {
+            "transition_kind": "round_done_waiting_ledger_commit",
+            "report_gate_passed": true,
+            "report_gate_failure_count": 0
+          },
+          "next_round_decision": {
+            "schema": "next_round_decision_evidence_v1",
+            "display_state": "safe-to-continue-after-current-round"
+          }
+        }
+      }
+    },
+    {
+      "name": "operator_attention_report",
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "blocked-operator-attention",
+        "safe_to_wait_current_round_active": false,
+        "safe_to_continue_after_current_round": false,
+        "operator_attention_blocked": true,
+        "operator_attention_required": true,
+        "may_display_unattended_continuation": false,
+        "wait_for_current_round": false,
+        "continue_after_current_round": false,
+        "reason_code": "report_gate_failed_operator_attention_required",
+        "evidence": {
+          "transition_kind": "normal_in_progress",
+          "report_gate_passed": false,
+          "report_gate_failure_count": 1
+        }
+      },
+      "next_round_decision_report_v1": {
+        "schema": "next_round_decision_report_v1",
+        "consumer_surface": "evolution_loop_status_report_next_round_decision",
+        "source_schema": "next_round_decision_evidence_v1",
+        "report_only": true,
+        "read_only": true,
+        "side_effects": false,
+        "starts_process": false,
+        "sends_prompt": false,
+        "changes_daemon_loop_behavior": false,
+        "changes_prompt_content": false,
+        "changes_report_gate_stop_semantics": false,
+        "changes_runtime_calls": false,
+        "changes_model_pool_behavior": false,
+        "display_state": "blocked-operator-attention",
+        "safe_to_wait_current_round_active": false,
+        "safe_to_continue_after_current_round": false,
+        "operator_attention_blocked": true,
+        "operator_attention_required": true,
+        "may_display_unattended_continuation": false,
+        "wait_for_current_round": false,
+        "continue_after_current_round": false,
+        "reason_code": "report_gate_failed_operator_attention_required",
+        "evidence": {
+          "transition_kind": "normal_in_progress",
+          "report_gate_passed": false,
+          "report_gate_failure_count": 1
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "blocked-operator-attention"
+        }
+      },
+      "live_status_bundle": {
+        "schema": "live_status_bundle_v1",
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "blocked-operator-attention"
+        },
+        "next_round_decision_report_v1": {
+          "schema": "next_round_decision_report_v1",
+          "consumer_surface": "evolution_loop_status_report_next_round_decision",
+          "source_schema": "next_round_decision_evidence_v1",
+          "report_only": true,
+          "read_only": true,
+          "side_effects": false,
+          "starts_process": false,
+          "sends_prompt": false,
+          "changes_daemon_loop_behavior": false,
+          "changes_prompt_content": false,
+          "changes_report_gate_stop_semantics": false,
+          "changes_runtime_calls": false,
+          "changes_model_pool_behavior": false,
+          "display_state": "blocked-operator-attention",
+          "safe_to_wait_current_round_active": false,
+          "safe_to_continue_after_current_round": false,
+          "operator_attention_blocked": true,
+          "operator_attention_required": true,
+          "may_display_unattended_continuation": false,
+          "wait_for_current_round": false,
+          "continue_after_current_round": false,
+          "reason_code": "report_gate_failed_operator_attention_required",
+          "evidence": {
+            "transition_kind": "normal_in_progress",
+            "report_gate_passed": false,
+            "report_gate_failure_count": 1
+          },
+          "next_round_decision": {
+            "schema": "next_round_decision_evidence_v1",
+            "display_state": "blocked-operator-attention"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,338 @@
+{
+  "root_status": {
+    "daemon": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 209816
+    },
+    "loop": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "daemon_round_transition_status_v1": {
+        "read_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "report_only": true,
+        "status": "normal_in_progress",
+        "transition_kind": "normal_in_progress",
+        "latest_round_state": "round_in_progress",
+        "round_in_progress": true,
+        "observed_round_done": false,
+        "active_round": 380,
+        "latest_done_round": 379,
+        "ledger_latest_round": 379,
+        "ledger_lag_rounds": 1,
+        "reason_codes": [
+          "current_round_active"
+        ],
+        "evidence_ids": [
+          "daemon-round-transition-status-v1:active-380:done-379:ledger-379"
+        ],
+        "side_effects": {
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "writes_ndkv": false
+        }
+      },
+      "next_round_decision_report_v1": {
+        "schema": "next_round_decision_report_v1",
+        "read_only": true,
+        "report_only": true,
+        "side_effects": false,
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-wait",
+          "decision_status": "safe_to_wait_current_round_active",
+          "operator_attention_blocked": false,
+          "operator_attention_required": false,
+          "active_round": 380,
+          "latest_done_round": 379,
+          "ledger_latest_round": 379,
+          "read_only": true,
+          "report_only": true,
+          "dispatch_work_allowed": false,
+          "prompt_replay_allowed": false,
+          "process_start_allowed": false,
+          "ndkv_write_allowed": false,
+          "side_effects": {
+            "starts_daemon": false,
+            "stops_daemon": false,
+            "touches_remote": false,
+            "sends_prompt": false,
+            "starts_stream": false,
+            "replays_prompt": false,
+            "writes_ndkv": false
+          },
+          "reason_codes": [
+            "current_round_active",
+            "latest_completed_ledger_report_gate_passed"
+          ],
+          "evidence_ids": [
+            "active-round:380",
+            "done-round:379",
+            "ledger:latest-round-379",
+            "round:379:report-gate-passed"
+          ]
+        }
+      },
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "blocked-operator-attention",
+        "decision_status": "operator_attention_blocked",
+        "operator_attention_required": true,
+        "active_round": 999,
+        "latest_done_round": 999,
+        "ledger_latest_round": 999,
+        "read_only": true,
+        "report_only": true,
+        "process_start_allowed": false,
+        "prompt_replay_allowed": false,
+        "dispatch_work_allowed": false,
+        "ndkv_write_allowed": false,
+        "reason_codes": [
+          "legacy_status_must_not_win"
+        ],
+        "evidence_ids": [
+          "legacy:operator-attention"
+        ]
+      },
+      "readiness": {
+        "ready": true,
+        "failures": []
+      }
+    },
+    "next_round_downstream_status_consumers_v1": {
+      "schema": "next_round_downstream_status_consumers_v1",
+      "read_only": true,
+      "report_only": true,
+      "side_effects": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "starts_stream": false,
+      "writes_ndkv": false,
+      "active_round": 380,
+      "latest_done_round": 379,
+      "ledger_latest_round": 379,
+      "effective_decision_status": "safe_to_wait_current_round_active",
+      "round_id_evidence": {
+        "source_schema": "daemon_round_transition_status_v1",
+        "transition_kind": "normal_in_progress",
+        "active_round": 380,
+        "latest_done_round": 379,
+        "ledger_latest_round": 379,
+        "reason_codes": [
+          "daemon_round_in_progress"
+        ],
+        "evidence_ids": [
+          "active-round:380",
+          "done-round:379",
+          "ledger:latest-round-379"
+        ]
+      },
+      "reason_codes": [
+        "downstream_consumers_ready",
+        "safe_to_wait_current_round_active"
+      ],
+      "evidence_ids": [
+        "status-root:downstream-consumers",
+        "daemon-round-transition-status-v1:active-380:done-379:ledger-379"
+      ],
+      "consumers": {
+        "forge_operator_display": {
+          "consumer_id": "forge_operator_display",
+          "required": true,
+          "satisfied": true,
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "reason_codes": [
+            "safe_to_wait_visible"
+          ],
+          "evidence_ids": [
+            "forge:summary-safe-to-wait"
+          ]
+        },
+        "service_cli_display": {
+          "consumer_id": "service_cli_display",
+          "required": true,
+          "satisfied": true,
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false
+        }
+      }
+    }
+  },
+  "live_status_bundle_status": {
+    "daemon": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 209816
+    },
+    "loop": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "live_status_bundle": {
+        "schema": "daemon_live_status_bundle_v1",
+        "read_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "report_only": true,
+        "daemon_round_transition_status_v1": {
+          "read_only": true,
+          "starts_process": false,
+          "sends_prompt": false,
+          "report_only": true,
+          "status": "normal_in_progress",
+          "transition_kind": "normal_in_progress",
+          "latest_round_state": "round_in_progress",
+          "round_in_progress": true,
+          "observed_round_done": false,
+          "active_round": 380,
+          "latest_done_round": 379,
+          "ledger_latest_round": 379,
+          "ledger_lag_rounds": 1
+        },
+        "next_round_decision_report_v1": {
+          "schema": "next_round_decision_report_v1",
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "next_round_decision": {
+            "schema": "next_round_decision_evidence_v1",
+            "display_state": "safe-to-wait",
+            "decision_status": "safe_to_wait_current_round_active",
+            "operator_attention_blocked": false,
+            "operator_attention_required": false,
+            "active_round": 380,
+            "latest_done_round": 379,
+            "ledger_latest_round": 379,
+            "read_only": true,
+            "report_only": true,
+            "dispatch_work_allowed": false,
+            "prompt_replay_allowed": false,
+            "process_start_allowed": false,
+            "ndkv_write_allowed": false,
+            "side_effects": {
+              "starts_daemon": false,
+              "stops_daemon": false,
+              "touches_remote": false,
+              "sends_prompt": false,
+              "starts_stream": false,
+              "replays_prompt": false,
+              "writes_ndkv": false
+            },
+            "reason_codes": [
+              "current_round_active",
+              "latest_completed_ledger_report_gate_passed"
+            ],
+            "evidence_ids": [
+              "active-round:380",
+              "done-round:379",
+              "ledger:latest-round-379",
+              "round:379:report-gate-passed"
+            ]
+          }
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "blocked-operator-attention",
+          "decision_status": "operator_attention_blocked",
+          "operator_attention_required": true,
+          "active_round": 999,
+          "latest_done_round": 999,
+          "ledger_latest_round": 999,
+          "read_only": true,
+          "report_only": true,
+          "process_start_allowed": false,
+          "prompt_replay_allowed": false,
+          "dispatch_work_allowed": false,
+          "ndkv_write_allowed": false,
+          "reason_codes": [
+            "legacy_status_must_not_win"
+          ],
+          "evidence_ids": [
+            "legacy:operator-attention"
+          ]
+        },
+        "next_round_downstream_status_consumers_v1": {
+          "schema": "next_round_downstream_status_consumers_v1",
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "starts_process": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "writes_ndkv": false,
+          "active_round": 380,
+          "latest_done_round": 379,
+          "ledger_latest_round": 379,
+          "effective_decision_status": "safe_to_wait_current_round_active",
+          "round_id_evidence": {
+            "source_schema": "daemon_round_transition_status_v1",
+            "transition_kind": "normal_in_progress",
+            "active_round": 380,
+            "latest_done_round": 379,
+            "ledger_latest_round": 379,
+            "reason_codes": [
+              "daemon_round_in_progress"
+            ],
+            "evidence_ids": [
+              "active-round:380",
+              "done-round:379",
+              "ledger:latest-round-379"
+            ]
+          },
+          "reason_codes": [
+            "downstream_consumers_ready",
+            "safe_to_wait_current_round_active"
+          ],
+          "evidence_ids": [
+            "live-status-bundle:downstream-consumers",
+            "daemon-round-transition-status-v1:active-380:done-379:ledger-379"
+          ],
+          "consumers": [
+            {
+              "consumer_id": "forge_operator_display",
+              "required": true,
+              "satisfied": true,
+              "read_only": true,
+              "report_only": true,
+              "side_effects": false,
+              "reason_codes": [
+                "safe_to_wait_visible"
+              ],
+              "evidence_ids": [
+                "forge:summary-safe-to-wait"
+              ]
+            },
+            {
+              "consumer_id": "service_cli_display",
+              "required": true,
+              "satisfied": true,
+              "read_only": true,
+              "report_only": true,
+              "side_effects": false
+            }
+          ]
+        }
+      },
+      "readiness": {
+        "ready": true,
+        "failures": []
+      }
+    }
+  }
+}

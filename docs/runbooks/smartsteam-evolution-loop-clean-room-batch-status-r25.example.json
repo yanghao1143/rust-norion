@@ -1,0 +1,33 @@
+{
+  "schema": "clean_room_batch_status_v1",
+  "clean_room_batch_status": {
+    "report_only": true,
+    "side_effects_allowed": false,
+    "r24_status": "completed",
+    "r24_completed_worker_ids": [
+      "019ee1c3-ec62-7a92-9c04-27b68ac5f4b9",
+      "019ee1c4-0fd4-7b72-8518-cd3d88a66ef7",
+      "019ee1c4-3b94-7cb0-a870-b1cb0e7b11e4",
+      "019ee1c4-602e-7cc3-ad58-3b5a35a60a5c"
+    ],
+    "r25_clean_room_replacements_status": "completed",
+    "r25_clean_room_replacement_worker_ids": [
+      "019ee1cf-86d4-7010-8a2c-5bfddaf2ec46",
+      "019ee1cf-aa92-7322-ab1e-2fea4fd7bad2",
+      "019ee1cf-d818-7790-b7ec-ba2802abfeb0",
+      "019ee1cf-fd70-7302-ab19-858c98874a30",
+      "019ee1d0-22e9-7cf1-9165-68e283a7968c",
+      "019ee1d0-4800-7482-ab7b-9ab9c3cbf2b0"
+    ],
+    "old_polluted_windows_assignment_allowed": false,
+    "blocked_old_window_ids": [
+      "old-polluted-worker-window",
+      "paused-or-stale-worker-window"
+    ],
+    "main_window_owns_ssh": true,
+    "main_window_owns_daemon": true,
+    "main_window_owns_remote_model_pool": true,
+    "main_window_owns_runtime_start_stop": true,
+    "worker_runtime_ownership_allowed": false
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema": "memory_startup_admission_status_v1",
+  "source": "docs/runbooks/smartsteam-parallel-coordination.md R23 evidence",
+  "read_only": true,
+  "memory_startup_admission_status": {
+    "read_only_contract": true,
+    "read_only_review_required": true,
+    "index_quality_blocker_count": 1,
+    "index_quality_warning_count": 2,
+    "index_operation_count": 3,
+    "index_refresh_count": 1,
+    "index_detail_codes": [
+      "stale_index",
+      "refresh_planned"
+    ],
+    "context_rot_risk_count": 2,
+    "context_rot_blocker_reason_codes": [
+      "old_window_payload"
+    ],
+    "admission_decision_count": 4,
+    "admission_accepted_count": 2,
+    "admission_risk_rejection_count": 1,
+    "migration_live_store_targeted_count": 0,
+    "adapter_live_write_count": 0,
+    "live_write_phase_request_count": 0,
+    "live_store_mutation_requested": false,
+    "store_mutation_count": 0,
+    "ndkv_write_allowed": false,
+    "helper_prose_line_count": 2,
+    "non_contract_line_count": 3,
+    "admission_expanded_by_non_contract_evidence": false
+  },
+  "side_effects": {
+    "starts_daemon": false,
+    "stops_daemon": false,
+    "touches_remote": false,
+    "downloads_model": false,
+    "sends_prompt": false,
+    "starts_stream": false,
+    "expands_memory_admission": false,
+    "mutates_memory_store": false,
+    "writes_ndkv": false
+  }
+}

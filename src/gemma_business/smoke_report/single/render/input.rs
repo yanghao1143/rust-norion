@@ -1,0 +1,38 @@
+use crate::gemma_business::audit::GemmaModelServiceAnswerAudit;
+use crate::gemma_business::health_status::SmokeHealthStatus;
+
+pub(in crate::gemma_business::smoke_report::single) struct SingleReportRender<'a> {
+    pub(in crate::gemma_business::smoke_report::single) passed: bool,
+    pub(in crate::gemma_business::smoke_report::single) bind: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) business_case_name: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) trace_path_json: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) memory_path_json: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) experience_path_json: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) adaptive_path_json: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) response_path_json: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) health: &'a SmokeHealthStatus,
+    pub(in crate::gemma_business::smoke_report::single) business_cycle_ok: bool,
+    pub(in crate::gemma_business::smoke_report::single) business_cycle_passed: bool,
+    pub(in crate::gemma_business::smoke_report::single) state_gate_passed: bool,
+    pub(in crate::gemma_business::smoke_report::single) trace_gate_passed: bool,
+    pub(in crate::gemma_business::smoke_report::single) runtime_model: Option<&'a str>,
+    pub(in crate::gemma_business::smoke_report::single) runtime_token_count: u64,
+    pub(in crate::gemma_business::smoke_report::single) runtime_uncertainty_signal: bool,
+    pub(in crate::gemma_business::smoke_report::single) answer_preview: &'a str,
+    pub(in crate::gemma_business::smoke_report::single) answer_audit:
+        &'a GemmaModelServiceAnswerAudit,
+    pub(in crate::gemma_business::smoke_report::single) feedback_applied: u64,
+    pub(in crate::gemma_business::smoke_report::single) rust_check_feedback_applied: u64,
+    pub(in crate::gemma_business::smoke_report::single) rust_check_checked: bool,
+    pub(in crate::gemma_business::smoke_report::single) rust_check_passed: bool,
+    pub(in crate::gemma_business::smoke_report::single) self_improve_checked: bool,
+    pub(in crate::gemma_business::smoke_report::single) self_improve_passed: bool,
+    pub(in crate::gemma_business::smoke_report::single) runtime_tokens: u64,
+    pub(in crate::gemma_business::smoke_report::single) external_feedbacks: u64,
+    pub(in crate::gemma_business::smoke_report::single) feedback_memory_updates: u64,
+    pub(in crate::gemma_business::smoke_report::single) replay_rust_check_passed: u64,
+    pub(in crate::gemma_business::smoke_report::single) live_memory_feedback_applied: u64,
+    pub(in crate::gemma_business::smoke_report::single) live_evolution_items: u64,
+    pub(in crate::gemma_business::smoke_report::single) checked_trace_lines: u64,
+    pub(in crate::gemma_business::smoke_report::single) failures: &'a [String],
+}

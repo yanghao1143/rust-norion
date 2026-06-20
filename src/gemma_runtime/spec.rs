@@ -1,0 +1,13 @@
+pub const GEMMA4_12B_MODEL_ID: &str = "google/gemma-4-12B-it";
+pub const GEMMA4_12B_TOKENIZER: &str = "gemma4";
+pub const GEMMA4_12B_NATIVE_CONTEXT_WINDOW: usize = 262_144;
+pub const GEMMA4_12B_LOCAL_WINDOW_TOKENS: usize = 1_024;
+pub const GEMMA4_12B_LAYER_COUNT: usize = 48;
+pub const GEMMA4_12B_HIDDEN_SIZE: usize = 3_840;
+pub const GEMMA4_12B_ATTENTION_HEADS: usize = 16;
+pub const GEMMA4_12B_KV_HEADS: usize = 8;
+pub const GEMMA4_12B_DEFAULT_RUNTIME_WINDOW: usize = 4_096;
+pub const GEMMA4_12B_DEFAULT_QUANT: &str = "4";
+pub const GEMMA4_12B_DEFAULT_LOCAL_ISQ: &str = "4";
+pub const GEMMA4_12B_DEFAULT_PAGED_ATTN: &str = "off";
+pub const GEMMA4_12B_DEFAULT_THINKING: &str = "false";

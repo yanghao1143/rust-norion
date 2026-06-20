@@ -1,0 +1,218 @@
+use crate::engine::InferenceOutcome;
+use crate::hardware::DeviceClass;
+use crate::reflection::RuntimeDiagnostics;
+
+use super::{BenchmarkCase, explicit_device_count, push_unique_device};
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BenchmarkRuntimeDeviceExecutionEvidence {
+    pub cases: usize,
+    pub matched_cases: usize,
+    pub runtime_kv_precision_cases: usize,
+    pub failures: Vec<String>,
+    pub(super) matched_devices: Vec<DeviceClass>,
+    pub(super) kv_precision_devices: Vec<DeviceClass>,
+}
+
+impl BenchmarkRuntimeDeviceExecutionEvidence {
+    pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
+        let diagnostics = &outcome.runtime_diagnostics;
+        let has_forward_signal = diagnostics.has_forward_signal();
+        let has_device_execution_signal = diagnostics.has_device_execution_signal();
+        let has_runtime_reported_device_execution_signal =
+            diagnostics.has_runtime_reported_device_execution_signal();
+        if runtime_static_architecture_only(diagnostics) {
+            return;
+        }
+
+        if !has_forward_signal && !has_device_execution_signal {
+            return;
+        }
+
+        let device = outcome.hardware_plan.device;
+        if !has_device_execution_signal {
+            self.failures.push(format!(
+                "{}:{} runtime forward signal is missing device execution diagnostics",
+                device.as_str(),
+                case.name
+            ));
+            return;
+        }
+        if !has_runtime_reported_device_execution_signal {
+            self.failures.push(format!(
+                "{}:{} runtime device execution diagnostics source={} is not runtime-reported",
+                device.as_str(),
+                case.name,
+                diagnostics
+                    .device_execution_source
+                    .as_deref()
+                    .unwrap_or("unknown")
+            ));
+            return;
+        }
+
+        self.cases += 1;
+        let execution = &outcome.hardware_plan.execution;
+        let mut mismatches = Vec::new();
+        record_runtime_device_execution_mismatch(
+            &mut mismatches,
+            "device_profile",
+            diagnostics.device_profile.as_deref(),
+            device.as_str(),
+        );
+        record_runtime_device_execution_mismatch(
+            &mut mismatches,
+            "primary_lane",
+            diagnostics.primary_lane.as_deref(),
+            execution.primary_lane.as_str(),
+        );
+        record_runtime_device_execution_mismatch(
+            &mut mismatches,
+            "fallback_lane",
+            diagnostics.fallback_lane.as_deref(),
+            execution.fallback_lane.as_str(),
+        );
+        record_runtime_device_execution_mismatch(
+            &mut mismatches,
+            "memory_mode",
+            diagnostics.memory_mode.as_deref(),
+            execution.memory_mode.as_str(),
+        );
+        record_runtime_device_execution_usize_mismatch(
+            &mut mismatches,
+            "hot_kv_precision_bits",
+            diagnostics.hot_kv_precision_bits.map(usize::from),
+            usize::from(execution.hot_kv_precision_bits),
+        );
+        record_runtime_device_execution_usize_mismatch(
+            &mut mismatches,
+            "cold_kv_precision_bits",
+            diagnostics.cold_kv_precision_bits.map(usize::from),
+            usize::from(execution.cold_kv_precision_bits),
+        );
+
+        if diagnostics.has_valid_kv_precision_signal() {
+            self.runtime_kv_precision_cases += 1;
+            push_unique_device(&mut self.kv_precision_devices, device);
+        } else {
+            self.failures.push(format!(
+                "{}:{} runtime device execution is missing valid KV precision diagnostics",
+                device.as_str(),
+                case.name
+            ));
+        }
+
+        if mismatches.is_empty() {
+            self.matched_cases += 1;
+            push_unique_device(&mut self.matched_devices, device);
+        } else {
+            self.failures.push(format!(
+                "{}:{} runtime device execution mismatch: {}",
+                device.as_str(),
+                case.name,
+                mismatches.join(", ")
+            ));
+        }
+    }
+
+    pub fn device_profiles(&self) -> usize {
+        explicit_device_count(&self.matched_devices)
+    }
+
+    pub fn matched_devices_csv(&self) -> String {
+        if self.matched_devices.is_empty() {
+            "none".to_owned()
+        } else {
+            self.matched_devices
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        }
+    }
+
+    pub fn runtime_kv_precision_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_precision_devices)
+    }
+
+    pub fn runtime_kv_precision_devices_csv(&self) -> String {
+        if self.kv_precision_devices.is_empty() {
+            "none".to_owned()
+        } else {
+            self.kv_precision_devices
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        }
+    }
+}
+
+fn record_runtime_device_execution_mismatch(
+    mismatches: &mut Vec<String>,
+    field: &str,
+    actual: Option<&str>,
+    expected: &str,
+) {
+    match actual {
+        Some(actual) if actual == expected => {}
+        Some(actual) => mismatches.push(format!("{field} actual={actual} expected={expected}")),
+        None => mismatches.push(format!("{field} missing expected={expected}")),
+    }
+}
+
+fn record_runtime_device_execution_usize_mismatch(
+    mismatches: &mut Vec<String>,
+    field: &str,
+    actual: Option<usize>,
+    expected: usize,
+) {
+    match actual {
+        Some(actual) if actual == expected => {}
+        Some(actual) => mismatches.push(format!("{field} actual={actual} expected={expected}")),
+        None => mismatches.push(format!("{field} missing expected={expected}")),
+    }
+}
+
+pub(super) fn runtime_static_architecture_only(diagnostics: &RuntimeDiagnostics) -> bool {
+    diagnostics.has_runtime_architecture_signal()
+        && diagnostics.device_execution_source.as_deref()
+            == Some(RuntimeDiagnostics::control_plane_filled_device_execution_source())
+        && !diagnostics.has_layer_mode_signal()
+        && diagnostics.forward_energy.is_none()
+        && diagnostics.kv_influence.is_none()
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BenchmarkRuntimeArchitectureEvidence {
+    pub cases: usize,
+    pub(super) devices: Vec<DeviceClass>,
+}
+
+impl BenchmarkRuntimeArchitectureEvidence {
+    pub(super) fn record(&mut self, outcome: &InferenceOutcome) {
+        let diagnostics = &outcome.runtime_diagnostics;
+        if diagnostics.has_runtime_architecture_signal()
+            && diagnostics.has_valid_kv_precision_signal()
+        {
+            self.cases += 1;
+            push_unique_device(&mut self.devices, outcome.hardware_plan.device);
+        }
+    }
+
+    pub fn device_profiles(&self) -> usize {
+        explicit_device_count(&self.devices)
+    }
+
+    pub fn devices_csv(&self) -> String {
+        if self.devices.is_empty() {
+            "none".to_owned()
+        } else {
+            self.devices
+                .iter()
+                .map(|device| device.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
+        }
+    }
+}

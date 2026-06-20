@@ -1,0 +1,56 @@
+{
+  "schema": "next_round_decision_report_v1",
+  "report_gate": {
+    "passed": true,
+    "failures": []
+  },
+  "continuation_gate_report_v1": {
+    "allow_unattended_continuation": true,
+    "gate_blocked": false,
+    "strict_report_gate_passed": true,
+    "latest_round": 366,
+    "latest_success": true,
+    "latest_runtime_response_failure": false,
+    "historical_runtime_response_failures": 0,
+    "failure_reasons": []
+  },
+  "model_pool_alignment": {
+    "alignment_ok": true,
+    "quality_workers": {
+      "manifest": 1,
+      "status": 1,
+      "max": 1
+    },
+    "helper_workers": {
+      "manifest": 5,
+      "status": 5,
+      "target": 5
+    },
+    "route_blocked_or_failed": [],
+    "route_dependency_failures": [],
+    "missing_status_roles": [],
+    "missing_status_helper_roles": []
+  },
+  "next_round_decision": {
+    "decision_status": "safe_to_continue_after_current_round",
+    "current_round_active": false,
+    "live_status_display_state": "ledger_synced",
+    "transition_kind": "ledger_synced",
+    "active_round": 366,
+    "ledger_latest_round": 366,
+    "latest_done_round": 366,
+    "readiness_can_schedule_next_round": true,
+    "report_gate_ready": true,
+    "context_hygiene_passed": true,
+    "read_only": true,
+    "report_only": true,
+    "no_side_effects": true,
+    "dispatch_work_allowed": false,
+    "prompt_replay_allowed": false,
+    "process_start_allowed": false,
+    "memory_write_allowed": false,
+    "ndkv_write_allowed": false,
+    "operator_attention_required": false,
+    "failure_reasons": []
+  }
+}

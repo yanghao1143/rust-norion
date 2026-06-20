@@ -1,7 +1,11 @@
-/target/
+target/
+**/target/
+**/target-*/
+**/target-r*/
 noiron-memory.tsv
 *.legacy.tsv
 *.ndkv
 *.compact
 *.log
 *.tmp
+state/

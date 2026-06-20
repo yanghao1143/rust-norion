@@ -1,0 +1,52 @@
+Rust-Norion Research Deployment Non-Commercial License
+Version 1.0
+
+Copyright (c) 2026 yanghao1143 and contributors.
+
+1. Permission
+
+You may use, copy, modify, publish, distribute, display, perform, and deploy
+this software and its documentation for non-commercial research, education,
+evaluation, testing, benchmarking, and experimental deployment.
+
+2. Non-Commercial Restriction
+
+Commercial use is not permitted without prior written permission from the
+copyright holder. Commercial use includes selling, sublicensing, offering paid
+services, using the software to provide paid hosted services, embedding it in a
+commercial product, or using it primarily for commercial advantage.
+
+3. Research Deployment
+
+Non-commercial deployment is permitted when the deployment is for research,
+education, validation, reproducibility, safety analysis, benchmarking, or
+technical evaluation. Operators are responsible for complying with applicable
+law, privacy obligations, safety requirements, and third-party model or data
+licenses.
+
+4. Contributions
+
+By submitting a contribution, you agree that your contribution is licensed under
+this license unless a written contribution agreement states otherwise. The
+project maintainer may accept, reject, modify, or revert contributions.
+
+5. Third-Party Materials
+
+Third-party code, models, datasets, papers, and tools remain governed by their
+own licenses. References to external projects do not grant permission to copy
+code from those projects unless their licenses allow it and attribution is
+preserved.
+
+6. No Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR
+A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+7. Additional Permission
+
+Commercial licenses, exceptions, or deployment permissions may be granted only
+by explicit written approval from the copyright holder.

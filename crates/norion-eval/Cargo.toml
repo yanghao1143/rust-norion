@@ -1,0 +1,8 @@
+[package]
+name = "norion-eval"
+version = "0.1.0"
+edition = "2024"
+license-file = "../../LICENSE"
+
+[dependencies]
+norion-test = { path = "../norion-test" }

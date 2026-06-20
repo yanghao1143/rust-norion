@@ -1,0 +1,303 @@
+{
+  "safe_to_wait_status": {
+    "daemon": {
+      "schema_version": 1,
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 199264,
+      "pid_file_exists": true,
+      "stale_pid_file": false,
+      "stale_pid": null
+    },
+    "loop": {
+      "schema_version": 1,
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "backend_endpoint": "127.0.0.1:7979",
+      "ledger": {
+        "total_records": 368,
+        "invalid_records": 0,
+        "duplicate_rounds": 0,
+        "round_gaps": 0,
+        "success_count": 368,
+        "feedback_applied_total": 1472,
+        "runtime_tokens_total": 23552,
+        "latest": {
+          "round": 368,
+          "case": "smartsteam-evolution-loop-0368",
+          "success": true,
+          "runtime_tokens": 64,
+          "feedback_applied": 4
+        }
+      },
+      "report": {
+        "path": "missing-r37-report.json",
+        "exists": false
+      },
+      "backend": {
+        "checked": true,
+        "ok": true,
+        "readiness_ok": true,
+        "safe_device_ok": true,
+        "engine_busy": true,
+        "active_engine_requests": 1,
+        "gemma_runtime_model": "Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf",
+        "error": ""
+      },
+      "remote_chain": {
+        "checked": true,
+        "exists": true,
+        "ready": true,
+        "remote_runtime": {
+          "probed": true,
+          "touches_remote": false,
+          "worker_count": 6,
+          "cpu_or_no_gpu_count": 0,
+          "cpu_or_no_gpu_roles": [],
+          "backend_metadata_may_differ_roles": [],
+          "acceleration_ok": true,
+          "acceleration_next_step": "",
+          "error": ""
+        },
+        "error": ""
+      },
+      "model_pool": {
+        "available": true,
+        "launch_allowed": true,
+        "reason": "ready",
+        "worker_count": 6,
+        "healthy_worker_count": 6,
+        "min_context_tokens": 65536
+      },
+      "readiness": {
+        "ready": true,
+        "failures": []
+      },
+      "live_status_bundle": {
+        "schema": "daemon_live_status_bundle_v1",
+        "read_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "report_only": true,
+        "daemon_round_transition_status_v1": {
+          "read_only": true,
+          "starts_process": false,
+          "sends_prompt": false,
+          "report_only": true,
+          "transition_kind": "normal_in_progress",
+          "active_round": 369,
+          "latest_done_round": 368,
+          "ledger_latest_round": 368,
+          "round_in_progress": true,
+          "activity_reason": "generate:start",
+          "reason_codes": [
+            "daemon_round_in_progress"
+          ],
+          "evidence_ids": [
+            "active-round:369",
+            "ledger:latest-round-368"
+          ],
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "mutates_active_round": false,
+          "writes_ndkv": false
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-wait",
+          "decision_status": "safe_to_wait",
+          "current_round_active": true,
+          "active_round": 369,
+          "latest_done_round": 368,
+          "ledger_latest_round": 368,
+          "readiness_can_schedule_next_round": false,
+          "report_gate_ready": true,
+          "context_hygiene_passed": true,
+          "read_only": true,
+          "report_only": true,
+          "no_side_effects": true,
+          "dispatch_work_allowed": false,
+          "prompt_replay_allowed": false,
+          "process_start_allowed": false,
+          "memory_write_allowed": false,
+          "ndkv_write_allowed": false,
+          "operator_attention_required": false,
+          "reason_codes": [
+            "current_round_active"
+          ],
+          "evidence_ids": [
+            "active-round:369",
+            "ledger:latest-round-368"
+          ],
+          "failure_reasons": []
+        }
+      },
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "safe-to-wait",
+        "decision_status": "safe_to_wait",
+        "current_round_active": true,
+        "active_round": 369,
+        "latest_done_round": 368,
+        "ledger_latest_round": 368,
+        "read_only": true,
+        "report_only": true,
+        "no_side_effects": true,
+        "dispatch_work_allowed": false,
+        "prompt_replay_allowed": false,
+        "process_start_allowed": false,
+        "memory_write_allowed": false,
+        "ndkv_write_allowed": false,
+        "operator_attention_required": false,
+        "reason_codes": [
+          "current_round_active"
+        ],
+        "evidence_ids": [
+          "active-round:369",
+          "ledger:latest-round-368"
+        ],
+        "failure_reasons": []
+      },
+      "next_step": "safe-to-wait: current round 369 is active; monitor JsonStatus"
+    }
+  },
+  "blocked_operator_attention_status": {
+    "daemon": {
+      "schema_version": 1,
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 199264,
+      "pid_file_exists": true,
+      "stale_pid_file": false,
+      "stale_pid": null
+    },
+    "loop": {
+      "schema_version": 1,
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "backend_endpoint": "127.0.0.1:7979",
+      "ledger": {
+        "total_records": 368,
+        "invalid_records": 0,
+        "duplicate_rounds": 0,
+        "round_gaps": 0,
+        "success_count": 367,
+        "feedback_applied_total": 1468,
+        "runtime_tokens_total": 23488,
+        "latest": {
+          "round": 368,
+          "case": "smartsteam-evolution-loop-0368",
+          "success": false,
+          "runtime_tokens": 64,
+          "feedback_applied": 0
+        }
+      },
+      "report": {
+        "path": "missing-r37-report.json",
+        "exists": false
+      },
+      "readiness": {
+        "ready": false,
+        "failures": [
+          "report_gate_failed"
+        ]
+      },
+      "live_status_bundle": {
+        "schema": "daemon_live_status_bundle_v1",
+        "read_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "report_only": true,
+        "daemon_round_transition_status_v1": {
+          "read_only": true,
+          "starts_process": false,
+          "sends_prompt": false,
+          "report_only": true,
+          "transition_kind": "ledger_synced",
+          "active_round": 368,
+          "latest_done_round": 368,
+          "ledger_latest_round": 368,
+          "round_in_progress": false,
+          "reason_codes": [
+            "ledger_synced"
+          ],
+          "evidence_ids": [
+            "ledger:latest-round-368"
+          ],
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "mutates_active_round": false,
+          "writes_ndkv": false
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "blocked-operator-attention",
+          "decision_status": "operator_attention_blocked",
+          "current_round_active": false,
+          "active_round": 368,
+          "latest_done_round": 368,
+          "ledger_latest_round": 368,
+          "readiness_can_schedule_next_round": false,
+          "report_gate_ready": false,
+          "context_hygiene_passed": true,
+          "read_only": true,
+          "report_only": true,
+          "no_side_effects": true,
+          "dispatch_work_allowed": false,
+          "prompt_replay_allowed": false,
+          "process_start_allowed": false,
+          "memory_write_allowed": false,
+          "ndkv_write_allowed": false,
+          "operator_attention_required": true,
+          "reason_code": "report_gate_failed_operator_attention_required",
+          "failure_reasons": [
+            "report_gate_failed_operator_attention_required"
+          ],
+          "evidence_ids": [
+            "round:368:report-gate-failed"
+          ]
+        }
+      },
+      "next_round_decision": {
+        "schema": "next_round_decision_evidence_v1",
+        "display_state": "blocked-operator-attention",
+        "decision_status": "operator_attention_blocked",
+        "current_round_active": false,
+        "active_round": 368,
+        "latest_done_round": 368,
+        "ledger_latest_round": 368,
+        "read_only": true,
+        "report_only": true,
+        "no_side_effects": true,
+        "dispatch_work_allowed": false,
+        "prompt_replay_allowed": false,
+        "process_start_allowed": false,
+        "memory_write_allowed": false,
+        "ndkv_write_allowed": false,
+        "operator_attention_required": true,
+        "reason_code": "report_gate_failed_operator_attention_required",
+        "failure_reasons": [
+          "report_gate_failed_operator_attention_required"
+        ],
+        "evidence_ids": [
+          "round:368:report-gate-failed"
+        ]
+      },
+      "next_step": "blocked: operator attention required before scheduling the next round"
+    }
+  }
+}

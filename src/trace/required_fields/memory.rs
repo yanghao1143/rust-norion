@@ -1,0 +1,34 @@
+use super::{TraceRequiredField, required_field};
+
+pub(super) const MEMORY_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
+    required_field("memory", "\"memory\":{"),
+    required_field("runtime_kv_exported", "\"runtime_kv_exported\":"),
+    required_field("runtime_kv_stored", "\"runtime_kv_stored\":"),
+    required_field("runtime_kv_hold", "\"runtime_kv_hold\":"),
+    required_field("runtime_kv_held", "\"runtime_kv_held\":"),
+    required_field("memory_feedback_reinforced", "\"feedback_reinforced\":"),
+    required_field("memory_feedback_penalized", "\"feedback_penalized\":"),
+    required_field(
+        "memory_feedback_reinforcement_amount",
+        "\"feedback_reinforcement_amount\":",
+    ),
+    required_field(
+        "memory_feedback_penalty_amount",
+        "\"feedback_penalty_amount\":",
+    ),
+    required_field("memory_feedback_updates", "\"feedback_updates\":"),
+    required_field("memory_feedback_applied", "\"feedback_applied\":"),
+    required_field("memory_feedback_removed", "\"feedback_removed\":"),
+    required_field("memory_feedback_missing", "\"feedback_missing\":"),
+    required_field(
+        "memory_feedback_strength_delta",
+        "\"feedback_strength_delta\":",
+    ),
+    required_field(
+        "memory_feedback_update_summaries",
+        "\"feedback_update_summaries\":",
+    ),
+    required_field("drift", "\"drift\":{"),
+    required_field("rollback_adaptive", "\"rollback_adaptive\":"),
+    required_field("process_reward", "\"process_reward\":{"),
+];

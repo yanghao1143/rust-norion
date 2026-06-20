@@ -3,5 +3,55 @@
 version = 4
 
 [[package]]
+name = "model-pool-advice-core"
+version = "0.1.0"
+
+[[package]]
+name = "norion-agent"
+version = "0.1.0"
+
+[[package]]
+name = "norion-cli"
+version = "0.1.0"
+dependencies = [
+ "norion-service",
+]
+
+[[package]]
+name = "norion-core"
+version = "0.1.0"
+
+[[package]]
+name = "norion-eval"
+version = "0.1.0"
+dependencies = [
+ "norion-test",
+]
+
+[[package]]
+name = "norion-memory"
+version = "0.1.0"
+
+[[package]]
+name = "norion-service"
+version = "0.1.0"
+dependencies = [
+ "norion-memory",
+]
+
+[[package]]
+name = "norion-test"
+version = "0.1.0"
+
+[[package]]
 name = "rust-norion"
 version = "0.1.0"
+dependencies = [
+ "model-pool-advice-core",
+ "norion-agent",
+ "norion-cli",
+ "norion-core",
+ "norion-eval",
+ "norion-memory",
+ "norion-service",
+]

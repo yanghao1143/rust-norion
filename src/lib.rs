@@ -6,6 +6,7 @@ pub mod drift;
 pub mod engine;
 pub mod experience;
 pub mod experience_replay;
+pub mod gemma_runtime;
 pub mod gist_memory;
 pub mod hardware;
 pub mod hierarchy;
@@ -21,6 +22,8 @@ pub mod reflection;
 pub mod router;
 pub mod runtime;
 pub mod runtime_manifest;
+pub mod rust_validation;
+pub mod split;
 pub mod state_inspect;
 pub mod tiered_cache;
 pub mod token_stream;
@@ -47,9 +50,25 @@ pub use engine::{
     HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
     NoironEngine,
 };
-pub use experience::{ExperienceInput, ExperienceMatch, ExperienceRecord, ExperienceStore};
+pub use experience::{
+    ExperienceHygieneFinding, ExperienceHygieneQuarantinePlan, ExperienceHygieneReport,
+    ExperienceHygieneSeverity, ExperienceIndexFinding, ExperienceIndexReport, ExperienceInput,
+    ExperienceMatch, ExperienceRecord, ExperienceRepairAction, ExperienceRepairItem,
+    ExperienceRepairPlan, ExperienceRepairProjection, ExperienceRepairSkippedItem,
+    ExperienceRetrievalReport, ExperienceRuntimeTokenMetrics, ExperienceStore,
+    render_experience_hint,
+};
 pub use experience_replay::{
     ExperienceReplayItem, ExperienceReplayPlan, ExperienceReplayPlanner, ExperienceReplayReport,
+};
+pub use gemma_runtime::{
+    GEMMA4_12B_ATTENTION_HEADS, GEMMA4_12B_DEFAULT_LOCAL_ISQ, GEMMA4_12B_DEFAULT_PAGED_ATTN,
+    GEMMA4_12B_DEFAULT_QUANT, GEMMA4_12B_DEFAULT_RUNTIME_WINDOW, GEMMA4_12B_DEFAULT_THINKING,
+    GEMMA4_12B_HIDDEN_SIZE, GEMMA4_12B_KV_HEADS, GEMMA4_12B_LAYER_COUNT,
+    GEMMA4_12B_LOCAL_WINDOW_TOKENS, GEMMA4_12B_MODEL_ID, GEMMA4_12B_NATIVE_CONTEXT_WINDOW,
+    GEMMA4_12B_TOKENIZER, GemmaRuntimeConfig, GemmaRuntimeDefaults, GemmaRuntimeFitSummary,
+    GemmaRuntimeQuantizationMode, ensure_gemma4_12b_runtime_defaults,
+    infer_hf_cache_from_local_snapshot, normalize_runtime_metadata,
 };
 pub use gist_memory::{GistGenerator, GistLevel, GistRecord};
 pub use hardware::{
@@ -95,20 +114,22 @@ pub use router::{
     RouterState, RoutingContext, RoutingDecision,
 };
 pub use runtime::{
-    CommandPromptMode, CommandRuntime, CommandWireFormat, ModelRuntime, RuntimeAdapterObservation,
-    RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
-    RuntimeResponse, RuntimeToken, RuntimeTokenId, parse_runtime_response_json,
-    runtime_request_json,
+    CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat,
+    MistralRsHttpRuntime, ModelRuntime, RuntimeAdapterObservation, RuntimeBackend,
+    RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
+    RuntimeTokenId, parse_runtime_response_json, runtime_request_json,
 };
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,
     RuntimeQuantizationPolicy, TransformerRuntimeArchitecture,
     default_transformer_runtime_architecture,
 };
+pub use rust_validation::{RustSnippetCheck, RustSnippetCheckReport, RustSnippetValidator};
 pub use state_inspect::{
-    StateExperienceSummary, StateInspectionDeviceGateReport, StateInspectionGate,
-    StateInspectionGateReport, StateInspectionMatrixGate, StateInspectionMatrixGateReport,
-    StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
+    StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
+    StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
+    StateInspectionMatrixGate, StateInspectionMatrixGateReport, StateInspectionReport,
+    StateMemorySummary, StateMemoryVectorDimensions,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
@@ -119,9 +140,10 @@ pub use toolsmith::{
     ToolBlueprint, ToolBuildStatus, ToolIntent, ToolsmithInput, ToolsmithPlan, ToolsmithPlanner,
 };
 pub use trace::{
-    TraceSchemaGateReport, append_trace_jsonl, append_trace_jsonl_with_case,
-    evaluate_trace_schema_jsonl, evaluate_trace_schema_line, trace_json_line,
-    trace_json_line_with_case,
+    TraceSchemaGateReport, append_business_contract_trace_jsonl, append_rust_check_trace_jsonl,
+    append_trace_jsonl, append_trace_jsonl_with_case, business_contract_trace_json_line,
+    evaluate_trace_schema_jsonl, evaluate_trace_schema_line, rust_check_trace_json_line,
+    trace_json_line, trace_json_line_with_case,
 };
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,

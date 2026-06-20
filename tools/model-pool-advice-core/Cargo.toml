@@ -1,0 +1,7 @@
+[package]
+name = "model-pool-advice-core"
+version = "0.1.0"
+edition = "2024"
+license-file = "../../LICENSE"
+
+[dependencies]

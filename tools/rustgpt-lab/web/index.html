@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>rust-norion Stream Lab</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <h1>rust-norion Stream Lab</h1>
+    <div class="controls">
+      <label>输出
+        <select id="outputMode">
+          <option value="raw">raw Gemma</option>
+          <option value="enhanced">enhanced Noiron</option>
+        </select>
+      </label>
+      <label>接口
+        <select id="endpoint">
+          <option value="chat">/v1/chat</option>
+          <option value="generate">/v1/generate</option>
+          <option value="business-cycle">/v1/business-cycle</option>
+        </select>
+      </label>
+      <label>profile
+        <select id="profile">
+          <option value="coding">coding</option>
+          <option value="general">general</option>
+          <option value="writing">writing</option>
+          <option value="long">long</option>
+        </select>
+      </label>
+      <label>生成预算 max_tokens
+        <input id="maxTokens" type="number" min="1" max="262144" step="256" value="262144">
+      </label>
+      <label>上下文消息
+        <input id="contextLimit" type="number" min="2" max="256" step="1" value="64">
+      </label>
+      <label class="toggle">
+        <input id="followOutput" type="checkbox" checked>
+        跟随输出
+      </label>
+      <button id="clearContext" type="button">清空上下文</button>
+      <div id="businessControls" class="business-controls">
+        <label>反馈
+          <input id="feedbackAmount" type="number" min="0" max="1" step="0.1" value="0.5">
+        </label>
+        <label class="toggle">
+          <input id="selfImprove" type="checkbox" checked>
+          自改进
+        </label>
+      </div>
+      <div id="statusLine" class="statusline">空闲：后端 7878，前端代理 8787</div>
+      <div id="backendLine" class="backendline">后端状态：检查中...</div>
+      <div id="modelPoolLine" class="poolline">模型池：检查中...</div>
+      <div id="modelPoolAdviceLine" class="adviceline">模型池建议：等待状态...</div>
+      <div id="contextLine" class="statusline">上下文：0/64 条短会话消息，临时浏览器会话</div>
+    </div>
+  </header>
+  <main>
+    <section id="messages">
+      <div class="meta">连接的是本地外围代理。它会流式显示状态、心跳和后端事件；可接安全 built-in 后端，也可接真实 Gemma 12B 后端。</div>
+    </section>
+  </main>
+  <footer>
+    <form id="chatForm">
+      <textarea id="prompt" placeholder="输入中文问题，例如：请用中文说明 rust-norion 当前如何联调 Gemma。" required></textarea>
+      <textarea id="rustCheckCode" placeholder="业务联调可选 Rust 代码检查，例如：pub fn ok() -> bool { true }"></textarea>
+      <button id="send" type="submit" disabled>检查中</button>
+      <button id="cancel" type="button" hidden disabled>取消</button>
+    </form>
+  </footer>
+  <script src="/app.js"></script>
+</body>
+</html>
+

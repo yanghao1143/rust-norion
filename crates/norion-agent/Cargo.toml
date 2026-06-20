@@ -1,0 +1,11 @@
+[package]
+name = "norion-agent"
+version = "0.1.0"
+edition = "2024"
+description = "Lightweight multi-agent scheduling core for rust-norion"
+license-file = "../../LICENSE"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]

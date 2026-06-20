@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "contract_version": "smartsteam.gemma-chain.mlx-experiment-preflight-contract.v1",
+  "read_only": true,
+  "executes_commands": false,
+  "ssh_allowed": false,
+  "download_allowed": false,
+  "starts_process": false,
+  "sends_prompt": false,
+  "writes_model_weights": false,
+  "pool_policy": "experimental_not_gguf_pool",
+  "candidate_manifest": "tools/gemma-chain/mlx-experiment-candidates.json",
+  "default_decision": "blocked_until_main_window_authorizes_owner_flow",
+  "preflight_items": [
+    {
+      "id": "mlx_runtime_present",
+      "required": true,
+      "required_evidence": "Remote Apple Silicon host has mlx_lm.server or an equivalent MLX serving runtime available without installing from system prompts.",
+      "candidate_commands": [
+        "which mlx_lm.server",
+        "mlx_lm.server --help",
+        "python3 -m mlx_lm --help"
+      ],
+      "ssh_required": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "requires_main_window_authorization": true,
+      "pass_condition": "mlx_lm.server or equivalent command exists and returns help/version without Xcode CLT prompt"
+    },
+    {
+      "id": "python_toolchain_isolated",
+      "required": true,
+      "required_evidence": "Python/venv/conda path for MLX is isolated and does not trigger Xcode command line tools install prompts.",
+      "candidate_commands": [
+        "python3 --version",
+        "which python3",
+        "python3 -c \"import sys; print(sys.executable)\"",
+        "python3 -m pip show mlx-lm"
+      ],
+      "ssh_required": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "requires_main_window_authorization": true,
+      "pass_condition": "isolated Python is available, mlx-lm package is discoverable, and no system install prompt appears"
+    },
+    {
+      "id": "experiment_port_free",
+      "required": true,
+      "required_evidence": "A non-GGUF experiment port is free and not one of 8686-8690.",
+      "candidate_commands": [
+        "lsof -nP -iTCP:<experiment_port> -sTCP:LISTEN",
+        "netstat -an | grep <experiment_port>"
+      ],
+      "ssh_required": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "requires_main_window_authorization": true,
+      "pass_condition": "chosen experiment port is not listening and does not collide with GGUF pool, backend, or Web Lab"
+    },
+    {
+      "id": "gguf_daemon_report_fresh",
+      "required": true,
+      "required_evidence": "GGUF daemon/report baseline is fresh before any MLX live experiment.",
+      "candidate_commands": [
+        "read daemon status JSON for rounds, ledger_lag, stale, gate_failures",
+        "read target/evolution/daemon/report.json",
+        "read target/evolution/daemon/evolution-loop.out.log tail"
+      ],
+      "ssh_required": false,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "requires_main_window_authorization": false,
+      "pass_condition": "stale=false, ledger_lag=0, gate_failures=0, latest report round aligns with ledger/status"
+    },
+    {
+      "id": "memory_headroom_green",
+      "required": true,
+      "required_evidence": "32GB unified memory has enough free/headroom capacity to test one MLX slot without pushing GGUF pool into swap pressure.",
+      "candidate_commands": [
+        "vm_stat",
+        "memory_pressure",
+        "sysctl hw.memsize",
+        "ps -Ao pid,rss,comm | sort -nr -k2 | head"
+      ],
+      "ssh_required": true,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "requires_main_window_authorization": true,
+      "pass_condition": "memory pressure is normal, swap pressure is acceptable, and GGUF llama-server processes remain Metal accelerated"
+    },
+    {
+      "id": "gguf_pool_isolated",
+      "required": true,
+      "required_evidence": "MLX experiment will not mutate GGUF worker manifest, ports 8686-8690, model cache, daemon config, or Web Lab routing.",
+      "candidate_commands": [
+        "review planned MLX launch command",
+        "review planned model directory",
+        "review planned experiment port"
+      ],
+      "ssh_required": false,
+      "downloads": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "requires_main_window_authorization": false,
+      "pass_condition": "all planned paths and ports are separate from GGUF pool and marked experimental"
+    }
+  ],
+  "authorization_boundary": {
+    "may_execute_preflight_commands": false,
+    "may_download_models": false,
+    "may_start_mlx_runtime": false,
+    "may_send_smoke_prompt": false,
+    "may_modify_gguf_pool": false,
+    "main_window_authorization_required_for": [
+      "ssh runtime inventory",
+      "python toolchain probe",
+      "remote port probe",
+      "remote memory probe",
+      "model download",
+      "mlx runtime start",
+      "smoke prompt",
+      "teardown or persistence decision"
+    ]
+  }
+}

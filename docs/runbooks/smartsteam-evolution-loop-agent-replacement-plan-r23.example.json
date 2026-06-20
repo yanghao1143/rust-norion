@@ -1,0 +1,42 @@
+{
+  "schema": "agent_window_context_clean_room_replacement_plan_v1",
+  "source": "docs/runbooks/smartsteam-parallel-coordination.md R23 evidence",
+  "report_only": true,
+  "pure_data_only": true,
+  "side_effects_allowed": false,
+  "starts_thread": false,
+  "sends_message": false,
+  "reads_old_window_payload": false,
+  "original_window_follow_up_assignment_allowed": false,
+  "clean_room_replacement_plan_required": true,
+  "clean_room_replacement_available": true,
+  "replacement_prompt_ready": true,
+  "follow_up_tasks_only_in_replacement_prompt": true,
+  "replacement_prompt": {
+    "task_ids": [
+      "R24-clean-room-worker-A"
+    ],
+    "evidence_result_ids": [
+      "handoff-summary:r23-agent"
+    ],
+    "reason_codes": [
+      "window_context_polluted",
+      "paused_by_main_window"
+    ]
+  },
+  "side_effects": {
+    "starts_clean_room_replacement": false,
+    "starts_thread": false,
+    "sends_message": false,
+    "reads_old_window_payload": false,
+    "mutates_worker_window_status": false,
+    "starts_daemon": false,
+    "stops_daemon": false,
+    "touches_remote": false,
+    "downloads_model": false,
+    "warms_model_cache": false,
+    "sends_prompt": false,
+    "starts_stream": false,
+    "replays_prompt": false
+  }
+}

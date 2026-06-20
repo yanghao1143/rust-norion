@@ -1,0 +1,373 @@
+use super::*;
+use crate::disk_kv::DiskKvStore;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[test]
+fn fuses_similar_memories() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let first = cache.store_or_fuse("rust attention routing", vec![1.0, 0.0, 0.0], 0.8);
+    let second = cache.store_or_fuse("rust adaptive routing", vec![0.95, 0.05, 0.0], 0.8);
+
+    assert_eq!(first, second);
+    assert_eq!(cache.len(), 1);
+    assert!(cache.entries()[0].strength > 0.8);
+}
+
+#[test]
+fn fusing_multibyte_memory_keys_truncates_on_utf8_boundaries() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let first_key = "本地模型联调计划".repeat(24);
+    let second_key = "必须用 cargo test 验证中文记忆融合".repeat(24);
+    let first = cache.store_or_fuse(first_key, vec![1.0, 0.0, 0.0], 0.8);
+    let second = cache.store_or_fuse(second_key, vec![0.95, 0.05, 0.0], 0.8);
+
+    assert_eq!(first, second);
+    let key = &cache.entries()[0].key;
+    assert!(key.is_char_boundary(key.len()));
+    assert!(key.len() <= 260);
+}
+
+#[test]
+fn dimension_mismatched_vectors_do_not_fuse() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let first = cache.store_or_fuse("old fallback embedding", vec![1.0], 0.9);
+    let second = cache.store_or_fuse("runtime embedding", vec![1.0, 0.0, 0.0, 0.0], 0.9);
+
+    assert_ne!(first, second);
+    assert_eq!(cache.len(), 2);
+}
+
+#[test]
+fn runtime_kv_memories_do_not_fuse_with_semantic_memories() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let semantic = cache.store_or_fuse("prompt lesson memory", vec![1.0, 0.0, 0.0], 0.9);
+    let runtime_kv = cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+
+    assert_ne!(semantic, runtime_kv);
+    assert_eq!(cache.len(), 2);
+    assert!(
+        cache
+            .entries()
+            .iter()
+            .any(|entry| entry.id == runtime_kv && entry.key.starts_with("runtime_kv:"))
+    );
+}
+
+#[test]
+fn gist_memories_do_not_fuse_with_semantic_memories() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let semantic = cache.store_or_fuse("prompt lesson memory", vec![1.0, 0.0, 0.0], 0.9);
+    let gist = cache.store_or_fuse(
+        "gist:paragraph:prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+
+    assert_ne!(semantic, gist);
+    assert_eq!(cache.len(), 2);
+    assert!(
+        cache
+            .entries()
+            .iter()
+            .any(|entry| entry.id == gist && entry.key.starts_with("gist:"))
+    );
+}
+
+#[test]
+fn lookup_penalizes_mismatched_embedding_dimensions() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    cache.store_or_fuse("short embedding", vec![1.0], 0.9);
+    let compatible = cache.store_or_fuse("runtime embedding", vec![1.0, 0.0, 0.0, 0.0], 0.6);
+
+    let matches = cache.lookup(&[1.0, 0.0, 0.0, 0.0], 2);
+
+    assert_eq!(matches[0].id, compatible);
+    assert!(matches.iter().any(|item| item.similarity < 0.5));
+}
+
+#[test]
+fn penalize_removes_weak_bad_memory() {
+    let mut cache = KvFusionCache::new();
+    let id = cache.store_or_fuse("bad memory", vec![0.1, 0.2], 0.05);
+
+    let first = cache.penalize(id, 1.0);
+    let second = cache.penalize(id, 1.0);
+    let third = cache.penalize(id, 1.0);
+
+    assert_eq!(first.action, MemoryUpdateAction::Penalize);
+    assert_eq!(first.id, id);
+    assert!(first.was_applied());
+    assert!(first.strength_delta < 0.0);
+    assert!(first.removed || second.removed || third.removed);
+    if first.removed {
+        assert!(!second.was_applied());
+        assert!(!third.was_applied());
+    }
+    assert!(cache.entries().iter().all(|entry| entry.id != id));
+}
+
+#[test]
+fn memory_update_reports_record_reinforcement_strength_delta() {
+    let mut cache = KvFusionCache::new();
+    let id = cache.store_or_fuse("useful memory", vec![0.4, 0.6], 0.6);
+    let before = cache.entries()[0].strength;
+
+    let report = cache.reinforce(id, 0.5);
+
+    assert_eq!(report.action, MemoryUpdateAction::Reinforce);
+    assert_eq!(report.id, id);
+    assert_eq!(report.requested_amount, 0.5);
+    assert_eq!(report.strength_before, Some(before));
+    assert_eq!(report.strength_after, Some(cache.entries()[0].strength));
+    assert!(report.was_applied());
+    assert!(!report.removed);
+    assert!(report.strength_delta > 0.0);
+
+    let missing = cache.reinforce(id + 1000, 0.8);
+    assert!(!missing.was_applied());
+    assert_eq!(missing.strength_delta, 0.0);
+}
+
+#[test]
+fn retention_decays_stale_memory() {
+    let mut cache = KvFusionCache::new();
+    cache.store_or_fuse("stale but useful", vec![0.3, 0.4], 0.8);
+    cache.entries[0].hits = 3;
+    cache.entries[0].last_access = 1;
+    cache.clock = 16;
+
+    let report = cache.apply_retention(MemoryRetentionPolicy {
+        stale_after: 4,
+        decay_rate: 0.20,
+        remove_below_strength: 0.01,
+        remove_after_failures: 8,
+    });
+
+    assert_eq!(report.before, 1);
+    assert_eq!(report.after, 1);
+    assert_eq!(report.decayed, 1);
+    assert!(cache.entries()[0].strength < 0.8);
+}
+
+#[test]
+fn retention_removes_stale_failed_memory() {
+    let mut cache = KvFusionCache::new();
+    let id = cache.store_or_fuse("stale failed", vec![0.1, 0.2], 0.05);
+    cache.entries[0].strength = 0.02;
+    cache.entries[0].failures = 4;
+    cache.entries[0].last_access = 1;
+    cache.clock = 16;
+
+    let report = cache.apply_retention(MemoryRetentionPolicy {
+        stale_after: 4,
+        decay_rate: 0.10,
+        remove_below_strength: 0.04,
+        remove_after_failures: 4,
+    });
+
+    assert_eq!(report.before, 1);
+    assert_eq!(report.after, 0);
+    assert_eq!(report.removed, vec![id]);
+    assert!(cache.is_empty());
+}
+
+#[test]
+fn compaction_merges_existing_near_duplicate_memories() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let weaker = cache.store_or_fuse("old duplicate", vec![1.0, 0.0, 0.0], 0.35);
+    let stronger = cache.store_or_fuse("strong duplicate", vec![0.93, 0.37, 0.0], 0.90);
+    let unrelated = cache.store_or_fuse("unrelated memory", vec![0.0, 1.0, 0.0], 0.85);
+
+    assert_eq!(cache.len(), 3);
+
+    let report = cache.compact_similar(MemoryCompactionPolicy {
+        similarity_threshold: 0.90,
+        max_candidates: 16,
+        max_merges: 8,
+    });
+
+    assert_eq!(report.before, 3);
+    assert_eq!(report.after, 2);
+    assert_eq!(report.merged.len(), 1);
+    assert_eq!(report.merged[0].primary_id, stronger);
+    assert_eq!(report.merged[0].removed_id, weaker);
+    assert_eq!(report.removed, vec![weaker]);
+    assert!(cache.entries().iter().any(|entry| entry.id == stronger));
+    assert!(cache.entries().iter().any(|entry| entry.id == unrelated));
+    assert!(cache.entries().iter().all(|entry| entry.id != weaker));
+    assert!(
+        cache
+            .entries()
+            .iter()
+            .find(|entry| entry.id == stronger)
+            .unwrap()
+            .key
+            .contains("old duplicate")
+    );
+}
+
+#[test]
+fn compaction_does_not_merge_runtime_kv_with_semantic_memory() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let semantic = cache.store_or_fuse("semantic duplicate", vec![1.0, 0.0, 0.0], 0.95);
+    let runtime_kv = cache.store_or_fuse(
+        "runtime_kv:l1h0:0-1 :: semantic duplicate",
+        vec![1.0, 0.0, 0.0],
+        0.95,
+    );
+
+    let report = cache.compact_similar(MemoryCompactionPolicy {
+        similarity_threshold: 0.90,
+        max_candidates: 16,
+        max_merges: 8,
+    });
+
+    assert_eq!(report.after, 2);
+    assert!(report.merged.is_empty());
+    assert!(cache.entries().iter().any(|entry| entry.id == semantic));
+    assert!(cache.entries().iter().any(|entry| entry.id == runtime_kv));
+}
+
+#[test]
+fn compaction_preserves_protected_current_memory_ids() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let protected = cache.store_or_fuse("protected current memory", vec![1.0, 0.0], 0.30);
+    let duplicate = cache.store_or_fuse("strong duplicate", vec![0.94, 0.34], 0.95);
+
+    let report = cache.compact_similar_with_protected(
+        MemoryCompactionPolicy {
+            similarity_threshold: 0.90,
+            max_candidates: 16,
+            max_merges: 8,
+        },
+        &[protected],
+    );
+
+    assert_eq!(report.after, 1);
+    assert_eq!(report.merged[0].primary_id, protected);
+    assert_eq!(report.merged[0].removed_id, duplicate);
+    assert!(cache.entries().iter().any(|entry| entry.id == protected));
+    assert!(cache.entries().iter().all(|entry| entry.id != duplicate));
+}
+
+#[test]
+fn disk_kv_roundtrip_preserves_entries() {
+    let path = temp_path("cache-roundtrip");
+    let mut cache = KvFusionCache::new();
+    let id = cache.store_or_fuse("durable memory", vec![0.4, 0.7, 0.1], 0.9);
+    cache.reinforce(id, 0.5);
+
+    cache.save_to_disk_kv(&path).unwrap();
+    let loaded = KvFusionCache::load_from_disk_kv(&path).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded.entries()[0].id, id);
+    assert_eq!(loaded.entries()[0].key, "durable memory");
+    assert!(loaded.entries()[0].strength > 0.9);
+    cleanup(path);
+}
+
+#[test]
+fn disk_kv_uses_quantized_vectors_and_loads_them() {
+    let path = temp_path("cache-quantized");
+    let mut cache = KvFusionCache::new();
+    let id = cache.store_or_fuse("compressed memory", vec![0.4, 0.7, 0.1], 0.9);
+
+    cache.save_to_disk_kv(&path).unwrap();
+    let store = DiskKvStore::open(&path).unwrap();
+    let stored = String::from_utf8(store.get(&format!("memory/{id}")).unwrap().unwrap())
+        .expect("memory record should be utf-8");
+
+    assert!(stored.contains("\tq4:"));
+
+    let loaded = KvFusionCache::load_from_disk_kv(&path).unwrap();
+    let restored = &loaded.entries()[0].vector;
+
+    assert_eq!(restored.len(), 3);
+    assert!((restored[0] - 0.4).abs() <= 0.05);
+    assert!((restored[1] - 0.7).abs() <= 0.05);
+    assert!((restored[2] - 0.1).abs() <= 0.05);
+    cleanup(path);
+}
+
+#[test]
+fn disk_kv_loader_accepts_legacy_plain_vectors() {
+    let path = temp_path("cache-legacy");
+    let mut store = DiskKvStore::open(&path).unwrap();
+    store
+        .put(
+            "memory/42",
+            b"42\t0.900000\t1\t0\t1.000000\tlegacy\t0.100000,0.200000",
+        )
+        .unwrap();
+    store.put("meta/next_id", b"43").unwrap();
+
+    let loaded = KvFusionCache::load_from_disk_kv(&path).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded.entries()[0].id, 42);
+    assert_eq!(loaded.entries()[0].vector, vec![0.1, 0.2]);
+    assert_eq!(loaded.entries()[0].created_at, 0);
+    assert_eq!(loaded.entries()[0].last_access, 1);
+    cleanup(path);
+}
+
+#[test]
+fn persistent_save_uses_append_only_disk_kv() {
+    let path = temp_path("persistent-disk-kv");
+    let mut cache = KvFusionCache::new();
+    cache.store_or_fuse("persistent disk kv", vec![0.2, 0.4, 0.6], 0.9);
+
+    cache.save_persistent(&path).unwrap();
+
+    let bytes = fs::read(&path).unwrap();
+    assert!(bytes.starts_with(b"NDK1"));
+
+    let loaded = KvFusionCache::load_persistent(&path).unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded.entries()[0].key, "persistent disk kv");
+    cleanup(path);
+}
+
+#[test]
+fn persistent_load_accepts_legacy_tsv_and_migrates_on_save() {
+    let path = temp_path("persistent-legacy").with_extension("tsv");
+    let mut legacy = KvFusionCache::new();
+    legacy.store_or_fuse("legacy tsv memory", vec![0.1, 0.8], 0.85);
+    legacy.save_to_disk(&path).unwrap();
+    let backup_path = legacy_backup_path(&path);
+
+    let loaded = KvFusionCache::load_persistent(&path).unwrap();
+    loaded.save_persistent(&path).unwrap();
+
+    let bytes = fs::read(&path).unwrap();
+    assert!(bytes.starts_with(b"NDK1"));
+    assert!(backup_path.exists());
+
+    let migrated = KvFusionCache::load_persistent(&path).unwrap();
+    assert_eq!(migrated.len(), 1);
+    assert!(migrated.entries()[0].key.contains("legacy tsv memory"));
+
+    cleanup(path);
+    cleanup(backup_path);
+}
+
+fn temp_path(label: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "rust-norion-{label}-{}-{nanos}.ndkv",
+        std::process::id()
+    ))
+}
+
+fn cleanup(path: std::path::PathBuf) {
+    let _ = std::fs::remove_file(path);
+}

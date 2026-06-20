@@ -1,0 +1,250 @@
+{
+  "root_status": {
+    "daemon": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 199264
+    },
+    "loop": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "readiness": {
+        "ready": true,
+        "failures": []
+      }
+    },
+    "next_round_downstream_status_consumers_v1": {
+      "schema": "next_round_downstream_status_consumers_v1",
+      "read_only": true,
+      "report_only": true,
+      "side_effects": false,
+      "starts_process": false,
+      "sends_prompt": false,
+      "starts_stream": false,
+      "writes_ndkv": false,
+      "active_round": 373,
+      "latest_done_round": 372,
+      "ledger_latest_round": 372,
+      "round_id_evidence": {
+        "transition_kind": "normal_in_progress",
+        "active_round": 373,
+        "latest_done_round": 372,
+        "ledger_latest_round": 372,
+        "reason_codes": [
+          "daemon_round_in_progress"
+        ],
+        "evidence_ids": [
+          "active-round:373",
+          "done-round:372",
+          "ledger:latest-round-372"
+        ]
+      },
+      "reason_codes": [
+        "downstream_consumers_ready"
+      ],
+      "evidence_ids": [
+        "status-root:downstream-consumers"
+      ],
+      "consumers": {
+        "service_cli_display": {
+          "consumer_id": "service_cli_display",
+          "required": true,
+          "satisfied": true,
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "reason_codes": [
+            "stable_dto_fields_visible"
+          ],
+          "evidence_ids": [
+            "service-cli:status-source"
+          ]
+        },
+        "forge_operator_display": {
+          "consumer_id": "forge_operator_display",
+          "required": true,
+          "satisfied": true,
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "reason_codes": [
+            "operator_summary_visible"
+          ],
+          "evidence_ids": [
+            "forge:summary"
+          ]
+        },
+        "agent_assignment_acceptance": {
+          "consumer_id": "agent_assignment_acceptance",
+          "required": true,
+          "accepted": true,
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "reason_codes": [
+            "round_ids_available"
+          ],
+          "evidence_ids": [
+            "agent:assignment"
+          ]
+        },
+        "memory_self_improve_admission_visibility": {
+          "consumer_id": "memory_self_improve_admission_visibility",
+          "required": true,
+          "admission_visible": true,
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "reason_codes": [
+            "admission_visibility_report_only"
+          ],
+          "evidence_ids": [
+            "memory:self-improve"
+          ]
+        }
+      }
+    }
+  },
+  "live_status_bundle_status": {
+    "daemon": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "running": true,
+      "pid": 199264
+    },
+    "loop": {
+      "read_only": true,
+      "starts_process": false,
+      "sends_prompt": false,
+      "touches_remote": false,
+      "live_status_bundle": {
+        "schema": "daemon_live_status_bundle_v1",
+        "read_only": true,
+        "starts_process": false,
+        "sends_prompt": false,
+        "report_only": true,
+        "next_round_downstream_status_consumers_v1": {
+          "schema": "next_round_downstream_status_consumers_v1",
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "starts_process": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "writes_ndkv": false,
+          "active_round": 374,
+          "latest_done_round": 373,
+          "ledger_latest_round": 373,
+          "round_id_evidence": {
+            "transition_kind": "round_done_waiting_ledger_commit",
+            "active_round": 374,
+            "latest_done_round": 373,
+            "ledger_latest_round": 373,
+            "reason_codes": [
+              "latest_done_round_waiting_ledger_commit"
+            ],
+            "evidence_ids": [
+              "active-round:374",
+              "done-round:373",
+              "ledger:latest-round-373"
+            ]
+          },
+          "consumers": [
+            {
+              "consumer_id": "service_cli_display",
+              "required": true,
+              "satisfied": true,
+              "read_only": true,
+              "report_only": true,
+              "side_effects": false
+            },
+            {
+              "consumer_id": "forge_operator_display",
+              "required": true,
+              "satisfied": true,
+              "read_only": true,
+              "report_only": true,
+              "side_effects": false
+            },
+            {
+              "consumer_id": "agent_assignment_acceptance",
+              "required": true,
+              "accepted": true,
+              "read_only": true,
+              "report_only": true,
+              "side_effects": false
+            },
+            {
+              "consumer_id": "memory_self_improve_admission_visibility",
+              "required": true,
+              "admission_visible": true,
+              "read_only": true,
+              "report_only": true,
+              "side_effects": false
+            }
+          ]
+        },
+        "next_round_decision_report_v1": {
+          "schema": "next_round_decision_report_v1",
+          "read_only": true,
+          "report_only": true,
+          "side_effects": false,
+          "next_round_decision": {
+            "schema": "next_round_decision_evidence_v1",
+            "display_state": "safe-to-continue-after-current-round",
+            "decision_status": "safe_to_continue_after_current_round",
+            "active_round": 374,
+            "latest_done_round": 373,
+            "ledger_latest_round": 373,
+            "read_only": true,
+            "report_only": true,
+            "dispatch_work_allowed": false,
+            "prompt_replay_allowed": false,
+            "process_start_allowed": false,
+            "ndkv_write_allowed": false,
+            "side_effects": {
+              "starts_daemon": false,
+              "stops_daemon": false,
+              "touches_remote": false,
+              "sends_prompt": false,
+              "starts_stream": false,
+              "replays_prompt": false,
+              "writes_ndkv": false
+            },
+            "reason_codes": [
+              "latest_done_round_waiting_ledger_commit"
+            ],
+            "evidence_ids": [
+              "active-round:374",
+              "done-round:373",
+              "ledger:latest-round-373"
+            ]
+          }
+        },
+        "next_round_decision": {
+          "schema": "next_round_decision_evidence_v1",
+          "display_state": "safe-to-wait",
+          "decision_status": "safe_to_wait",
+          "active_round": 999,
+          "latest_done_round": 998,
+          "ledger_latest_round": 998,
+          "read_only": true,
+          "report_only": true,
+          "dispatch_work_allowed": false,
+          "prompt_replay_allowed": false,
+          "process_start_allowed": false,
+          "ndkv_write_allowed": false
+        }
+      },
+      "readiness": {
+        "ready": true,
+        "failures": []
+      }
+    }
+  }
+}

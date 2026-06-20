@@ -1,0 +1,258 @@
+use super::*;
+use crate::kv_quant::QuantizationBits;
+
+#[test]
+fn kv_quant_benchmark_default_gate_passes() {
+    let summary = KvQuantBenchmarkSummary::run_default();
+    let report = summary.evaluate(&KvQuantBenchmarkGate::default());
+
+    assert_eq!(summary.len(), 6);
+    assert!(summary.max_abs_error_for(QuantizationBits::Four) > 0.0);
+    assert!(summary.max_abs_error_for(QuantizationBits::Eight) > 0.0);
+    assert!(report.passed, "{:?}", report.failures);
+    assert!(summary.summary_line().contains("kv_quant_benchmark"));
+    assert!(report.summary_line().contains("passed=true"));
+}
+
+#[test]
+fn kv_quant_gate_reports_accuracy_and_compression_failures() {
+    let mut summary = KvQuantBenchmarkSummary::default();
+    summary.record("wide", QuantizationBits::Four, &[-1.0, 0.0, 1.0]);
+    let gate = KvQuantBenchmarkGate {
+        max_four_bit_abs_error: 0.0,
+        max_four_bit_mean_error: 0.0,
+        max_four_bit_compression_ratio: 0.01,
+        max_eight_bit_abs_error: 1.0,
+        max_eight_bit_mean_error: 1.0,
+        max_eight_bit_compression_ratio: 1.0,
+        max_total_elapsed_us: None,
+    };
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("q4_max_abs_error"))
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("q4_compression_ratio"))
+    );
+}
+
+#[test]
+fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
+    let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+        first_stored_memory: true,
+        first_runtime_kv_stored: 1,
+        first_runtime_kv_namespace_preserved: true,
+        second_used_memories: 2,
+        second_used_runtime_kv_memory: true,
+        second_used_experiences: 1,
+        second_imported_runtime_kv_blocks: 2,
+        second_imported_runtime_kv_from_namespace: true,
+        second_runtime_adapter_observations: 1,
+        second_runtime_adapter_best_score: Some(0.84),
+        second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+        second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_quality: 0.82,
+        first_drift_severity: DriftSeverity::Watch,
+        second_drift_severity: DriftSeverity::Stable,
+    });
+
+    assert!(report.passed);
+    assert!(report.summary_line().contains("passed=true"));
+    assert!(
+        report
+            .summary_line()
+            .contains("second_runtime_adapter_observations=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_imported_runtime_kv_from_namespace=true")
+    );
+
+    let failed = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+        first_stored_memory: false,
+        first_runtime_kv_stored: 0,
+        first_runtime_kv_namespace_preserved: false,
+        second_used_memories: 0,
+        second_used_runtime_kv_memory: false,
+        second_used_experiences: 0,
+        second_imported_runtime_kv_blocks: 0,
+        second_imported_runtime_kv_from_namespace: false,
+        second_runtime_adapter_observations: 0,
+        second_runtime_adapter_best_score: None,
+        second_runtime_adapter_best_adapter: None,
+        second_runtime_selected_adapter: None,
+        second_quality: 0.2,
+        first_drift_severity: DriftSeverity::Stable,
+        second_drift_severity: DriftSeverity::Block,
+    });
+
+    assert!(!failed.passed);
+    assert!(failed.failures.len() >= 7);
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("runtime_kv namespace"))
+    );
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("persisted runtime KV memory"))
+    );
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("adapter observations"))
+    );
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("best runtime adapter observation"))
+    );
+}
+
+#[test]
+fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime() {
+    let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+        first_stored_memory: true,
+        first_runtime_kv_stored: 1,
+        first_runtime_kv_namespace_preserved: true,
+        second_used_memories: 2,
+        second_used_runtime_kv_memory: true,
+        second_used_experiences: 1,
+        second_imported_runtime_kv_blocks: 2,
+        second_imported_runtime_kv_from_namespace: true,
+        second_runtime_adapter_observations: 1,
+        second_runtime_adapter_best_score: Some(0.80),
+        second_runtime_adapter_best_adapter: Some("cpu-simd".to_owned()),
+        second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_quality: 0.82,
+        first_drift_severity: DriftSeverity::Stable,
+        second_drift_severity: DriftSeverity::Stable,
+    });
+
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("selected adapter portable-rust"))
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_runtime_adapter_best_adapter=cpu-simd")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_runtime_selected_adapter=portable-rust")
+    );
+}
+
+#[test]
+fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
+    let passing_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+        first_stored_memory: true,
+        first_runtime_kv_stored: 1,
+        first_runtime_kv_namespace_preserved: true,
+        second_used_memories: 2,
+        second_used_runtime_kv_memory: true,
+        second_used_experiences: 1,
+        second_imported_runtime_kv_blocks: 1,
+        second_imported_runtime_kv_from_namespace: true,
+        second_runtime_adapter_observations: 1,
+        second_runtime_adapter_best_score: Some(0.72),
+        second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+        second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_quality: 0.80,
+        first_drift_severity: DriftSeverity::Stable,
+        second_drift_severity: DriftSeverity::Stable,
+    });
+    let complete = PersistentRoundtripMatrixReport::evaluate(
+        DeviceClass::explicit_profiles()
+            .iter()
+            .copied()
+            .map(|device| PersistentRoundtripDeviceReport {
+                device,
+                report: passing_report.clone(),
+            })
+            .collect(),
+    );
+
+    assert!(complete.passed, "{:?}", complete.failures);
+    assert_eq!(
+        complete.covered_devices(),
+        DeviceClass::explicit_profiles().len()
+    );
+    assert!(complete.missing_devices().is_empty());
+    assert!(
+        complete
+            .summary_line()
+            .contains("persistent_roundtrip_matrix: passed=true")
+    );
+
+    let failed_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+        first_stored_memory: true,
+        first_runtime_kv_stored: 1,
+        first_runtime_kv_namespace_preserved: true,
+        second_used_memories: 1,
+        second_used_runtime_kv_memory: false,
+        second_used_experiences: 1,
+        second_imported_runtime_kv_blocks: 1,
+        second_imported_runtime_kv_from_namespace: false,
+        second_runtime_adapter_observations: 1,
+        second_runtime_adapter_best_score: Some(0.72),
+        second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
+        second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_quality: 0.80,
+        first_drift_severity: DriftSeverity::Stable,
+        second_drift_severity: DriftSeverity::Stable,
+    });
+    let incomplete = PersistentRoundtripMatrixReport::evaluate(vec![
+        PersistentRoundtripDeviceReport {
+            device: DeviceClass::CpuOnly,
+            report: passing_report,
+        },
+        PersistentRoundtripDeviceReport {
+            device: DeviceClass::IntegratedGpu,
+            report: failed_report,
+        },
+    ]);
+
+    assert!(!incomplete.passed);
+    assert_eq!(incomplete.covered_devices(), 2);
+    assert_eq!(
+        incomplete.missing_devices().len(),
+        DeviceClass::explicit_profiles().len() - 2
+    );
+    assert_eq!(
+        incomplete.failed_devices(),
+        vec![DeviceClass::IntegratedGpu]
+    );
+    assert!(
+        incomplete
+            .failures
+            .iter()
+            .any(|failure| failure.contains("missing="))
+    );
+    assert!(
+        incomplete
+            .failures
+            .iter()
+            .any(|failure| failure.contains("integrated"))
+    );
+}

@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "contract_version": "smartsteam.gemma-chain.mlx-experiment-artifact-template.v1",
+  "read_only": true,
+  "executes_commands": false,
+  "writes_artifacts": false,
+  "default_root": "target/remote-gemma-mlx-experiments",
+  "run_id_format": "YYYYMMDD-HHMMSS-<model-slug>",
+  "run_directory_template": "target/remote-gemma-mlx-experiments/<run-id>",
+  "candidate_manifest": "tools/gemma-chain/mlx-experiment-candidates.json",
+  "preflight_contract": "tools/gemma-chain/mlx-experiment-preflight-contract.json",
+  "execution_checklist": "tools/gemma-chain/mlx-experiment-execution-checklist.json",
+  "production_pool_constraints": [
+    "Artifacts must not be written under target/remote-gemma-chain except by existing GGUF status producers.",
+    "Artifacts must not modify GGUF worker manifests, ports 8686-8690, model cache, daemon config, or model weights.",
+    "Artifacts must identify runtime=mlx and experimental=true.",
+    "Artifacts must keep GGUF health recheck separate from MLX smoke evidence."
+  ],
+  "artifacts": [
+    {
+      "id": "preflight",
+      "path": "<run-dir>/preflight.json",
+      "stage_id": "preflight_pass",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "model_id",
+        "collected_at_utc",
+        "read_only",
+        "ssh_used",
+        "downloads",
+        "starts_process",
+        "sends_prompt",
+        "preflight_items",
+        "gguf_baseline",
+        "decision"
+      ],
+      "pass_fields": [
+        "decision.allowed_to_download=true",
+        "preflight_items[].passed=true",
+        "gguf_baseline.stale=false",
+        "gguf_baseline.ledger_lag=0",
+        "gguf_baseline.gate_failures=0"
+      ],
+      "cannot_substitute_for": [
+        "download.json",
+        "start.json",
+        "smoke.json",
+        "resource-sample.json"
+      ]
+    },
+    {
+      "id": "download",
+      "path": "<run-dir>/download.json",
+      "stage_id": "download_cache_hash",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "model_id",
+        "download_authorized_by",
+        "target_dir",
+        "downloaded_files",
+        "sha256",
+        "total_bytes",
+        "disk_free_before_bytes",
+        "disk_free_after_bytes",
+        "decision"
+      ],
+      "pass_fields": [
+        "decision.cache_ready=true",
+        "downloaded_files[].sha256_present=true",
+        "target_dir_under_mlx_experiment_cache=true",
+        "writes_gguf_cache=false"
+      ],
+      "cannot_substitute_for": [
+        "preflight.json",
+        "start.json",
+        "resource-sample.json"
+      ]
+    },
+    {
+      "id": "start",
+      "path": "<run-dir>/start.json",
+      "stage_id": "single_slot_start",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "model_id",
+        "runtime",
+        "experiment_port",
+        "pid",
+        "started_at_utc",
+        "starts_process",
+        "sends_prompt",
+        "listening",
+        "gguf_ports_unchanged",
+        "decision"
+      ],
+      "pass_fields": [
+        "runtime=mlx",
+        "starts_process=true",
+        "sends_prompt=false",
+        "listening=true",
+        "experiment_port_not_in_8686_8690=true",
+        "gguf_ports_unchanged=true"
+      ],
+      "cannot_substitute_for": [
+        "smoke.json",
+        "resource-sample.json",
+        "gguf-health-recheck.json"
+      ]
+    },
+    {
+      "id": "smoke",
+      "path": "<run-dir>/smoke.json",
+      "stage_id": "smoke_prompt",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "model_id",
+        "runtime",
+        "experiment_port",
+        "prompt_authorized_by",
+        "sends_prompt",
+        "max_tokens",
+        "elapsed_ms",
+        "response_ok",
+        "runtime_tokens",
+        "error",
+        "not_routed_through_daemon",
+        "decision"
+      ],
+      "pass_fields": [
+        "runtime=mlx",
+        "sends_prompt=true",
+        "response_ok=true",
+        "not_routed_through_daemon=true",
+        "runtime_tokens>0"
+      ],
+      "cannot_substitute_for": [
+        "resource-sample.json",
+        "gguf-health-recheck.json"
+      ]
+    },
+    {
+      "id": "resource_sample",
+      "path": "<run-dir>/resource-sample.json",
+      "stage_id": "resource_sample",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "model_id",
+        "collected_at_utc",
+        "memory_pressure",
+        "swap_used_bytes",
+        "available_memory_bytes",
+        "top_processes",
+        "mlx_pid",
+        "gguf_worker_count",
+        "gguf_metal_worker_count",
+        "decision"
+      ],
+      "pass_fields": [
+        "decision.resource_headroom_green=true",
+        "gguf_worker_count=6",
+        "gguf_metal_worker_count=6",
+        "memory_pressure!=critical"
+      ],
+      "cannot_substitute_for": [
+        "smoke.json",
+        "teardown.json",
+        "gguf-health-recheck.json"
+      ]
+    },
+    {
+      "id": "teardown",
+      "path": "<run-dir>/teardown.json",
+      "stage_id": "teardown_or_keep_decision",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "model_id",
+        "decision",
+        "teardown_authorized_by",
+        "stopped_process",
+        "kept_running",
+        "final_pid_state",
+        "final_port_state",
+        "owner_if_kept",
+        "monitoring_if_kept"
+      ],
+      "pass_fields": [
+        "stopped_process=true or kept_running=true_with_owner_and_monitoring",
+        "production_routing_modified=false",
+        "gguf_pool_modified=false"
+      ],
+      "cannot_substitute_for": [
+        "gguf-health-recheck.json"
+      ]
+    },
+    {
+      "id": "gguf_health_recheck",
+      "path": "<run-dir>/gguf-health-recheck.json",
+      "stage_id": "gguf_pool_health_recheck",
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "collected_at_utc",
+        "status_with_model_cache",
+        "model_cache_status",
+        "daemon_status",
+        "report",
+        "decision"
+      ],
+      "pass_fields": [
+        "status_with_model_cache.workers_healthy=6",
+        "status_with_model_cache.metal_workers=6",
+        "model_cache_status.all_ok=true",
+        "daemon_status.stale=false",
+        "daemon_status.ledger_lag=0",
+        "daemon_status.gate_failures=0"
+      ],
+      "cannot_substitute_for": [
+        "preflight.json",
+        "resource-sample.json"
+      ]
+    }
+  ],
+  "run_summary": {
+    "path": "<run-dir>/summary.json",
+    "required_fields": [
+      "schema_version",
+      "run_id",
+      "model_id",
+      "candidate_priority",
+      "started_at_utc",
+      "ended_at_utc",
+      "final_decision",
+      "artifact_paths",
+      "failed_stage_id",
+      "gguf_pool_unchanged",
+      "production_pool_constraints_satisfied"
+    ],
+    "final_pass_condition": "all required artifacts exist, each stage decision passed, gguf_pool_unchanged=true, production_pool_constraints_satisfied=true"
+  }
+}

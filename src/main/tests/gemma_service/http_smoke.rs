@@ -1,0 +1,961 @@
+use super::*;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
+#[derive(Clone)]
+struct BlockingBackend {
+    started: Arc<AtomicBool>,
+    release: Arc<AtomicBool>,
+}
+
+impl InferenceBackend for BlockingBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        self.started.store(true, Ordering::SeqCst);
+        for _ in 0..200 {
+            if self.release.load(Ordering::SeqCst) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        InferenceDraft::new(
+            "blocking backend released",
+            vec![ReasoningStep::new("blocking_backend", "released", 0.8)],
+        )
+    }
+}
+
+fn write_dirty_experience_store(path: &Path) {
+    let mut store = rust_norion::ExperienceStore::new();
+    store.record(experience_input(
+        "Conversation transcript:\nuser: audit GitLab merge_requests over ssh\nassistant: ok",
+        "ssh -o ConnectTimeout=8 gitlab.local merge_requests bash command",
+        0.94,
+    ));
+    store.record(experience_input(
+        "用中文解释 Rust 所有权",
+        "回答要保持中文、聚焦所有权、给出短示例。",
+        0.82,
+    ));
+    store.save_to_disk_kv(path).unwrap();
+}
+
+fn experience_input(prompt: &str, lesson: &str, quality: f32) -> rust_norion::ExperienceInput {
+    rust_norion::ExperienceInput {
+        prompt: prompt.to_owned(),
+        profile: rust_norion::TaskProfile::Coding,
+        lesson: lesson.to_owned(),
+        quality,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: None,
+        router_threshold_after: 0.5,
+        stream_windows: 1,
+        route_budget: rust_norion::RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        hierarchy: rust_norion::HierarchyWeights::new(0.33, 0.34, 0.33),
+        used_memory_ids: Vec::new(),
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: rust_norion::RuntimeDiagnostics::default(),
+        runtime_token_metrics: rust_norion::ExperienceRuntimeTokenMetrics::default(),
+        process_reward: rust_norion::ProcessRewardReport::default(),
+        live_evolution: rust_norion::LiveInferenceEvolution::default(),
+    }
+}
+
+#[test]
+fn model_service_health_responds_while_generate_is_running() {
+    let asset_dir = target_asset_dir("model-service-concurrent-health");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service concurrent health prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let first_health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&first_health).contains("\"ok\":true"));
+    assert!(http_body(&first_health).contains("\"runtime_mode\":\"built-in\""));
+    assert!(http_body(&first_health).contains("\"gemma_runtime_server\":null"));
+    assert!(http_body(&first_health).contains("\"gemma_runtime_reachable\":null"));
+    assert!(http_body(&first_health).contains("\"last_inference\":null"));
+
+    let generate_bind = bind.clone();
+    let generate_handle = thread::spawn(move || {
+        service_http_request(
+            &generate_bind,
+            "POST",
+            "/v1/generate",
+            Some("{\"prompt\":\"hold generate\",\"profile\":\"coding\"}"),
+        )
+    });
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        started.load(Ordering::SeqCst),
+        "generate request should enter the blocking backend"
+    );
+
+    let health_during_generate = service_http_request(&bind, "GET", "/health", None);
+    assert!(
+        http_body(&health_during_generate).contains("\"ok\":true"),
+        "{health_during_generate}"
+    );
+    assert!(
+        http_body(&health_during_generate).contains("\"active_engine_requests\":1"),
+        "{health_during_generate}"
+    );
+    assert!(
+        http_body(&health_during_generate).contains("\"engine_busy\":true"),
+        "{health_during_generate}"
+    );
+
+    release.store(true, Ordering::SeqCst);
+    let generate = generate_handle.join().unwrap();
+    assert!(http_body(&generate).contains("\"ok\":true"), "{generate}");
+    let final_health = service_http_request(&bind, "GET", "/health", None);
+    let final_health_body = http_body(&final_health);
+    assert!(
+        final_health_body.contains("\"last_inference\":{"),
+        "{final_health_body}"
+    );
+    assert!(
+        final_health_body.contains("\"endpoint\":\"generate\""),
+        "{final_health_body}"
+    );
+    assert!(
+        final_health_body.contains("\"elapsed_ms\":"),
+        "{final_health_body}"
+    );
+    assert!(
+        final_health_body.contains("\"runtime_token_count\":"),
+        "{final_health_body}"
+    );
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_experience_hygiene_quarantine_is_explicit_apply_only() {
+    let asset_dir = target_asset_dir("model-service-experience-hygiene");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let backup = asset_dir.join("experience.backup.ndkv");
+    let quarantine = asset_dir.join("experience.quarantine.ndkv");
+    write_dirty_experience_store(&experience);
+
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+        "experience hygiene service prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let report = wait_for_http_response(&bind, "GET", "/v1/experience-hygiene", None);
+    let dry_run = service_http_request(
+        &bind,
+        "POST",
+        "/v1/experience-hygiene/quarantine",
+        Some("{\"limit\":10}"),
+    );
+    let after_dry_run = rust_norion::ExperienceStore::load_from_disk_kv(&experience).unwrap();
+    assert_eq!(after_dry_run.len(), 2);
+    assert!(!backup.exists());
+    assert!(!quarantine.exists());
+    let apply_body = format!(
+        "{{\"apply\":true,\"limit\":10,\"backup_path\":{},\"quarantine_path\":{}}}",
+        service_json_string(&backup.display().to_string()),
+        service_json_string(&quarantine.display().to_string())
+    );
+    let apply = service_http_request(
+        &bind,
+        "POST",
+        "/v1/experience-hygiene/quarantine",
+        Some(&apply_body),
+    );
+    let clean_report = service_http_request(&bind, "GET", "/v1/experience-hygiene", None);
+    handle.join().unwrap().unwrap();
+
+    let report_body = http_body(&report);
+    assert!(report_body.contains("\"checked\":true"), "{report_body}");
+    assert!(
+        report_body.contains("\"quarantine_candidates\":1"),
+        "{report_body}"
+    );
+    assert!(
+        report_body.contains("\"candidate_ids\":[1]"),
+        "{report_body}"
+    );
+
+    let dry_run_body = http_body(&dry_run);
+    assert!(dry_run_body.contains("\"applied\":false"), "{dry_run_body}");
+
+    let apply_body = http_body(&apply);
+    assert!(apply_body.contains("\"applied\":true"), "{apply_body}");
+    assert!(backup.exists());
+    assert!(quarantine.exists());
+    let retained = rust_norion::ExperienceStore::load_from_disk_kv(&experience).unwrap();
+    let quarantined = rust_norion::ExperienceStore::load_from_disk_kv(&quarantine).unwrap();
+    assert_eq!(retained.len(), 1);
+    assert_eq!(quarantined.len(), 1);
+
+    let clean_report_body = http_body(&clean_report);
+    assert!(
+        clean_report_body.contains("\"quarantine_candidates\":0"),
+        "{clean_report_body}"
+    );
+    assert!(
+        clean_report_body.contains("\"clean\":true"),
+        "{clean_report_body}"
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_experience_cleanup_audit_is_read_only() {
+    let asset_dir = target_asset_dir("model-service-experience-cleanup-audit");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let experience = asset_dir.join("experience.ndkv");
+    write_dirty_experience_store(&experience);
+    let before = rust_norion::ExperienceStore::load_from_disk_kv(&experience)
+        .unwrap()
+        .len();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "1".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "experience cleanup audit service prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let response = wait_for_http_response(
+        &bind,
+        "POST",
+        "/v1/experience-cleanup-audit",
+        Some("{\"limit\":7}"),
+    );
+    handle.join().unwrap().unwrap();
+
+    let after = rust_norion::ExperienceStore::load_from_disk_kv(&experience)
+        .unwrap()
+        .len();
+    let body = http_body(&response);
+    assert!(body.contains("\"ok\":true"), "{body}");
+    assert!(body.contains("\"writes_experience_state\":false"), "{body}");
+    assert!(body.contains("\"sample_limit\":7"), "{body}");
+    assert!(body.contains("\"report\":{"), "{body}");
+    assert!(body.contains("\"index_report\":{"), "{body}");
+    assert!(body.contains("\"quarantine_plan\":{"), "{body}");
+    assert!(body.contains("\"repair_plan\":{"), "{body}");
+    assert!(body.contains("\"quarantine_candidates\":1"), "{body}");
+    assert_eq!(before, after);
+    assert!(!asset_dir.join("experience.backup.ndkv").exists());
+    assert!(!asset_dir.join("experience.quarantine.ndkv").exists());
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_experience_cleanup_audit_defers_large_store() {
+    let asset_dir = target_asset_dir("model-service-experience-cleanup-audit-large-store");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let experience = asset_dir.join("experience.ndkv");
+    fs::write(&experience, vec![b'x'; 1_000_001]).unwrap();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "1".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "experience cleanup audit large store prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let response = wait_for_http_response(
+        &bind,
+        "POST",
+        "/v1/experience-cleanup-audit",
+        Some("{\"limit\":7}"),
+    );
+    handle.join().unwrap().unwrap();
+
+    let body = http_body(&response);
+    assert!(body.contains("\"ok\":true"), "{body}");
+    assert!(body.contains("\"checked\":false"), "{body}");
+    assert!(
+        body.contains("experience_hygiene_deferred_large_file"),
+        "{body}"
+    );
+    assert!(body.contains("\"writes_experience_state\":false"), "{body}");
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_experience_retrieval_previews_matches_without_generation() {
+    let asset_dir = target_asset_dir("model-service-experience-retrieval");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "1".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "experience retrieval service prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        engine.experience.record(experience_input(
+            "Conversation transcript:\nuser: 帮我用rust输出一段for循环代码\nassistant: Rust loop\nuser: Bash command\nssh -o ConnectTimeout=8 gitlab.local merge_requests",
+            "polluted shell transcript should be skipped",
+            0.99,
+        ));
+        engine.experience.record(experience_input(
+            "Rust for loop examples",
+            "show a clean Rust range loop with for i in 0..10",
+            0.82,
+        ));
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let response = wait_for_http_response(
+        &bind,
+        "POST",
+        "/v1/experience-retrieval",
+        Some(
+            "{\"prompt\":\"帮我用rust输出一段for循环代码\",\"profile\":\"coding\",\"limit\":5,\"index_context\":\"model_pool_index: src/experience contains clean Rust loop examples\"}",
+        ),
+    );
+    let body = http_body(&response);
+
+    assert!(body.contains("\"ok\":true"), "{body}");
+    assert!(
+        body.contains("\"prompt\":\"帮我用rust输出一段for循环代码\""),
+        "{body}"
+    );
+    assert!(body.contains("\"index_context_used\":true"), "{body}");
+    assert!(body.contains("\"index_context_chars\":66"), "{body}");
+    assert!(body.contains("\"total_records\":2"), "{body}");
+    assert!(body.contains("\"match_count\":1"), "{body}");
+    assert!(
+        body.contains("\"skipped_cross_task_pollution\":1"),
+        "{body}"
+    );
+    assert!(
+        body.contains("\"lesson_preview\":\"show a clean Rust range loop"),
+        "{body}"
+    );
+    assert!(!body.contains("gitlab.local"), "{body}");
+
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_health_reports_gemma_runtime_reachability() {
+    let asset_dir = target_asset_dir("model-service-gemma-runtime-reachability");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let runtime_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    runtime_listener.set_nonblocking(true).unwrap();
+    let runtime_addr = runtime_listener.local_addr().unwrap();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--gemma-runtime-server".to_owned(),
+        format!("http://{runtime_addr}"),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service gemma runtime reachability prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let reachable_health = wait_for_http_response(&bind, "GET", "/health", None);
+    let reachable_body = http_body(&reachable_health);
+    assert!(
+        reachable_body.contains("\"runtime_mode\":\"gemma-http\""),
+        "{reachable_body}"
+    );
+    assert!(
+        reachable_body.contains("\"gemma_runtime_reachable\":true"),
+        "{reachable_body}"
+    );
+    drop(runtime_listener);
+
+    let unreachable_health = service_http_request(&bind, "GET", "/health", None);
+    let unreachable_body = http_body(&unreachable_health);
+    assert!(
+        unreachable_body.contains("\"gemma_runtime_reachable\":false"),
+        "{unreachable_body}"
+    );
+
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_runs_generate_replay_and_inspect_http_smoke() {
+    let asset_dir = target_asset_dir("model-service-http-smoke");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace = asset_dir.join("trace.jsonl");
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "7".to_owned(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+        "--trace".to_owned(),
+        trace.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace.display().to_string(),
+        "--inspect-min-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-live-inference-runs".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-replay-runs".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-replay-items".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedbacks".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedback-memory-updates".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedback-strength-delta".to_owned(),
+        "0.08".to_owned(),
+        "service smoke prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let generate_info = service_http_request(&bind, "GET", "/v1/generate", None);
+    let generate_body = "{\"prompt\":\"用中文解释 Rust 所有权，并给出一个 rust-norion 业务联调测试建议。\",\"profile\":\"coding\",\"case\":\"service-http-smoke\"}";
+    let generate = service_http_request(&bind, "POST", "/v1/generate", Some(generate_body));
+    let generate_json = http_body(&generate).to_owned();
+    let experience_id = json_u64_field(&generate_json, "experience_id")
+        .expect("generate response must expose experience_id");
+    let feedback_memory_ids = json_u64_array_field(&generate_json, "feedback_memory_ids")
+        .expect("generate response must expose feedback_memory_ids");
+    assert!(
+        !feedback_memory_ids.is_empty(),
+        "generate response must include at least one feedback memory id: {generate_json}"
+    );
+    let feedback_request = format!(
+        "{{\"experience_id\":{},\"action\":\"reinforce\",\"amount\":0.5}}",
+        experience_id
+    );
+    let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
+    let chat_body = "{\"messages\":[{\"role\":\"system\",\"content\":\"你是 rust-norion 的本地模型服务。\"},{\"role\":\"user\",\"content\":\"继续用中文给一个业务联调建议。\"}],\"profile\":\"coding\",\"case\":\"chat-http-smoke\"}";
+    let chat = service_http_request(&bind, "POST", "/v1/chat", Some(chat_body));
+    let replay = service_http_request(&bind, "POST", "/v1/replay", Some("{\"limit\":1}"));
+    let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let generate_info_body = http_body(&generate_info);
+    let generate_body = http_body(&generate);
+    let chat_body = http_body(&chat);
+    let feedback_body = http_body(&feedback);
+    let replay_body = http_body(&replay);
+    let inspect_body = http_body(&inspect);
+
+    assert!(health_body.contains("\"ok\":true"));
+    assert!(generate_info_body.contains("\"endpoint\":\"/v1/generate\""));
+    assert!(generate_info_body.contains("\"method\":\"POST\""));
+    assert!(generate_body.contains("\"ok\":true"));
+    assert!(generate_body.contains("\"profile\":\"coding\""));
+    assert!(generate_body.contains("\"traceable\":true"));
+    assert!(generate_body.contains("\"stored_memory_id\":"));
+    assert!(generate_body.contains("\"used_memory_ids\":["));
+    assert!(generate_body.contains("\"stored_gist_memory_ids\":["));
+    assert!(generate_body.contains("\"stored_runtime_kv_memory_ids\":["));
+    assert!(generate_body.contains("\"feedback_memory_ids\":["));
+    assert!(generate_body.contains("\"runtime_token_count\":"));
+    assert!(generate_body.contains("\"runtime_entropy_count\":"));
+    assert!(generate_body.contains("\"runtime_logprob_count\":"));
+    assert!(generate_body.contains("\"runtime_uncertainty_token_count\":"));
+    assert!(generate_body.contains("\"runtime_uncertainty_signal\":"));
+    assert!(json_u64_field(generate_body, "runtime_token_count").is_some());
+    assert!(json_u64_field(generate_body, "runtime_uncertainty_token_count").is_some());
+    assert!(json_bool_field(generate_body, "runtime_uncertainty_signal").is_some());
+    assert!(chat_body.contains("\"ok\":true"));
+    assert!(chat_body.contains("\"profile\":\"coding\""));
+    assert!(chat_body.contains("\"traceable\":true"));
+    assert!(chat_body.contains("\"experience_id\":"));
+    assert!(feedback_body.contains("\"ok\":true"));
+    assert!(feedback_body.contains("\"action\":\"reinforce\""));
+    assert!(feedback_body.contains(&format!("\"experience_id\":{experience_id}")));
+    assert!(feedback_body.contains(&format!(
+        "\"memory_ids\":{}",
+        service_u64_array(&feedback_memory_ids)
+    )));
+    assert_eq!(
+        json_u64_field(feedback_body, "applied"),
+        Some(feedback_memory_ids.len() as u64)
+    );
+    assert!(
+        json_f32_field(feedback_body, "strength_delta").unwrap_or_default() >= 0.08,
+        "{feedback_body}"
+    );
+    assert!(feedback_body.contains("\"evolution_external_feedbacks\":1"));
+    assert!(feedback_body.contains(&format!(
+        "\"evolution_external_feedback_memory_updates\":{}",
+        feedback_memory_ids.len()
+    )));
+    assert!(replay_body.contains("\"ok\":true"));
+    assert!(replay_body.contains("\"applied\":1"));
+    assert!(
+        json_u64_field(replay_body, "live_memory_feedback_updates").unwrap_or_default() >= 1,
+        "{replay_body}"
+    );
+    assert!(
+        json_u64_field(replay_body, "live_memory_feedback_applied").unwrap_or_default() >= 1,
+        "{replay_body}"
+    );
+    assert!(
+        json_u64_field(replay_body, "live_evolution_items").unwrap_or_default() >= 1,
+        "{replay_body}"
+    );
+    assert!(
+        inspect_body.contains("\"state_gate\":{\"passed\":true"),
+        "{inspect_body}"
+    );
+    assert!(
+        inspect_body.contains("\"trace_gate\":{\"passed\":true"),
+        "{inspect_body}"
+    );
+    let runtime_audit = GemmaModelServiceRuntimeAudit::from_inspect_body(inspect_body);
+    assert!(runtime_audit.passed(), "{runtime_audit:?} {inspect_body}");
+    assert_eq!(runtime_audit, GemmaModelServiceRuntimeAudit::default());
+    assert!(
+        json_u64_field(inspect_body, "evolution_live_inference_runs").unwrap_or_default() >= 2,
+        "{inspect_body}"
+    );
+    assert!(
+        json_u64_field(inspect_body, "evolution_replay_runs").unwrap_or_default() >= 1,
+        "{inspect_body}"
+    );
+    assert!(inspect_body.contains("\"evolution_external_feedbacks\":1"));
+    assert!(inspect_body.contains(&format!(
+        "\"evolution_external_feedback_memory_updates\":{}",
+        feedback_memory_ids.len()
+    )));
+
+    let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let state_report = run_state_inspection(&args).unwrap();
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(trace_report.checked_lines >= 2);
+    assert!(state_report.experience_count >= 2);
+    assert!(state_report.memory_count >= 1);
+    assert!(state_report.evolution_ledger.live_inference_runs >= 2);
+    assert!(state_report.evolution_ledger.replay_runs >= 1);
+    assert_eq!(state_report.evolution_ledger.external_feedbacks, 1);
+    assert_eq!(
+        state_report
+            .evolution_ledger
+            .external_feedback_memory_updates,
+        feedback_memory_ids.len() as u64
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_runs_self_improve_http_smoke() {
+    let asset_dir = target_asset_dir("model-service-self-improve-smoke");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace = asset_dir.join("trace.jsonl");
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+        "--trace".to_owned(),
+        trace.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace.display().to_string(),
+        "--inspect-min-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-live-inference-runs".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-replay-runs".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-replay-items".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedbacks".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedback-memory-updates".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedback-strength-delta".to_owned(),
+        "0.08".to_owned(),
+        "service self improve prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let generate_body = "{\"prompt\":\"用中文给出 rust-norion 本地模型业务联调建议。\",\"profile\":\"coding\",\"case\":\"self-improve-http-smoke\"}";
+    let generate = service_http_request(&bind, "POST", "/v1/generate", Some(generate_body));
+    let generate_json = http_body(&generate).to_owned();
+    let experience_id = json_u64_field(&generate_json, "experience_id")
+        .expect("generate response must expose experience_id");
+    let feedback_memory_ids = json_u64_array_field(&generate_json, "feedback_memory_ids")
+        .expect("generate response must expose feedback_memory_ids");
+    assert!(!feedback_memory_ids.is_empty(), "{generate_json}");
+    let feedback_request = format!(
+        "{{\"experience_id\":{},\"action\":\"reinforce\",\"amount\":0.5}}",
+        experience_id
+    );
+    let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
+    let self_improve = service_http_request(
+        &bind,
+        "POST",
+        "/v1/self-improve",
+        Some("{\"limit\":1,\"trace_gate\":true}"),
+    );
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let feedback_body = http_body(&feedback);
+    let self_improve_body = http_body(&self_improve);
+
+    assert!(health_body.contains("\"ok\":true"));
+    assert!(feedback_body.contains("\"ok\":true"), "{feedback_body}");
+    assert!(self_improve_body.contains("\"ok\":true"));
+    assert!(
+        self_improve_body.contains("\"self_improve\":{\"passed\":true"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"replay_passed\":true"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"business_cycle_gate\":false"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"state_gate\":{\"passed\":true"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"trace_gate\":{\"passed\":true"),
+        "{self_improve_body}"
+    );
+    assert_eq!(
+        json_u64_field(self_improve_body, "replay_applied"),
+        Some(1),
+        "{self_improve_body}"
+    );
+    assert!(
+        json_u64_field(self_improve_body, "live_memory_feedback_updates").unwrap_or_default() >= 1,
+        "{self_improve_body}"
+    );
+    assert!(
+        json_u64_field(self_improve_body, "evolution_replay_runs").unwrap_or_default() >= 1,
+        "{self_improve_body}"
+    );
+    assert!(
+        json_u64_field(self_improve_body, "evolution_replay_items").unwrap_or_default() >= 1,
+        "{self_improve_body}"
+    );
+
+    let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let state_report = run_state_inspection(&args).unwrap();
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(trace_report.checked_lines, 1);
+    assert_eq!(state_report.evolution_ledger.replay_runs, 1);
+    assert!(state_report.evolution_ledger.replay_items >= 1);
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_business_cycle_runs_feedback_rust_check_and_self_improve() {
+    let asset_dir = target_asset_dir("model-service-business-cycle-smoke");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace = asset_dir.join("trace.jsonl");
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+        "--trace".to_owned(),
+        trace.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace.display().to_string(),
+        "--inspect-min-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-live-inference-runs".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-replay-runs".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-replay-items".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-external-feedbacks".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-evolution-external-feedback-memory-updates".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-evolution-external-feedback-strength-delta".to_owned(),
+        "0.08".to_owned(),
+        "--inspect-min-rust-check-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-rust-check-passed".to_owned(),
+        "1".to_owned(),
+        "--inspect-max-rust-check-failed".to_owned(),
+        "0".to_owned(),
+        "service business cycle prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let code = r#"pub fn apply_user_feedback(memory_id: u64) -> bool { memory_id > 0 }"#;
+    let request = format!(
+        "{{\"prompt\":\"用中文给出 rust-norion 业务联调和反馈建议。\",\"profile\":\"coding\",\"case\":\"gemma-service-rust-feedback\",\"feedback_amount\":0.5,\"rust_check_code\":{},\"rust_check_case\":\"business-cycle-rust-check\",\"self_improve\":true,\"self_improve_limit\":1,\"gate\":\"business_cycle\",\"trace_gate\":true}}",
+        service_json_string(code)
+    );
+    let business_cycle = service_http_request(&bind, "POST", "/v1/business-cycle", Some(&request));
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let cycle_body = http_body(&business_cycle);
+
+    assert!(health_body.contains("\"ok\":true"));
+    assert!(cycle_body.contains("\"ok\":true"), "{cycle_body}");
+    assert!(
+        cycle_body.contains("\"business_cycle\":{\"passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        cycle_body.contains("\"feedback_passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        cycle_body.contains("\"rust_check_checked\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        cycle_body.contains("\"rust_check_passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        cycle_body.contains("\"self_improve_passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        cycle_body.contains("\"state_gate\":{\"passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        cycle_body.contains("\"trace_gate\":{\"passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        json_u64_field(cycle_body, "feedback_applied").unwrap_or_default() >= 1,
+        "{cycle_body}"
+    );
+    assert!(
+        json_u64_field(cycle_body, "runtime_token_count").is_some(),
+        "{cycle_body}"
+    );
+    assert!(
+        json_u64_field(cycle_body, "rust_check_passed").unwrap_or_default() >= 1
+            || cycle_body.contains("\"rust_check_passed\":true"),
+        "{cycle_body}"
+    );
+    assert!(
+        json_u64_field(cycle_body, "evolution_external_feedbacks").unwrap_or_default() >= 2,
+        "{cycle_body}"
+    );
+    assert!(
+        json_u64_field(cycle_body, "evolution_replay_runs").unwrap_or_default() >= 1,
+        "{cycle_body}"
+    );
+
+    let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let trace_content = fs::read_to_string(&trace).unwrap();
+    let state_report = run_state_inspection(&args).unwrap();
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(trace_report.checked_lines, 3);
+    assert_eq!(trace_report.business_contract_events, 1);
+    assert_eq!(trace_report.business_contract_event_passed, 1);
+    assert_eq!(trace_report.business_contract_event_failed, 0);
+    assert_eq!(trace_report.rust_check_events, 1);
+    assert_eq!(trace_report.rust_check_passed, 1);
+    assert!(
+        trace_content.contains("\"schema\":\"rust-norion-rust-check-v1\""),
+        "{trace_content}"
+    );
+    assert!(
+        trace_content.contains("\"schema\":\"rust-norion-business-contract-v1\""),
+        "{trace_content}"
+    );
+    assert_eq!(state_report.evolution_ledger.live_inference_runs, 1);
+    assert_eq!(state_report.evolution_ledger.external_feedbacks, 2);
+    assert!(state_report.evolution_ledger.replay_runs >= 1);
+    assert!(state_report.evolution_ledger.replay_rust_check_items >= 1);
+    assert!(state_report.business_contract_passed_count >= 1);
+    assert!(
+        state_report
+            .evolution_ledger
+            .replay_business_contract_passed
+            >= 1
+    );
+
+    if let Some(source_path) = json_string_field(cycle_body, "source_path")
+        && let Some(parent) = PathBuf::from(source_path).parent()
+    {
+        let _ = fs::remove_dir_all(parent);
+    }
+    fs::remove_dir_all(asset_dir).unwrap();
+}

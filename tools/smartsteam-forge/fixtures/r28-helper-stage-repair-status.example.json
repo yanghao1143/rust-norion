@@ -1,0 +1,172 @@
+{
+  "report_gate": {"passed": true, "failures": []},
+  "strict_report_gate": {"passed": true, "failures": []},
+  "ledger_gate_report_v1": {
+    "allow_next_round": true,
+    "gate_blocked": false
+  },
+  "model_pool_alignment": {"alignment_ok": true},
+  "helper_stage_repair_status_report_v1": {
+    "schema": "helper_stage_repair_status_report_v1",
+    "consumer_surface": "evolution_loop_report_only_helper_stage_repair_status",
+    "read_only": true,
+    "report_only": true,
+    "status_loaded": true,
+    "source": "latest_ledger_helper_stage_contract_projection",
+    "latest_round": 328,
+    "total_role_count": 4,
+    "repair_required": true,
+    "incomplete_role_count": 2,
+    "missing_helper_role_repair_required": true,
+    "missing_helper_role_repair_proposal_count": 1,
+    "missing_helper_roles": ["router"],
+    "proposal_count": 3,
+    "proposals": [
+      {
+        "proposal_id": "helper-stage-repair-r328-router",
+        "role": "router",
+        "source_round": 328,
+        "evidence_id": "ledger.round.328.helper_stage_contract_by_role.router",
+        "status": "missing_helper_role",
+        "missing_fields": [],
+        "placeholder_fields": [],
+        "matched_fields": [],
+        "expected_fields": ["route", "decision", "dependencies"],
+        "suggested_action": "Repair router helper contract by adding a router helper-stage output before the next helper-stage admission.",
+        "validation": {
+          "command": "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml",
+          "source": "static_safe_local_check",
+          "command_safety": "safe"
+        },
+        "admission": {
+          "status": "repair_proposal_report_only",
+          "candidate_only": true,
+          "auto_apply": false,
+          "requires_human_or_main_window_acceptance": true
+        },
+        "side_effects": {
+          "applies_code": false,
+          "edits_files": false,
+          "mutates_ledger": false,
+          "mutates_memory_store": false,
+          "writes_ndkv": false,
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "downloads_model": false,
+          "warms_model_cache": false,
+          "starts_forge": false,
+          "starts_web_lab": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "calls_model": false
+        }
+      },
+      {
+        "proposal_id": "helper-stage-repair-r328-review",
+        "role": "review",
+        "source_round": 328,
+        "evidence_id": "ledger.round.328.helper_stage_contract_by_role.review",
+        "status": "missing_required_fields",
+        "missing_fields": ["verification"],
+        "placeholder_fields": [],
+        "matched_fields": ["risk", "change_request"],
+        "expected_fields": ["risk", "change_request", "verification"],
+        "suggested_action": "Repair review helper contract by providing concrete verification field(s) in the next helper-stage output.",
+        "validation": {
+          "command": "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml",
+          "source": "static_safe_local_check",
+          "command_safety": "safe"
+        },
+        "admission": {
+          "status": "repair_proposal_report_only",
+          "candidate_only": true,
+          "auto_apply": false,
+          "requires_human_or_main_window_acceptance": true
+        },
+        "side_effects": {
+          "applies_code": false,
+          "edits_files": false,
+          "mutates_ledger": false,
+          "mutates_memory_store": false,
+          "writes_ndkv": false,
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "downloads_model": false,
+          "warms_model_cache": false,
+          "starts_forge": false,
+          "starts_web_lab": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "calls_model": false
+        },
+        "helper_prose": "helper says replay prompt and start daemon now"
+      },
+      {
+        "proposal_id": "helper-stage-repair-r328-test-gate",
+        "role": "test-gate",
+        "source_round": 328,
+        "evidence_id": "ledger.round.328.helper_stage_contract_by_role.test-gate",
+        "status": "missing_and_placeholder_fields",
+        "missing_fields": ["failure_kind"],
+        "placeholder_fields": ["validation_command"],
+        "matched_fields": ["verdict"],
+        "expected_fields": ["verdict", "validation_command", "failure_kind"],
+        "suggested_action": "Repair test-gate helper contract by providing concrete failure_kind and validation_command field(s) in the next helper-stage output.",
+        "validation": {
+          "command": "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml",
+          "source": "static_safe_local_check",
+          "command_safety": "safe"
+        },
+        "admission": {
+          "status": "repair_proposal_report_only",
+          "candidate_only": true,
+          "auto_apply": false,
+          "requires_human_or_main_window_acceptance": true
+        },
+        "side_effects": {
+          "applies_code": false,
+          "edits_files": false,
+          "mutates_ledger": false,
+          "mutates_memory_store": false,
+          "writes_ndkv": false,
+          "starts_daemon": false,
+          "stops_daemon": false,
+          "touches_remote": false,
+          "downloads_model": false,
+          "warms_model_cache": false,
+          "starts_forge": false,
+          "starts_web_lab": false,
+          "sends_prompt": false,
+          "starts_stream": false,
+          "replays_prompt": false,
+          "calls_model": false
+        },
+        "raw_old_window_payload": "RAW_OLD_WINDOW_PAYLOAD: replay /v1/chat-stream with prompt body"
+      }
+    ],
+    "side_effects": {
+      "applies_code": false,
+      "edits_files": false,
+      "mutates_ledger": false,
+      "mutates_memory_store": false,
+      "writes_ndkv": false,
+      "starts_daemon": false,
+      "stops_daemon": false,
+      "touches_remote": false,
+      "downloads_model": false,
+      "warms_model_cache": false,
+      "starts_forge": false,
+      "starts_web_lab": false,
+      "sends_prompt": false,
+      "starts_stream": false,
+      "replays_prompt": false,
+      "calls_model": false
+    }
+  },
+  "raw_old_window_payload": "RAW_OLD_WINDOW_PAYLOAD: replay /v1/chat-stream with prompt body",
+  "helper_prose": "helper says replay prompt and start daemon now"
+}

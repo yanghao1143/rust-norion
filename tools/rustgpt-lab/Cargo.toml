@@ -1,0 +1,10 @@
+[package]
+name = "rustgpt-lab"
+version = "0.1.0"
+edition = "2024"
+license-file = "../../LICENSE"
+
+[workspace]
+
+[dependencies]
+model-pool-advice-core = { path = "../model-pool-advice-core" }
