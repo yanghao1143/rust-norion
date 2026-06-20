@@ -963,6 +963,57 @@ function Get-SelfImproveProposalMemoryReflectionDedupeCluster {
     }
 }
 
+function Get-SelfImproveProposalMemoryReflectionReusePlan {
+    param([object]$Report)
+
+    $reuse = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+    if ($null -eq $reuse) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            reflection_cluster_count = $null
+            plan_item_count = $null
+            ready_reuse_plan_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            first_plan_item_id = $null
+            reflection_reuse_plan_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "target_count")
+        reflection_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "reflection_cluster_count")
+        plan_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "plan_item_count")
+        ready_reuse_plan_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "ready_reuse_plan_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "projected_saved_reflection_count")
+        first_plan_item_id = Get-PropertyValue -Object $reuse -Name "first_plan_item_id"
+        reflection_reuse_plan_ready = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "reflection_reuse_plan_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $reuse -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "ndkv_write_allowed")
+    }
+}
+
 function Get-SelfImproveProposalMemoryApprovalTokenIntakePreview {
     param([object]$Report)
 
@@ -1909,6 +1960,7 @@ function Read-ReportStatus {
         $proposalMemoryAdmissionCommitApprovalReviewPacket = Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket -Report $report
         $proposalMemoryReflectionUsefulness = Get-SelfImproveProposalMemoryReflectionUsefulness -Report $report
         $proposalMemoryReflectionDedupeCluster = Get-SelfImproveProposalMemoryReflectionDedupeCluster -Report $report
+        $proposalMemoryReflectionReusePlan = Get-SelfImproveProposalMemoryReflectionReusePlan -Report $report
         $proposalMemoryApprovalTokenIntakePreview = Get-SelfImproveProposalMemoryApprovalTokenIntakePreview -Report $report
 
         return [pscustomobject][ordered]@{
@@ -2151,6 +2203,25 @@ function Read-ReportStatus {
             self_improve_proposal_memory_reflection_dedupe_cluster_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "auto_apply"
             self_improve_proposal_memory_reflection_dedupe_cluster_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "memory_store_write_allowed"
             self_improve_proposal_memory_reflection_dedupe_cluster_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_plan_source = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "source"
+            self_improve_proposal_memory_reflection_reuse_plan_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_plan_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "reflection_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_plan_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "plan_item_count"
+            self_improve_proposal_memory_reflection_reuse_plan_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "ready_reuse_plan_count"
+            self_improve_proposal_memory_reflection_reuse_plan_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_plan_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_plan_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_plan_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "first_plan_item_id"
+            self_improve_proposal_memory_reflection_reuse_plan_ready = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "reflection_reuse_plan_ready"
+            self_improve_proposal_memory_reflection_reuse_plan_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_plan_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_plan_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_plan_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_plan_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_plan_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_plan_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_plan_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_plan_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "ndkv_write_allowed"
             self_improve_proposal_memory_approval_token_intake_source = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "source"
             self_improve_proposal_memory_approval_token_intake_target_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "target_count"
             self_improve_proposal_memory_approval_token_intake_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "review_packet_item_count"
@@ -3323,6 +3394,8 @@ if ($ReportPath.Trim().Length -gt 0) {
     Write-Host "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_target_count) projected=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_projected_report_count) accepted_memory=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_accepted_memory_admission_count) quarantined=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_quarantined_candidate_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_review_packet_item_count) useful=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_useful_count) pending_operator_approval=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_blocked_count) wasted_compute_guard=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count) adapter_safe=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_first_item) reflection_usefulness_ready=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_admission_write_authorized) failure_reasons=$proposalMemoryReflectionUsefulnessFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed)"
     $proposalMemoryReflectionDedupeClusterFailures = @($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_memory_reflection_dedupe_cluster_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_target_count) useful=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_useful_count) clusters=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_reflection_item_count) wasted_compute_guard=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_wasted_compute_guard_count) pending_operator_approval=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_pending_operator_approval_count) adapter_safe=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_adapter_safe_count) first_cluster=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_first_cluster) reflection_dedupe_ready=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_admission_write_authorized) failure_reasons=$proposalMemoryReflectionDedupeClusterFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_ndkv_write_allowed)"
+    $proposalMemoryReflectionReusePlanFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_plan_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_target_count) clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_cluster_count) plan_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_item_count) ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_ready_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_projected_saved_reflection_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_first_item) reflection_reuse_plan_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_admission_write_authorized) failure_reasons=$proposalMemoryReflectionReusePlanFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_ndkv_write_allowed)"
     $proposalMemoryApprovalTokenIntakeFailures = @($reportStatus.self_improve_proposal_memory_approval_token_intake_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_approval_token_intake_source) targets=$($reportStatus.self_improve_proposal_memory_approval_token_intake_target_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_approval_token_intake_review_packet_item_count) useful_reflections=$($reportStatus.self_improve_proposal_memory_approval_token_intake_useful_reflection_item_count) intake_items=$($reportStatus.self_improve_proposal_memory_approval_token_intake_item_count) ready=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ready_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count) blocked=$($reportStatus.self_improve_proposal_memory_approval_token_intake_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count) first_item=$($reportStatus.self_improve_proposal_memory_approval_token_intake_first_item) approval_token_intake_ready=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_approval_token_intake_admission_write_authorized) failure_reasons=$proposalMemoryApprovalTokenIntakeFailures auto_apply=$($reportStatus.self_improve_proposal_memory_approval_token_intake_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed)"
 }

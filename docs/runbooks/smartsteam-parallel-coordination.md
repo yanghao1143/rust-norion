@@ -4367,6 +4367,35 @@ System-error replacements:
   commit_allowed=false admission_write_authorized=false auto_apply=false
   memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
   checks confirmed the new report's write-safety flags remain false.
+- R87 main-window memory reflection reuse plan report on 2026-06-20: added the
+  next report-only layer after R86 dedupe clusters. The new
+  `SelfImproveProposalMemoryReflectionReusePlanReport` converts dedupe cluster
+  evidence into explicit reuse-plan items with representative proposal ids,
+  duplicate proposal ids, approval-review packet ids, evidence ids, planned
+  reuse actions, duplicate reflection counts, and projected saved reflection
+  counts. This is a planning surface only: it does not execute prompt skipping,
+  call a model, consume approval tokens, grant commit authority, mutate memory,
+  or write `.ndkv`. `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_reflection_reuse_plan_report_v1`, adds prompt
+  context `self_improve_memory_reflection_reuse_plan=...`, emits
+  `next_self_improve_should_reuse_memory_reflection_plan:true` only when the
+  projected saved reflection count is positive, and exposes the same data
+  through status `-JsonStatus` and human-readable status output. The report
+  remains candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `auto_apply=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Validation passed with focused R87 tests, full `crates/norion-eval` tests
+  (`385` passed), full `tools/evolution-loop` tests (`414` passed),
+  PowerShell status parse plus `evolution_loop_status_selftest=PASS`, and
+  `git diff --check`. A report-only refresh to
+  `target\evolution\daemon\report-r87-memory-reflection-reuse-plan.json` from
+  the local ledger showed the new report with `targets=0 clusters=0
+  plan_items=0 ready=0 projected_saved_reflections=0
+  reflection_reuse_plan_ready=false commit_allowed=false
+  admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the reuse-plan report remains read-only, report-only,
+  candidate-only, and write-disabled.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT
