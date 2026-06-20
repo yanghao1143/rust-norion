@@ -1176,9 +1176,120 @@ pub struct MemorySubmissionSummaryHistoryRecord {
 #[derive(Debug, Clone, Default)]
 pub struct MemorySubmissionSummaryHistoryRecorder;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryNoteQualityDecisionKind {
+    Admit,
+    RejectEmptyTopic,
+    RejectEmptyContent,
+    RejectDuplicate,
+}
+
+impl MemoryNoteQualityDecisionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Admit => "admit",
+            Self::RejectEmptyTopic => "reject_empty_topic",
+            Self::RejectEmptyContent => "reject_empty_content",
+            Self::RejectDuplicate => "reject_duplicate",
+        }
+    }
+
+    pub fn accepted(self) -> bool {
+        self == Self::Admit
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryNoteQualityDecision {
+    pub index: usize,
+    pub topic: String,
+    pub kind: MemoryNoteQualityDecisionKind,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryNoteQualityReport {
+    pub decisions: Vec<MemoryNoteQualityDecision>,
+    pub admitted_notes: usize,
+    pub rejected_notes: usize,
+    pub telemetry: Vec<String>,
+}
+
+impl MemoryNoteQualityReport {
+    pub fn from_notes(notes: &[MemoryNote]) -> Self {
+        let mut decisions = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut admitted_notes = 0usize;
+
+        for (index, note) in notes.iter().enumerate() {
+            let topic = normalized_note_field(&note.topic);
+            let content = normalized_note_field(&note.content);
+            let fingerprint = format!(
+                "{}\n{}",
+                topic.to_ascii_lowercase(),
+                content.to_ascii_lowercase()
+            );
+            let (kind, reasons) = if topic.is_empty() {
+                (
+                    MemoryNoteQualityDecisionKind::RejectEmptyTopic,
+                    vec![format!("memory_note_quality_empty_topic index={index}")],
+                )
+            } else if content.is_empty() {
+                (
+                    MemoryNoteQualityDecisionKind::RejectEmptyContent,
+                    vec![format!("memory_note_quality_empty_content index={index}")],
+                )
+            } else if !seen.insert(fingerprint) {
+                (
+                    MemoryNoteQualityDecisionKind::RejectDuplicate,
+                    vec![format!("memory_note_quality_duplicate index={index}")],
+                )
+            } else {
+                admitted_notes = admitted_notes.saturating_add(1);
+                (
+                    MemoryNoteQualityDecisionKind::Admit,
+                    vec![format!("memory_note_quality_admitted index={index}")],
+                )
+            };
+
+            decisions.push(MemoryNoteQualityDecision {
+                index,
+                topic,
+                kind,
+                reasons,
+            });
+        }
+
+        let rejected_notes = decisions
+            .iter()
+            .filter(|decision| !decision.kind.accepted())
+            .count();
+        let telemetry =
+            memory_note_quality_report_telemetry(notes.len(), admitted_notes, rejected_notes);
+
+        Self {
+            decisions,
+            admitted_notes,
+            rejected_notes,
+            telemetry,
+        }
+    }
+
+    pub fn rejection_reasons(&self) -> Vec<String> {
+        self.decisions
+            .iter()
+            .filter(|decision| !decision.kind.accepted())
+            .flat_map(|decision| decision.reasons.iter().cloned())
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryPromotionGateDecision {
     pub candidate_notes: usize,
+    pub admitted_candidate_notes: usize,
+    pub rejected_candidate_notes: usize,
+    pub note_quality: MemoryNoteQualityReport,
     pub reflection_gate: ReflectionLoopHistoryGateDecision,
     pub aggregation_conflict_gate: AggregationConflictReviewTrendGateDecision,
     pub memory_health: MemorySubmissionHealth,
@@ -1483,9 +1594,21 @@ impl MemoryPromotionGate {
         memory_health: &MemorySubmissionHealth,
     ) -> MemoryPromotionGateDecision {
         let mut reasons = Vec::new();
+        let note_quality = MemoryNoteQualityReport::from_notes(candidate_notes);
 
         if candidate_notes.is_empty() {
             reasons.push("memory_promotion_no_candidate_notes".to_owned());
+        }
+        if !candidate_notes.is_empty() && note_quality.admitted_notes == 0 {
+            reasons.push("memory_promotion_no_admitted_candidate_notes".to_owned());
+            extend_memory_ordered_unique(
+                &mut reasons,
+                note_quality
+                    .rejection_reasons()
+                    .into_iter()
+                    .map(|reason| format!("memory_promotion_note_quality:{reason}"))
+                    .collect(),
+            );
         }
 
         if !reflection_gate.is_memory_promotable() {
@@ -1524,7 +1647,7 @@ impl MemoryPromotionGate {
         let requires_repair_first = reflection_gate.requires_repair_first
             || aggregation_conflict_gate.requires_repair_first
             || memory_health.requires_repair_first();
-        let can_promote_memory_note = !candidate_notes.is_empty()
+        let can_promote_memory_note = note_quality.admitted_notes > 0
             && reflection_gate.is_memory_promotable()
             && aggregation_conflict_gate.is_side_effect_safe()
             && memory_health.is_stable()
@@ -1543,6 +1666,8 @@ impl MemoryPromotionGate {
         ));
         let telemetry = memory_promotion_gate_telemetry(
             candidate_notes.len(),
+            note_quality.admitted_notes,
+            note_quality.rejected_notes,
             can_promote_memory_note,
             can_submit_memory,
             requires_repair_first,
@@ -1553,6 +1678,9 @@ impl MemoryPromotionGate {
 
         MemoryPromotionGateDecision {
             candidate_notes: candidate_notes.len(),
+            admitted_candidate_notes: note_quality.admitted_notes,
+            rejected_candidate_notes: note_quality.rejected_notes,
+            note_quality,
             reflection_gate: reflection_gate.clone(),
             aggregation_conflict_gate: aggregation_conflict_gate.clone(),
             memory_health: memory_health.clone(),
@@ -1880,11 +2008,28 @@ fn join_codes(codes: Vec<String>) -> String {
     }
 }
 
+fn normalized_note_field(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn hex_id(id: &str) -> String {
     id.as_bytes()
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>()
+}
+
+fn memory_note_quality_report_telemetry(
+    candidate_notes: usize,
+    admitted_notes: usize,
+    rejected_notes: usize,
+) -> Vec<String> {
+    vec![
+        "agent_memory_note_quality=true".to_owned(),
+        format!("agent_memory_note_quality_candidate_notes={candidate_notes}"),
+        format!("agent_memory_note_quality_admitted_notes={admitted_notes}"),
+        format!("agent_memory_note_quality_rejected_notes={rejected_notes}"),
+    ]
 }
 
 fn memory_submission_summary_telemetry(
@@ -2045,6 +2190,8 @@ fn memory_promotion_gate_repair_tasks(
 
 fn memory_promotion_gate_telemetry(
     candidate_notes: usize,
+    admitted_candidate_notes: usize,
+    rejected_candidate_notes: usize,
     can_promote_memory_note: bool,
     can_submit_memory: bool,
     requires_repair_first: bool,
@@ -2055,6 +2202,8 @@ fn memory_promotion_gate_telemetry(
     vec![
         "agent_memory_promotion_gate=true".to_owned(),
         format!("agent_memory_promotion_gate_candidate_notes={candidate_notes}"),
+        format!("agent_memory_promotion_gate_admitted_candidate_notes={admitted_candidate_notes}"),
+        format!("agent_memory_promotion_gate_rejected_candidate_notes={rejected_candidate_notes}"),
         format!("agent_memory_promotion_gate_promote={can_promote_memory_note}"),
         format!("agent_memory_promotion_gate_submit={can_submit_memory}"),
         format!("agent_memory_promotion_gate_requires_repair_first={requires_repair_first}"),
@@ -3090,6 +3239,129 @@ mod tests {
             gate.telemetry
                 .iter()
                 .any(|line| line == "agent_memory_promotion_gate_promote=true")
+        );
+    }
+
+    #[test]
+    fn memory_note_quality_rejects_empty_and_duplicate_candidates() {
+        let notes = vec![
+            MemoryNote::new("agent_cycle", "remember budget isolation"),
+            MemoryNote::new("  ", "missing topic"),
+            MemoryNote::new("agent_cycle", "   "),
+            MemoryNote::new(" agent_cycle ", "remember   budget isolation"),
+        ];
+
+        let report = MemoryNoteQualityReport::from_notes(&notes);
+
+        assert_eq!(report.admitted_notes, 1);
+        assert_eq!(report.rejected_notes, 3);
+        assert_eq!(
+            report
+                .decisions
+                .iter()
+                .map(|decision| decision.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                MemoryNoteQualityDecisionKind::Admit,
+                MemoryNoteQualityDecisionKind::RejectEmptyTopic,
+                MemoryNoteQualityDecisionKind::RejectEmptyContent,
+                MemoryNoteQualityDecisionKind::RejectDuplicate,
+            ]
+        );
+        assert_eq!(
+            report.rejection_reasons(),
+            vec![
+                "memory_note_quality_empty_topic index=1".to_owned(),
+                "memory_note_quality_empty_content index=2".to_owned(),
+                "memory_note_quality_duplicate index=3".to_owned(),
+            ]
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_note_quality_rejected_notes=3")
+        );
+    }
+
+    #[test]
+    fn memory_promotion_gate_filters_bad_notes_before_submission() {
+        let reflection_gate = stable_reflection_gate();
+        let review_gate = review_trend_gate(vec![AgentMessage::new(
+            "m1",
+            AgentRole::Researcher,
+            AgentMessageKind::Finding,
+            "memory",
+            "remember the clean handoff",
+        )]);
+        let memory_health = stable_memory_submission_health();
+        let notes = vec![
+            MemoryNote::new("agent_cycle", "remember clean handoff"),
+            MemoryNote::new("", "missing topic"),
+            MemoryNote::new("agent_cycle", "remember   clean   handoff"),
+        ];
+
+        let gate =
+            MemoryPromotionGate::new().gate(&notes, &reflection_gate, &review_gate, &memory_health);
+
+        assert_eq!(gate.candidate_notes, 3);
+        assert_eq!(gate.admitted_candidate_notes, 1);
+        assert_eq!(gate.rejected_candidate_notes, 2);
+        assert!(gate.can_promote_memory_note);
+        assert!(gate.can_submit_memory);
+        assert!(!gate.requires_repair_first);
+        assert!(gate.reasons.is_empty());
+        assert_eq!(
+            gate.note_quality.rejection_reasons(),
+            vec![
+                "memory_note_quality_empty_topic index=1",
+                "memory_note_quality_duplicate index=2",
+            ]
+        );
+        assert!(
+            gate.telemetry
+                .iter()
+                .any(|line| { line == "agent_memory_promotion_gate_admitted_candidate_notes=1" })
+        );
+        assert!(
+            gate.telemetry
+                .iter()
+                .any(|line| { line == "agent_memory_promotion_gate_rejected_candidate_notes=2" })
+        );
+    }
+
+    #[test]
+    fn memory_promotion_gate_blocks_when_all_candidate_notes_fail_quality() {
+        let reflection_gate = stable_reflection_gate();
+        let review_gate = review_trend_gate(vec![AgentMessage::new(
+            "m1",
+            AgentRole::Researcher,
+            AgentMessageKind::Finding,
+            "memory",
+            "reject empty memory notes",
+        )]);
+        let memory_health = stable_memory_submission_health();
+        let notes = vec![
+            MemoryNote::new("", "missing topic"),
+            MemoryNote::new("agent_cycle", "   "),
+        ];
+
+        let gate =
+            MemoryPromotionGate::new().gate(&notes, &reflection_gate, &review_gate, &memory_health);
+
+        assert_eq!(gate.candidate_notes, 2);
+        assert_eq!(gate.admitted_candidate_notes, 0);
+        assert_eq!(gate.rejected_candidate_notes, 2);
+        assert!(!gate.can_promote_memory_note);
+        assert!(!gate.can_submit_memory);
+        assert!(!gate.requires_repair_first);
+        assert_eq!(
+            gate.reasons,
+            vec![
+                "memory_promotion_no_admitted_candidate_notes",
+                "memory_promotion_note_quality:memory_note_quality_empty_topic index=0",
+                "memory_promotion_note_quality:memory_note_quality_empty_content index=1",
+            ]
         );
     }
 

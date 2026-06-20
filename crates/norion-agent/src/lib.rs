@@ -585,6 +585,7 @@ pub use memory::{
     AgentRecallOutcomeAttributionAction, AgentRecallOutcomeAttributionPlanner,
     AgentRecallOutcomeAttributionPolicy, AgentRecallOutcomeAttributionReport,
     AgentWaveMemoryRecallPlan, AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter,
+    MemoryNoteQualityDecision, MemoryNoteQualityDecisionKind, MemoryNoteQualityReport,
     MemoryPromotionGate, MemoryPromotionGateDecision, MemoryRecallContext,
     MemoryRecallContextPlanner, MemoryRecallDecision, MemoryRecallDecisionKind,
     MemoryRecallDryRunEvidence, MemoryRecallItem, MemoryRecallPolicy, MemorySubmissionDashboard,
