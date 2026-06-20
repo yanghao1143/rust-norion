@@ -4531,6 +4531,22 @@ System-error replacements:
   `reflection_reuse_execution_authorized=false`,
   `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
   `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R94 memory reflection reuse lookup approval token decision record preview on
+  2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1`
+  layer after the R93 token-intake decision preview. The preview records that
+  approval/rejection tokens are ready to be recorded as an explicit operator
+  token decision, but it does not select or consume either token and keeps
+  `approved_lookup_execution_count=0`. It does not perform memory lookup,
+  assume a lookup hit, skip model calls, authorize reflection reuse execution,
+  write memory, or write `.ndkv`. The report JSON, prompt, status, and legacy
+  replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
 
 ## Handoff rules
 
