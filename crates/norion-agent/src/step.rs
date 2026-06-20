@@ -14,7 +14,11 @@ use crate::execute::{AgentWaveExecution, AgentWaveExecutor};
 use crate::ledger::AgentCycleLedgerAdmissionStatus;
 use crate::ledger::{AgentCycleLedger, AgentCycleLedgerEntry, AgentCycleLedgerPolicy};
 use crate::loopback::{AgentLoopbackPlan, AgentLoopbackPlanner};
-use crate::memory::MemorySubmissionReport;
+use crate::memory::{
+    AgentMemoryReuseExecutionPreflightPlanner, AgentMemoryReuseExecutionPreflightPolicy,
+    AgentMemoryReuseExecutionPreflightReport, AgentWaveMemoryRecallPlan,
+    MemoryRecallDryRunEvidence, MemorySubmissionReport,
+};
 use crate::ports::EnginePort;
 use crate::service::{
     AgentServiceCommandPlanner, AgentServiceCommandReceipt, AgentServiceExecutionReport,
@@ -597,6 +601,95 @@ impl AgentClosedLoopPreparedDispatch {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopPreparedMemoryReusePreflight {
+    pub prepared_dispatch: AgentClosedLoopPreparedDispatch,
+    pub preflight: Option<AgentMemoryReuseExecutionPreflightReport>,
+    pub skipped_reasons: Vec<String>,
+}
+
+impl AgentClosedLoopPreparedMemoryReusePreflight {
+    pub fn has_preflight(&self) -> bool {
+        self.preflight.is_some()
+    }
+
+    pub fn can_enter_execution(&self) -> bool {
+        self.preflight
+            .as_ref()
+            .is_some_and(|preflight| preflight.can_enter_execution)
+            && self.skipped_reasons.is_empty()
+    }
+
+    pub fn requires_repair_first(&self) -> bool {
+        !self.skipped_reasons.is_empty()
+            || self
+                .preflight
+                .as_ref()
+                .is_some_and(|preflight| preflight.requires_repair_first)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentClosedLoopPreparedMemoryReusePreflightPlanner {
+    preflight_planner: AgentMemoryReuseExecutionPreflightPlanner,
+}
+
+impl Default for AgentClosedLoopPreparedMemoryReusePreflightPlanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AgentClosedLoopPreparedMemoryReusePreflightPlanner {
+    pub fn new() -> Self {
+        Self {
+            preflight_planner: AgentMemoryReuseExecutionPreflightPlanner::new(),
+        }
+    }
+
+    pub fn with_policy(policy: AgentMemoryReuseExecutionPreflightPolicy) -> Self {
+        Self {
+            preflight_planner: AgentMemoryReuseExecutionPreflightPlanner::new().with_policy(policy),
+        }
+    }
+
+    pub fn plan(
+        &self,
+        prepared_dispatch: AgentClosedLoopPreparedDispatch,
+        recall_plan: &AgentWaveMemoryRecallPlan,
+        dry_run_evidence: &[MemoryRecallDryRunEvidence],
+    ) -> AgentClosedLoopPreparedMemoryReusePreflight {
+        if !prepared_dispatch.can_dispatch() {
+            let skipped_reasons = if prepared_dispatch.skipped_reasons.is_empty() {
+                vec!["prepared_dispatch_not_executable".to_owned()]
+            } else {
+                prepared_dispatch.skipped_reasons.clone()
+            };
+            return AgentClosedLoopPreparedMemoryReusePreflight {
+                prepared_dispatch,
+                preflight: None,
+                skipped_reasons,
+            };
+        }
+
+        let preflight = prepared_dispatch.dispatch.as_ref().map(|dispatch| {
+            self.preflight_planner
+                .plan_for_dispatch(dispatch, recall_plan, dry_run_evidence)
+        });
+        let skipped_reasons = preflight
+            .as_ref()
+            .filter(|preflight| !preflight.can_enter_execution)
+            .map(|preflight| preflight.blocked_reasons.clone())
+            .unwrap_or_default();
+
+        AgentClosedLoopPreparedMemoryReusePreflight {
+            prepared_dispatch,
+            preflight,
+            skipped_reasons,
+        }
     }
 }
 
@@ -1789,6 +1882,90 @@ mod tests {
                 .reason
                 .contains("insufficient budget")
         );
+    }
+
+    #[test]
+    fn closed_loop_prepared_memory_reuse_preflight_reports_sidecar_without_engine_call() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let turn_plan = history.next_turn_plan(
+            next_queue(),
+            AgentClosedLoopExecutionHealthPolicy::default(),
+        );
+        let budget = BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(8, 1, 1));
+        let prepared_dispatch = AgentClosedLoopDispatchPreparer::new().prepare(
+            turn_plan,
+            &BTreeSet::new(),
+            budget,
+            &BudgetPolicy::strict(),
+            2,
+        );
+        let task = prepared_dispatch.dispatch.as_ref().unwrap().assigned_tasks[0].clone();
+        let evidence = MemoryRecallDryRunEvidence {
+            source: "norion_memory_reuse_dry_run".to_owned(),
+            read_only: true,
+            candidate_count: 2,
+            long_term_match_count: 2,
+            context_decision_count: 2,
+            accepted_context_count: 1,
+            rejected_context_count: 1,
+            used_tokens: 72,
+            requested_kv_count: 3,
+            kv_promote_count: 1,
+            kv_missing_count: 1,
+            kv_already_hot_count: 1,
+            kv_duplicate_count: 0,
+            kv_backend_available: true,
+            memory_store_write_allowed: false,
+            kv_prefetch_apply_allowed: false,
+            reason_codes: vec!["read_only".to_owned(), "context_accepted".to_owned()],
+            detail_codes: vec!["kv_prefetch:promote:6e657874".to_owned()],
+        };
+        let recall_context = crate::memory::MemoryRecallContextPlanner::new()
+            .plan_from_dry_run_evidence(&task, &evidence);
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![recall_context],
+            telemetry: Vec::new(),
+        };
+        let engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+
+        let prepared_preflight = AgentClosedLoopPreparedMemoryReusePreflightPlanner::new().plan(
+            prepared_dispatch,
+            &recall_plan,
+            &[evidence],
+        );
+
+        assert_eq!(engine.calls, 0);
+        assert!(prepared_preflight.has_preflight());
+        assert!(prepared_preflight.can_enter_execution());
+        assert!(!prepared_preflight.requires_repair_first());
+        assert!(prepared_preflight.skipped_reasons.is_empty());
+        let report = prepared_preflight.preflight.unwrap();
+        assert!(report.read_only);
+        assert!(report.memory_reuse_ready);
+        assert!(report.can_enter_execution);
+        assert!(!report.prompt_injection_allowed);
+        assert!(!report.engine_port_touched);
+        assert!(!report.memory_store_write_allowed);
+        assert!(!report.kv_prefetch_apply_allowed);
+        assert_eq!(report.task_ids, vec!["next-turn"]);
+        assert_eq!(report.recall_task_ids, vec!["next-turn"]);
+        assert_eq!(report.dry_run_evidence_count, 1);
+        assert_eq!(report.kv_requested_count, 3);
+        assert!(report.blocked_reasons.is_empty());
     }
 
     #[test]

@@ -533,6 +533,303 @@ impl AgentWaveMemoryRecallPlanner {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AgentMemoryReuseExecutionPreflightPolicy {
+    pub require_recall_for_each_task: bool,
+    pub require_dry_run_evidence: bool,
+    pub block_on_recall_failure: bool,
+}
+
+impl Default for AgentMemoryReuseExecutionPreflightPolicy {
+    fn default() -> Self {
+        Self {
+            require_recall_for_each_task: true,
+            require_dry_run_evidence: true,
+            block_on_recall_failure: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryReuseExecutionPreflightReport {
+    pub task_ids: Vec<String>,
+    pub recall_task_ids: Vec<String>,
+    pub missing_recall_task_ids: Vec<String>,
+    pub unexpected_recall_task_ids: Vec<String>,
+    pub failed_recall_task_ids: Vec<String>,
+    pub dry_run_evidence_sources: Vec<String>,
+    pub unsafe_dry_run_sources: Vec<String>,
+    pub read_only: bool,
+    pub memory_reuse_ready: bool,
+    pub can_enter_execution: bool,
+    pub requires_repair_first: bool,
+    pub prompt_injection_allowed: bool,
+    pub engine_port_touched: bool,
+    pub memory_store_write_allowed: bool,
+    pub kv_prefetch_apply_allowed: bool,
+    pub accepted_recall_count: usize,
+    pub rejected_recall_count: usize,
+    pub dry_run_evidence_count: usize,
+    pub kv_requested_count: usize,
+    pub kv_promote_count: usize,
+    pub kv_missing_count: usize,
+    pub kv_already_hot_count: usize,
+    pub kv_duplicate_count: usize,
+    pub blocked_reasons: Vec<String>,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentMemoryReuseExecutionPreflightReport {
+    pub fn is_clean(&self) -> bool {
+        !self.requires_repair_first && self.blocked_reasons.is_empty()
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        let mut codes = BTreeSet::new();
+        codes.insert("read_only".to_owned());
+        if self.memory_reuse_ready {
+            codes.insert("memory_reuse_ready".to_owned());
+        }
+        if self.can_enter_execution {
+            codes.insert("can_enter_execution".to_owned());
+        }
+        if self.requires_repair_first {
+            codes.insert("requires_repair_first".to_owned());
+        }
+        if !self.missing_recall_task_ids.is_empty() {
+            codes.insert("missing_recall_tasks".to_owned());
+        }
+        if !self.unexpected_recall_task_ids.is_empty() {
+            codes.insert("unexpected_recall_tasks".to_owned());
+        }
+        if !self.failed_recall_task_ids.is_empty() {
+            codes.insert("failed_recall_tasks".to_owned());
+        }
+        if !self.unsafe_dry_run_sources.is_empty() {
+            codes.insert("unsafe_dry_run_sources".to_owned());
+        }
+        if self.kv_requested_count > 0 {
+            codes.insert("kv_prefetch_planned".to_owned());
+        }
+        codes.extend(self.blocked_reasons.iter().cloned());
+        codes.into_iter().collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "agent_memory_reuse_execution_preflight read_only={} tasks={} recall_contexts={} dry_run_evidence={} memory_reuse_ready={} can_enter_execution={} requires_repair_first={} prompt_injection_allowed={} engine_port_touched={} memory_store_write_allowed={} kv_prefetch_apply_allowed={} accepted_recall={} rejected_recall={} kv_requested={} kv_promote={} kv_missing={} reason_codes={}",
+            self.read_only,
+            self.task_ids.len(),
+            self.recall_task_ids.len(),
+            self.dry_run_evidence_count,
+            self.memory_reuse_ready,
+            self.can_enter_execution,
+            self.requires_repair_first,
+            self.prompt_injection_allowed,
+            self.engine_port_touched,
+            self.memory_store_write_allowed,
+            self.kv_prefetch_apply_allowed,
+            self.accepted_recall_count,
+            self.rejected_recall_count,
+            self.kv_requested_count,
+            self.kv_promote_count,
+            self.kv_missing_count,
+            join_codes(self.reason_codes()),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryReuseExecutionPreflightPlanner {
+    pub policy: AgentMemoryReuseExecutionPreflightPolicy,
+}
+
+impl Default for AgentMemoryReuseExecutionPreflightPlanner {
+    fn default() -> Self {
+        Self {
+            policy: AgentMemoryReuseExecutionPreflightPolicy::default(),
+        }
+    }
+}
+
+impl AgentMemoryReuseExecutionPreflightPlanner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_policy(mut self, policy: AgentMemoryReuseExecutionPreflightPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn plan_for_dispatch(
+        &self,
+        dispatch: &AgentCycleDispatch,
+        recall_plan: &AgentWaveMemoryRecallPlan,
+        dry_run_evidence: &[MemoryRecallDryRunEvidence],
+    ) -> AgentMemoryReuseExecutionPreflightReport {
+        let task_ids = dispatch
+            .assigned_tasks
+            .iter()
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+        let task_id_set = task_ids.iter().cloned().collect::<BTreeSet<_>>();
+        let recall_task_ids = recall_plan
+            .contexts
+            .iter()
+            .map(|context| context.task_id.clone())
+            .collect::<Vec<_>>();
+        let recall_task_id_set = recall_task_ids.iter().cloned().collect::<BTreeSet<_>>();
+        let missing_recall_task_ids = if self.policy.require_recall_for_each_task {
+            task_id_set
+                .difference(&recall_task_id_set)
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let unexpected_recall_task_ids = recall_task_id_set
+            .difference(&task_id_set)
+            .cloned()
+            .collect::<Vec<_>>();
+        let failed_recall_task_ids = recall_plan
+            .contexts
+            .iter()
+            .filter(|context| context.failed())
+            .map(|context| context.task_id.clone())
+            .collect::<Vec<_>>();
+        let dry_run_evidence_sources = dry_run_evidence
+            .iter()
+            .map(|evidence| normalized_source(&evidence.source))
+            .collect::<Vec<_>>();
+        let unsafe_dry_run_sources = dry_run_evidence
+            .iter()
+            .filter(|evidence| !evidence.safe_for_recall_sidecar())
+            .map(|evidence| normalized_source(&evidence.source))
+            .collect::<Vec<_>>();
+        let evidence_requested_memory_store_write = dry_run_evidence
+            .iter()
+            .any(|evidence| evidence.memory_store_write_allowed);
+        let evidence_requested_kv_prefetch_apply = dry_run_evidence
+            .iter()
+            .any(|evidence| evidence.kv_prefetch_apply_allowed);
+        let read_only = recall_plan.read_only()
+            && dry_run_evidence.iter().all(|evidence| evidence.read_only)
+            && !evidence_requested_memory_store_write
+            && !evidence_requested_kv_prefetch_apply;
+        let accepted_recall_count = recall_plan.accepted_count();
+        let rejected_recall_count = recall_plan.rejected_count();
+        let dry_run_evidence_count = dry_run_evidence.len();
+        let kv_requested_count = dry_run_evidence
+            .iter()
+            .map(|evidence| evidence.requested_kv_count)
+            .sum::<usize>();
+        let kv_promote_count = dry_run_evidence
+            .iter()
+            .map(|evidence| evidence.kv_promote_count)
+            .sum::<usize>();
+        let kv_missing_count = dry_run_evidence
+            .iter()
+            .map(|evidence| evidence.kv_missing_count)
+            .sum::<usize>();
+        let kv_already_hot_count = dry_run_evidence
+            .iter()
+            .map(|evidence| evidence.kv_already_hot_count)
+            .sum::<usize>();
+        let kv_duplicate_count = dry_run_evidence
+            .iter()
+            .map(|evidence| evidence.kv_duplicate_count)
+            .sum::<usize>();
+
+        let mut blocked_reasons = Vec::new();
+        if task_ids.is_empty() {
+            blocked_reasons.push("dispatch_empty".to_owned());
+        }
+        if !read_only {
+            blocked_reasons.push("memory_reuse_preflight_not_read_only".to_owned());
+        }
+        if self.policy.require_dry_run_evidence && dry_run_evidence.is_empty() {
+            blocked_reasons.push("memory_reuse_dry_run_evidence_missing".to_owned());
+        }
+        if evidence_requested_memory_store_write {
+            blocked_reasons.push("memory_store_write_allowed".to_owned());
+        }
+        if evidence_requested_kv_prefetch_apply {
+            blocked_reasons.push("kv_prefetch_apply_allowed".to_owned());
+        }
+        blocked_reasons.extend(
+            missing_recall_task_ids
+                .iter()
+                .map(|id| format!("memory_reuse_recall_missing_task={id}")),
+        );
+        blocked_reasons.extend(
+            unexpected_recall_task_ids
+                .iter()
+                .map(|id| format!("memory_reuse_recall_unexpected_task={id}")),
+        );
+        if self.policy.block_on_recall_failure {
+            blocked_reasons.extend(
+                failed_recall_task_ids
+                    .iter()
+                    .map(|id| format!("memory_reuse_recall_failed_task={id}")),
+            );
+        }
+        blocked_reasons.extend(
+            unsafe_dry_run_sources
+                .iter()
+                .map(|source| format!("memory_reuse_dry_run_unsafe_source={source}")),
+        );
+
+        let requires_repair_first = !blocked_reasons.is_empty();
+        let memory_reuse_ready = !requires_repair_first
+            && read_only
+            && (!self.policy.require_dry_run_evidence || dry_run_evidence_count > 0)
+            && (accepted_recall_count > 0 || dry_run_evidence_count > 0);
+        let can_enter_execution = !requires_repair_first && !task_ids.is_empty();
+        let telemetry = memory_reuse_execution_preflight_telemetry(
+            task_ids.len(),
+            recall_task_ids.len(),
+            dry_run_evidence_count,
+            memory_reuse_ready,
+            can_enter_execution,
+            requires_repair_first,
+            accepted_recall_count,
+            rejected_recall_count,
+            kv_requested_count,
+            kv_promote_count,
+            kv_missing_count,
+        );
+
+        AgentMemoryReuseExecutionPreflightReport {
+            task_ids,
+            recall_task_ids,
+            missing_recall_task_ids,
+            unexpected_recall_task_ids,
+            failed_recall_task_ids,
+            dry_run_evidence_sources,
+            unsafe_dry_run_sources,
+            read_only,
+            memory_reuse_ready,
+            can_enter_execution,
+            requires_repair_first,
+            prompt_injection_allowed: false,
+            engine_port_touched: false,
+            memory_store_write_allowed: false,
+            kv_prefetch_apply_allowed: false,
+            accepted_recall_count,
+            rejected_recall_count,
+            dry_run_evidence_count,
+            kv_requested_count,
+            kv_promote_count,
+            kv_missing_count,
+            kv_already_hot_count,
+            kv_duplicate_count,
+            blocked_reasons,
+            telemetry,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemorySubmissionReport {
     pub submitted: Vec<MemoryNote>,
@@ -1250,6 +1547,40 @@ fn memory_recall_dry_run_evidence_telemetry(
     ]
 }
 
+fn memory_reuse_execution_preflight_telemetry(
+    task_count: usize,
+    recall_context_count: usize,
+    dry_run_evidence_count: usize,
+    memory_reuse_ready: bool,
+    can_enter_execution: bool,
+    requires_repair_first: bool,
+    accepted_recall_count: usize,
+    rejected_recall_count: usize,
+    kv_requested_count: usize,
+    kv_promote_count: usize,
+    kv_missing_count: usize,
+) -> Vec<String> {
+    vec![
+        "agent_memory_reuse_execution_preflight=true".to_owned(),
+        "agent_memory_reuse_execution_preflight_read_only=true".to_owned(),
+        "agent_memory_reuse_execution_preflight_prompt_injection_allowed=false".to_owned(),
+        "agent_memory_reuse_execution_preflight_engine_port_touched=false".to_owned(),
+        format!("agent_memory_reuse_execution_preflight_tasks={task_count}"),
+        format!("agent_memory_reuse_execution_preflight_recall_contexts={recall_context_count}"),
+        format!("agent_memory_reuse_execution_preflight_dry_run_evidence={dry_run_evidence_count}"),
+        format!("agent_memory_reuse_execution_preflight_ready={memory_reuse_ready}"),
+        format!("agent_memory_reuse_execution_preflight_can_enter_execution={can_enter_execution}"),
+        format!(
+            "agent_memory_reuse_execution_preflight_requires_repair_first={requires_repair_first}"
+        ),
+        format!("agent_memory_reuse_execution_preflight_accepted_recall={accepted_recall_count}"),
+        format!("agent_memory_reuse_execution_preflight_rejected_recall={rejected_recall_count}"),
+        format!("agent_memory_reuse_execution_preflight_kv_requested={kv_requested_count}"),
+        format!("agent_memory_reuse_execution_preflight_kv_promote={kv_promote_count}"),
+        format!("agent_memory_reuse_execution_preflight_kv_missing={kv_missing_count}"),
+    ]
+}
+
 fn agent_wave_memory_recall_telemetry(contexts: &[MemoryRecallContext]) -> Vec<String> {
     let plan = AgentWaveMemoryRecallPlan {
         contexts: contexts.to_vec(),
@@ -1857,6 +2188,196 @@ mod tests {
                 .iter()
                 .any(|line| { line == "agent_memory_recall_dry_run_evidence_safe=false" })
         );
+    }
+
+    #[test]
+    fn memory_reuse_execution_preflight_allows_clean_read_only_bridge() {
+        let task = AgentTask::new(
+            "memory-coder",
+            AgentRole::Coder,
+            "execute after memory reuse preflight",
+            AgentBudget::new(8, 1, 1),
+        );
+        let dispatch = AgentCycleDispatch {
+            wave: AgentExecutionWave {
+                wave: 0,
+                task_ids: vec![task.id.clone()],
+                parallel_count: 1,
+            },
+            dispatch: TaskDispatchPlan {
+                assignments: vec![TaskAssignment {
+                    task_id: task.id.clone(),
+                    role: AgentRole::Coder,
+                    lane: "default".to_owned(),
+                    budget_reserved: AgentBudget::new(8, 1, 1),
+                }],
+                ..TaskDispatchPlan::default()
+            },
+            assigned_tasks: vec![task.clone()],
+            blocked_task_ids: Vec::new(),
+            remaining_queue: crate::task::AgentTaskQueue::new(),
+        };
+        let recall_context = MemoryRecallContextPlanner::new().plan_from_records(
+            &task,
+            "role:coder lane:default objective:execute after memory reuse preflight".to_owned(),
+            vec![MemoryRecord::new(
+                "lesson-1",
+                "safe runtime reuse lesson",
+                "long_term",
+            )],
+        );
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![recall_context],
+            telemetry: Vec::new(),
+        };
+        let evidence = MemoryRecallDryRunEvidence {
+            source: "norion_memory_reuse_dry_run".to_owned(),
+            read_only: true,
+            candidate_count: 2,
+            long_term_match_count: 2,
+            context_decision_count: 2,
+            accepted_context_count: 1,
+            rejected_context_count: 1,
+            used_tokens: 64,
+            requested_kv_count: 3,
+            kv_promote_count: 1,
+            kv_missing_count: 1,
+            kv_already_hot_count: 1,
+            kv_duplicate_count: 0,
+            kv_backend_available: true,
+            memory_store_write_allowed: false,
+            kv_prefetch_apply_allowed: false,
+            reason_codes: vec!["read_only".to_owned(), "context_accepted".to_owned()],
+            detail_codes: vec!["kv_prefetch:promote:636f6c64".to_owned()],
+        };
+
+        let report = AgentMemoryReuseExecutionPreflightPlanner::new().plan_for_dispatch(
+            &dispatch,
+            &recall_plan,
+            &[evidence],
+        );
+
+        assert!(report.read_only);
+        assert!(report.memory_reuse_ready);
+        assert!(report.can_enter_execution);
+        assert!(!report.requires_repair_first);
+        assert!(!report.prompt_injection_allowed);
+        assert!(!report.engine_port_touched);
+        assert!(!report.memory_store_write_allowed);
+        assert!(!report.kv_prefetch_apply_allowed);
+        assert_eq!(report.task_ids, vec!["memory-coder"]);
+        assert_eq!(report.recall_task_ids, vec!["memory-coder"]);
+        assert_eq!(report.accepted_recall_count, 1);
+        assert_eq!(report.rejected_recall_count, 0);
+        assert_eq!(report.dry_run_evidence_count, 1);
+        assert_eq!(report.kv_requested_count, 3);
+        assert_eq!(report.kv_promote_count, 1);
+        assert_eq!(report.kv_missing_count, 1);
+        assert!(report.blocked_reasons.is_empty());
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_reuse_execution_preflight_ready=true")
+        );
+        assert!(report.summary_line().contains("can_enter_execution=true"));
+    }
+
+    #[test]
+    fn memory_reuse_execution_preflight_blocks_mismatch_and_write_flags() {
+        let task = AgentTask::new(
+            "memory-coder",
+            AgentRole::Coder,
+            "execute after memory reuse preflight",
+            AgentBudget::new(8, 1, 1),
+        );
+        let dispatch = AgentCycleDispatch {
+            wave: AgentExecutionWave {
+                wave: 0,
+                task_ids: vec![task.id.clone()],
+                parallel_count: 1,
+            },
+            dispatch: TaskDispatchPlan::default(),
+            assigned_tasks: vec![task],
+            blocked_task_ids: Vec::new(),
+            remaining_queue: crate::task::AgentTaskQueue::new(),
+        };
+        let unexpected_task = AgentTask::new(
+            "other-task",
+            AgentRole::Reviewer,
+            "wrong sidecar task",
+            AgentBudget::new(4, 1, 1),
+        );
+        let recall_context = MemoryRecallContextPlanner::new().plan_from_records(
+            &unexpected_task,
+            "role:reviewer lane:default objective:wrong sidecar task".to_owned(),
+            vec![MemoryRecord::new(
+                "lesson-1",
+                "wrong task lesson",
+                "long_term",
+            )],
+        );
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![recall_context],
+            telemetry: Vec::new(),
+        };
+        let evidence = MemoryRecallDryRunEvidence {
+            source: "unsafe_dry_run".to_owned(),
+            read_only: true,
+            candidate_count: 1,
+            long_term_match_count: 1,
+            context_decision_count: 1,
+            accepted_context_count: 1,
+            rejected_context_count: 0,
+            used_tokens: 32,
+            requested_kv_count: 1,
+            kv_promote_count: 1,
+            kv_missing_count: 0,
+            kv_already_hot_count: 0,
+            kv_duplicate_count: 0,
+            kv_backend_available: true,
+            memory_store_write_allowed: true,
+            kv_prefetch_apply_allowed: true,
+            reason_codes: vec!["read_only".to_owned()],
+            detail_codes: Vec::new(),
+        };
+
+        let report = AgentMemoryReuseExecutionPreflightPlanner::new().plan_for_dispatch(
+            &dispatch,
+            &recall_plan,
+            &[evidence],
+        );
+
+        assert!(!report.read_only);
+        assert!(!report.memory_reuse_ready);
+        assert!(!report.can_enter_execution);
+        assert!(report.requires_repair_first);
+        assert!(!report.memory_store_write_allowed);
+        assert!(!report.kv_prefetch_apply_allowed);
+        assert_eq!(report.missing_recall_task_ids, vec!["memory-coder"]);
+        assert_eq!(report.unexpected_recall_task_ids, vec!["other-task"]);
+        assert_eq!(report.unsafe_dry_run_sources, vec!["unsafe_dry_run"]);
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"memory_reuse_recall_missing_task=memory-coder".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"memory_reuse_recall_unexpected_task=other-task".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"memory_store_write_allowed".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"kv_prefetch_apply_allowed".to_owned())
+        );
+        assert!(report.summary_line().contains("requires_repair_first=true"));
     }
 
     #[test]

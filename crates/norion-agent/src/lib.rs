@@ -580,13 +580,15 @@ pub use loopback::{
     AgentLoopbackPlanSummaryHistoryRecorder, AgentLoopbackPlanner,
 };
 pub use memory::{
-    AgentWaveMemoryRecallPlan, AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter,
-    MemoryPromotionGate, MemoryPromotionGateDecision, MemoryRecallContext,
-    MemoryRecallContextPlanner, MemoryRecallDecision, MemoryRecallDecisionKind,
-    MemoryRecallDryRunEvidence, MemoryRecallItem, MemoryRecallPolicy, MemorySubmissionDashboard,
-    MemorySubmissionFailure, MemorySubmissionGateDecision, MemorySubmissionHealth,
-    MemorySubmissionHealthPolicy, MemorySubmissionHealthStatus, MemorySubmissionReport,
-    MemorySubmissionSummary, MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
+    AgentMemoryReuseExecutionPreflightPlanner, AgentMemoryReuseExecutionPreflightPolicy,
+    AgentMemoryReuseExecutionPreflightReport, AgentWaveMemoryRecallPlan,
+    AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter, MemoryPromotionGate,
+    MemoryPromotionGateDecision, MemoryRecallContext, MemoryRecallContextPlanner,
+    MemoryRecallDecision, MemoryRecallDecisionKind, MemoryRecallDryRunEvidence, MemoryRecallItem,
+    MemoryRecallPolicy, MemorySubmissionDashboard, MemorySubmissionFailure,
+    MemorySubmissionGateDecision, MemorySubmissionHealth, MemorySubmissionHealthPolicy,
+    MemorySubmissionHealthStatus, MemorySubmissionReport, MemorySubmissionSummary,
+    MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
     MemorySubmissionSummaryHistoryRecorder,
 };
 pub use message::{AgentMessage, AgentMessageKind};
@@ -757,7 +759,9 @@ pub use step::{
     AgentClosedLoopExecutionReport, AgentClosedLoopExecutionSummary, AgentClosedLoopNextTurnMode,
     AgentClosedLoopNextTurnPlan, AgentClosedLoopNextTurnPlanner, AgentClosedLoopPreparedCycle,
     AgentClosedLoopPreparedCycleCloser, AgentClosedLoopPreparedDispatch,
-    AgentClosedLoopPreparedExecution, AgentClosedLoopPreparedExecutor, AgentClosedLoopStep,
+    AgentClosedLoopPreparedExecution, AgentClosedLoopPreparedExecutor,
+    AgentClosedLoopPreparedMemoryReusePreflight,
+    AgentClosedLoopPreparedMemoryReusePreflightPlanner, AgentClosedLoopStep,
     AgentClosedLoopStepInput, AgentClosedLoopStepper,
 };
 pub use task::{
