@@ -11560,10 +11560,15 @@ mod tests {
         let depleted = BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let ledger = BudgetLedger::new()
