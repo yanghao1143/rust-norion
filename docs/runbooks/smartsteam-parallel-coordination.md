@@ -4245,6 +4245,46 @@ System-error replacements:
   id, and rollback anchors. No daemon/model start-stop, SSH, download,
   model-cache warming, Forge/Web Lab start, prompt/stream/model call, live
   memory mutation, or `.ndkv` write was performed.
+- R84 main-window memory reflection usefulness report on 2026-06-20: added the
+  report-only reflection/usefulness layer after R83 approval review packets.
+  The new `SelfImproveProposalMemoryReflectionUsefulnessReport` combines
+  acceptance summary, action closure, and approval-review packet evidence to
+  classify memory candidates as accepted/quarantined/blocked, expose pending
+  operator approval, count useful reflection items, count wasted-compute guards,
+  and confirm adapter safety without granting any write authority.
+  `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_reflection_usefulness_report_v1`, adds prompt
+  context `self_improve_memory_reflection_usefulness=...`, emits
+  `next_self_improve_should_review_memory_reflection_usefulness:true` when the
+  report is ready, and exposes the same data through status `-JsonStatus` and
+  human-readable status output. This remains candidate-only/report-only with
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Verification passed: focused `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml memory_admission --target-dir
+  target\r84-eval-focused-memory` with `2 passed`, focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r84-tool-focused-self-improve` with `29 passed`, focused
+  report/prompt tests with `1 passed` each, full `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml --target-dir target\r84-eval-full` with `385
+  passed`, full `cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+  --target-dir target\r84-tool-full` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r84-memory-reflection-usefulness.json` from
+  the daemon ledger showed `427` rounds, `416/427` successes, action closure
+  `targets=8 closed=8 open=0`, approval review packet
+  `review_packet_items=8 ready=8 pending=8 blocked=0`, and reflection
+  usefulness `useful=8 pending_operator_approval=8 blocked=0
+  wasted_compute_guard=8 adapter_safe=8 reflection_usefulness_ready=true
+  commit_allowed=false admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the first reflection item is ready, pending operator
+  approval, closed-action-confirmed, adapter-safe/no-write, has content digest,
+  idempotency key, approval-review packet id, and usefulness evidence ids. No
+  daemon/model start-stop, SSH, download, model-cache warming, Forge/Web Lab
+  start, prompt/stream/model call, live memory mutation, or `.ndkv` write was
+  performed.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT

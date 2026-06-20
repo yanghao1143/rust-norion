@@ -1894,6 +1894,35 @@ fn print_report(
             .memory_store_write_allowed,
         self_improve_proposal_memory_admission_commit_approval_review_packet.ndkv_write_allowed
     );
+    let self_improve_proposal_memory_reflection_usefulness =
+        self_improve_proposal_artifact.memory_reflection_usefulness();
+    let first_memory_reflection_item = self_improve_proposal_memory_reflection_usefulness
+        .first_reflection_item_id
+        .as_deref()
+        .unwrap_or("-");
+    println!(
+        "self_improve_proposal_memory_reflection_usefulness_report_v1: targets={} projected={} accepted_memory={} quarantined={} review_packet_items={} useful={} pending_operator_approval={} blocked={} wasted_compute_guard={} adapter_safe={} first_item={} reflection_usefulness_ready={} explicit_operator_approval_required={} validation_required={} rollback_required={} commit_allowed={} admission_write_authorized={} auto_apply={} memory_store_write_allowed={} ndkv_write_allowed={}",
+        self_improve_proposal_memory_reflection_usefulness.target_count,
+        self_improve_proposal_memory_reflection_usefulness.projected_report_count,
+        self_improve_proposal_memory_reflection_usefulness.accepted_memory_admission_count,
+        self_improve_proposal_memory_reflection_usefulness.quarantined_candidate_count,
+        self_improve_proposal_memory_reflection_usefulness.review_packet_item_count,
+        self_improve_proposal_memory_reflection_usefulness.useful_reflection_item_count,
+        self_improve_proposal_memory_reflection_usefulness.pending_operator_approval_count,
+        self_improve_proposal_memory_reflection_usefulness.blocked_count,
+        self_improve_proposal_memory_reflection_usefulness.wasted_compute_guard_count,
+        self_improve_proposal_memory_reflection_usefulness.adapter_safe_count,
+        first_memory_reflection_item,
+        self_improve_proposal_memory_reflection_usefulness.reflection_usefulness_ready,
+        self_improve_proposal_memory_reflection_usefulness.explicit_operator_approval_required,
+        self_improve_proposal_memory_reflection_usefulness.validation_required,
+        self_improve_proposal_memory_reflection_usefulness.rollback_required,
+        self_improve_proposal_memory_reflection_usefulness.commit_allowed,
+        self_improve_proposal_memory_reflection_usefulness.admission_write_authorized,
+        self_improve_proposal_memory_reflection_usefulness.auto_apply,
+        self_improve_proposal_memory_reflection_usefulness.memory_store_write_allowed,
+        self_improve_proposal_memory_reflection_usefulness.ndkv_write_allowed
+    );
     if let Some(last) = &summary.last {
         println!(
             "last: round={} case={} success={} runtime_tokens={} feedback_applied={} round_wall_elapsed_ms={}",
@@ -3649,6 +3678,46 @@ fn prompt_context_text_with_self_improve_proposals(
                         .to_owned(),
                 );
             }
+            let memory_reflection_usefulness = artifact.memory_reflection_usefulness();
+            let first_reflection_item = memory_reflection_usefulness
+                .first_reflection_item_id
+                .as_deref()
+                .unwrap_or("none");
+            let memory_reflection_failures =
+                if memory_reflection_usefulness.failure_reasons.is_empty() {
+                    "none".to_owned()
+                } else {
+                    memory_reflection_usefulness.failure_reasons.join(",")
+                };
+            lines.push(format!(
+                "self_improve_memory_reflection_usefulness=targets:{} projected:{} accepted_memory:{} quarantined:{} review_packet_items:{} useful:{} pending_operator_approval:{} blocked:{} wasted_compute_guard:{} adapter_safe:{} first_item:{} reflection_usefulness_ready:{} explicit_operator_approval_required:{} validation_required:{} rollback_required:{} commit_allowed:{} admission_write_authorized:{} failure_reasons:{} auto_apply:{} memory_store_write_allowed:{} ndkv_write_allowed:{}",
+                memory_reflection_usefulness.target_count,
+                memory_reflection_usefulness.projected_report_count,
+                memory_reflection_usefulness.accepted_memory_admission_count,
+                memory_reflection_usefulness.quarantined_candidate_count,
+                memory_reflection_usefulness.review_packet_item_count,
+                memory_reflection_usefulness.useful_reflection_item_count,
+                memory_reflection_usefulness.pending_operator_approval_count,
+                memory_reflection_usefulness.blocked_count,
+                memory_reflection_usefulness.wasted_compute_guard_count,
+                memory_reflection_usefulness.adapter_safe_count,
+                first_reflection_item,
+                memory_reflection_usefulness.reflection_usefulness_ready,
+                memory_reflection_usefulness.explicit_operator_approval_required,
+                memory_reflection_usefulness.validation_required,
+                memory_reflection_usefulness.rollback_required,
+                memory_reflection_usefulness.commit_allowed,
+                memory_reflection_usefulness.admission_write_authorized,
+                memory_reflection_failures,
+                memory_reflection_usefulness.auto_apply,
+                memory_reflection_usefulness.memory_store_write_allowed,
+                memory_reflection_usefulness.ndkv_write_allowed
+            ));
+            if memory_reflection_usefulness.reflection_usefulness_ready {
+                lines.push(
+                    "next_self_improve_should_review_memory_reflection_usefulness:true".to_owned(),
+                );
+            }
         }
     }
 
@@ -4495,7 +4564,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -4578,6 +4647,9 @@ fn report_json_with_remote_chain_and_required_latest_roles(
             self_improve_proposal_artifact
         ),
         self_improve_proposal_artifact::option_memory_admission_commit_approval_review_packet_report_json(
+            self_improve_proposal_artifact
+        ),
+        self_improve_proposal_artifact::option_memory_reflection_usefulness_report_json(
             self_improve_proposal_artifact
         ),
         summary.state_gate_passed,
@@ -8292,6 +8364,13 @@ mod tests {
                 "\"commit_allowed\":false",
                 "\"admission_write_authorized\":false",
                 "\"commit approval review packet requires ready approval decision\"",
+                "\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{\"schema\":\"self_improve_proposal_memory_reflection_usefulness_report_v1\"",
+                "\"consumer_surface\":\"evolution_loop_report_only_self_improve_memory_reflection_usefulness\"",
+                "\"useful_reflection_item_count\":0",
+                "\"reflection_usefulness_ready\":false",
+                "\"commit_allowed\":false",
+                "\"admission_write_authorized\":false",
+                "\"reflection usefulness requires all action targets closed\"",
             ],
         );
         assert_occurrences(&json, "\"self_improve_proposal_artifact_v1\":{", 1);
@@ -8354,6 +8433,11 @@ mod tests {
         assert_occurrences(
             &json,
             "\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{",
+            1,
+        );
+        assert_occurrences(
+            &json,
+            "\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{",
             1,
         );
     }
@@ -8430,6 +8514,9 @@ mod tests {
         assert!(context.contains(
             "self_improve_memory_admission_commit_approval_review_packet=targets:1 requests:1 approval_decision_items:1 review_packet_items:1 ready:1 pending:1 blocked:0 first_item:self-improve-r392-helper_contract-updatethevalidationcomma approval_review_packet_ready:true explicit_operator_approval_required:true validation_required:true rollback_required:true commit_allowed:false admission_write_authorized:false failure_reasons:none auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
         ));
+        assert!(context.contains(
+            "self_improve_memory_reflection_usefulness=targets:1 projected:1 accepted_memory:0 quarantined:1 review_packet_items:1 useful:1 pending_operator_approval:1 blocked:0 wasted_compute_guard:1 adapter_safe:1 first_item:self-improve-r392-helper_contract-updatethevalidationcomma reflection_usefulness_ready:true explicit_operator_approval_required:true validation_required:true rollback_required:true commit_allowed:false admission_write_authorized:false failure_reasons:none auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
+        ));
         assert!(!context.contains(
             "next_self_improve_should_convert_advisory_to_evidence_backed_business_improvement:true"
         ));
@@ -8469,6 +8556,9 @@ mod tests {
         assert!(context.contains(
             "next_self_improve_should_review_memory_admission_commit_approval_packet:true"
         ));
+        assert!(
+            context.contains("next_self_improve_should_review_memory_reflection_usefulness:true")
+        );
     }
 
     #[test]

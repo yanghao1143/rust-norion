@@ -26775,6 +26775,66 @@ pub struct SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport {
     pub review_packet_items: Vec<SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionUsefulnessItem {
+    pub proposal_id: String,
+    pub source_round: Option<u64>,
+    pub reflection_usefulness_ready: bool,
+    pub reflection_status: String,
+    pub reuse_recommendation: String,
+    pub wasted_compute_guard: bool,
+    pub adapter_safety_status: String,
+    pub preview_memory_record_id: String,
+    pub approval_review_packet_id: String,
+    pub idempotency_key: String,
+    pub content_digest: String,
+    pub evidence_ids: Vec<String>,
+    pub usefulness_evidence_ids: Vec<String>,
+    pub experiment_id: String,
+    pub rollback_anchor_ids: Vec<String>,
+    pub pending_operator_approval: bool,
+    pub closed_action_confirmed: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub blocked_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionUsefulnessReport {
+    pub target_count: usize,
+    pub projected_report_count: usize,
+    pub accepted_memory_admission_count: usize,
+    pub quarantined_candidate_count: usize,
+    pub review_packet_item_count: usize,
+    pub useful_reflection_item_count: usize,
+    pub pending_operator_approval_count: usize,
+    pub blocked_count: usize,
+    pub wasted_compute_guard_count: usize,
+    pub adapter_safe_count: usize,
+    pub first_reflection_item_id: Option<String>,
+    pub reflection_usefulness_ready: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub failure_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+    pub reflection_items: Vec<SelfImproveProposalMemoryReflectionUsefulnessItem>,
+}
+
 impl SelfImproveProposalMemoryAdmissionWriterPlanReport {
     pub fn from_request_and_decision(
         request: &SelfImproveProposalMemoryAdmissionRequestReport,
@@ -27370,6 +27430,123 @@ impl SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport {
     }
 }
 
+impl SelfImproveProposalMemoryReflectionUsefulnessReport {
+    pub fn from_acceptance_closure_and_review_packet(
+        acceptance_summary: &SelfImproveProposalAcceptanceSummaryReport,
+        closure: &SelfImproveProposalActionClosureReport,
+        review: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport,
+    ) -> Self {
+        let reflection_usefulness_ready = acceptance_summary.projected_report_count > 0
+            && closure.all_targets_closed()
+            && review.approval_review_packet_ready
+            && review.ready_review_packet_count > 0
+            && review.pending_approval_count > 0
+            && review.blocked_count == 0
+            && review.explicit_operator_approval_required
+            && review.validation_required
+            && review.rollback_required
+            && review.report_only
+            && review.candidate_only
+            && !review.auto_apply
+            && !review.commit_allowed
+            && !review.admission_write_authorized
+            && !review.memory_store_write_allowed
+            && !review.ndkv_write_allowed;
+        let reflection_items = review
+            .review_packet_items
+            .iter()
+            .map(|item| {
+                let closure_item = closure
+                    .closure_items
+                    .iter()
+                    .find(|closure_item| closure_item.proposal_id == item.proposal_id);
+                SelfImproveProposalMemoryReflectionUsefulnessItem::from_review_packet_item(
+                    item,
+                    closure_item,
+                    reflection_usefulness_ready,
+                )
+            })
+            .collect::<Vec<_>>();
+        let useful_reflection_item_count = reflection_items
+            .iter()
+            .filter(|item| item.reflection_usefulness_ready)
+            .count();
+        let pending_operator_approval_count = reflection_items
+            .iter()
+            .filter(|item| item.pending_operator_approval)
+            .count();
+        let wasted_compute_guard_count = reflection_items
+            .iter()
+            .filter(|item| item.wasted_compute_guard)
+            .count();
+        let adapter_safe_count = reflection_items
+            .iter()
+            .filter(|item| item.adapter_safety_status == "adapter_safe_no_writes")
+            .count();
+        let mut failure_reasons = review.failure_reasons.clone();
+        if acceptance_summary.projected_report_count == 0 {
+            failure_reasons.push("reflection usefulness has no projected reports".to_owned());
+        }
+        if !closure.all_targets_closed() {
+            failure_reasons
+                .push("reflection usefulness requires all action targets closed".to_owned());
+        }
+        if !review.approval_review_packet_ready {
+            failure_reasons
+                .push("reflection usefulness requires ready approval review packet".to_owned());
+        }
+        if review.commit_allowed || review.admission_write_authorized {
+            failure_reasons
+                .push("reflection usefulness input already authorized writes".to_owned());
+        }
+        if review.auto_apply {
+            failure_reasons.push("reflection usefulness input attempted auto apply".to_owned());
+        }
+        if review.memory_store_write_allowed {
+            failure_reasons
+                .push("reflection usefulness input allowed memory store writes".to_owned());
+        }
+        if review.ndkv_write_allowed {
+            failure_reasons.push("reflection usefulness input allowed ndkv writes".to_owned());
+        }
+        failure_reasons.sort();
+        failure_reasons.dedup();
+
+        Self {
+            target_count: review.target_count,
+            projected_report_count: acceptance_summary.projected_report_count,
+            accepted_memory_admission_count: acceptance_summary.memory_admission_accepted_count,
+            quarantined_candidate_count: acceptance_summary
+                .advisory_only_count
+                .saturating_add(acceptance_summary.require_repair_count),
+            review_packet_item_count: review.review_packet_item_count,
+            useful_reflection_item_count,
+            pending_operator_approval_count,
+            blocked_count: reflection_items
+                .len()
+                .saturating_sub(useful_reflection_item_count),
+            wasted_compute_guard_count,
+            adapter_safe_count,
+            first_reflection_item_id: reflection_items
+                .first()
+                .map(|item| item.proposal_id.clone()),
+            reflection_usefulness_ready,
+            explicit_operator_approval_required: reflection_usefulness_ready,
+            validation_required: reflection_usefulness_ready,
+            rollback_required: reflection_usefulness_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            failure_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+            reflection_items,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionCommitRecordStageItem {
     pub fn from_receipt_item(
         item: &SelfImproveProposalMemoryAdmissionWriterDryRunReceiptItem,
@@ -27749,6 +27926,114 @@ impl SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem {
             rollback_required: approval_review_packet_ready,
             commit_allowed: false,
             write_authorized: false,
+            admission_write_authorized: false,
+            blocked_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+        }
+    }
+}
+
+impl SelfImproveProposalMemoryReflectionUsefulnessItem {
+    pub fn from_review_packet_item(
+        item: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem,
+        closure_item: Option<&SelfImproveProposalActionClosureItem>,
+        reflection_usefulness_ready: bool,
+    ) -> Self {
+        let closed_action_confirmed = closure_item.is_some_and(|closure_item| {
+            closure_item.closed
+                && closure_item.code_evidence_present
+                && closure_item.validation_evidence_present
+                && closure_item.validation_passed
+        });
+        let adapter_safe = item.explicit_operator_approval_required
+            && item.validation_required
+            && item.rollback_required
+            && !item.commit_allowed
+            && !item.write_authorized
+            && !item.admission_write_authorized
+            && !item.memory_store_write_allowed
+            && !item.ndkv_write_allowed
+            && item.report_only
+            && item.candidate_only
+            && !item.auto_apply;
+        let pending_operator_approval = item.approval_review_packet_ready
+            && item.approval_decision == "pending_explicit_commit_approval"
+            && !item.approval_token.is_empty()
+            && !item.rejection_token.is_empty();
+        let reflection_usefulness_ready = reflection_usefulness_ready
+            && item.approval_review_packet_ready
+            && pending_operator_approval
+            && closed_action_confirmed
+            && adapter_safe
+            && item.blocked_reasons.is_empty();
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if !reflection_usefulness_ready {
+            if !item.approval_review_packet_ready {
+                blocked_reasons.push("reflection_item_review_packet_not_ready".to_owned());
+            }
+            if !pending_operator_approval {
+                blocked_reasons.push("reflection_item_missing_operator_approval_tokens".to_owned());
+            }
+            if closure_item.is_none() {
+                blocked_reasons.push("reflection_item_missing_action_closure".to_owned());
+            }
+            if !closed_action_confirmed {
+                blocked_reasons.push("reflection_item_action_closure_not_confirmed".to_owned());
+            }
+            if !adapter_safe {
+                blocked_reasons.push("reflection_item_adapter_safety_not_confirmed".to_owned());
+            }
+        }
+        blocked_reasons.sort();
+        blocked_reasons.dedup();
+
+        let mut usefulness_evidence_ids = item.evidence_ids.clone();
+        if let Some(closure_item) = closure_item {
+            usefulness_evidence_ids.extend(closure_item.code_evidence_ids.clone());
+            usefulness_evidence_ids.extend(closure_item.validation_evidence_ids.clone());
+        }
+        usefulness_evidence_ids.push(item.approval_review_packet_id.clone());
+        usefulness_evidence_ids.sort();
+        usefulness_evidence_ids.dedup();
+
+        Self {
+            proposal_id: item.proposal_id.clone(),
+            source_round: item.source_round,
+            reflection_usefulness_ready,
+            reflection_status: if reflection_usefulness_ready {
+                "useful_pending_operator_memory_admission_approval".to_owned()
+            } else {
+                "blocked_until_usefulness_and_safety_evidence_ready".to_owned()
+            },
+            reuse_recommendation: if reflection_usefulness_ready {
+                "reuse_as_closed_action_reflection_after_operator_approval".to_owned()
+            } else {
+                "do_not_reuse_until_reflection_packet_ready".to_owned()
+            },
+            wasted_compute_guard: reflection_usefulness_ready,
+            adapter_safety_status: if adapter_safe {
+                "adapter_safe_no_writes".to_owned()
+            } else {
+                "blocked_adapter_safety_review".to_owned()
+            },
+            preview_memory_record_id: item.preview_memory_record_id.clone(),
+            approval_review_packet_id: item.approval_review_packet_id.clone(),
+            idempotency_key: item.idempotency_key.clone(),
+            content_digest: item.content_digest.clone(),
+            evidence_ids: item.evidence_ids.clone(),
+            usefulness_evidence_ids,
+            experiment_id: item.experiment_id.clone(),
+            rollback_anchor_ids: item.rollback_anchor_ids.clone(),
+            pending_operator_approval,
+            closed_action_confirmed,
+            explicit_operator_approval_required: reflection_usefulness_ready,
+            validation_required: reflection_usefulness_ready,
+            rollback_required: reflection_usefulness_ready,
+            commit_allowed: false,
             admission_write_authorized: false,
             blocked_reasons,
             report_only: true,
@@ -41677,6 +41962,75 @@ mod tests {
         assert!(!review_item.memory_store_write_allowed);
         assert!(!review_item.ndkv_write_allowed);
         assert!(review_item.blocked_reasons.is_empty());
+
+        let reflection_usefulness =
+            SelfImproveProposalMemoryReflectionUsefulnessReport::from_acceptance_closure_and_review_packet(
+                &summary,
+                &closure,
+                &approval_review,
+            );
+        assert_eq!(reflection_usefulness.target_count, 1);
+        assert_eq!(reflection_usefulness.projected_report_count, 1);
+        assert_eq!(reflection_usefulness.accepted_memory_admission_count, 0);
+        assert_eq!(reflection_usefulness.quarantined_candidate_count, 1);
+        assert_eq!(reflection_usefulness.review_packet_item_count, 1);
+        assert_eq!(reflection_usefulness.useful_reflection_item_count, 1);
+        assert_eq!(reflection_usefulness.pending_operator_approval_count, 1);
+        assert_eq!(reflection_usefulness.blocked_count, 0);
+        assert_eq!(reflection_usefulness.wasted_compute_guard_count, 1);
+        assert_eq!(reflection_usefulness.adapter_safe_count, 1);
+        assert!(reflection_usefulness.reflection_usefulness_ready);
+        assert!(reflection_usefulness.explicit_operator_approval_required);
+        assert!(reflection_usefulness.validation_required);
+        assert!(reflection_usefulness.rollback_required);
+        assert!(!reflection_usefulness.commit_allowed);
+        assert!(!reflection_usefulness.admission_write_authorized);
+        assert!(reflection_usefulness.failure_reasons.is_empty());
+        assert!(reflection_usefulness.report_only);
+        assert!(reflection_usefulness.candidate_only);
+        assert!(!reflection_usefulness.auto_apply);
+        assert!(!reflection_usefulness.memory_store_write_allowed);
+        assert!(!reflection_usefulness.ndkv_write_allowed);
+        let reflection_item = reflection_usefulness.reflection_items.first().unwrap();
+        assert_eq!(reflection_item.proposal_id, review_item.proposal_id);
+        assert!(reflection_item.reflection_usefulness_ready);
+        assert_eq!(
+            reflection_item.reflection_status,
+            "useful_pending_operator_memory_admission_approval"
+        );
+        assert_eq!(
+            reflection_item.reuse_recommendation,
+            "reuse_as_closed_action_reflection_after_operator_approval"
+        );
+        assert!(reflection_item.wasted_compute_guard);
+        assert_eq!(
+            reflection_item.adapter_safety_status,
+            "adapter_safe_no_writes"
+        );
+        assert_eq!(
+            reflection_item.approval_review_packet_id,
+            review_item.approval_review_packet_id
+        );
+        assert_eq!(reflection_item.content_digest, review_item.content_digest);
+        assert_eq!(reflection_item.idempotency_key, review_item.idempotency_key);
+        assert!(reflection_item.pending_operator_approval);
+        assert!(reflection_item.closed_action_confirmed);
+        assert!(
+            reflection_item
+                .usefulness_evidence_ids
+                .contains(&review_item.approval_review_packet_id)
+        );
+        assert!(reflection_item.explicit_operator_approval_required);
+        assert!(reflection_item.validation_required);
+        assert!(reflection_item.rollback_required);
+        assert!(!reflection_item.commit_allowed);
+        assert!(!reflection_item.admission_write_authorized);
+        assert!(reflection_item.report_only);
+        assert!(reflection_item.candidate_only);
+        assert!(!reflection_item.auto_apply);
+        assert!(!reflection_item.memory_store_write_allowed);
+        assert!(!reflection_item.ndkv_write_allowed);
+        assert!(reflection_item.blocked_reasons.is_empty());
     }
 
     #[test]

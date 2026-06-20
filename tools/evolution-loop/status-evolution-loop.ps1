@@ -853,6 +853,63 @@ function Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket {
     }
 }
 
+function Get-SelfImproveProposalMemoryReflectionUsefulness {
+    param([object]$Report)
+
+    $reflection = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_usefulness_report_v1"
+    if ($null -eq $reflection) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            projected_report_count = $null
+            accepted_memory_admission_count = $null
+            quarantined_candidate_count = $null
+            review_packet_item_count = $null
+            useful_reflection_item_count = $null
+            pending_operator_approval_count = $null
+            blocked_count = $null
+            wasted_compute_guard_count = $null
+            adapter_safe_count = $null
+            first_reflection_item = $null
+            reflection_usefulness_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_usefulness_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "target_count")
+        projected_report_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "projected_report_count")
+        accepted_memory_admission_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "accepted_memory_admission_count")
+        quarantined_candidate_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "quarantined_candidate_count")
+        review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "review_packet_item_count")
+        useful_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "useful_reflection_item_count")
+        pending_operator_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "pending_operator_approval_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "blocked_count")
+        wasted_compute_guard_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "wasted_compute_guard_count")
+        adapter_safe_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "adapter_safe_count")
+        first_reflection_item = Get-PropertyValue -Object $reflection -Name "first_reflection_item_id"
+        reflection_usefulness_ready = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "reflection_usefulness_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $reflection -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "ndkv_write_allowed")
+    }
+}
+
 function Select-FirstNonNull {
     param(
         [object]$Preferred,
@@ -1742,6 +1799,7 @@ function Read-ReportStatus {
         $proposalMemoryAdmissionCommitApprovalRequest = Get-SelfImproveProposalMemoryAdmissionCommitApprovalRequest -Report $report
         $proposalMemoryAdmissionCommitApprovalDecision = Get-SelfImproveProposalMemoryAdmissionCommitApprovalDecision -Report $report
         $proposalMemoryAdmissionCommitApprovalReviewPacket = Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket -Report $report
+        $proposalMemoryReflectionUsefulness = Get-SelfImproveProposalMemoryReflectionUsefulness -Report $report
 
         return [pscustomobject][ordered]@{
             path = $Path
@@ -1941,6 +1999,28 @@ function Read-ReportStatus {
             self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "auto_apply"
             self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "memory_store_write_allowed"
             self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_usefulness_source = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "source"
+            self_improve_proposal_memory_reflection_usefulness_target_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "target_count"
+            self_improve_proposal_memory_reflection_usefulness_projected_report_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "projected_report_count"
+            self_improve_proposal_memory_reflection_usefulness_accepted_memory_admission_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "accepted_memory_admission_count"
+            self_improve_proposal_memory_reflection_usefulness_quarantined_candidate_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "quarantined_candidate_count"
+            self_improve_proposal_memory_reflection_usefulness_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "review_packet_item_count"
+            self_improve_proposal_memory_reflection_usefulness_useful_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "useful_reflection_item_count"
+            self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "pending_operator_approval_count"
+            self_improve_proposal_memory_reflection_usefulness_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "blocked_count"
+            self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "wasted_compute_guard_count"
+            self_improve_proposal_memory_reflection_usefulness_adapter_safe_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "adapter_safe_count"
+            self_improve_proposal_memory_reflection_usefulness_first_item = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "first_reflection_item"
+            self_improve_proposal_memory_reflection_usefulness_ready = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "reflection_usefulness_ready"
+            self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_usefulness_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "validation_required"
+            self_improve_proposal_memory_reflection_usefulness_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "rollback_required"
+            self_improve_proposal_memory_reflection_usefulness_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_usefulness_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_usefulness_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_usefulness_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "auto_apply"
+            self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "ndkv_write_allowed"
             ledger_lag_rounds = $lag
             stale = if ($null -eq $lag) { $null } else { [bool]($lag -gt 0) }
             remote_runtime_probed = Convert-ToNullableBool (Get-PropertyValue -Object $remoteRuntime -Name "probed")
@@ -3088,6 +3168,8 @@ if ($ReportPath.Trim().Length -gt 0) {
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_decision_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_item_count) recorded=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_recorded_count) approved=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_approved_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_first_item) commit_approval_decision_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_ready) explicit_commit_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_explicit_commit_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalDecisionFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_ndkv_write_allowed)"
     $proposalAdmissionCommitApprovalReviewPacketFailures = @($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_decision_item_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count) ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_first_item) approval_review_packet_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalReviewPacketFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed)"
+    $proposalMemoryReflectionUsefulnessFailures = @($reportStatus.self_improve_proposal_memory_reflection_usefulness_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_target_count) projected=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_projected_report_count) accepted_memory=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_accepted_memory_admission_count) quarantined=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_quarantined_candidate_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_review_packet_item_count) useful=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_useful_count) pending_operator_approval=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_blocked_count) wasted_compute_guard=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count) adapter_safe=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_first_item) reflection_usefulness_ready=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_admission_write_authorized) failure_reasons=$proposalMemoryReflectionUsefulnessFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed)"
 }
 Write-Host "next_round_decision: schema=$($nextRoundDecision.schema) display_state=$($nextRoundDecision.display_state) safe_to_wait_current_round_active=$($nextRoundDecision.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecision.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecision.operator_attention_blocked) reason=$($nextRoundDecision.reason_code) read_only=$($nextRoundDecision.read_only) report_only=$($nextRoundDecision.report_only) side_effects=$($nextRoundDecision.side_effects)"
 Write-Host "next_round_decision_report_v1: schema=$($nextRoundDecisionReportV1.schema) display_state=$($nextRoundDecisionReportV1.display_state) safe_to_wait_current_round_active=$($nextRoundDecisionReportV1.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecisionReportV1.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecisionReportV1.operator_attention_blocked) reason=$($nextRoundDecisionReportV1.reason_code) read_only=$($nextRoundDecisionReportV1.read_only) report_only=$($nextRoundDecisionReportV1.report_only) side_effects=$($nextRoundDecisionReportV1.side_effects)"
