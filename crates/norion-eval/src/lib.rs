@@ -26999,6 +26999,68 @@ pub struct SelfImproveProposalMemoryReflectionReusePreflightReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionReuseLookupPreviewItem {
+    pub cluster_id: String,
+    pub lookup_key: String,
+    pub representative_proposal_id: String,
+    pub duplicate_proposal_ids: Vec<String>,
+    pub evidence_ids: Vec<String>,
+    pub projected_saved_reflection_count: usize,
+    pub projected_model_call_skip_count: usize,
+    pub lookup_preview_ready: bool,
+    pub reuse_preflight_passed: bool,
+    pub model_call_skip_candidate: bool,
+    pub planned_lookup_action: String,
+    pub required_operator_action: String,
+    pub model_call_skip_authorized: bool,
+    pub reflection_reuse_execution_authorized: bool,
+    pub memory_lookup_performed: bool,
+    pub lookup_hit_assumed: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub blocked_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionReuseLookupPreviewReport {
+    pub target_count: usize,
+    pub preflight_item_count: usize,
+    pub lookup_preview_item_count: usize,
+    pub ready_lookup_preview_count: usize,
+    pub blocked_item_count: usize,
+    pub duplicate_cluster_count: usize,
+    pub duplicate_reflection_item_count: usize,
+    pub projected_saved_reflection_count: usize,
+    pub projected_model_call_skip_count: usize,
+    pub first_lookup_key: Option<String>,
+    pub lookup_preview_ready: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub model_call_skip_authorized: bool,
+    pub reflection_reuse_execution_authorized: bool,
+    pub memory_lookup_performed: bool,
+    pub lookup_hit_assumed: bool,
+    pub failure_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+    pub lookup_items: Vec<SelfImproveProposalMemoryReflectionReuseLookupPreviewItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
     pub proposal_id: String,
     pub source_round: Option<u64>,
@@ -28074,6 +28136,125 @@ impl SelfImproveProposalMemoryReflectionReusePreflightReport {
     }
 }
 
+impl SelfImproveProposalMemoryReflectionReuseLookupPreviewReport {
+    pub fn from_reuse_preflight(
+        preflight: &SelfImproveProposalMemoryReflectionReusePreflightReport,
+    ) -> Self {
+        let lookup_preview_preflight_ready = preflight.reuse_preflight_passed
+            && preflight.preflight_item_count > 0
+            && preflight.preflight_passed_item_count == preflight.preflight_item_count
+            && preflight.projected_model_call_skip_count > 0
+            && preflight.explicit_operator_approval_required
+            && preflight.validation_required
+            && preflight.rollback_required
+            && preflight.report_only
+            && preflight.candidate_only
+            && !preflight.auto_apply
+            && !preflight.commit_allowed
+            && !preflight.admission_write_authorized
+            && !preflight.model_call_skip_authorized
+            && !preflight.reflection_reuse_execution_authorized
+            && !preflight.memory_store_write_allowed
+            && !preflight.ndkv_write_allowed;
+
+        let lookup_items = preflight
+            .preflight_items
+            .iter()
+            .map(|item| {
+                SelfImproveProposalMemoryReflectionReuseLookupPreviewItem::from_reuse_preflight_item(
+                    item,
+                    lookup_preview_preflight_ready,
+                )
+            })
+            .collect::<Vec<_>>();
+        let ready_lookup_preview_count = lookup_items
+            .iter()
+            .filter(|item| item.lookup_preview_ready)
+            .count();
+        let blocked_item_count = lookup_items
+            .iter()
+            .filter(|item| !item.lookup_preview_ready)
+            .count();
+        let lookup_preview_ready = lookup_preview_preflight_ready
+            && !lookup_items.is_empty()
+            && ready_lookup_preview_count == lookup_items.len();
+
+        let mut failure_reasons = preflight.failure_reasons.clone();
+        if preflight.preflight_item_count == 0 {
+            failure_reasons
+                .push("reflection reuse lookup preview has no preflight items".to_owned());
+        }
+        if !preflight.reuse_preflight_passed {
+            failure_reasons
+                .push("reflection reuse lookup preview requires passed preflight".to_owned());
+        }
+        if preflight.preflight_passed_item_count != preflight.preflight_item_count {
+            failure_reasons.push(
+                "reflection reuse lookup preview requires all preflight items passed".to_owned(),
+            );
+        }
+        if preflight.projected_model_call_skip_count == 0 {
+            failure_reasons.push(
+                "reflection reuse lookup preview has no projected model-call skips".to_owned(),
+            );
+        }
+        if preflight.commit_allowed || preflight.admission_write_authorized {
+            failure_reasons
+                .push("reflection reuse lookup preview input already authorized writes".to_owned());
+        }
+        if preflight.model_call_skip_authorized || preflight.reflection_reuse_execution_authorized {
+            failure_reasons.push(
+                "reflection reuse lookup preview input already authorized execution".to_owned(),
+            );
+        }
+        if preflight.auto_apply {
+            failure_reasons
+                .push("reflection reuse lookup preview input attempted auto apply".to_owned());
+        }
+        if preflight.memory_store_write_allowed {
+            failure_reasons.push(
+                "reflection reuse lookup preview input allowed memory store writes".to_owned(),
+            );
+        }
+        if preflight.ndkv_write_allowed {
+            failure_reasons
+                .push("reflection reuse lookup preview input allowed ndkv writes".to_owned());
+        }
+        failure_reasons.sort();
+        failure_reasons.dedup();
+
+        Self {
+            target_count: preflight.target_count,
+            preflight_item_count: preflight.preflight_item_count,
+            lookup_preview_item_count: lookup_items.len(),
+            ready_lookup_preview_count,
+            blocked_item_count,
+            duplicate_cluster_count: preflight.duplicate_cluster_count,
+            duplicate_reflection_item_count: preflight.duplicate_reflection_item_count,
+            projected_saved_reflection_count: preflight.projected_saved_reflection_count,
+            projected_model_call_skip_count: preflight.projected_model_call_skip_count,
+            first_lookup_key: lookup_items.first().map(|item| item.lookup_key.clone()),
+            lookup_preview_ready,
+            explicit_operator_approval_required: lookup_preview_ready,
+            validation_required: lookup_preview_ready,
+            rollback_required: lookup_preview_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            model_call_skip_authorized: false,
+            reflection_reuse_execution_authorized: false,
+            memory_lookup_performed: false,
+            lookup_hit_assumed: false,
+            failure_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+            lookup_items,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport {
     pub fn from_review_packet_and_reflection_usefulness(
         review: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport,
@@ -28983,6 +29164,103 @@ impl SelfImproveProposalMemoryReflectionReusePreflightItem {
     }
 }
 
+impl SelfImproveProposalMemoryReflectionReuseLookupPreviewItem {
+    fn from_reuse_preflight_item(
+        item: &SelfImproveProposalMemoryReflectionReusePreflightItem,
+        lookup_preview_preflight_ready: bool,
+    ) -> Self {
+        let lookup_preview_ready = lookup_preview_preflight_ready
+            && item.reuse_preflight_passed
+            && item.model_call_skip_candidate
+            && item.projected_saved_reflection_count > 0
+            && item.explicit_operator_approval_required
+            && item.validation_required
+            && item.rollback_required
+            && item.report_only
+            && item.candidate_only
+            && !item.auto_apply
+            && !item.commit_allowed
+            && !item.admission_write_authorized
+            && !item.model_call_skip_authorized
+            && !item.reflection_reuse_execution_authorized
+            && !item.memory_store_write_allowed
+            && !item.ndkv_write_allowed
+            && item.blocked_reasons.is_empty();
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if !lookup_preview_ready {
+            if !lookup_preview_preflight_ready {
+                blocked_reasons.push("reflection_reuse_lookup_preview_not_ready".to_owned());
+            }
+            if !item.reuse_preflight_passed {
+                blocked_reasons
+                    .push("reflection_reuse_lookup_preview_item_preflight_not_passed".to_owned());
+            }
+            if !item.model_call_skip_candidate {
+                blocked_reasons
+                    .push("reflection_reuse_lookup_preview_item_not_skip_candidate".to_owned());
+            }
+            if item.projected_saved_reflection_count == 0 {
+                blocked_reasons
+                    .push("reflection_reuse_lookup_preview_item_no_projected_savings".to_owned());
+            }
+            if item.commit_allowed || item.admission_write_authorized {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_preview_item_already_authorized_write".to_owned(),
+                );
+            }
+            if item.model_call_skip_authorized || item.reflection_reuse_execution_authorized {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_preview_item_already_authorized_execution".to_owned(),
+                );
+            }
+            if item.auto_apply || item.memory_store_write_allowed || item.ndkv_write_allowed {
+                blocked_reasons
+                    .push("reflection_reuse_lookup_preview_item_attempted_side_effect".to_owned());
+            }
+        }
+        blocked_reasons.sort();
+        blocked_reasons.dedup();
+
+        Self {
+            cluster_id: item.cluster_id.clone(),
+            lookup_key: reflection_reuse_lookup_key(item),
+            representative_proposal_id: item.representative_proposal_id.clone(),
+            duplicate_proposal_ids: item.duplicate_proposal_ids.clone(),
+            evidence_ids: item.evidence_ids.clone(),
+            projected_saved_reflection_count: item.projected_saved_reflection_count,
+            projected_model_call_skip_count: item.projected_saved_reflection_count,
+            lookup_preview_ready,
+            reuse_preflight_passed: item.reuse_preflight_passed,
+            model_call_skip_candidate: item.model_call_skip_candidate,
+            planned_lookup_action: if lookup_preview_ready {
+                "preview_reflection_reuse_lookup_key_without_memory_access".to_owned()
+            } else {
+                "block_lookup_preview_until_preflight_ready".to_owned()
+            },
+            required_operator_action: if lookup_preview_ready {
+                "approve_future_lookup_execution_before_model_call_skip".to_owned()
+            } else {
+                "repair_or_wait_before_reuse_lookup_execution".to_owned()
+            },
+            model_call_skip_authorized: false,
+            reflection_reuse_execution_authorized: false,
+            memory_lookup_performed: false,
+            lookup_hit_assumed: false,
+            explicit_operator_approval_required: lookup_preview_ready,
+            validation_required: lookup_preview_ready,
+            rollback_required: lookup_preview_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            blocked_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
     pub fn from_review_packet_and_usefulness_item(
         item: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem,
@@ -29422,6 +29700,30 @@ fn reflection_text_digest(value: &str) -> String {
         hash = (hash ^ byte as u64).wrapping_mul(0x100000001b3);
     }
     format!("fnv1a64:{hash:016x}")
+}
+
+fn reflection_reuse_lookup_key(
+    item: &SelfImproveProposalMemoryReflectionReusePreflightItem,
+) -> String {
+    let mut duplicate_proposal_ids = item.duplicate_proposal_ids.clone();
+    duplicate_proposal_ids.sort();
+    duplicate_proposal_ids.dedup();
+    let mut evidence_ids = item.evidence_ids.clone();
+    evidence_ids.sort();
+    evidence_ids.dedup();
+    let digest_seed = format!(
+        "{}:{}:{}:{}:{}",
+        item.cluster_id,
+        item.representative_proposal_id,
+        duplicate_proposal_ids.join(","),
+        evidence_ids.join(","),
+        item.projected_saved_reflection_count
+    );
+    format!(
+        "memory-reflection-reuse-lookup:{}:{}",
+        writer_plan_slug(&item.cluster_id),
+        reflection_text_digest(&digest_seed).replace(':', "-")
+    )
 }
 
 fn writer_receipt_content_digest(
@@ -43301,6 +43603,65 @@ mod tests {
                 .contains(&"reflection_reuse_preflight_item_no_projected_savings".to_owned())
         );
 
+        let reflection_reuse_lookup_preview =
+            SelfImproveProposalMemoryReflectionReuseLookupPreviewReport::from_reuse_preflight(
+                &reflection_reuse_preflight,
+            );
+        assert_eq!(reflection_reuse_lookup_preview.target_count, 1);
+        assert_eq!(reflection_reuse_lookup_preview.preflight_item_count, 1);
+        assert_eq!(reflection_reuse_lookup_preview.lookup_preview_item_count, 1);
+        assert_eq!(
+            reflection_reuse_lookup_preview.ready_lookup_preview_count,
+            0
+        );
+        assert_eq!(reflection_reuse_lookup_preview.blocked_item_count, 1);
+        assert_eq!(
+            reflection_reuse_lookup_preview.projected_model_call_skip_count,
+            0
+        );
+        assert!(!reflection_reuse_lookup_preview.lookup_preview_ready);
+        assert!(!reflection_reuse_lookup_preview.explicit_operator_approval_required);
+        assert!(!reflection_reuse_lookup_preview.validation_required);
+        assert!(!reflection_reuse_lookup_preview.rollback_required);
+        assert!(!reflection_reuse_lookup_preview.commit_allowed);
+        assert!(!reflection_reuse_lookup_preview.admission_write_authorized);
+        assert!(!reflection_reuse_lookup_preview.model_call_skip_authorized);
+        assert!(!reflection_reuse_lookup_preview.reflection_reuse_execution_authorized);
+        assert!(!reflection_reuse_lookup_preview.memory_lookup_performed);
+        assert!(!reflection_reuse_lookup_preview.lookup_hit_assumed);
+        assert!(
+            reflection_reuse_lookup_preview
+                .failure_reasons
+                .contains(&"reflection reuse lookup preview requires passed preflight".to_owned())
+        );
+        assert!(reflection_reuse_lookup_preview.report_only);
+        assert!(reflection_reuse_lookup_preview.candidate_only);
+        assert!(!reflection_reuse_lookup_preview.auto_apply);
+        assert!(!reflection_reuse_lookup_preview.memory_store_write_allowed);
+        assert!(!reflection_reuse_lookup_preview.ndkv_write_allowed);
+        let lookup_preview_item = reflection_reuse_lookup_preview
+            .lookup_items
+            .first()
+            .unwrap();
+        assert_eq!(
+            lookup_preview_item.cluster_id,
+            reuse_preflight_item.cluster_id
+        );
+        assert!(
+            lookup_preview_item
+                .lookup_key
+                .starts_with("memory-reflection-reuse-lookup:")
+        );
+        assert!(!lookup_preview_item.lookup_preview_ready);
+        assert!(!lookup_preview_item.model_call_skip_authorized);
+        assert!(!lookup_preview_item.reflection_reuse_execution_authorized);
+        assert!(!lookup_preview_item.memory_lookup_performed);
+        assert!(!lookup_preview_item.lookup_hit_assumed);
+        assert_eq!(
+            lookup_preview_item.planned_lookup_action,
+            "block_lookup_preview_until_preflight_ready"
+        );
+
         let mut repeated_reflection_usefulness = reflection_usefulness.clone();
         let mut repeated_reflection_item = reflection_item.clone();
         repeated_reflection_item.source_round = Some(393);
@@ -43402,6 +43763,74 @@ mod tests {
         assert!(!repeated_reuse_preflight_item.admission_write_authorized);
         assert!(!repeated_reuse_preflight_item.memory_store_write_allowed);
         assert!(!repeated_reuse_preflight_item.ndkv_write_allowed);
+
+        let repeated_reuse_lookup_preview =
+            SelfImproveProposalMemoryReflectionReuseLookupPreviewReport::from_reuse_preflight(
+                &repeated_reuse_preflight,
+            );
+        assert_eq!(repeated_reuse_lookup_preview.preflight_item_count, 1);
+        assert_eq!(repeated_reuse_lookup_preview.lookup_preview_item_count, 1);
+        assert_eq!(repeated_reuse_lookup_preview.ready_lookup_preview_count, 1);
+        assert_eq!(repeated_reuse_lookup_preview.blocked_item_count, 0);
+        assert_eq!(repeated_reuse_lookup_preview.duplicate_cluster_count, 1);
+        assert_eq!(
+            repeated_reuse_lookup_preview.duplicate_reflection_item_count,
+            1
+        );
+        assert_eq!(
+            repeated_reuse_lookup_preview.projected_saved_reflection_count,
+            1
+        );
+        assert_eq!(
+            repeated_reuse_lookup_preview.projected_model_call_skip_count,
+            1
+        );
+        assert!(repeated_reuse_lookup_preview.lookup_preview_ready);
+        assert!(repeated_reuse_lookup_preview.explicit_operator_approval_required);
+        assert!(repeated_reuse_lookup_preview.validation_required);
+        assert!(repeated_reuse_lookup_preview.rollback_required);
+        assert!(!repeated_reuse_lookup_preview.commit_allowed);
+        assert!(!repeated_reuse_lookup_preview.admission_write_authorized);
+        assert!(!repeated_reuse_lookup_preview.model_call_skip_authorized);
+        assert!(!repeated_reuse_lookup_preview.reflection_reuse_execution_authorized);
+        assert!(!repeated_reuse_lookup_preview.memory_lookup_performed);
+        assert!(!repeated_reuse_lookup_preview.lookup_hit_assumed);
+        assert!(repeated_reuse_lookup_preview.failure_reasons.is_empty());
+        assert!(repeated_reuse_lookup_preview.report_only);
+        assert!(repeated_reuse_lookup_preview.candidate_only);
+        assert!(!repeated_reuse_lookup_preview.auto_apply);
+        assert!(!repeated_reuse_lookup_preview.memory_store_write_allowed);
+        assert!(!repeated_reuse_lookup_preview.ndkv_write_allowed);
+        let repeated_lookup_preview_item =
+            repeated_reuse_lookup_preview.lookup_items.first().unwrap();
+        assert!(repeated_lookup_preview_item.lookup_preview_ready);
+        assert!(repeated_lookup_preview_item.reuse_preflight_passed);
+        assert!(repeated_lookup_preview_item.model_call_skip_candidate);
+        assert_eq!(
+            repeated_lookup_preview_item.projected_model_call_skip_count,
+            1
+        );
+        assert!(
+            repeated_lookup_preview_item
+                .lookup_key
+                .starts_with("memory-reflection-reuse-lookup:")
+        );
+        assert_eq!(
+            repeated_lookup_preview_item.planned_lookup_action,
+            "preview_reflection_reuse_lookup_key_without_memory_access"
+        );
+        assert_eq!(
+            repeated_lookup_preview_item.required_operator_action,
+            "approve_future_lookup_execution_before_model_call_skip"
+        );
+        assert!(!repeated_lookup_preview_item.model_call_skip_authorized);
+        assert!(!repeated_lookup_preview_item.reflection_reuse_execution_authorized);
+        assert!(!repeated_lookup_preview_item.memory_lookup_performed);
+        assert!(!repeated_lookup_preview_item.lookup_hit_assumed);
+        assert!(!repeated_lookup_preview_item.commit_allowed);
+        assert!(!repeated_lookup_preview_item.admission_write_authorized);
+        assert!(!repeated_lookup_preview_item.memory_store_write_allowed);
+        assert!(!repeated_lookup_preview_item.ndkv_write_allowed);
 
         let token_intake_preview =
             SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport::from_review_packet_and_reflection_usefulness(

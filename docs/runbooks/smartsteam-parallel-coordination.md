@@ -4448,6 +4448,24 @@ System-error replacements:
   attribution. `claurst` declares GPL-3.0 at the root and in `src-rust`, so it
   must not be copied directly into rust-norion unless the project explicitly
   accepts GPL-3.0 obligations; for now it is architecture inspiration only.
+- R89 memory reflection reuse lookup preview on 2026-06-20: added the
+  report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1`
+  surface after the R88 reuse preflight. The preview derives deterministic
+  future lookup keys from preflight items, but it does not perform a memory
+  lookup, assume a lookup hit, skip model calls, authorize reflection reuse
+  execution, write memory, or write `.ndkv`. Validation passed with focused
+  `norion-eval` memory tests, focused `tools/evolution-loop` self-improve,
+  report, and prompt tests, focused `norion-test` legacy replay optional-schema
+  coverage, `tools/evolution-loop/test-evolution-loop-status.ps1`, full
+  `norion-eval` (`385` passed), full `tools/evolution-loop` (`414` passed),
+  full `norion-test` (`104` passed), cargo fmt checks, and a generated report
+  JSON safety check confirming `read_only=true`, `report_only=true`,
+  `candidate_only=true`, `commit_allowed=false`,
+  `admission_write_authorized=false`, `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
 
 ## Handoff rules
 
