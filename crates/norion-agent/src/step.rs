@@ -845,6 +845,50 @@ pub struct AgentClosedLoopMemoryReusePreflightExecutor {
     executor: AgentClosedLoopPreparedExecutor,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightExecutionReport {
+    pub preflight: Option<AgentMemoryReuseExecutionPreflightReport>,
+    pub execution: AgentClosedLoopPreparedExecution,
+    pub planned_engine_calls: usize,
+    pub executed_engine_calls: usize,
+    pub skipped_engine_calls: usize,
+    pub preflight_clean: bool,
+    pub memory_reuse_ready: bool,
+    pub can_enter_execution: bool,
+    pub execution_complete: bool,
+    pub blocked_reasons: Vec<String>,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentClosedLoopMemoryReusePreflightExecutionReport {
+    pub fn is_clean(&self) -> bool {
+        self.preflight_clean
+            && self.memory_reuse_ready
+            && self.can_enter_execution
+            && self.execution_complete
+            && self.skipped_engine_calls == 0
+            && self.blocked_reasons.is_empty()
+    }
+
+    pub fn saved_compute(&self) -> bool {
+        self.skipped_engine_calls > 0
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "agent_memory_reuse_preflight_execution preflight_clean={} memory_reuse_ready={} can_enter_execution={} execution_complete={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} blocked_reasons={}",
+            self.preflight_clean,
+            self.memory_reuse_ready,
+            self.can_enter_execution,
+            self.execution_complete,
+            self.planned_engine_calls,
+            self.executed_engine_calls,
+            self.skipped_engine_calls,
+            self.blocked_reasons.len(),
+        )
+    }
+}
+
 impl AgentClosedLoopMemoryReusePreflightExecutor {
     pub fn new() -> Self {
         Self {
@@ -886,6 +930,68 @@ impl AgentClosedLoopMemoryReusePreflightExecutor {
 
         self.executor
             .execute(prepared_preflight.prepared_dispatch, engine)
+    }
+
+    pub fn execute_with_report<E>(
+        &self,
+        prepared_preflight: AgentClosedLoopPreparedMemoryReusePreflight,
+        engine: &mut E,
+    ) -> AgentClosedLoopMemoryReusePreflightExecutionReport
+    where
+        E: EnginePort,
+        E::Error: ToString,
+    {
+        let preflight = prepared_preflight.preflight.clone();
+        let planned_engine_calls = prepared_preflight
+            .prepared_dispatch
+            .assigned_task_ids()
+            .len();
+        let preflight_clean = preflight
+            .as_ref()
+            .is_some_and(AgentMemoryReuseExecutionPreflightReport::is_clean);
+        let memory_reuse_ready = preflight
+            .as_ref()
+            .is_some_and(|preflight| preflight.memory_reuse_ready);
+        let can_enter_execution = prepared_preflight.can_enter_execution();
+
+        let execution = self.execute(prepared_preflight, engine);
+        let executed_engine_calls = execution.result_count() + execution.failure_count();
+        let skipped_engine_calls = planned_engine_calls.saturating_sub(executed_engine_calls);
+        let execution_complete = execution.is_complete();
+        let mut blocked_reasons = execution.skipped_reasons.clone();
+        if blocked_reasons.is_empty() {
+            blocked_reasons.extend(
+                preflight
+                    .as_ref()
+                    .map(|preflight| preflight.blocked_reasons.clone())
+                    .unwrap_or_default(),
+            );
+        }
+        let telemetry = memory_reuse_preflight_execution_telemetry(
+            preflight.is_some(),
+            preflight_clean,
+            memory_reuse_ready,
+            can_enter_execution,
+            execution_complete,
+            planned_engine_calls,
+            executed_engine_calls,
+            skipped_engine_calls,
+            &blocked_reasons,
+        );
+
+        AgentClosedLoopMemoryReusePreflightExecutionReport {
+            preflight,
+            execution,
+            planned_engine_calls,
+            executed_engine_calls,
+            skipped_engine_calls,
+            preflight_clean,
+            memory_reuse_ready,
+            can_enter_execution,
+            execution_complete,
+            blocked_reasons,
+            telemetry,
+        }
     }
 }
 
@@ -1054,6 +1160,40 @@ fn rate(count: usize, total: usize) -> f32 {
     } else {
         count as f32 / total as f32
     }
+}
+
+fn memory_reuse_preflight_execution_telemetry(
+    preflight_present: bool,
+    preflight_clean: bool,
+    memory_reuse_ready: bool,
+    can_enter_execution: bool,
+    execution_complete: bool,
+    planned_engine_calls: usize,
+    executed_engine_calls: usize,
+    skipped_engine_calls: usize,
+    blocked_reasons: &[String],
+) -> Vec<String> {
+    let mut telemetry = vec![
+        "agent_memory_reuse_preflight_execution=true".to_owned(),
+        format!("agent_memory_reuse_preflight_present={preflight_present}"),
+        format!("agent_memory_reuse_preflight_clean={preflight_clean}"),
+        format!("agent_memory_reuse_ready={memory_reuse_ready}"),
+        format!("agent_memory_reuse_can_enter_execution={can_enter_execution}"),
+        format!("agent_memory_reuse_execution_complete={execution_complete}"),
+        format!("agent_memory_reuse_planned_engine_calls={planned_engine_calls}"),
+        format!("agent_memory_reuse_executed_engine_calls={executed_engine_calls}"),
+        format!("agent_memory_reuse_skipped_engine_calls={skipped_engine_calls}"),
+        format!(
+            "agent_memory_reuse_preflight_blocked_reasons={}",
+            blocked_reasons.len()
+        ),
+    ];
+    telemetry.extend(
+        blocked_reasons
+            .iter()
+            .map(|reason| format!("agent_memory_reuse_preflight_blocked_reason={reason}")),
+    );
+    telemetry
 }
 
 #[cfg(test)]
@@ -2080,8 +2220,9 @@ mod tests {
             fail: false,
         };
 
-        let prepared_execution = AgentClosedLoopMemoryReusePreflightExecutor::new()
-            .execute(prepared_preflight, &mut engine);
+        let report = AgentClosedLoopMemoryReusePreflightExecutor::new()
+            .execute_with_report(prepared_preflight, &mut engine);
+        let prepared_execution = &report.execution;
 
         assert_eq!(engine.calls, 1);
         assert!(prepared_execution.has_execution());
@@ -2089,6 +2230,20 @@ mod tests {
         assert_eq!(prepared_execution.result_count(), 1);
         assert_eq!(prepared_execution.failure_count(), 0);
         assert!(prepared_execution.skipped_reasons.is_empty());
+        assert!(report.is_clean());
+        assert!(!report.saved_compute());
+        assert!(report.preflight.is_some());
+        assert_eq!(report.planned_engine_calls, 1);
+        assert_eq!(report.executed_engine_calls, 1);
+        assert_eq!(report.skipped_engine_calls, 0);
+        assert!(report.blocked_reasons.is_empty());
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_reuse_skipped_engine_calls=0")
+        );
+        assert!(report.summary_line().contains("execution_complete=true"));
     }
 
     #[test]
@@ -2131,8 +2286,9 @@ mod tests {
             fail: false,
         };
 
-        let prepared_execution = AgentClosedLoopMemoryReusePreflightExecutor::new()
-            .execute(prepared_preflight, &mut engine);
+        let report = AgentClosedLoopMemoryReusePreflightExecutor::new()
+            .execute_with_report(prepared_preflight, &mut engine);
+        let prepared_execution = &report.execution;
 
         assert_eq!(engine.calls, 0);
         assert!(!prepared_execution.has_execution());
@@ -2149,6 +2305,24 @@ mod tests {
                 .skipped_reasons
                 .contains(&"memory_reuse_recall_missing_task=next-turn".to_owned())
         );
+        assert!(!report.is_clean());
+        assert!(report.saved_compute());
+        assert!(report.preflight.is_some());
+        assert_eq!(report.planned_engine_calls, 1);
+        assert_eq!(report.executed_engine_calls, 0);
+        assert_eq!(report.skipped_engine_calls, 1);
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"memory_reuse_dry_run_evidence_missing".to_owned())
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_reuse_skipped_engine_calls=1")
+        );
+        assert!(report.summary_line().contains("skipped_engine_calls=1"));
     }
 
     #[test]

@@ -757,6 +757,7 @@ pub use step::{
     AgentClosedLoopExecutionHealth, AgentClosedLoopExecutionHealthPolicy,
     AgentClosedLoopExecutionHealthStatus, AgentClosedLoopExecutionHistory,
     AgentClosedLoopExecutionReport, AgentClosedLoopExecutionSummary,
+    AgentClosedLoopMemoryReusePreflightExecutionReport,
     AgentClosedLoopMemoryReusePreflightExecutor, AgentClosedLoopNextTurnMode,
     AgentClosedLoopNextTurnPlan, AgentClosedLoopNextTurnPlanner, AgentClosedLoopPreparedCycle,
     AgentClosedLoopPreparedCycleCloser, AgentClosedLoopPreparedDispatch,
