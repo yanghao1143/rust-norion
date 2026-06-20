@@ -4466,6 +4466,25 @@ System-error replacements:
   `reflection_reuse_execution_authorized=false`,
   `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
   `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R90 memory reflection reuse lookup approval request on 2026-06-20: added the
+  report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1`
+  layer after the R89 lookup preview. The request records deterministic
+  approval/rejection tokens, idempotency keys, rollback anchors, and operator
+  checklist evidence for future review, but it does not consume approval
+  tokens, perform memory lookup, assume a lookup hit, skip model calls,
+  authorize reflection reuse execution, write memory, or write `.ndkv`. The
+  implementation remains Norion-owned and clean-room safe: no external code was
+  copied, and the GPL-only `claurst` baseline remains architecture inspiration
+  only. Focused validation passed for `norion-eval` memory admission,
+  `tools/evolution-loop` self-improve/report/prompt, `norion-test` optional
+  replay schema coverage, and `tools/evolution-loop/test-evolution-loop-status.ps1`.
+  The R90 status surface preserves `read_only=true`, `report_only=true`,
+  `candidate_only=true`, `commit_allowed=false`,
+  `admission_write_authorized=false`, `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
 
 ## Handoff rules
 

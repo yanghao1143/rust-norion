@@ -2049,6 +2049,62 @@ fn print_report(
         self_improve_proposal_memory_reflection_reuse_lookup_preview.memory_store_write_allowed,
         self_improve_proposal_memory_reflection_reuse_lookup_preview.ndkv_write_allowed
     );
+    let self_improve_proposal_memory_reflection_reuse_lookup_approval_request =
+        self_improve_proposal_artifact.memory_reflection_reuse_lookup_approval_request();
+    let first_memory_reflection_reuse_lookup_approval_request =
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .first_approval_request_id
+            .as_deref()
+            .unwrap_or("-");
+    println!(
+        "self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1: targets={} preflight_items={} lookup_preview_items={} ready_lookup_previews={} approval_requests={} ready_requests={} requested={} blocked={} approval_tokens={} rejection_tokens={} duplicate_clusters={} duplicate_reflections={} projected_saved_reflections={} projected_model_call_skips={} first_item={} lookup_approval_request_ready={} explicit_operator_approval_required={} validation_required={} rollback_required={} commit_allowed={} admission_write_authorized={} model_call_skip_authorized={} reflection_reuse_execution_authorized={} memory_lookup_performed={} lookup_hit_assumed={} auto_apply={} memory_store_write_allowed={} ndkv_write_allowed={}",
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.target_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.preflight_item_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .lookup_preview_item_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .ready_lookup_preview_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .approval_request_item_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .ready_approval_request_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .requested_lookup_approval_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.blocked_item_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .approval_token_present_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .rejection_token_present_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .duplicate_cluster_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .duplicate_reflection_item_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .projected_saved_reflection_count,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .projected_model_call_skip_count,
+        first_memory_reflection_reuse_lookup_approval_request,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .lookup_approval_request_ready,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .explicit_operator_approval_required,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.validation_required,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.rollback_required,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.commit_allowed,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .admission_write_authorized,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .model_call_skip_authorized,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .reflection_reuse_execution_authorized,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .memory_lookup_performed,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.lookup_hit_assumed,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.auto_apply,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request
+            .memory_store_write_allowed,
+        self_improve_proposal_memory_reflection_reuse_lookup_approval_request.ndkv_write_allowed
+    );
     let self_improve_proposal_memory_approval_token_intake_preview =
         self_improve_proposal_artifact.memory_approval_token_intake_preview();
     let first_approval_token_intake_item =
@@ -4037,6 +4093,58 @@ fn prompt_context_text_with_self_improve_proposals(
                         .to_owned(),
                 );
             }
+            let lookup_approval_request =
+                artifact.memory_reflection_reuse_lookup_approval_request();
+            let first_lookup_approval_request = lookup_approval_request
+                .first_approval_request_id
+                .as_deref()
+                .unwrap_or("none");
+            let lookup_approval_request_failures =
+                if lookup_approval_request.failure_reasons.is_empty() {
+                    "none".to_owned()
+                } else {
+                    lookup_approval_request.failure_reasons.join(",")
+                };
+            lines.push(format!(
+                "self_improve_memory_reflection_reuse_lookup_approval_request=targets:{} preflight_items:{} lookup_preview_items:{} ready_lookup_previews:{} approval_requests:{} ready_requests:{} requested:{} blocked:{} approval_tokens:{} rejection_tokens:{} duplicate_clusters:{} duplicate_reflections:{} projected_saved_reflections:{} projected_model_call_skips:{} first_item:{} lookup_approval_request_ready:{} explicit_operator_approval_required:{} validation_required:{} rollback_required:{} commit_allowed:{} admission_write_authorized:{} model_call_skip_authorized:{} reflection_reuse_execution_authorized:{} memory_lookup_performed:{} lookup_hit_assumed:{} failure_reasons:{} auto_apply:{} memory_store_write_allowed:{} ndkv_write_allowed:{}",
+                lookup_approval_request.target_count,
+                lookup_approval_request.preflight_item_count,
+                lookup_approval_request.lookup_preview_item_count,
+                lookup_approval_request.ready_lookup_preview_count,
+                lookup_approval_request.approval_request_item_count,
+                lookup_approval_request.ready_approval_request_count,
+                lookup_approval_request.requested_lookup_approval_count,
+                lookup_approval_request.blocked_item_count,
+                lookup_approval_request.approval_token_present_count,
+                lookup_approval_request.rejection_token_present_count,
+                lookup_approval_request.duplicate_cluster_count,
+                lookup_approval_request.duplicate_reflection_item_count,
+                lookup_approval_request.projected_saved_reflection_count,
+                lookup_approval_request.projected_model_call_skip_count,
+                first_lookup_approval_request,
+                lookup_approval_request.lookup_approval_request_ready,
+                lookup_approval_request.explicit_operator_approval_required,
+                lookup_approval_request.validation_required,
+                lookup_approval_request.rollback_required,
+                lookup_approval_request.commit_allowed,
+                lookup_approval_request.admission_write_authorized,
+                lookup_approval_request.model_call_skip_authorized,
+                lookup_approval_request.reflection_reuse_execution_authorized,
+                lookup_approval_request.memory_lookup_performed,
+                lookup_approval_request.lookup_hit_assumed,
+                lookup_approval_request_failures,
+                lookup_approval_request.auto_apply,
+                lookup_approval_request.memory_store_write_allowed,
+                lookup_approval_request.ndkv_write_allowed
+            ));
+            if lookup_approval_request.lookup_approval_request_ready
+                && lookup_approval_request.requested_lookup_approval_count > 0
+            {
+                lines.push(
+                    "next_self_improve_should_request_memory_reflection_reuse_lookup_approval:true"
+                        .to_owned(),
+                );
+            }
             let approval_token_intake = artifact.memory_approval_token_intake_preview();
             let first_approval_token_intake_item = approval_token_intake
                 .first_intake_item_id
@@ -4923,7 +5031,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -5021,6 +5129,9 @@ fn report_json_with_remote_chain_and_required_latest_roles(
             self_improve_proposal_artifact
         ),
         self_improve_proposal_artifact::option_memory_reflection_reuse_lookup_preview_report_json(
+            self_improve_proposal_artifact
+        ),
+        self_improve_proposal_artifact::option_memory_reflection_reuse_lookup_approval_request_report_json(
             self_improve_proposal_artifact
         ),
         self_improve_proposal_artifact::option_memory_approval_token_intake_preview_report_json(
@@ -8776,6 +8887,15 @@ mod tests {
                 "\"memory_lookup_performed\":false",
                 "\"lookup_hit_assumed\":false",
                 "\"reflection reuse lookup preview has no preflight items\"",
+                "\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{\"schema\":\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\"",
+                "\"consumer_surface\":\"evolution_loop_report_only_self_improve_memory_reflection_reuse_lookup_approval_request\"",
+                "\"approval_request_item_count\":0",
+                "\"requested_lookup_approval_count\":0",
+                "\"approval_token_present_count\":0",
+                "\"lookup_approval_request_ready\":false",
+                "\"memory_lookup_performed\":false",
+                "\"lookup_hit_assumed\":false",
+                "\"reflection reuse lookup approval request has no lookup preview items\"",
                 "\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{\"schema\":\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\"",
                 "\"consumer_surface\":\"evolution_loop_report_only_self_improve_memory_admission_operator_approval_token_intake_preview\"",
                 "\"ready_intake_count\":0",
@@ -8868,6 +8988,11 @@ mod tests {
         assert_occurrences(
             &json,
             "\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{",
+            1,
+        );
+        assert_occurrences(
+            &json,
+            "\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{",
             1,
         );
         assert_occurrences(
@@ -8977,6 +9102,12 @@ mod tests {
             "lookup_preview_ready:false explicit_operator_approval_required:false validation_required:false rollback_required:false commit_allowed:false admission_write_authorized:false model_call_skip_authorized:false reflection_reuse_execution_authorized:false memory_lookup_performed:false lookup_hit_assumed:false failure_reasons:reflection reuse lookup preview has no projected model-call skips,reflection reuse lookup preview requires all preflight items passed,reflection reuse lookup preview requires passed preflight,reflection reuse preflight has no projected model-call savings auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
         ));
         assert!(context.contains(
+            "self_improve_memory_reflection_reuse_lookup_approval_request=targets:1 preflight_items:1 lookup_preview_items:1 ready_lookup_previews:0 approval_requests:1 ready_requests:0 requested:0 blocked:1 approval_tokens:0 rejection_tokens:0 duplicate_clusters:0 duplicate_reflections:0 projected_saved_reflections:0 projected_model_call_skips:0 first_item:memory-reflection-reuse-lookup-approval:"
+        ));
+        assert!(context.contains(
+            "lookup_approval_request_ready:false explicit_operator_approval_required:false validation_required:false rollback_required:false commit_allowed:false admission_write_authorized:false model_call_skip_authorized:false reflection_reuse_execution_authorized:false memory_lookup_performed:false lookup_hit_assumed:false failure_reasons:reflection reuse lookup approval request has no projected model-call skips,reflection reuse lookup approval request requires all lookup previews ready,reflection reuse lookup approval request requires ready lookup preview,reflection reuse lookup preview has no projected model-call skips,reflection reuse lookup preview requires all preflight items passed,reflection reuse lookup preview requires passed preflight,reflection reuse preflight has no projected model-call savings auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
+        ));
+        assert!(context.contains(
             "self_improve_memory_admission_operator_approval_token_intake_preview=targets:1 review_packet_items:1 useful_reflections:1 intake_items:1 ready:1 pending_operator_tokens:1 blocked:0 approval_tokens:1 rejection_tokens:1 first_item:self-improve-r392-helper_contract-updatethevalidationcomma approval_token_intake_ready:true explicit_operator_approval_required:true validation_required:true rollback_required:true commit_allowed:false admission_write_authorized:false failure_reasons:none auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
         ));
         assert!(!context.contains(
@@ -9030,6 +9161,9 @@ mod tests {
         ));
         assert!(!context.contains(
             "next_self_improve_should_prepare_memory_reflection_reuse_lookup_preview:true"
+        ));
+        assert!(!context.contains(
+            "next_self_improve_should_request_memory_reflection_reuse_lookup_approval:true"
         ));
         assert!(
             context
