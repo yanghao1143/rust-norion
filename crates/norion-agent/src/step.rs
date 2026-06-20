@@ -16,8 +16,9 @@ use crate::ledger::{AgentCycleLedger, AgentCycleLedgerEntry, AgentCycleLedgerPol
 use crate::loopback::{AgentLoopbackPlan, AgentLoopbackPlanner};
 use crate::memory::{
     AgentMemoryReuseExecutionPreflightPlanner, AgentMemoryReuseExecutionPreflightPolicy,
-    AgentMemoryReuseExecutionPreflightReport, AgentWaveMemoryRecallPlan,
-    MemoryRecallDryRunEvidence, MemorySubmissionReport,
+    AgentMemoryReuseExecutionPreflightReport, AgentRecallOutcomeAttributionPlanner,
+    AgentRecallOutcomeAttributionReport, AgentWaveMemoryRecallPlan, MemoryRecallDryRunEvidence,
+    MemorySubmissionReport,
 };
 use crate::ports::EnginePort;
 use crate::service::{
@@ -1184,6 +1185,7 @@ impl AgentClosedLoopPreparedDispatch {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentClosedLoopPreparedMemoryReusePreflight {
     pub prepared_dispatch: AgentClosedLoopPreparedDispatch,
+    pub recall_plan: AgentWaveMemoryRecallPlan,
     pub preflight: Option<AgentMemoryReuseExecutionPreflightReport>,
     pub skipped_reasons: Vec<String>,
 }
@@ -1247,6 +1249,7 @@ impl AgentClosedLoopPreparedMemoryReusePreflightPlanner {
             };
             return AgentClosedLoopPreparedMemoryReusePreflight {
                 prepared_dispatch,
+                recall_plan: recall_plan.clone(),
                 preflight: None,
                 skipped_reasons,
             };
@@ -1264,6 +1267,7 @@ impl AgentClosedLoopPreparedMemoryReusePreflightPlanner {
 
         AgentClosedLoopPreparedMemoryReusePreflight {
             prepared_dispatch,
+            recall_plan: recall_plan.clone(),
             preflight,
             skipped_reasons,
         }
@@ -1436,6 +1440,7 @@ pub struct AgentClosedLoopMemoryReusePreflightExecutor {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentClosedLoopMemoryReusePreflightExecutionReport {
     pub preflight: Option<AgentMemoryReuseExecutionPreflightReport>,
+    pub recall_outcome_attribution: Option<AgentRecallOutcomeAttributionReport>,
     pub execution: AgentClosedLoopPreparedExecution,
     pub planned_engine_calls: usize,
     pub executed_engine_calls: usize,
@@ -1463,8 +1468,23 @@ impl AgentClosedLoopMemoryReusePreflightExecutionReport {
     }
 
     pub fn summary_line(&self) -> String {
+        let attribution_updates = self
+            .recall_outcome_attribution
+            .as_ref()
+            .map(|attribution| attribution.attributions.len())
+            .unwrap_or_default();
+        let attribution_reinforce = self
+            .recall_outcome_attribution
+            .as_ref()
+            .map(|attribution| attribution.reinforced_count)
+            .unwrap_or_default();
+        let attribution_penalize = self
+            .recall_outcome_attribution
+            .as_ref()
+            .map(|attribution| attribution.penalized_count)
+            .unwrap_or_default();
         format!(
-            "agent_memory_reuse_preflight_execution preflight_clean={} memory_reuse_ready={} can_enter_execution={} execution_complete={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} blocked_reasons={}",
+            "agent_memory_reuse_preflight_execution preflight_clean={} memory_reuse_ready={} can_enter_execution={} execution_complete={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} recall_attribution_updates={} recall_attribution_reinforce={} recall_attribution_penalize={} blocked_reasons={}",
             self.preflight_clean,
             self.memory_reuse_ready,
             self.can_enter_execution,
@@ -1472,6 +1492,9 @@ impl AgentClosedLoopMemoryReusePreflightExecutionReport {
             self.planned_engine_calls,
             self.executed_engine_calls,
             self.skipped_engine_calls,
+            attribution_updates,
+            attribution_reinforce,
+            attribution_penalize,
             self.blocked_reasons.len(),
         )
     }
@@ -1489,6 +1512,13 @@ pub struct AgentClosedLoopMemoryReusePreflightExecutionSummary {
     pub planned_engine_calls: usize,
     pub executed_engine_calls: usize,
     pub skipped_engine_calls: usize,
+    pub recall_attribution_present: bool,
+    pub recall_attribution_updates: usize,
+    pub recall_attribution_reinforced: usize,
+    pub recall_attribution_penalized: usize,
+    pub recall_attribution_skipped_missing_outcome_tasks: usize,
+    pub recall_attribution_read_only: bool,
+    pub recall_attribution_memory_store_write_allowed: bool,
     pub blocked_reasons: Vec<String>,
 }
 
@@ -1505,13 +1535,42 @@ impl AgentClosedLoopMemoryReusePreflightExecutionSummary {
             planned_engine_calls: report.planned_engine_calls,
             executed_engine_calls: report.executed_engine_calls,
             skipped_engine_calls: report.skipped_engine_calls,
+            recall_attribution_present: report.recall_outcome_attribution.is_some(),
+            recall_attribution_updates: report
+                .recall_outcome_attribution
+                .as_ref()
+                .map(|attribution| attribution.attributions.len())
+                .unwrap_or_default(),
+            recall_attribution_reinforced: report
+                .recall_outcome_attribution
+                .as_ref()
+                .map(|attribution| attribution.reinforced_count)
+                .unwrap_or_default(),
+            recall_attribution_penalized: report
+                .recall_outcome_attribution
+                .as_ref()
+                .map(|attribution| attribution.penalized_count)
+                .unwrap_or_default(),
+            recall_attribution_skipped_missing_outcome_tasks: report
+                .recall_outcome_attribution
+                .as_ref()
+                .map(|attribution| attribution.skipped_missing_outcome_task_ids.len())
+                .unwrap_or_default(),
+            recall_attribution_read_only: report
+                .recall_outcome_attribution
+                .as_ref()
+                .is_some_and(|attribution| attribution.read_only),
+            recall_attribution_memory_store_write_allowed: report
+                .recall_outcome_attribution
+                .as_ref()
+                .is_some_and(|attribution| attribution.memory_store_write_allowed),
             blocked_reasons: report.blocked_reasons.clone(),
         }
     }
 
     pub fn summary_line(&self) -> String {
         format!(
-            "agent_memory_reuse_preflight_execution_summary clean={} preflight_present={} memory_reuse_ready={} can_enter_execution={} execution_complete={} saved_compute={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} blocked_reasons={}",
+            "agent_memory_reuse_preflight_execution_summary clean={} preflight_present={} memory_reuse_ready={} can_enter_execution={} execution_complete={} saved_compute={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} recall_attribution_present={} recall_attribution_updates={} recall_attribution_reinforce={} recall_attribution_penalize={} blocked_reasons={}",
             self.clean,
             self.preflight_present,
             self.memory_reuse_ready,
@@ -1521,6 +1580,10 @@ impl AgentClosedLoopMemoryReusePreflightExecutionSummary {
             self.planned_engine_calls,
             self.executed_engine_calls,
             self.skipped_engine_calls,
+            self.recall_attribution_present,
+            self.recall_attribution_updates,
+            self.recall_attribution_reinforced,
+            self.recall_attribution_penalized,
             self.blocked_reasons.len(),
         )
     }
@@ -1586,6 +1649,12 @@ pub struct AgentClosedLoopMemoryReusePreflightExecutionDashboard {
     pub dispatch_blocked_reports: usize,
     pub missing_preflight_reports: usize,
     pub saved_compute_reports: usize,
+    pub recall_attribution_reports: usize,
+    pub recall_attribution_updates: usize,
+    pub recall_attribution_reinforced: usize,
+    pub recall_attribution_penalized: usize,
+    pub recall_attribution_skipped_missing_outcome_tasks: usize,
+    pub recall_attribution_write_attempt_reports: usize,
     pub clean_rate: f32,
     pub planned_engine_calls: usize,
     pub executed_engine_calls: usize,
@@ -1617,6 +1686,30 @@ impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
             .iter()
             .filter(|summary| summary.saved_compute)
             .count();
+        let recall_attribution_reports = summaries
+            .iter()
+            .filter(|summary| summary.recall_attribution_present)
+            .count();
+        let recall_attribution_updates = summaries
+            .iter()
+            .map(|summary| summary.recall_attribution_updates)
+            .sum::<usize>();
+        let recall_attribution_reinforced = summaries
+            .iter()
+            .map(|summary| summary.recall_attribution_reinforced)
+            .sum::<usize>();
+        let recall_attribution_penalized = summaries
+            .iter()
+            .map(|summary| summary.recall_attribution_penalized)
+            .sum::<usize>();
+        let recall_attribution_skipped_missing_outcome_tasks = summaries
+            .iter()
+            .map(|summary| summary.recall_attribution_skipped_missing_outcome_tasks)
+            .sum::<usize>();
+        let recall_attribution_write_attempt_reports = summaries
+            .iter()
+            .filter(|summary| summary.recall_attribution_memory_store_write_allowed)
+            .count();
         let planned_engine_calls = summaries
             .iter()
             .map(|summary| summary.planned_engine_calls)
@@ -1640,6 +1733,12 @@ impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
             dispatch_blocked_reports,
             missing_preflight_reports,
             saved_compute_reports,
+            recall_attribution_reports,
+            recall_attribution_updates,
+            recall_attribution_reinforced,
+            recall_attribution_penalized,
+            recall_attribution_skipped_missing_outcome_tasks,
+            recall_attribution_write_attempt_reports,
             planned_engine_calls,
             executed_engine_calls,
             skipped_engine_calls,
@@ -1652,6 +1751,12 @@ impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
             dispatch_blocked_reports,
             missing_preflight_reports,
             saved_compute_reports,
+            recall_attribution_reports,
+            recall_attribution_updates,
+            recall_attribution_reinforced,
+            recall_attribution_penalized,
+            recall_attribution_skipped_missing_outcome_tasks,
+            recall_attribution_write_attempt_reports,
             clean_rate: rate(clean_reports, total_reports),
             planned_engine_calls,
             executed_engine_calls,
@@ -1697,6 +1802,7 @@ pub struct AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy {
     pub maximum_blocked_reports: usize,
     pub maximum_missing_preflight_reports: usize,
     pub maximum_skipped_engine_calls: usize,
+    pub maximum_recall_attribution_write_attempt_reports: usize,
 }
 
 impl Default for AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy {
@@ -1706,6 +1812,7 @@ impl Default for AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy {
             maximum_blocked_reports: 0,
             maximum_missing_preflight_reports: 0,
             maximum_skipped_engine_calls: 0,
+            maximum_recall_attribution_write_attempt_reports: 0,
         }
     }
 }
@@ -1745,6 +1852,15 @@ impl AgentClosedLoopMemoryReusePreflightExecutionHealth {
             repair_reasons.push(format!(
                 "memory_reuse_blocked_reports={}>{}",
                 dashboard.blocked_reports, policy.maximum_blocked_reports
+            ));
+        }
+        if dashboard.recall_attribution_write_attempt_reports
+            > policy.maximum_recall_attribution_write_attempt_reports
+        {
+            repair_reasons.push(format!(
+                "recall_attribution_write_attempt_reports={}>{}",
+                dashboard.recall_attribution_write_attempt_reports,
+                policy.maximum_recall_attribution_write_attempt_reports
             ));
         }
 
@@ -1878,6 +1994,7 @@ impl AgentClosedLoopMemoryReusePreflightExecutor {
         E::Error: ToString,
     {
         let preflight = prepared_preflight.preflight.clone();
+        let recall_plan = prepared_preflight.recall_plan.clone();
         let planned_engine_calls = prepared_preflight
             .prepared_dispatch
             .assigned_task_ids()
@@ -1894,6 +2011,9 @@ impl AgentClosedLoopMemoryReusePreflightExecutor {
         let executed_engine_calls = execution.result_count() + execution.failure_count();
         let skipped_engine_calls = planned_engine_calls.saturating_sub(executed_engine_calls);
         let execution_complete = execution.is_complete();
+        let recall_outcome_attribution = execution.execution.as_ref().map(|execution| {
+            AgentRecallOutcomeAttributionPlanner::new().plan(&recall_plan, execution)
+        });
         let mut blocked_reasons = execution.skipped_reasons.clone();
         if blocked_reasons.is_empty() {
             blocked_reasons.extend(
@@ -1903,7 +2023,7 @@ impl AgentClosedLoopMemoryReusePreflightExecutor {
                     .unwrap_or_default(),
             );
         }
-        let telemetry = memory_reuse_preflight_execution_telemetry(
+        let mut telemetry = memory_reuse_preflight_execution_telemetry(
             preflight.is_some(),
             preflight_clean,
             memory_reuse_ready,
@@ -1912,11 +2032,16 @@ impl AgentClosedLoopMemoryReusePreflightExecutor {
             planned_engine_calls,
             executed_engine_calls,
             skipped_engine_calls,
+            recall_outcome_attribution.as_ref(),
             &blocked_reasons,
         );
+        if let Some(attribution) = &recall_outcome_attribution {
+            telemetry.extend(attribution.telemetry.clone());
+        }
 
         AgentClosedLoopMemoryReusePreflightExecutionReport {
             preflight,
+            recall_outcome_attribution,
             execution,
             planned_engine_calls,
             executed_engine_calls,
@@ -2107,8 +2232,23 @@ fn memory_reuse_preflight_execution_telemetry(
     planned_engine_calls: usize,
     executed_engine_calls: usize,
     skipped_engine_calls: usize,
+    recall_outcome_attribution: Option<&AgentRecallOutcomeAttributionReport>,
     blocked_reasons: &[String],
 ) -> Vec<String> {
+    let recall_attribution_present = recall_outcome_attribution.is_some();
+    let recall_attribution_updates = recall_outcome_attribution
+        .map(|attribution| attribution.attributions.len())
+        .unwrap_or_default();
+    let recall_attribution_reinforced = recall_outcome_attribution
+        .map(|attribution| attribution.reinforced_count)
+        .unwrap_or_default();
+    let recall_attribution_penalized = recall_outcome_attribution
+        .map(|attribution| attribution.penalized_count)
+        .unwrap_or_default();
+    let recall_attribution_read_only =
+        recall_outcome_attribution.is_some_and(|attribution| attribution.read_only);
+    let recall_attribution_memory_store_write_allowed = recall_outcome_attribution
+        .is_some_and(|attribution| attribution.memory_store_write_allowed);
     let mut telemetry = vec![
         "agent_memory_reuse_preflight_execution=true".to_owned(),
         format!("agent_memory_reuse_preflight_present={preflight_present}"),
@@ -2119,6 +2259,14 @@ fn memory_reuse_preflight_execution_telemetry(
         format!("agent_memory_reuse_planned_engine_calls={planned_engine_calls}"),
         format!("agent_memory_reuse_executed_engine_calls={executed_engine_calls}"),
         format!("agent_memory_reuse_skipped_engine_calls={skipped_engine_calls}"),
+        format!("agent_memory_reuse_recall_attribution_present={recall_attribution_present}"),
+        format!("agent_memory_reuse_recall_attribution_updates={recall_attribution_updates}"),
+        format!("agent_memory_reuse_recall_attribution_reinforce={recall_attribution_reinforced}"),
+        format!("agent_memory_reuse_recall_attribution_penalize={recall_attribution_penalized}"),
+        format!("agent_memory_reuse_recall_attribution_read_only={recall_attribution_read_only}"),
+        format!(
+            "agent_memory_reuse_recall_attribution_memory_store_write_allowed={recall_attribution_memory_store_write_allowed}"
+        ),
         format!(
             "agent_memory_reuse_preflight_blocked_reasons={}",
             blocked_reasons.len()
@@ -2139,6 +2287,12 @@ fn memory_reuse_preflight_execution_dashboard_telemetry(
     dispatch_blocked_reports: usize,
     missing_preflight_reports: usize,
     saved_compute_reports: usize,
+    recall_attribution_reports: usize,
+    recall_attribution_updates: usize,
+    recall_attribution_reinforced: usize,
+    recall_attribution_penalized: usize,
+    recall_attribution_skipped_missing_outcome_tasks: usize,
+    recall_attribution_write_attempt_reports: usize,
     planned_engine_calls: usize,
     executed_engine_calls: usize,
     skipped_engine_calls: usize,
@@ -2156,6 +2310,24 @@ fn memory_reuse_preflight_execution_dashboard_telemetry(
         ),
         format!(
             "agent_memory_reuse_preflight_execution_saved_compute_reports={saved_compute_reports}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_recall_attribution_reports={recall_attribution_reports}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_recall_attribution_updates={recall_attribution_updates}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_recall_attribution_reinforce={recall_attribution_reinforced}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_recall_attribution_penalize={recall_attribution_penalized}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_recall_attribution_skipped_missing_outcome_tasks={recall_attribution_skipped_missing_outcome_tasks}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_recall_attribution_write_attempt_reports={recall_attribution_write_attempt_reports}"
         ),
         format!(
             "agent_memory_reuse_preflight_execution_planned_engine_calls={planned_engine_calls}"
@@ -2725,6 +2897,13 @@ mod tests {
             planned_engine_calls,
             executed_engine_calls,
             skipped_engine_calls,
+            recall_attribution_present: false,
+            recall_attribution_updates: 0,
+            recall_attribution_reinforced: 0,
+            recall_attribution_penalized: 0,
+            recall_attribution_skipped_missing_outcome_tasks: 0,
+            recall_attribution_read_only: true,
+            recall_attribution_memory_store_write_allowed: false,
             blocked_reasons: blocked_reasons
                 .into_iter()
                 .map(str::to_owned)
@@ -4484,6 +4663,14 @@ mod tests {
         assert!(report.is_clean());
         assert!(!report.saved_compute());
         assert!(report.preflight.is_some());
+        let attribution = report.recall_outcome_attribution.as_ref().unwrap();
+        assert!(attribution.read_only);
+        assert!(!attribution.memory_store_write_allowed);
+        assert_eq!(attribution.reinforced_count, 1);
+        assert_eq!(attribution.penalized_count, 0);
+        assert_eq!(attribution.attributions.len(), 1);
+        assert_eq!(attribution.attributions[0].task_id, "next-turn");
+        assert_eq!(attribution.attributions[0].action.as_str(), "reinforce");
         assert_eq!(report.planned_engine_calls, 1);
         assert_eq!(report.executed_engine_calls, 1);
         assert_eq!(report.skipped_engine_calls, 0);
@@ -4494,15 +4681,138 @@ mod tests {
                 .iter()
                 .any(|line| line == "agent_memory_reuse_skipped_engine_calls=0")
         );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_memory_reuse_recall_attribution_updates=1" })
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_recall_outcome_attribution_reinforce=1")
+        );
         assert!(report.summary_line().contains("execution_complete=true"));
+        assert!(
+            report
+                .summary_line()
+                .contains("recall_attribution_reinforce=1")
+        );
         let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
         history.record_report(&report);
         assert_eq!(history.latest().unwrap().executed_engine_calls, 1);
+        assert_eq!(history.latest().unwrap().recall_attribution_updates, 1);
+        assert_eq!(history.latest().unwrap().recall_attribution_reinforced, 1);
+        let dashboard = history.dashboard();
+        assert_eq!(dashboard.recall_attribution_reports, 1);
+        assert_eq!(dashboard.recall_attribution_updates, 1);
+        assert_eq!(dashboard.recall_attribution_reinforced, 1);
+        assert_eq!(dashboard.recall_attribution_penalized, 0);
+        assert_eq!(dashboard.recall_attribution_write_attempt_reports, 0);
+        assert!(dashboard.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_execution_recall_attribution_updates=1"
+        }));
         assert!(
             history
                 .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default())
                 .is_stable()
         );
+    }
+
+    #[test]
+    fn closed_loop_memory_reuse_preflight_executor_penalizes_failed_recall_outcome() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let turn_plan = history.next_turn_plan(
+            next_queue(),
+            AgentClosedLoopExecutionHealthPolicy::default(),
+        );
+        let budget = BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(8, 1, 1));
+        let prepared_dispatch = AgentClosedLoopDispatchPreparer::new().prepare(
+            turn_plan,
+            &BTreeSet::new(),
+            budget,
+            &BudgetPolicy::strict(),
+            2,
+        );
+        let task = prepared_dispatch.dispatch.as_ref().unwrap().assigned_tasks[0].clone();
+        let evidence = MemoryRecallDryRunEvidence {
+            source: "norion_memory_reuse_dry_run".to_owned(),
+            read_only: true,
+            candidate_count: 1,
+            long_term_match_count: 1,
+            context_decision_count: 1,
+            accepted_context_count: 1,
+            rejected_context_count: 0,
+            used_tokens: 48,
+            requested_kv_count: 2,
+            kv_promote_count: 1,
+            kv_missing_count: 0,
+            kv_already_hot_count: 1,
+            kv_duplicate_count: 0,
+            kv_backend_available: true,
+            memory_store_write_allowed: false,
+            kv_prefetch_apply_allowed: false,
+            reason_codes: vec!["read_only".to_owned()],
+            detail_codes: vec!["kv_prefetch:promote:6e657874".to_owned()],
+        };
+        let recall_context = crate::memory::MemoryRecallContextPlanner::new()
+            .plan_from_dry_run_evidence(&task, &evidence);
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![recall_context],
+            telemetry: Vec::new(),
+        };
+        let prepared_preflight = AgentClosedLoopPreparedMemoryReusePreflightPlanner::new().plan(
+            prepared_dispatch,
+            &recall_plan,
+            &[evidence],
+        );
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: true,
+        };
+
+        let report = AgentClosedLoopMemoryReusePreflightExecutor::new()
+            .execute_with_report(prepared_preflight, &mut engine);
+        let attribution = report.recall_outcome_attribution.as_ref().unwrap();
+
+        assert_eq!(engine.calls, 1);
+        assert!(!report.is_clean());
+        assert!(attribution.read_only);
+        assert!(!attribution.memory_store_write_allowed);
+        assert_eq!(attribution.reinforced_count, 0);
+        assert_eq!(attribution.penalized_count, 1);
+        assert_eq!(attribution.attributions[0].task_id, "next-turn");
+        assert_eq!(attribution.attributions[0].action.as_str(), "penalize");
+        assert_eq!(attribution.attributions[0].amount, 0.32);
+        assert!(
+            attribution.attributions[0]
+                .reason_codes
+                .contains(&"execution_failed".to_owned())
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_memory_reuse_recall_attribution_penalize=1" })
+        );
+        let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
+        history.record_report(&report);
+        let dashboard = history.dashboard();
+
+        assert_eq!(dashboard.recall_attribution_penalized, 1);
+        assert_eq!(dashboard.recall_attribution_write_attempt_reports, 0);
     }
 
     #[test]
@@ -4567,6 +4877,7 @@ mod tests {
         assert!(!report.is_clean());
         assert!(report.saved_compute());
         assert!(report.preflight.is_some());
+        assert!(report.recall_outcome_attribution.is_none());
         assert_eq!(report.planned_engine_calls, 1);
         assert_eq!(report.executed_engine_calls, 0);
         assert_eq!(report.skipped_engine_calls, 1);
@@ -4580,6 +4891,12 @@ mod tests {
                 .telemetry
                 .iter()
                 .any(|line| line == "agent_memory_reuse_skipped_engine_calls=1")
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_memory_reuse_recall_attribution_present=false" })
         );
         assert!(report.summary_line().contains("skipped_engine_calls=1"));
         let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
