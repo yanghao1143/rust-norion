@@ -752,6 +752,321 @@ impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory {
+    summaries: Vec<AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard {
+    pub total_records: usize,
+    pub repair_first_records: usize,
+    pub non_repair_records: usize,
+    pub repair_tasks: usize,
+    pub reasons: usize,
+    pub next_queue_tasks: usize,
+    pub non_repair_rate: f32,
+    pub latest_repair_task_ids: Vec<String>,
+    pub latest_next_queue_task_ids: Vec<String>,
+    pub telemetry: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus {
+    Stable,
+    Watch,
+    Repair,
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Watch => "watch",
+            Self::Repair => "repair",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy {
+    pub maximum_repair_first_records: usize,
+    pub maximum_repair_tasks: usize,
+    pub maximum_reasons: usize,
+    pub minimum_non_repair_rate: f32,
+}
+
+impl Default for AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy {
+    fn default() -> Self {
+        Self {
+            maximum_repair_first_records: 0,
+            maximum_repair_tasks: 0,
+            maximum_reasons: 0,
+            minimum_non_repair_rate: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth {
+    pub status: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus,
+    pub reasons: Vec<String>,
+    pub dashboard: AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecord {
+    pub history: AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory,
+    pub appended_summary: AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary,
+    pub dashboard: AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard,
+    pub health: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth,
+    pub telemetry: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecorder;
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_summaries(
+        summaries: Vec<AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary>,
+    ) -> Self {
+        Self { summaries }
+    }
+
+    pub fn push(&mut self, summary: AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary) {
+        self.summaries.push(summary);
+    }
+
+    pub fn summaries(&self) -> &[AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary] {
+        &self.summaries
+    }
+
+    pub fn latest(&self) -> Option<&AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary> {
+        self.summaries.last()
+    }
+
+    pub fn len(&self) -> usize {
+        self.summaries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.summaries.is_empty()
+    }
+
+    pub fn dashboard(&self) -> AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard {
+        AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard::from_summaries(&self.summaries)
+    }
+
+    pub fn health(
+        &self,
+        policy: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy,
+    ) -> AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth {
+        self.dashboard().health(policy)
+    }
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard {
+    pub fn from_summaries(
+        summaries: &[AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary],
+    ) -> Self {
+        let total_records = summaries.len();
+        let repair_first_records = summaries
+            .iter()
+            .filter(|summary| summary.requires_repair_first)
+            .count();
+        let non_repair_records = total_records.saturating_sub(repair_first_records);
+        let repair_tasks = summaries
+            .iter()
+            .map(|summary| summary.repair_tasks)
+            .sum::<usize>();
+        let reasons = summaries
+            .iter()
+            .map(|summary| summary.reasons)
+            .sum::<usize>();
+        let next_queue_tasks = summaries
+            .iter()
+            .map(|summary| summary.next_queue_tasks)
+            .sum::<usize>();
+        let latest_repair_task_ids = summaries
+            .last()
+            .map(|summary| summary.repair_task_ids.clone())
+            .unwrap_or_default();
+        let latest_next_queue_task_ids = summaries
+            .last()
+            .map(|summary| summary.next_queue_task_ids.clone())
+            .unwrap_or_default();
+        let non_repair_rate = rate(non_repair_records, total_records);
+        let telemetry = memory_reuse_preflight_repair_task_plan_dashboard_telemetry(
+            total_records,
+            repair_first_records,
+            non_repair_records,
+            repair_tasks,
+            reasons,
+            next_queue_tasks,
+            non_repair_rate,
+            &latest_repair_task_ids,
+            &latest_next_queue_task_ids,
+        );
+
+        Self {
+            total_records,
+            repair_first_records,
+            non_repair_records,
+            repair_tasks,
+            reasons,
+            next_queue_tasks,
+            non_repair_rate,
+            latest_repair_task_ids,
+            latest_next_queue_task_ids,
+            telemetry,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.total_records == 0
+    }
+
+    pub fn health(
+        &self,
+        policy: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy,
+    ) -> AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth {
+        AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth::from_dashboard(
+            self.clone(),
+            policy,
+        )
+    }
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth {
+    pub fn from_dashboard(
+        dashboard: AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard,
+        policy: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy,
+    ) -> Self {
+        let mut repair_reasons = Vec::new();
+        let mut watch_reasons = Vec::new();
+
+        if dashboard.is_empty() {
+            watch_reasons.push("memory_reuse_preflight_repair_task_plan_history_empty".to_owned());
+        }
+
+        if dashboard.repair_first_records > policy.maximum_repair_first_records {
+            repair_reasons.push(format!(
+                "memory_reuse_preflight_repair_task_plan_repair_first_records={}>{}",
+                dashboard.repair_first_records, policy.maximum_repair_first_records
+            ));
+        }
+        if dashboard.repair_tasks > policy.maximum_repair_tasks {
+            repair_reasons.push(format!(
+                "memory_reuse_preflight_repair_task_plan_repair_tasks={}>{}",
+                dashboard.repair_tasks, policy.maximum_repair_tasks
+            ));
+        }
+
+        if dashboard.reasons > policy.maximum_reasons {
+            watch_reasons.push(format!(
+                "memory_reuse_preflight_repair_task_plan_reasons={}>{}",
+                dashboard.reasons, policy.maximum_reasons
+            ));
+        }
+        if !dashboard.is_empty() && dashboard.non_repair_rate < policy.minimum_non_repair_rate {
+            watch_reasons.push(format!(
+                "memory_reuse_preflight_repair_task_plan_non_repair_rate={:.3}<{}",
+                dashboard.non_repair_rate, policy.minimum_non_repair_rate
+            ));
+        }
+
+        let (status, reasons) = if !repair_reasons.is_empty() {
+            repair_reasons.extend(watch_reasons);
+            (
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Repair,
+                repair_reasons,
+            )
+        } else if !watch_reasons.is_empty() {
+            (
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Watch,
+                watch_reasons,
+            )
+        } else {
+            (
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Stable,
+                Vec::new(),
+            )
+        };
+
+        Self {
+            status,
+            reasons,
+            dashboard,
+        }
+    }
+
+    pub fn is_stable(&self) -> bool {
+        self.status == AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Stable
+    }
+
+    pub fn allows_service_advance(&self) -> bool {
+        self.status != AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Repair
+    }
+
+    pub fn requires_repair_first(&self) -> bool {
+        self.status == AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Repair
+    }
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecord {
+    pub fn records(&self) -> usize {
+        self.history.len()
+    }
+
+    pub fn allows_service_advance(&self) -> bool {
+        self.health.allows_service_advance()
+    }
+
+    pub fn requires_repair_first(&self) -> bool {
+        self.health.requires_repair_first()
+    }
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecorder {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn record_summary_with_health(
+        &self,
+        mut history: AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory,
+        summary: AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary,
+        policy: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy,
+    ) -> AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecord {
+        history.push(summary.clone());
+        let dashboard = history.dashboard();
+        let health = dashboard.health(policy);
+        let telemetry =
+            memory_reuse_preflight_repair_task_plan_history_record_telemetry(&dashboard, &health);
+
+        AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecord {
+            history,
+            appended_summary: summary,
+            dashboard,
+            health,
+            telemetry,
+        }
+    }
+
+    pub fn record_plan_with_health(
+        &self,
+        history: AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory,
+        plan: &AgentClosedLoopMemoryReusePreflightRepairTaskPlan,
+        policy: AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy,
+    ) -> AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecord {
+        self.record_summary_with_health(history, plan.summary(), policy)
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AgentClosedLoopNextTurnPlanner;
 
@@ -1808,6 +2123,83 @@ fn memory_reuse_preflight_repair_task_plan_summary_telemetry(
         )
     }));
     telemetry
+}
+
+fn memory_reuse_preflight_repair_task_plan_dashboard_telemetry(
+    total_records: usize,
+    repair_first_records: usize,
+    non_repair_records: usize,
+    repair_tasks: usize,
+    reasons: usize,
+    next_queue_tasks: usize,
+    non_repair_rate: f32,
+    latest_repair_task_ids: &[String],
+    latest_next_queue_task_ids: &[String],
+) -> Vec<String> {
+    let mut telemetry = vec![
+        "agent_memory_reuse_preflight_repair_task_plan_dashboard=true".to_owned(),
+        format!("agent_memory_reuse_preflight_repair_task_plan_dashboard_records={total_records}"),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_repair_first_records={repair_first_records}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_non_repair_records={non_repair_records}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_repair_tasks={repair_tasks}"
+        ),
+        format!("agent_memory_reuse_preflight_repair_task_plan_dashboard_reasons={reasons}"),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_next_queue_tasks={next_queue_tasks}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_non_repair_rate={non_repair_rate:.3}"
+        ),
+    ];
+    telemetry.extend(latest_repair_task_ids.iter().map(|task_id| {
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_latest_repair_task_id={task_id}"
+        )
+    }));
+    telemetry.extend(latest_next_queue_task_ids.iter().map(|task_id| {
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_dashboard_latest_next_queue_task_id={task_id}"
+        )
+    }));
+    telemetry
+}
+
+fn memory_reuse_preflight_repair_task_plan_history_record_telemetry(
+    dashboard: &AgentClosedLoopMemoryReusePreflightRepairTaskPlanDashboard,
+    health: &AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealth,
+) -> Vec<String> {
+    vec![
+        "agent_memory_reuse_preflight_repair_task_plan_history_record=true".to_owned(),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_history_record_status={}",
+            health.status.as_str()
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_history_record_records={}",
+            dashboard.total_records
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_history_record_repair_first_records={}",
+            dashboard.repair_first_records
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_history_record_repair_tasks={}",
+            dashboard.repair_tasks
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_history_record_requires_repair_first={}",
+            health.requires_repair_first()
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_history_record_allows_service_advance={}",
+            health.allows_service_advance()
+        ),
+    ]
 }
 
 fn memory_reuse_preflight_repair_tasks(
@@ -3196,6 +3588,186 @@ mod tests {
             line == &format!(
                 "agent_memory_reuse_preflight_repair_task_plan_summary_repair_tasks={repair_task_count}"
             )
+        }));
+    }
+
+    #[test]
+    fn memory_reuse_preflight_repair_task_plan_history_watches_empty_history() {
+        let health = AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory::new()
+            .health(AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy::default());
+
+        assert_eq!(
+            health.status,
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Watch
+        );
+        assert_eq!(
+            health.reasons,
+            vec!["memory_reuse_preflight_repair_task_plan_history_empty".to_owned()]
+        );
+        assert_eq!(health.dashboard.total_records, 0);
+        assert_eq!(health.dashboard.non_repair_rate, 0.0);
+        assert!(health.allows_service_advance());
+        assert!(!health.requires_repair_first());
+        assert!(health.dashboard.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_repair_task_plan_dashboard_records=0"
+        }));
+    }
+
+    #[test]
+    fn memory_reuse_preflight_repair_task_plan_history_marks_non_repair_history_stable() {
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    1,
+                    1,
+                    0,
+                    Vec::new(),
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let summary = AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+            memory_health,
+            next_queue(),
+        )
+        .summary();
+
+        let history =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory::from_summaries(vec![
+                summary,
+            ]);
+        let dashboard = history.dashboard();
+        let health = dashboard
+            .health(AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy::default());
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history.latest().unwrap().next_queue_task_ids,
+            vec!["next-turn"]
+        );
+        assert_eq!(history.summaries().len(), 1);
+        assert_eq!(dashboard.total_records, 1);
+        assert_eq!(dashboard.repair_first_records, 0);
+        assert_eq!(dashboard.non_repair_records, 1);
+        assert_eq!(dashboard.repair_tasks, 0);
+        assert_eq!(dashboard.reasons, 0);
+        assert_eq!(dashboard.next_queue_tasks, 1);
+        assert_eq!(dashboard.non_repair_rate, 1.0);
+        assert!(dashboard.latest_repair_task_ids.is_empty());
+        assert_eq!(dashboard.latest_next_queue_task_ids, vec!["next-turn"]);
+        assert!(health.is_stable());
+        assert!(health.reasons.is_empty());
+        assert!(health.allows_service_advance());
+        assert!(!health.requires_repair_first());
+        assert!(dashboard.telemetry.iter().any(|line| line
+            == "agent_memory_reuse_preflight_repair_task_plan_dashboard_non_repair_rate=1.000"));
+    }
+
+    #[test]
+    fn memory_reuse_preflight_repair_task_plan_history_repairs_repeated_repair_pressure() {
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    1,
+                    0,
+                    1,
+                    vec!["memory_reuse_preflight_not_executable"],
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let repair_task_count = memory_health.reasons.len();
+        let plan = AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+            memory_health,
+            next_queue(),
+        );
+
+        let record = AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecorder::new()
+            .record_plan_with_health(
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory::new(),
+                &plan,
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy::default(),
+            );
+
+        assert_eq!(record.records(), 1);
+        assert_eq!(record.dashboard.repair_first_records, 1);
+        assert_eq!(record.dashboard.repair_tasks, repair_task_count);
+        assert_eq!(record.dashboard.reasons, repair_task_count);
+        assert_eq!(
+            record.dashboard.latest_repair_task_ids[0],
+            "memory-reuse-preflight-repair-0"
+        );
+        assert_eq!(
+            record.health.status,
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Repair
+        );
+        assert!(!record.health.allows_service_advance());
+        assert!(record.health.requires_repair_first());
+        assert!(!record.allows_service_advance());
+        assert!(record.requires_repair_first());
+        assert!(record.health.reasons.iter().any(|reason| {
+            reason == "memory_reuse_preflight_repair_task_plan_repair_first_records=1>0"
+        }));
+        assert!(record.health.reasons.iter().any(|reason| {
+            reason
+                == &format!(
+                    "memory_reuse_preflight_repair_task_plan_repair_tasks={repair_task_count}>0"
+                )
+        }));
+        assert!(record.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_repair_task_plan_history_record_status=repair"
+        }));
+    }
+
+    #[test]
+    fn memory_reuse_preflight_repair_task_plan_recorder_appends_summary_with_health() {
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    1,
+                    1,
+                    0,
+                    Vec::new(),
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let plan = AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+            memory_health,
+            next_queue(),
+        );
+
+        let record = AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecorder::new()
+            .record_plan_with_health(
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory::new(),
+                &plan,
+                AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy::default(),
+            );
+
+        assert_eq!(record.records(), 1);
+        assert_eq!(record.history.latest(), Some(&record.appended_summary));
+        assert_eq!(record.appended_summary.next_queue_tasks, 1);
+        assert_eq!(record.dashboard.total_records, 1);
+        assert_eq!(
+            record.health.status.as_str(),
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthStatus::Stable.as_str()
+        );
+        assert!(record.allows_service_advance());
+        assert!(!record.requires_repair_first());
+        assert!(record.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_repair_task_plan_history_record_records=1"
         }));
     }
 
