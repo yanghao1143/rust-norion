@@ -12,6 +12,7 @@ on:
       - "LICENSE"
       - "README.md"
       - "src/**"
+      - "crates/norion-core/**"
       - "crates/norion-agent/**"
       - "crates/norion-eval/**"
       - "crates/norion-memory/**"
@@ -28,6 +29,7 @@ on:
       - "LICENSE"
       - "README.md"
       - "src/**"
+      - "crates/norion-core/**"
       - "crates/norion-agent/**"
       - "crates/norion-eval/**"
       - "crates/norion-memory/**"
@@ -60,6 +62,12 @@ jobs:
       - name: Check formatting for norion-eval
         run: cargo +stable fmt --package norion-eval --check
 
+      - name: Check formatting for rust-norion
+        run: cargo +stable fmt --package rust-norion --check
+
+      - name: Check formatting for norion-core
+        run: cargo +stable fmt --package norion-core --check
+
       - name: Check formatting for evolution-loop
         run: cargo +stable fmt --manifest-path tools/evolution-loop/Cargo.toml --check
 
@@ -68,6 +76,12 @@ jobs:
 
       - name: Test norion-eval
         run: cargo +stable test --locked --package norion-eval
+
+      - name: Test rust-norion
+        run: cargo +stable test --locked --package rust-norion
+
+      - name: Test norion-core
+        run: cargo +stable test --locked --package norion-core
 
       - name: Test norion-agent
         run: cargo +stable test --locked --package norion-agent
