@@ -4171,6 +4171,35 @@ System-error replacements:
   `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`. No
   daemon/model start-stop, SSH, download, live memory mutation, or `.ndkv` write
   was performed.
+- R82 main-window self-improve false-positive filter on 2026-06-20: tightened
+  proposal projection so review/helper prose no longer blocks memory admission
+  with stale non-actionable targets. The filter now drops warning-suppression
+  noise for `-Wno-unused-function`/`validation_stderr_tail` suggestions and the
+  stale `test_gate_dynamic_upstream_buffer_v1` config-enable/tune echo when the
+  ledger evidence already shows the test-gate stage using that policy. It keeps
+  real `--no-fail-fast` validation-command targets actionable and closed only
+  when code and validation evidence are present. Verification passed: focused
+  `cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+  warning_suppression --target-dir target\r82-tool-focused-warning` with
+  `2 passed`, focused `cargo test -q --manifest-path
+  tools\evolution-loop\Cargo.toml dynamic_buffer --target-dir
+  target\r82-tool-focused-dynamic` with `1 passed`, focused
+  `cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+  self_improve_proposal --target-dir target\r82-tool-focused-self-improve` with
+  `29 passed`, and full `tools\evolution-loop` with `414 passed`. A report-only
+  refresh to `target\evolution\daemon\report-r82-warning-suppression-filter.json`
+  from the daemon ledger showed `423` rounds, `412/423` successes, action
+  closure `targets=8 closed=8 open=0`, approval decision
+  `approval_decision_items=8 recorded=8 approved=0 pending=8 blocked=0
+  commit_approval_decision_ready=true`, and `commit_allowed=false`,
+  `admission_write_authorized=false`, `memory_store_write_allowed=false`, and
+  `ndkv_write_allowed=false`. Status validation with `-UseDaemonLedger` reported
+  `Ready=true` against `target\evolution\daemon\evolution-ledger.jsonl`, and
+  direct JSON checks confirmed R418/R419/R422 plus the noisy warning/dynamic
+  policy phrases are absent from self-improve proposal/action surfaces. No
+  daemon/model start-stop, SSH, download, model-cache warming, Forge/Web Lab
+  start, prompt/stream/model call, live memory mutation, or `.ndkv` write was
+  performed.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT

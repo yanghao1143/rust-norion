@@ -838,6 +838,8 @@ fn suggested_action_is_actionable(value: &str) -> bool {
     let normalized = strip_leading_candidate_action_label(&normalized);
     !suggested_action_is_explicit_noop(normalized)
         && !suggested_action_is_generic_placeholder(normalized)
+        && !suggested_action_is_warning_suppression_noise(normalized)
+        && !suggested_action_is_dynamic_buffer_config_noise(normalized)
 }
 
 fn normalize_candidate_action_for_matching(value: &str) -> String {
@@ -922,6 +924,40 @@ fn suggested_action_is_explicit_noop(value: &str) -> bool {
 fn suggested_action_is_generic_placeholder(value: &str) -> bool {
     value.starts_with("small next change grounded in the same evidence")
         || value.starts_with("small next change is grounded in the same evidence")
+}
+
+fn suggested_action_is_warning_suppression_noise(value: &str) -> bool {
+    if value.contains("wno unused function") {
+        return true;
+    }
+
+    let mentions_unused_warning =
+        value.contains("unused function") || value.contains("unused functions");
+    let points_at_validation_noise =
+        value.contains("validation stderr tail") || value.contains("compiler warning");
+    let only_suppresses_warning = value.contains("suppress")
+        || value.contains("build flags")
+        || value.contains("warning flag")
+        || value.contains("address the warnings");
+
+    mentions_unused_warning && points_at_validation_noise && only_suppresses_warning
+}
+
+fn suggested_action_is_dynamic_buffer_config_noise(value: &str) -> bool {
+    let mentions_policy = value.contains("test gate dynamic upstream buffer v1");
+    let asks_enable_and_tune = value.contains("enable") && value.contains("tune");
+    let echoes_review_config_request = value.contains("test gate stage configuration")
+        || value.contains("configuration file")
+        || value.contains("primary answer");
+    let only_restates_enabled_policy = !value.contains("missing")
+        && !value.contains("disabled")
+        && !value.contains("failing")
+        && !value.contains("regression");
+
+    mentions_policy
+        && asks_enable_and_tune
+        && echoes_review_config_request
+        && only_restates_enabled_policy
 }
 
 fn derived_proposal_id(round: Option<u64>, action: &str, source: &str) -> String {
@@ -2294,12 +2330,47 @@ mod tests {
             "review.change_request = Small next change grounded in the same evidence.",
             "proposal: `Small next change grounded in the same evidence`",
             "change_request: No small next change is grounded in the same evidence.",
+            "Add the missing `-Wno-unused-function` flag to the build process or clean up the unused functions in `src\\self_improve_proposal_artifact.rs` to address the warnings seen in `validation_stderr_tail`.",
+            "Update the build flags for the `evolution-loop` in the configuration to include `-Wno-unused-function` to suppress compiler warnings, as suggested by the primary_answer.",
+            "Update the `test-gate` stage configuration in the evolution loop to explicitly enable and tune the `test_gate_dynamic_upstream_buffer_v1` policy by modifying the relevant configuration file (primary_answer).",
         ] {
             assert!(!suggested_action_is_actionable(value));
         }
         assert!(suggested_action_is_actionable(
             "Update the validation_command to include --no-fail-fast"
         ));
+        assert!(suggested_action_is_actionable(
+            "Fix a regression where test_gate_dynamic_upstream_buffer_v1 is disabled"
+        ));
+    }
+
+    #[test]
+    fn filters_warning_suppression_review_noise() {
+        let text = "{\"round\":418,\"case\":\"warning-suppression-a\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"The validation command output contains multiple compiler warnings (`warning: function ... is never used`) which, while not failing the build, indicate unused code paths in `src\\\\self_improve_proposal_artifact.rs`.\",\"change_request\":\"Add the missing `-Wno-unused-function` flag to the build process or clean up the unused functions in `src\\\\self_improve_proposal_artifact.rs` to address the warnings seen in `validation_stderr_tail`.\",\"verification\":\"cargo build -q --manifest-path tools/evolution-loop/Cargo.toml\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}}}\n\
+{\"round\":419,\"case\":\"warning-suppression-b\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"The primary_answer references a `review.change_request` from round 418, but the provided structured_facts and previews do not contain this specific change request to verify the need for adding `-Wno-unused-function`.\",\"change_request\":\"Update the build flags for the `evolution-loop` in the configuration to include `-Wno-unused-function` to suppress compiler warnings, as suggested by the primary_answer.\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}}}\n";
+
+        let artifact = from_ledger_text(text);
+        let json = artifact.report_json();
+
+        assert_eq!(artifact.total_candidate_count, 0);
+        assert!(artifact.proposals.is_empty());
+        assert!(json.contains("\"projected_candidate_count\":0"));
+        assert!(!json.contains("Wno-unused-function"));
+        assert!(!json.contains("warning-suppression"));
+    }
+
+    #[test]
+    fn filters_dynamic_buffer_config_review_noise() {
+        let text = "{\"round\":422,\"case\":\"dynamic-buffer-config-noise\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"The proposed policy change involves modifying configuration to enable `test_gate_dynamic_upstream_buffer_v1`.\",\"change_request\":\"Update the `test-gate` stage configuration in the evolution loop to explicitly enable and tune the `test_gate_dynamic_upstream_buffer_v1` policy by modifying the relevant configuration file (primary_answer).\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}},\"allocation_evidence\":[\"pool_stage_route[test-gate] selected_context_buffer_policy:strategy:test_gate_dynamic_upstream_buffer_v1 selected_context_sufficient:true\"]}\n";
+
+        let artifact = from_ledger_text(text);
+        let json = artifact.report_json();
+
+        assert_eq!(artifact.total_candidate_count, 0);
+        assert!(artifact.proposals.is_empty());
+        assert!(json.contains("\"projected_candidate_count\":0"));
+        assert!(!json.contains("dynamic-buffer-config-noise"));
+        assert!(!json.contains("test_gate_dynamic_upstream_buffer_v1"));
     }
 
     #[test]
@@ -2360,6 +2431,50 @@ mod tests {
         assert!(writer_dry_run.dry_run_ready);
         assert_eq!(writer_dry_run_receipt.succeeded_receipt_count, 2);
         assert!(writer_dry_run_receipt.dry_run_receipt_ready);
+    }
+
+    #[test]
+    fn warning_suppression_tail_does_not_block_closed_action_memory_admission() {
+        let text = "{\"round\":417,\"case\":\"closed-no-fail-fast\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"validation stops early\",\"change_request\":\"Modify the `validation_command` in `tools/evolution-loop/Cargo.toml` to include `--no-fail-fast` to prevent premature test failure propagation, following the guidance in the `primary_answer`.\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}}}\n\
+{\"round\":418,\"case\":\"warning-suppression-tail-a\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"The validation command output contains multiple compiler warnings.\",\"change_request\":\"Add the missing `-Wno-unused-function` flag to the build process or clean up the unused functions in `src\\\\self_improve_proposal_artifact.rs` to address the warnings seen in `validation_stderr_tail`.\",\"verification\":\"cargo build -q --manifest-path tools/evolution-loop/Cargo.toml\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}}}\n\
+{\"round\":419,\"case\":\"warning-suppression-tail-b\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"The previous warning suppression request is not grounded by structured facts.\",\"change_request\":\"Update the build flags for the `evolution-loop` in the configuration to include `-Wno-unused-function` to suppress compiler warnings, as suggested by the primary_answer.\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}}}\n\
+{\"round\":422,\"case\":\"dynamic-buffer-config-tail\",\"success\":true,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"The proposed policy change involves modifying configuration to enable `test_gate_dynamic_upstream_buffer_v1`.\",\"change_request\":\"Update the `test-gate` stage configuration in the evolution loop to explicitly enable and tune the `test_gate_dynamic_upstream_buffer_v1` policy by modifying the relevant configuration file (primary_answer).\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\\\evolution-loop-daemon-check\"}}},\"allocation_evidence\":[\"pool_stage_route[test-gate] selected_context_buffer_policy:strategy:test_gate_dynamic_upstream_buffer_v1 selected_context_sufficient:true\"]}\n";
+
+        let artifact = from_ledger_text(text);
+        let closure = artifact.action_closure_report();
+        let readiness = artifact.memory_admission_readiness_report();
+        let request = artifact.memory_admission_request_report();
+        let decision = artifact.memory_admission_decision_report();
+        let writer_plan = artifact.memory_admission_writer_plan();
+        let writer_dry_run = artifact.memory_admission_writer_dry_run();
+        let writer_dry_run_receipt = artifact.memory_admission_writer_dry_run_receipt();
+        let commit_record_stage = artifact.memory_admission_commit_record_stage();
+        let approval_request = artifact.memory_admission_commit_approval_request();
+        let approval_decision = artifact.memory_admission_commit_approval_decision();
+
+        assert_eq!(artifact.total_candidate_count, 1);
+        assert_eq!(artifact.proposals.len(), 1);
+        assert_eq!(closure.closed_target_count, 1);
+        assert_eq!(closure.open_target_count, 0);
+        assert_eq!(readiness.ready_count, 1);
+        assert_eq!(readiness.blocked_count, 0);
+        assert_eq!(request.request_count, 1);
+        assert_eq!(request.blocked_count, 0);
+        assert!(decision.admission_writer_preflight_passed);
+        assert!(!decision.gate_blocked);
+        assert!(writer_plan.writer_plan_ready);
+        assert!(writer_dry_run.dry_run_ready);
+        assert!(writer_dry_run_receipt.dry_run_receipt_ready);
+        assert!(commit_record_stage.commit_record_stage_ready);
+        assert!(approval_request.commit_approval_request_ready);
+        assert!(approval_decision.commit_approval_decision_ready);
+        assert_eq!(approval_decision.recorded_approval_decision_count, 1);
+        assert_eq!(approval_decision.approved_commit_count, 0);
+        assert_eq!(approval_decision.pending_approval_count, 1);
+        assert!(!approval_decision.commit_allowed);
+        assert!(!approval_decision.admission_write_authorized);
+        assert!(!approval_decision.memory_store_write_allowed);
+        assert!(!approval_decision.ndkv_write_allowed);
     }
 
     #[test]
