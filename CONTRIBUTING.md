@@ -6,6 +6,8 @@ rust-norion accepts public collaboration through issues and pull requests.
 
 - All changes must be reviewed and approved by the repository owner or
   maintainer before merge.
+- Protected branches require a pull request, CODEOWNER approval from
+  `@yanghao1143`, and approval of the latest reviewable push.
 - Do not push directly to protected branches.
 - Keep contributions compatible with the repository license: non-commercial
   research, education, evaluation, and experimental deployment only.
