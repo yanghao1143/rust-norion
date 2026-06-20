@@ -87,17 +87,22 @@ The two baselines point in the same direction:
   extension ideas should begin as manifest/readiness rows before they become
   executable adapters.
 
-## Suggested Next Patch
+## Norion Contract Matrix
 
-Create a Norion-owned tool and extension contract matrix:
+The Norion-owned tool and extension contract matrix is now represented as a
+testable contract surface in `crates/norion-test/src/lib.rs`:
+`NorionToolExtensionContractMatrixPlan::clean_room_tool_extension_matrix`.
 
-- rows for file read, file edit, shell, PowerShell, search, web, MCP, OpenAPI,
-  task, agent/team, monitor/background, config, hook, plugin, bridge, and
-  worktree operations;
-- columns for owning crate, permission inputs, side effects, read-only preview,
-  compact evidence row, and repair-first behavior;
-- explicit "GPL-clean implementation required" note for any row inspired by
-  `claurst`.
+The matrix covers file read, file edit, shell, PowerShell, search, web, MCP,
+OpenAPI, task, agent/team, monitor/background, config, hook, plugin, bridge,
+and worktree operations. Each row names the owning crate, required permission
+inputs, declared side effects, read-only preview surface, compact evidence row,
+and repair-first behavior.
 
-That matrix can absorb the useful `rust-code` product ideas while keeping
-`claurst` safely at the architecture-inspiration level.
+The contract also makes the clean-room policy executable in tests: rows are
+deny-by-default, require a read-only preview before execution, require a
+capability manifest for extension-like surfaces, and require GPL-clean
+implementation. It explicitly forbids copying GPL code, prompts, or docs,
+vendoring external source, executing without preview, creating extensions
+without capability manifests, writing memory without admission, writing `.ndkv`
+state, or requesting a commercial license exception through a tool contract.

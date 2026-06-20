@@ -6221,6 +6221,351 @@ impl MemoryReuseDryRunSummaryContractPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolExtensionContractRow {
+    pub operation: String,
+    pub owning_crate: String,
+    pub permission_inputs: Vec<String>,
+    pub side_effects: Vec<String>,
+    pub read_only_preview: String,
+    pub evidence_row: String,
+    pub repair_first_behavior: String,
+    pub gpl_clean_required: bool,
+    pub deny_by_default: bool,
+}
+
+impl ToolExtensionContractRow {
+    fn new(
+        operation: impl Into<String>,
+        owning_crate: impl Into<String>,
+        permission_inputs: Vec<&str>,
+        side_effects: Vec<&str>,
+        read_only_preview: impl Into<String>,
+        evidence_row: impl Into<String>,
+        repair_first_behavior: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation: operation.into(),
+            owning_crate: owning_crate.into(),
+            permission_inputs: permission_inputs
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+            side_effects: side_effects
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+            read_only_preview: read_only_preview.into(),
+            evidence_row: evidence_row.into(),
+            repair_first_behavior: repair_first_behavior.into(),
+            gpl_clean_required: true,
+            deny_by_default: true,
+        }
+    }
+
+    pub fn requires_permission_input(&self, input: &str) -> bool {
+        self.permission_inputs
+            .iter()
+            .any(|permission| permission == input)
+    }
+
+    pub fn declares_side_effect(&self, side_effect: &str) -> bool {
+        self.side_effects
+            .iter()
+            .any(|declared| declared == side_effect)
+    }
+
+    pub fn has_read_only_preview(&self) -> bool {
+        !self.read_only_preview.is_empty()
+    }
+
+    pub fn has_evidence_row(&self) -> bool {
+        !self.evidence_row.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NorionToolExtensionContractMatrixPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub matrix_doc_path: String,
+    pub rows: Vec<ToolExtensionContractRow>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only_preview_before_execution: bool,
+    pub require_capability_manifest_for_extensions: bool,
+    pub require_gpl_clean_implementation: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl NorionToolExtensionContractMatrixPlan {
+    pub fn clean_room_tool_extension_matrix(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            matrix_doc_path: "docs/architecture/external-agent-baselines.md".to_owned(),
+            rows: vec![
+                ToolExtensionContractRow::new(
+                    "file_read",
+                    "crates/norion-service",
+                    vec!["workspace_root", "path_allowlist", "read_intent"],
+                    vec!["filesystem_read"],
+                    "file_read_manifest_preview",
+                    "tool_contract.file_read.evidence",
+                    "repair_first_when_path_outside_workspace",
+                ),
+                ToolExtensionContractRow::new(
+                    "file_edit",
+                    "crates/norion-service",
+                    vec![
+                        "workspace_root",
+                        "path_allowlist",
+                        "diff_intent",
+                        "review_gate",
+                    ],
+                    vec!["filesystem_write"],
+                    "file_edit_diff_preview",
+                    "tool_contract.file_edit.evidence",
+                    "repair_first_when_diff_unreviewed",
+                ),
+                ToolExtensionContractRow::new(
+                    "shell",
+                    "crates/norion-service",
+                    vec!["command_allowlist", "cwd", "timeout", "side_effect_class"],
+                    vec!["process_spawn"],
+                    "shell_command_dry_run_preview",
+                    "tool_contract.shell.evidence",
+                    "repair_first_when_command_not_allowlisted",
+                ),
+                ToolExtensionContractRow::new(
+                    "powershell",
+                    "crates/norion-service",
+                    vec![
+                        "command_allowlist",
+                        "cwd",
+                        "timeout",
+                        "windows_safety_class",
+                    ],
+                    vec!["process_spawn"],
+                    "powershell_command_dry_run_preview",
+                    "tool_contract.powershell.evidence",
+                    "repair_first_when_command_crosses_shell_boundary",
+                ),
+                ToolExtensionContractRow::new(
+                    "search",
+                    "crates/norion-service",
+                    vec!["query", "scope", "result_limit"],
+                    vec!["filesystem_read"],
+                    "search_scope_preview",
+                    "tool_contract.search.evidence",
+                    "repair_first_when_scope_unbounded",
+                ),
+                ToolExtensionContractRow::new(
+                    "web",
+                    "crates/norion-service",
+                    vec!["url_or_query", "network_policy", "citation_required"],
+                    vec!["network_read"],
+                    "web_request_preview",
+                    "tool_contract.web.evidence",
+                    "repair_first_when_source_untrusted",
+                ),
+                ToolExtensionContractRow::new(
+                    "mcp",
+                    "crates/norion-service",
+                    vec!["server_id", "tool_name", "capability_manifest"],
+                    vec!["external_tool_call"],
+                    "mcp_capability_preview",
+                    "tool_contract.mcp.evidence",
+                    "repair_first_when_manifest_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "openapi",
+                    "crates/norion-service",
+                    vec!["spec_uri", "operation_id", "auth_policy"],
+                    vec!["network_read", "network_write"],
+                    "openapi_operation_preview",
+                    "tool_contract.openapi.evidence",
+                    "repair_first_when_operation_unclassified",
+                ),
+                ToolExtensionContractRow::new(
+                    "task",
+                    "crates/norion-agent",
+                    vec!["task_id", "role", "budget", "dependencies"],
+                    vec!["agent_task_dispatch"],
+                    "task_dispatch_preview",
+                    "tool_contract.task.evidence",
+                    "repair_first_when_dependencies_unclosed",
+                ),
+                ToolExtensionContractRow::new(
+                    "agent_team",
+                    "crates/norion-agent",
+                    vec!["roles", "budget_limit", "message_limit", "conflict_policy"],
+                    vec!["agent_team_message"],
+                    "agent_team_plan_preview",
+                    "tool_contract.agent_team.evidence",
+                    "repair_first_when_conflicts_unresolved",
+                ),
+                ToolExtensionContractRow::new(
+                    "monitor_background",
+                    "crates/norion-service",
+                    vec!["monitor_id", "interval", "stop_policy"],
+                    vec!["background_task"],
+                    "monitor_schedule_preview",
+                    "tool_contract.monitor_background.evidence",
+                    "repair_first_when_stop_policy_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "config",
+                    "crates/norion-service",
+                    vec!["config_scope", "redaction_policy", "precedence"],
+                    vec!["configuration_read", "configuration_write"],
+                    "config_change_preview",
+                    "tool_contract.config.evidence",
+                    "repair_first_when_redaction_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "hook",
+                    "crates/norion-service",
+                    vec!["hook_name", "trigger", "capability_manifest"],
+                    vec!["hook_execution"],
+                    "hook_manifest_preview",
+                    "tool_contract.hook.evidence",
+                    "repair_first_when_hook_capabilities_unknown",
+                ),
+                ToolExtensionContractRow::new(
+                    "plugin",
+                    "crates/norion-service",
+                    vec!["plugin_id", "capability_manifest", "license_evidence"],
+                    vec!["plugin_execution"],
+                    "plugin_manifest_preview",
+                    "tool_contract.plugin.evidence",
+                    "repair_first_when_license_or_capability_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "bridge",
+                    "crates/norion-service",
+                    vec!["bridge_id", "remote_boundary", "capability_manifest"],
+                    vec!["remote_session"],
+                    "bridge_session_preview",
+                    "tool_contract.bridge.evidence",
+                    "repair_first_when_remote_boundary_unreviewed",
+                ),
+                ToolExtensionContractRow::new(
+                    "worktree",
+                    "crates/norion-service",
+                    vec!["repo_root", "branch_policy", "cleanup_policy"],
+                    vec!["git_worktree_write"],
+                    "worktree_plan_preview",
+                    "tool_contract.worktree.evidence",
+                    "repair_first_when_cleanup_policy_missing",
+                ),
+            ],
+            forbidden_capabilities: vec![
+                "copy_gpl_code".to_owned(),
+                "copy_gpl_prompts".to_owned(),
+                "copy_gpl_docs".to_owned(),
+                "vendor_external_source".to_owned(),
+                "execute_without_preview".to_owned(),
+                "extension_without_capability_manifest".to_owned(),
+                "tool_without_permission_inputs".to_owned(),
+                "memory_write_without_admission".to_owned(),
+                "ndkv_write".to_owned(),
+                "commercial_license_exception".to_owned(),
+            ],
+            require_read_only_preview_before_execution: true,
+            require_capability_manifest_for_extensions: true,
+            require_gpl_clean_implementation: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-test\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn row_for(&self, operation: &str) -> Option<&ToolExtensionContractRow> {
+        self.rows.iter().find(|row| row.operation == operation)
+    }
+
+    pub fn has_operation(&self, operation: &str) -> bool {
+        self.row_for(operation).is_some()
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn all_rows_have_read_only_preview(&self) -> bool {
+        self.rows
+            .iter()
+            .all(ToolExtensionContractRow::has_read_only_preview)
+    }
+
+    pub fn all_rows_have_evidence(&self) -> bool {
+        self.rows
+            .iter()
+            .all(ToolExtensionContractRow::has_evidence_row)
+    }
+
+    pub fn all_rows_deny_by_default(&self) -> bool {
+        self.rows.iter().all(|row| row.deny_by_default)
+    }
+
+    pub fn all_rows_require_gpl_clean_implementation(&self) -> bool {
+        self.rows.iter().all(|row| row.gpl_clean_required)
+    }
+
+    pub fn stays_clean_room_tool_boundary(&self) -> bool {
+        self.matrix_doc_path == "docs/architecture/external-agent-baselines.md"
+            && self.rows.len() == 16
+            && self.require_read_only_preview_before_execution
+            && self.require_capability_manifest_for_extensions
+            && self.require_gpl_clean_implementation
+            && self.all_rows_have_read_only_preview()
+            && self.all_rows_have_evidence()
+            && self.all_rows_deny_by_default()
+            && self.all_rows_require_gpl_clean_implementation()
+            && [
+                "file_read",
+                "file_edit",
+                "shell",
+                "powershell",
+                "search",
+                "web",
+                "mcp",
+                "openapi",
+                "task",
+                "agent_team",
+                "monitor_background",
+                "config",
+                "hook",
+                "plugin",
+                "bridge",
+                "worktree",
+            ]
+            .iter()
+            .all(|operation| self.has_operation(operation))
+            && [
+                "copy_gpl_code",
+                "copy_gpl_prompts",
+                "copy_gpl_docs",
+                "vendor_external_source",
+                "execute_without_preview",
+                "extension_without_capability_manifest",
+                "tool_without_permission_inputs",
+                "memory_write_without_admission",
+                "ndkv_write",
+                "commercial_license_exception",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HelperStageRepairPlan {
     pub name: String,
     pub stage: AdapterAcceptanceStage,
@@ -12905,6 +13250,110 @@ mod tests {
             r"cargo test --manifest-path .\crates\norion-memory\Cargo.toml"
         );
         assert!(report.stays_read_only_dry_run_boundary());
+    }
+
+    #[test]
+    fn tool_extension_contract_matrix_keeps_external_baselines_clean_room() {
+        let report = NorionToolExtensionContractMatrixPlan::clean_room_tool_extension_matrix(
+            "tool-extension-matrix-report",
+            AdapterAcceptanceStage::ReportOnly,
+        );
+        let enforced = NorionToolExtensionContractMatrixPlan::clean_room_tool_extension_matrix(
+            "tool-extension-matrix-enforced",
+            AdapterAcceptanceStage::Enforced,
+        );
+
+        assert_eq!(
+            enforced.matrix_doc_path,
+            "docs/architecture/external-agent-baselines.md"
+        );
+        assert_eq!(enforced.rows.len(), 16);
+        for operation in [
+            "file_read",
+            "file_edit",
+            "shell",
+            "powershell",
+            "search",
+            "web",
+            "mcp",
+            "openapi",
+            "task",
+            "agent_team",
+            "monitor_background",
+            "config",
+            "hook",
+            "plugin",
+            "bridge",
+            "worktree",
+        ] {
+            assert!(
+                enforced.has_operation(operation),
+                "missing tool matrix row {operation}"
+            );
+        }
+
+        let file_edit = enforced.row_for("file_edit").expect("file edit row");
+        assert_eq!(file_edit.owning_crate, "crates/norion-service");
+        assert!(file_edit.requires_permission_input("diff_intent"));
+        assert!(file_edit.requires_permission_input("review_gate"));
+        assert!(file_edit.declares_side_effect("filesystem_write"));
+        assert_eq!(file_edit.read_only_preview, "file_edit_diff_preview");
+        assert_eq!(
+            file_edit.repair_first_behavior,
+            "repair_first_when_diff_unreviewed"
+        );
+
+        let shell = enforced.row_for("shell").expect("shell row");
+        assert!(shell.requires_permission_input("command_allowlist"));
+        assert!(shell.requires_permission_input("side_effect_class"));
+        assert!(shell.declares_side_effect("process_spawn"));
+        assert_eq!(shell.read_only_preview, "shell_command_dry_run_preview");
+
+        let mcp = enforced.row_for("mcp").expect("mcp row");
+        assert!(mcp.requires_permission_input("capability_manifest"));
+        assert!(mcp.declares_side_effect("external_tool_call"));
+        assert_eq!(mcp.read_only_preview, "mcp_capability_preview");
+
+        let plugin = enforced.row_for("plugin").expect("plugin row");
+        assert!(plugin.requires_permission_input("license_evidence"));
+        assert!(plugin.requires_permission_input("capability_manifest"));
+        assert!(plugin.declares_side_effect("plugin_execution"));
+
+        let bridge = enforced.row_for("bridge").expect("bridge row");
+        assert!(bridge.requires_permission_input("remote_boundary"));
+        assert!(bridge.declares_side_effect("remote_session"));
+
+        for forbidden in [
+            "copy_gpl_code",
+            "copy_gpl_prompts",
+            "copy_gpl_docs",
+            "vendor_external_source",
+            "execute_without_preview",
+            "extension_without_capability_manifest",
+            "tool_without_permission_inputs",
+            "memory_write_without_admission",
+            "ndkv_write",
+            "commercial_license_exception",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden tool matrix capability {forbidden}"
+            );
+        }
+        assert!(enforced.require_read_only_preview_before_execution);
+        assert!(enforced.require_capability_manifest_for_extensions);
+        assert!(enforced.require_gpl_clean_implementation);
+        assert!(enforced.all_rows_have_read_only_preview());
+        assert!(enforced.all_rows_have_evidence());
+        assert!(enforced.all_rows_deny_by_default());
+        assert!(enforced.all_rows_require_gpl_clean_implementation());
+        assert!(enforced.stays_clean_room_tool_boundary());
+        assert!(report.stays_clean_room_tool_boundary());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-test\Cargo.toml"
+        );
     }
 
     #[test]

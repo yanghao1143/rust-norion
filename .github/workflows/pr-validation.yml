@@ -63,6 +63,9 @@ jobs:
       - name: Check formatting for evolution-loop
         run: cargo +stable fmt --manifest-path tools/evolution-loop/Cargo.toml --check
 
+      - name: Check formatting for norion-test
+        run: cargo +stable fmt --package norion-test --check
+
       - name: Test norion-eval
         run: cargo +stable test --locked --package norion-eval
 
@@ -71,6 +74,9 @@ jobs:
 
       - name: Test norion-memory
         run: cargo +stable test --locked --package norion-memory
+
+      - name: Test norion-test
+        run: cargo +stable test --locked --package norion-test
 
       - name: Test evolution-loop
         run: cargo +stable test --locked --manifest-path tools/evolution-loop/Cargo.toml
