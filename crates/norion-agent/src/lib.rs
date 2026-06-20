@@ -582,11 +582,11 @@ pub use loopback::{
 pub use memory::{
     AgentWaveMemoryRecallPlan, AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter,
     MemoryPromotionGate, MemoryPromotionGateDecision, MemoryRecallContext,
-    MemoryRecallContextPlanner, MemoryRecallDecision, MemoryRecallDecisionKind, MemoryRecallItem,
-    MemoryRecallPolicy, MemorySubmissionDashboard, MemorySubmissionFailure,
-    MemorySubmissionGateDecision, MemorySubmissionHealth, MemorySubmissionHealthPolicy,
-    MemorySubmissionHealthStatus, MemorySubmissionReport, MemorySubmissionSummary,
-    MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
+    MemoryRecallContextPlanner, MemoryRecallDecision, MemoryRecallDecisionKind,
+    MemoryRecallDryRunEvidence, MemoryRecallItem, MemoryRecallPolicy, MemorySubmissionDashboard,
+    MemorySubmissionFailure, MemorySubmissionGateDecision, MemorySubmissionHealth,
+    MemorySubmissionHealthPolicy, MemorySubmissionHealthStatus, MemorySubmissionReport,
+    MemorySubmissionSummary, MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
     MemorySubmissionSummaryHistoryRecorder,
 };
 pub use message::{AgentMessage, AgentMessageKind};

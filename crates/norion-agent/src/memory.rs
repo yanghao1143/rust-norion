@@ -31,6 +31,7 @@ pub enum MemoryRecallDecisionKind {
     RejectDuplicate,
     RejectEmptyId,
     RejectEmptySummary,
+    RejectUnsafeSidecar,
 }
 
 impl MemoryRecallDecisionKind {
@@ -41,11 +42,94 @@ impl MemoryRecallDecisionKind {
             Self::RejectDuplicate => "reject_duplicate",
             Self::RejectEmptyId => "reject_empty_id",
             Self::RejectEmptySummary => "reject_empty_summary",
+            Self::RejectUnsafeSidecar => "reject_unsafe_sidecar",
         }
     }
 
     pub fn accepted(self) -> bool {
         self == Self::Admit
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRecallDryRunEvidence {
+    pub source: String,
+    pub read_only: bool,
+    pub candidate_count: usize,
+    pub long_term_match_count: usize,
+    pub context_decision_count: usize,
+    pub accepted_context_count: usize,
+    pub rejected_context_count: usize,
+    pub used_tokens: usize,
+    pub requested_kv_count: usize,
+    pub kv_promote_count: usize,
+    pub kv_missing_count: usize,
+    pub kv_already_hot_count: usize,
+    pub kv_duplicate_count: usize,
+    pub kv_backend_available: bool,
+    pub memory_store_write_allowed: bool,
+    pub kv_prefetch_apply_allowed: bool,
+    pub reason_codes: Vec<String>,
+    pub detail_codes: Vec<String>,
+}
+
+impl MemoryRecallDryRunEvidence {
+    pub fn safe_for_recall_sidecar(&self) -> bool {
+        self.safety_reasons().is_empty()
+    }
+
+    pub fn safety_reasons(&self) -> Vec<String> {
+        let mut reasons = Vec::new();
+        if !self.read_only {
+            reasons.push("dry_run_not_read_only".to_owned());
+        }
+        if self.memory_store_write_allowed {
+            reasons.push("memory_store_write_allowed".to_owned());
+        }
+        if self.kv_prefetch_apply_allowed {
+            reasons.push("kv_prefetch_apply_allowed".to_owned());
+        }
+        reasons
+    }
+
+    pub fn record_id(&self, task_id: &str) -> String {
+        format!(
+            "memory-reuse-dry-run:{}:{}",
+            hex_id(&self.source),
+            hex_id(task_id)
+        )
+    }
+
+    pub fn summary_text(&self) -> String {
+        format!(
+            "source={} read_only={} candidates={} long_term_matches={} context_decisions={} context_accepted={} context_rejected={} used_tokens={} kv_requested={} kv_promote={} kv_missing={} kv_hot={} kv_duplicate={} kv_backend_available={} memory_store_write_allowed={} kv_prefetch_apply_allowed={} reason_codes={} detail_codes={}",
+            normalized_source(&self.source),
+            self.read_only,
+            self.candidate_count,
+            self.long_term_match_count,
+            self.context_decision_count,
+            self.accepted_context_count,
+            self.rejected_context_count,
+            self.used_tokens,
+            self.requested_kv_count,
+            self.kv_promote_count,
+            self.kv_missing_count,
+            self.kv_already_hot_count,
+            self.kv_duplicate_count,
+            self.kv_backend_available,
+            self.memory_store_write_allowed,
+            self.kv_prefetch_apply_allowed,
+            join_codes(self.reason_codes.clone()),
+            join_codes(self.detail_codes.clone()),
+        )
+    }
+
+    pub fn to_memory_record(&self, task_id: &str) -> MemoryRecord {
+        MemoryRecord::new(
+            self.record_id(task_id),
+            self.summary_text(),
+            normalized_source(&self.source),
+        )
     }
 }
 
@@ -340,6 +424,63 @@ impl MemoryRecallContextPlanner {
             returned_records: records.len(),
             read_only: true,
             decisions,
+            failure: None,
+            telemetry,
+        }
+    }
+
+    pub fn plan_from_dry_run_evidence(
+        &self,
+        task: &AgentTask,
+        evidence: &MemoryRecallDryRunEvidence,
+    ) -> MemoryRecallContext {
+        let query = format!(
+            "{} dry_run_source:{}",
+            memory_recall_query(task),
+            normalized_source(&evidence.source)
+        );
+        let safety_reasons = evidence.safety_reasons();
+        if safety_reasons.is_empty() {
+            let mut context =
+                self.plan_from_records(task, query, vec![evidence.to_memory_record(&task.id)]);
+            for decision in &mut context.decisions {
+                if decision.kind.accepted() {
+                    decision.reasons.push("dry_run_sidecar".to_owned());
+                    decision.reasons.extend(
+                        evidence
+                            .reason_codes
+                            .iter()
+                            .map(|code| format!("dry_run:{code}")),
+                    );
+                }
+            }
+            context
+                .telemetry
+                .extend(memory_recall_dry_run_evidence_telemetry(
+                    task, evidence, true, false,
+                ));
+            return context;
+        }
+
+        let mut reasons = vec!["dry_run_sidecar".to_owned()];
+        reasons.extend(safety_reasons);
+        let mut telemetry = memory_recall_context_telemetry(&task.id, 1, 0, 1, false);
+        telemetry.extend(memory_recall_dry_run_evidence_telemetry(
+            task, evidence, false, true,
+        ));
+
+        MemoryRecallContext {
+            task_id: task.id.clone(),
+            query,
+            requested_limit: 1,
+            returned_records: 1,
+            read_only: true,
+            decisions: vec![MemoryRecallDecision {
+                record_id: evidence.record_id(&task.id),
+                kind: MemoryRecallDecisionKind::RejectUnsafeSidecar,
+                item: None,
+                reasons,
+            }],
             failure: None,
             telemetry,
         }
@@ -1051,6 +1192,64 @@ fn memory_recall_context_telemetry(
     ]
 }
 
+fn memory_recall_dry_run_evidence_telemetry(
+    task: &AgentTask,
+    evidence: &MemoryRecallDryRunEvidence,
+    admitted: bool,
+    rejected: bool,
+) -> Vec<String> {
+    vec![
+        "agent_memory_recall_dry_run_evidence=true".to_owned(),
+        format!("agent_memory_recall_dry_run_evidence_task={}", task.id),
+        format!(
+            "agent_memory_recall_dry_run_evidence_source={}",
+            normalized_source(&evidence.source)
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_read_only={}",
+            evidence.read_only
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_safe={}",
+            evidence.safe_for_recall_sidecar()
+        ),
+        format!("agent_memory_recall_dry_run_evidence_admitted={admitted}"),
+        format!("agent_memory_recall_dry_run_evidence_rejected={rejected}"),
+        format!(
+            "agent_memory_recall_dry_run_evidence_candidates={}",
+            evidence.candidate_count
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_context_accepted={}",
+            evidence.accepted_context_count
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_context_rejected={}",
+            evidence.rejected_context_count
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_kv_requested={}",
+            evidence.requested_kv_count
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_kv_promote={}",
+            evidence.kv_promote_count
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_kv_missing={}",
+            evidence.kv_missing_count
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_memory_store_write_allowed={}",
+            evidence.memory_store_write_allowed
+        ),
+        format!(
+            "agent_memory_recall_dry_run_evidence_kv_prefetch_apply_allowed={}",
+            evidence.kv_prefetch_apply_allowed
+        ),
+    ]
+}
+
 fn agent_wave_memory_recall_telemetry(contexts: &[MemoryRecallContext]) -> Vec<String> {
     let plan = AgentWaveMemoryRecallPlan {
         contexts: contexts.to_vec(),
@@ -1598,6 +1797,66 @@ mod tests {
         assert_eq!(memory.submitted.len(), 0);
         assert!(context.reason_codes().contains(&"recall_failed".to_owned()));
         assert!(context.summary_line().contains("failed=true"));
+    }
+
+    #[test]
+    fn recall_context_planner_rejects_write_enabled_dry_run_sidecars() {
+        let task = AgentTask::new(
+            "memory-reuse",
+            AgentRole::MemoryCurator,
+            "inspect reuse dry run before admission",
+            AgentBudget::new(4, 1, 1),
+        );
+        let evidence = MemoryRecallDryRunEvidence {
+            source: "norion_memory_reuse_dry_run".to_owned(),
+            read_only: true,
+            candidate_count: 1,
+            long_term_match_count: 1,
+            context_decision_count: 1,
+            accepted_context_count: 1,
+            rejected_context_count: 0,
+            used_tokens: 48,
+            requested_kv_count: 1,
+            kv_promote_count: 1,
+            kv_missing_count: 0,
+            kv_already_hot_count: 0,
+            kv_duplicate_count: 0,
+            kv_backend_available: true,
+            memory_store_write_allowed: true,
+            kv_prefetch_apply_allowed: false,
+            reason_codes: vec!["read_only".to_owned(), "context_accepted".to_owned()],
+            detail_codes: vec!["kv_prefetch:promote:636f6c64".to_owned()],
+        };
+
+        let context =
+            MemoryRecallContextPlanner::new().plan_from_dry_run_evidence(&task, &evidence);
+
+        assert!(!evidence.safe_for_recall_sidecar());
+        assert!(context.read_only);
+        assert_eq!(context.returned_records, 1);
+        assert_eq!(context.accepted_count(), 0);
+        assert_eq!(context.rejected_count(), 1);
+        assert!(context.context_lines().is_empty());
+        assert_eq!(
+            context.decisions[0].kind,
+            MemoryRecallDecisionKind::RejectUnsafeSidecar
+        );
+        assert!(
+            context.decisions[0]
+                .reasons
+                .contains(&"memory_store_write_allowed".to_owned())
+        );
+        assert!(
+            context
+                .reason_codes()
+                .contains(&"memory_store_write_allowed".to_owned())
+        );
+        assert!(
+            context
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_memory_recall_dry_run_evidence_safe=false" })
+        );
     }
 
     #[test]
