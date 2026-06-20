@@ -543,6 +543,64 @@ impl AgentClosedLoopNextTurnPlan {
         self.mode.can_schedule() && !self.next_queue.is_empty()
     }
 
+    pub fn with_memory_reuse_preflight_health(
+        mut self,
+        memory_health: AgentClosedLoopMemoryReusePreflightExecutionHealth,
+    ) -> Self {
+        let previous_mode = self.mode;
+        if memory_health.requires_repair_first() {
+            self.mode = AgentClosedLoopNextTurnMode::Repair;
+        } else if !memory_health.is_stable() && self.mode == AgentClosedLoopNextTurnMode::Continue {
+            self.mode = AgentClosedLoopNextTurnMode::Observe;
+        }
+
+        for reason in &memory_health.reasons {
+            self.reasons
+                .push(format!("memory_reuse_preflight:{reason}"));
+        }
+        if let Some(line) = self
+            .telemetry
+            .iter_mut()
+            .find(|line| line.starts_with("next_turn_mode="))
+        {
+            *line = format!("next_turn_mode={}", self.mode.as_str());
+        } else {
+            self.telemetry
+                .push(format!("next_turn_mode={}", self.mode.as_str()));
+        }
+        self.telemetry.push(format!(
+            "memory_reuse_preflight_health_status={}",
+            memory_health.status.as_str()
+        ));
+        self.telemetry.push(format!(
+            "memory_reuse_preflight_reports={}",
+            memory_health.dashboard.total_reports
+        ));
+        self.telemetry.push(format!(
+            "memory_reuse_preflight_clean_rate={:.3}",
+            memory_health.dashboard.clean_rate
+        ));
+        self.telemetry.push(format!(
+            "memory_reuse_preflight_skipped_engine_calls={}",
+            memory_health.dashboard.skipped_engine_calls
+        ));
+        if self.mode != previous_mode {
+            self.telemetry.push(format!(
+                "memory_reuse_preflight_mode_override={}->{}",
+                previous_mode.as_str(),
+                self.mode.as_str()
+            ));
+        }
+        self.telemetry.extend(
+            memory_health
+                .reasons
+                .iter()
+                .map(|reason| format!("reason=memory_reuse_preflight:{reason}")),
+        );
+
+        self
+    }
+
     pub fn allows_adaptive_evolution(&self) -> bool {
         self.mode.allows_adaptive_evolution()
     }
@@ -2470,6 +2528,185 @@ mod tests {
             plan.telemetry
                 .iter()
                 .any(|line| line == "reason=next_queue_empty")
+        );
+    }
+
+    #[test]
+    fn closed_loop_next_turn_plan_keeps_continue_with_stable_memory_reuse_preflight_health() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    1,
+                    1,
+                    0,
+                    Vec::new(),
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        let plan = history
+            .next_turn_plan(
+                next_queue(),
+                AgentClosedLoopExecutionHealthPolicy::default(),
+            )
+            .with_memory_reuse_preflight_health(memory_health);
+
+        assert_eq!(plan.mode, AgentClosedLoopNextTurnMode::Continue);
+        assert!(plan.can_schedule());
+        assert!(plan.allows_adaptive_evolution());
+        assert!(plan.reasons.is_empty());
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "next_turn_mode=continue")
+        );
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "memory_reuse_preflight_health_status=stable")
+        );
+    }
+
+    #[test]
+    fn closed_loop_next_turn_plan_observes_memory_reuse_preflight_watch_health() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    1,
+                    1,
+                    0,
+                    Vec::new(),
+                ),
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    true,
+                    true,
+                    true,
+                    false,
+                    1,
+                    1,
+                    0,
+                    Vec::new(),
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        let plan = history
+            .next_turn_plan(
+                next_queue(),
+                AgentClosedLoopExecutionHealthPolicy::default(),
+            )
+            .with_memory_reuse_preflight_health(memory_health);
+
+        assert_eq!(plan.mode, AgentClosedLoopNextTurnMode::Observe);
+        assert!(plan.can_schedule());
+        assert!(!plan.allows_adaptive_evolution());
+        assert!(
+            plan.reasons
+                .iter()
+                .any(|reason| reason == "memory_reuse_preflight:memory_reuse_clean_rate=0.500<1")
+        );
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "next_turn_mode=observe")
+        );
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "memory_reuse_preflight_mode_override=continue->observe")
+        );
+    }
+
+    #[test]
+    fn closed_loop_next_turn_plan_repairs_memory_reuse_preflight_health_first() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    1,
+                    0,
+                    1,
+                    vec!["memory_reuse_preflight_not_executable"],
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        let plan = history
+            .next_turn_plan(
+                next_queue(),
+                AgentClosedLoopExecutionHealthPolicy::default(),
+            )
+            .with_memory_reuse_preflight_health(memory_health);
+
+        assert_eq!(plan.mode, AgentClosedLoopNextTurnMode::Repair);
+        assert!(plan.can_schedule());
+        assert!(!plan.allows_adaptive_evolution());
+        assert!(plan.requires_repair_first());
+        assert!(!plan.allows_service_advance());
+        assert!(
+            plan.reasons.iter().any(|reason| reason
+                == "memory_reuse_preflight:memory_reuse_missing_preflight_reports=1>0")
+        );
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "next_turn_mode=repair")
+        );
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "memory_reuse_preflight_mode_override=continue->repair")
         );
     }
 
