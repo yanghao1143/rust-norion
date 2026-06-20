@@ -8,4 +8,4 @@
 
 ## Reviewer Notes
 
-Maintainer approval is required before merge.
+Repository owner or maintainer approval is required before merge.

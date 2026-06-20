@@ -706,6 +706,27 @@ Set-Content -Encoding ASCII -LiteralPath $report -Value (@{
         memory_store_write_allowed = $false
         ndkv_write_allowed = $false
     }
+    self_improve_proposal_memory_reflection_dedupe_cluster_report_v1 = @{
+        target_count = 2
+        useful_reflection_item_count = 2
+        reflection_cluster_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        wasted_compute_guard_count = 2
+        pending_operator_approval_count = 2
+        adapter_safe_count = 2
+        first_cluster_id = "memory-reflection-dedupe:selfimprovehelpercontract:fnv1a64-0000000000001111"
+        reflection_dedupe_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
     self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1 = @{
         target_count = 2
         review_packet_item_count = 2
@@ -781,6 +802,9 @@ if ($reportStatus.report.self_improve_proposal_memory_admission_commit_approval_
 if ($reportStatus.report.self_improve_proposal_memory_reflection_usefulness_source -ne "self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_useful_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal memory reflection usefulness was not exposed"
 }
+if ($reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_source -ne "self_improve_proposal_memory_reflection_dedupe_cluster_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_useful_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_reflection_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_wasted_compute_guard_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_adapter_safe_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection dedupe cluster was not exposed"
+}
 if ($reportStatus.report.self_improve_proposal_memory_approval_token_intake_source -ne "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_approval_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal memory approval token intake preview was not exposed"
 }
@@ -818,6 +842,9 @@ if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_commit
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportHuman -notmatch "useful=2" -or $reportHuman -notmatch "pending_operator_approval=2" -or $reportHuman -notmatch "wasted_compute_guard=2" -or $reportHuman -notmatch "adapter_safe=2" -or $reportHuman -notmatch "reflection_usefulness_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve memory reflection usefulness"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_dedupe_cluster_report_v1: source=self_improve_proposal_memory_reflection_dedupe_cluster_report_v1" -or $reportHuman -notmatch "clusters=1" -or $reportHuman -notmatch "duplicate_clusters=1" -or $reportHuman -notmatch "duplicate_reflections=1" -or $reportHuman -notmatch "wasted_compute_guard=2" -or $reportHuman -notmatch "adapter_safe=2" -or $reportHuman -notmatch "reflection_dedupe_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection dedupe cluster"
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportHuman -notmatch "intake_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending_operator_tokens=2" -or $reportHuman -notmatch "approval_tokens=2" -or $reportHuman -notmatch "rejection_tokens=2" -or $reportHuman -notmatch "approval_token_intake_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve approval token intake preview"

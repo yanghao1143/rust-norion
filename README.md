@@ -12,10 +12,10 @@ This repository is public for non-commercial research, education, evaluation,
 benchmarking, and experimental deployment. Commercial use requires explicit
 written permission from the copyright holder. See [LICENSE](LICENSE).
 
-Public issues and pull requests are welcome, but merges require maintainer
-review and approval. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Public issues and pull requests are welcome, but merges require repository
+owner or maintainer review and approval. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过维护者审核批准。
+本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过仓库所有者或维护者审核批准。
 
 ## Project Goal / 项目目标
 

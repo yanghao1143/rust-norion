@@ -4330,6 +4330,43 @@ System-error replacements:
   start-stop, SSH, download, model-cache warming, Forge/Web Lab start,
   prompt/stream/model call, live memory mutation, or `.ndkv` write was
   performed.
+- R86 main-window memory reflection dedupe cluster report on 2026-06-20: added
+  a report-only clustering layer after R84 reflection usefulness and before R85
+  approval-token intake preview. The new
+  `SelfImproveProposalMemoryReflectionDedupeClusterReport` groups useful,
+  closed-action, adapter-safe reflection items by stable proposal family and
+  reuse/safety status, exposes cluster counts, duplicate cluster counts,
+  duplicate reflection item counts, first cluster id, pending operator approval
+  counts, wasted-compute guard counts, and adapter-safe counts. The report is a
+  reuse hint only: it does not call a model, parse approval tokens, grant commit
+  authority, mutate memory, or write `.ndkv`. `tools/evolution-loop` now emits
+  additive top-level
+  `self_improve_proposal_memory_reflection_dedupe_cluster_report_v1`, adds
+  prompt context `self_improve_memory_reflection_dedupe_cluster=...`, emits
+  `next_self_improve_should_avoid_duplicate_reflection_clusters:true` only when
+  duplicate clusters exist, and exposes the same data through status
+  `-JsonStatus` and human-readable status output. The report remains
+  candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `auto_apply=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Verification passed: focused `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml memory_admission --target-dir
+  target\r86-eval-focused-memory` with `2 passed`, focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r86-tool-focused-self-improve` with `29 passed`, focused
+  report/prompt tests with `1 passed` each, full `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml --target-dir target\r86-eval-full` with `385
+  passed`, full `cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+  --target-dir target\r86-tool-full` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r86-memory-reflection-dedupe-cluster.json`
+  from the local ledger showed `9` rounds, `7/9` successes, no projected
+  self-improve candidates, and dedupe cluster
+  `clusters=0 duplicate_clusters=0 reflection_dedupe_ready=false
+  commit_allowed=false admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the new report's write-safety flags remain false.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT

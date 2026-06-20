@@ -4,8 +4,8 @@ rust-norion accepts public collaboration through issues and pull requests.
 
 ## Ground Rules
 
-- All changes must be reviewed and approved by the repository maintainer before
-  merge.
+- All changes must be reviewed and approved by the repository owner or
+  maintainer before merge.
 - Do not push directly to protected branches.
 - Keep contributions compatible with the repository license: non-commercial
   research, education, evaluation, and experimental deployment only.

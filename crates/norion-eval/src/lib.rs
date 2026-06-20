@@ -26836,6 +26836,61 @@ pub struct SelfImproveProposalMemoryReflectionUsefulnessReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionDedupeClusterItem {
+    pub cluster_id: String,
+    pub cluster_key: String,
+    pub representative_proposal_id: String,
+    pub proposal_ids: Vec<String>,
+    pub approval_review_packet_ids: Vec<String>,
+    pub content_digests: Vec<String>,
+    pub evidence_ids: Vec<String>,
+    pub reflection_count: usize,
+    pub duplicate_reflection_count: usize,
+    pub wasted_compute_guard_count: usize,
+    pub pending_operator_approval_count: usize,
+    pub adapter_safe_count: usize,
+    pub reuse_recommendation: String,
+    pub dedupe_recommendation: String,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub blocked_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionDedupeClusterReport {
+    pub target_count: usize,
+    pub useful_reflection_item_count: usize,
+    pub reflection_cluster_count: usize,
+    pub duplicate_cluster_count: usize,
+    pub duplicate_reflection_item_count: usize,
+    pub wasted_compute_guard_count: usize,
+    pub pending_operator_approval_count: usize,
+    pub adapter_safe_count: usize,
+    pub first_cluster_id: Option<String>,
+    pub reflection_dedupe_ready: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub failure_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+    pub cluster_items: Vec<SelfImproveProposalMemoryReflectionDedupeClusterItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
     pub proposal_id: String,
     pub source_round: Option<u64>,
@@ -27608,6 +27663,119 @@ impl SelfImproveProposalMemoryReflectionUsefulnessReport {
     }
 }
 
+impl SelfImproveProposalMemoryReflectionDedupeClusterReport {
+    pub fn from_reflection_usefulness(
+        usefulness: &SelfImproveProposalMemoryReflectionUsefulnessReport,
+    ) -> Self {
+        let reflection_dedupe_ready = usefulness.reflection_usefulness_ready
+            && usefulness.useful_reflection_item_count > 0
+            && usefulness.blocked_count == 0
+            && usefulness.explicit_operator_approval_required
+            && usefulness.validation_required
+            && usefulness.rollback_required
+            && usefulness.report_only
+            && usefulness.candidate_only
+            && !usefulness.auto_apply
+            && !usefulness.commit_allowed
+            && !usefulness.admission_write_authorized
+            && !usefulness.memory_store_write_allowed
+            && !usefulness.ndkv_write_allowed;
+
+        let mut clusters: BTreeMap<
+            String,
+            Vec<&SelfImproveProposalMemoryReflectionUsefulnessItem>,
+        > = BTreeMap::new();
+        for item in usefulness
+            .reflection_items
+            .iter()
+            .filter(|item| item.reflection_usefulness_ready && item.wasted_compute_guard)
+        {
+            clusters
+                .entry(reflection_dedupe_cluster_key(item))
+                .or_default()
+                .push(item);
+        }
+
+        let cluster_items = clusters
+            .into_iter()
+            .map(|(cluster_key, items)| {
+                SelfImproveProposalMemoryReflectionDedupeClusterItem::from_reflection_items(
+                    cluster_key,
+                    items,
+                    reflection_dedupe_ready,
+                )
+            })
+            .collect::<Vec<_>>();
+        let duplicate_cluster_count = cluster_items
+            .iter()
+            .filter(|item| item.duplicate_reflection_count > 0)
+            .count();
+        let duplicate_reflection_item_count = cluster_items
+            .iter()
+            .map(|item| item.duplicate_reflection_count)
+            .sum();
+        let wasted_compute_guard_count = cluster_items
+            .iter()
+            .map(|item| item.wasted_compute_guard_count)
+            .sum();
+        let pending_operator_approval_count = cluster_items
+            .iter()
+            .map(|item| item.pending_operator_approval_count)
+            .sum();
+        let adapter_safe_count = cluster_items
+            .iter()
+            .map(|item| item.adapter_safe_count)
+            .sum();
+
+        let mut failure_reasons = usefulness.failure_reasons.clone();
+        if usefulness.useful_reflection_item_count == 0 {
+            failure_reasons.push("reflection dedupe has no useful reflection items".to_owned());
+        }
+        if !usefulness.reflection_usefulness_ready {
+            failure_reasons.push("reflection dedupe requires ready usefulness report".to_owned());
+        }
+        if usefulness.commit_allowed || usefulness.admission_write_authorized {
+            failure_reasons.push("reflection dedupe input already authorized writes".to_owned());
+        }
+        if usefulness.auto_apply {
+            failure_reasons.push("reflection dedupe input attempted auto apply".to_owned());
+        }
+        if usefulness.memory_store_write_allowed {
+            failure_reasons.push("reflection dedupe input allowed memory store writes".to_owned());
+        }
+        if usefulness.ndkv_write_allowed {
+            failure_reasons.push("reflection dedupe input allowed ndkv writes".to_owned());
+        }
+        failure_reasons.sort();
+        failure_reasons.dedup();
+
+        Self {
+            target_count: usefulness.target_count,
+            useful_reflection_item_count: usefulness.useful_reflection_item_count,
+            reflection_cluster_count: cluster_items.len(),
+            duplicate_cluster_count,
+            duplicate_reflection_item_count,
+            wasted_compute_guard_count,
+            pending_operator_approval_count,
+            adapter_safe_count,
+            first_cluster_id: cluster_items.first().map(|item| item.cluster_id.clone()),
+            reflection_dedupe_ready,
+            explicit_operator_approval_required: reflection_dedupe_ready,
+            validation_required: reflection_dedupe_ready,
+            rollback_required: reflection_dedupe_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            failure_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+            cluster_items,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport {
     pub fn from_review_packet_and_reflection_usefulness(
         review: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport,
@@ -28236,6 +28404,133 @@ impl SelfImproveProposalMemoryReflectionUsefulnessItem {
     }
 }
 
+impl SelfImproveProposalMemoryReflectionDedupeClusterItem {
+    fn from_reflection_items(
+        cluster_key: String,
+        items: Vec<&SelfImproveProposalMemoryReflectionUsefulnessItem>,
+        reflection_dedupe_ready: bool,
+    ) -> Self {
+        let representative = items
+            .first()
+            .expect("reflection dedupe clusters are never constructed empty");
+        let reflection_count = items.len();
+        let duplicate_reflection_count = reflection_count.saturating_sub(1);
+        let wasted_compute_guard_count = items
+            .iter()
+            .filter(|item| item.wasted_compute_guard)
+            .count();
+        let pending_operator_approval_count = items
+            .iter()
+            .filter(|item| item.pending_operator_approval)
+            .count();
+        let adapter_safe_count = items
+            .iter()
+            .filter(|item| item.adapter_safety_status == "adapter_safe_no_writes")
+            .count();
+        let explicit_operator_approval_required = reflection_dedupe_ready
+            && items
+                .iter()
+                .all(|item| item.explicit_operator_approval_required);
+        let validation_required =
+            reflection_dedupe_ready && items.iter().all(|item| item.validation_required);
+        let rollback_required =
+            reflection_dedupe_ready && items.iter().all(|item| item.rollback_required);
+        let mut blocked_reasons = items
+            .iter()
+            .flat_map(|item| item.blocked_reasons.iter().cloned())
+            .collect::<Vec<_>>();
+        if reflection_count == 0 {
+            blocked_reasons.push("reflection_dedupe_cluster_empty".to_owned());
+        }
+        if wasted_compute_guard_count != reflection_count {
+            blocked_reasons
+                .push("reflection_dedupe_cluster_missing_wasted_compute_guard".to_owned());
+        }
+        if pending_operator_approval_count != reflection_count {
+            blocked_reasons.push("reflection_dedupe_cluster_missing_operator_approval".to_owned());
+        }
+        if adapter_safe_count != reflection_count {
+            blocked_reasons.push("reflection_dedupe_cluster_not_adapter_safe".to_owned());
+        }
+        if items
+            .iter()
+            .any(|item| item.commit_allowed || item.admission_write_authorized)
+        {
+            blocked_reasons.push("reflection_dedupe_cluster_already_authorized_write".to_owned());
+        }
+        if items.iter().any(|item| {
+            item.auto_apply || item.memory_store_write_allowed || item.ndkv_write_allowed
+        }) {
+            blocked_reasons.push("reflection_dedupe_cluster_attempted_side_effect".to_owned());
+        }
+        blocked_reasons.sort();
+        blocked_reasons.dedup();
+
+        let mut proposal_ids = items
+            .iter()
+            .map(|item| item.proposal_id.clone())
+            .collect::<Vec<_>>();
+        proposal_ids.sort();
+        proposal_ids.dedup();
+        let mut approval_review_packet_ids = items
+            .iter()
+            .map(|item| item.approval_review_packet_id.clone())
+            .collect::<Vec<_>>();
+        approval_review_packet_ids.sort();
+        approval_review_packet_ids.dedup();
+        let mut content_digests = items
+            .iter()
+            .map(|item| item.content_digest.clone())
+            .collect::<Vec<_>>();
+        content_digests.sort();
+        content_digests.dedup();
+        let mut evidence_ids = items
+            .iter()
+            .flat_map(|item| item.usefulness_evidence_ids.iter().cloned())
+            .collect::<Vec<_>>();
+        evidence_ids.sort();
+        evidence_ids.dedup();
+
+        let cluster_id = format!(
+            "memory-reflection-dedupe:{}:{}",
+            writer_plan_slug(&cluster_key),
+            reflection_text_digest(&cluster_key).replace(':', "-")
+        );
+
+        Self {
+            cluster_id,
+            cluster_key,
+            representative_proposal_id: representative.proposal_id.clone(),
+            proposal_ids,
+            approval_review_packet_ids,
+            content_digests,
+            evidence_ids,
+            reflection_count,
+            duplicate_reflection_count,
+            wasted_compute_guard_count,
+            pending_operator_approval_count,
+            adapter_safe_count,
+            reuse_recommendation: representative.reuse_recommendation.clone(),
+            dedupe_recommendation: if duplicate_reflection_count > 0 {
+                "reuse_representative_reflection_cluster_before_new_model_call".to_owned()
+            } else {
+                "keep_single_reflection_cluster_for_future_reuse".to_owned()
+            },
+            explicit_operator_approval_required,
+            validation_required,
+            rollback_required,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            blocked_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
     pub fn from_review_packet_and_usefulness_item(
         item: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem,
@@ -28641,6 +28936,40 @@ fn writer_plan_slug(value: &str) -> String {
     } else {
         slug
     }
+}
+
+fn reflection_dedupe_cluster_key(
+    item: &SelfImproveProposalMemoryReflectionUsefulnessItem,
+) -> String {
+    format!(
+        "proposal-family:{}:reuse:{}:adapter:{}",
+        reflection_proposal_family_key(&item.proposal_id),
+        item.reuse_recommendation,
+        item.adapter_safety_status
+    )
+}
+
+fn reflection_proposal_family_key(value: &str) -> String {
+    let family = value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .filter(|character| !character.is_ascii_digit())
+        .map(|character| character.to_ascii_lowercase())
+        .take(64)
+        .collect::<String>();
+    if family.is_empty() {
+        "reflection".to_owned()
+    } else {
+        family
+    }
+}
+
+fn reflection_text_digest(value: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in value.bytes() {
+        hash = (hash ^ byte as u64).wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}")
 }
 
 fn writer_receipt_content_digest(
@@ -42371,6 +42700,92 @@ mod tests {
         assert!(!reflection_item.memory_store_write_allowed);
         assert!(!reflection_item.ndkv_write_allowed);
         assert!(reflection_item.blocked_reasons.is_empty());
+
+        let reflection_dedupe =
+            SelfImproveProposalMemoryReflectionDedupeClusterReport::from_reflection_usefulness(
+                &reflection_usefulness,
+            );
+        assert_eq!(reflection_dedupe.target_count, 1);
+        assert_eq!(reflection_dedupe.useful_reflection_item_count, 1);
+        assert_eq!(reflection_dedupe.reflection_cluster_count, 1);
+        assert_eq!(reflection_dedupe.duplicate_cluster_count, 0);
+        assert_eq!(reflection_dedupe.duplicate_reflection_item_count, 0);
+        assert_eq!(reflection_dedupe.wasted_compute_guard_count, 1);
+        assert_eq!(reflection_dedupe.pending_operator_approval_count, 1);
+        assert_eq!(reflection_dedupe.adapter_safe_count, 1);
+        assert!(reflection_dedupe.reflection_dedupe_ready);
+        assert!(reflection_dedupe.explicit_operator_approval_required);
+        assert!(reflection_dedupe.validation_required);
+        assert!(reflection_dedupe.rollback_required);
+        assert!(!reflection_dedupe.commit_allowed);
+        assert!(!reflection_dedupe.admission_write_authorized);
+        assert!(reflection_dedupe.failure_reasons.is_empty());
+        assert!(reflection_dedupe.report_only);
+        assert!(reflection_dedupe.candidate_only);
+        assert!(!reflection_dedupe.auto_apply);
+        assert!(!reflection_dedupe.memory_store_write_allowed);
+        assert!(!reflection_dedupe.ndkv_write_allowed);
+        let cluster_item = reflection_dedupe.cluster_items.first().unwrap();
+        assert!(
+            cluster_item
+                .cluster_id
+                .starts_with("memory-reflection-dedupe:")
+        );
+        assert_eq!(
+            cluster_item.representative_proposal_id,
+            reflection_item.proposal_id
+        );
+        assert_eq!(cluster_item.reflection_count, 1);
+        assert_eq!(cluster_item.duplicate_reflection_count, 0);
+        assert_eq!(
+            cluster_item.dedupe_recommendation,
+            "keep_single_reflection_cluster_for_future_reuse"
+        );
+        assert!(!cluster_item.commit_allowed);
+        assert!(!cluster_item.admission_write_authorized);
+        assert!(cluster_item.report_only);
+        assert!(cluster_item.candidate_only);
+        assert!(!cluster_item.auto_apply);
+        assert!(!cluster_item.memory_store_write_allowed);
+        assert!(!cluster_item.ndkv_write_allowed);
+        assert!(cluster_item.blocked_reasons.is_empty());
+
+        let mut repeated_reflection_usefulness = reflection_usefulness.clone();
+        let mut repeated_reflection_item = reflection_item.clone();
+        repeated_reflection_item.source_round = Some(393);
+        repeated_reflection_usefulness
+            .reflection_items
+            .push(repeated_reflection_item);
+        repeated_reflection_usefulness.useful_reflection_item_count = 2;
+        repeated_reflection_usefulness.pending_operator_approval_count = 2;
+        repeated_reflection_usefulness.wasted_compute_guard_count = 2;
+        repeated_reflection_usefulness.adapter_safe_count = 2;
+        let repeated_reflection_dedupe =
+            SelfImproveProposalMemoryReflectionDedupeClusterReport::from_reflection_usefulness(
+                &repeated_reflection_usefulness,
+            );
+        assert_eq!(repeated_reflection_dedupe.reflection_cluster_count, 1);
+        assert_eq!(repeated_reflection_dedupe.duplicate_cluster_count, 1);
+        assert_eq!(
+            repeated_reflection_dedupe.duplicate_reflection_item_count,
+            1
+        );
+        let repeated_cluster_item = repeated_reflection_dedupe.cluster_items.first().unwrap();
+        assert_eq!(repeated_cluster_item.reflection_count, 2);
+        assert_eq!(repeated_cluster_item.duplicate_reflection_count, 1);
+        assert_eq!(
+            repeated_cluster_item.dedupe_recommendation,
+            "reuse_representative_reflection_cluster_before_new_model_call"
+        );
+        assert!(
+            repeated_cluster_item
+                .proposal_ids
+                .contains(&reflection_item.proposal_id)
+        );
+        assert!(!repeated_cluster_item.commit_allowed);
+        assert!(!repeated_cluster_item.admission_write_authorized);
+        assert!(!repeated_cluster_item.memory_store_write_allowed);
+        assert!(!repeated_cluster_item.ndkv_write_allowed);
 
         let token_intake_preview =
             SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport::from_review_packet_and_reflection_usefulness(
