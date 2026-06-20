@@ -24,8 +24,21 @@ pub struct GenerationMetrics {
 
 impl GenerationMetrics {
     pub fn quality_score(self) -> f32 {
-        let perplexity_score = (1.0 / (1.0 + self.perplexity / 12.0)).clamp(0.0, 1.0);
-        let consistency_score = self.semantic_consistency.clamp(0.0, 1.0);
+        let perplexity = if self.perplexity.is_finite() {
+            self.perplexity.max(0.0)
+        } else {
+            f32::INFINITY
+        };
+        let perplexity_score = if perplexity.is_finite() {
+            (1.0 / (1.0 + perplexity / 12.0)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let consistency_score = if self.semantic_consistency.is_finite() {
+            self.semantic_consistency.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         let contradiction_penalty = (self.contradiction_count as f32 * 0.18).min(0.72);
         ((perplexity_score * 0.35) + (consistency_score * 0.65) - contradiction_penalty)
             .clamp(0.0, 1.0)

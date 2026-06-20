@@ -78,8 +78,9 @@ pub use hardware::{
     MemoryGovernancePlan, RuntimeAdapterHint, RuntimeManifestDeviceGateReport,
 };
 pub use hierarchy::{
-    HierarchyController, HierarchyState, HierarchyWeights, ProfileHierarchyObservations,
-    ProfileHierarchyWeights, TaskProfile,
+    HierarchyAdjustmentPreviewPlanner, HierarchyAdjustmentPreviewPolicy,
+    HierarchyAdjustmentPreviewReport, HierarchyController, HierarchyState, HierarchyWeightDelta,
+    HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
 };
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,

@@ -163,6 +163,20 @@ fn hardware_pressure_conserves_attention_budget() {
 }
 
 #[test]
+fn generation_metrics_quality_score_stays_finite_for_bad_inputs() {
+    let score = GenerationMetrics {
+        perplexity: f32::NAN,
+        semantic_consistency: f32::INFINITY,
+        contradiction_count: usize::MAX,
+        token_count: 32,
+    }
+    .quality_score();
+
+    assert!(score.is_finite());
+    assert_eq!(score, 0.0);
+}
+
+#[test]
 fn accelerator_headroom_spends_attention_on_borderline_tokens() {
     let router = NoironRouter::new();
     let normal = router.route_entropy("token", 0.62);
