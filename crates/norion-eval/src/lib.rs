@@ -27484,6 +27484,112 @@ pub struct SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRe
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestItem {
+    pub cluster_id: String,
+    pub lookup_key: String,
+    pub approval_request_id: String,
+    pub approval_decision_preview_id: String,
+    pub approval_token_intake_preview_id: String,
+    pub approval_token_intake_decision_preview_id: String,
+    pub approval_token_decision_record_preview_id: String,
+    pub approval_token_decision_record_request_id: String,
+    pub representative_proposal_id: String,
+    pub duplicate_proposal_ids: Vec<String>,
+    pub evidence_ids: Vec<String>,
+    pub projected_saved_reflection_count: usize,
+    pub projected_model_call_skip_count: usize,
+    pub lookup_preview_ready: bool,
+    pub lookup_approval_request_ready: bool,
+    pub lookup_approval_decision_preview_ready: bool,
+    pub token_intake_ready: bool,
+    pub token_intake_decision_preview_ready: bool,
+    pub token_decision_record_preview_ready: bool,
+    pub token_decision_record_request_ready: bool,
+    pub lookup_execution_approval_granted: bool,
+    pub pending_operator_approval: bool,
+    pub token_decision_status: String,
+    pub planned_operator_action: String,
+    pub decision_record_status: String,
+    pub selected_operator_token_status: String,
+    pub record_request_status: String,
+    pub requested_operator_action: String,
+    pub approval_token: String,
+    pub rejection_token: String,
+    pub approval_token_recordable: bool,
+    pub rejection_token_recordable: bool,
+    pub idempotency_key: String,
+    pub content_digest: String,
+    pub rollback_anchor_ids: Vec<String>,
+    pub operator_checklist: Vec<String>,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub model_call_skip_authorized: bool,
+    pub reflection_reuse_execution_authorized: bool,
+    pub memory_lookup_performed: bool,
+    pub lookup_hit_assumed: bool,
+    pub blocked_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestReport {
+    pub target_count: usize,
+    pub preflight_item_count: usize,
+    pub lookup_preview_item_count: usize,
+    pub ready_lookup_preview_count: usize,
+    pub approval_request_item_count: usize,
+    pub ready_approval_request_count: usize,
+    pub approval_decision_preview_item_count: usize,
+    pub ready_approval_decision_preview_count: usize,
+    pub token_intake_preview_item_count: usize,
+    pub ready_token_intake_preview_count: usize,
+    pub token_intake_decision_preview_item_count: usize,
+    pub ready_token_intake_decision_preview_count: usize,
+    pub token_decision_record_preview_item_count: usize,
+    pub ready_token_decision_record_preview_count: usize,
+    pub token_decision_record_request_item_count: usize,
+    pub ready_token_decision_record_request_count: usize,
+    pub requested_token_decision_record_count: usize,
+    pub pending_operator_token_count: usize,
+    pub approved_lookup_execution_count: usize,
+    pub blocked_item_count: usize,
+    pub approval_token_present_count: usize,
+    pub rejection_token_present_count: usize,
+    pub duplicate_cluster_count: usize,
+    pub duplicate_reflection_item_count: usize,
+    pub projected_saved_reflection_count: usize,
+    pub projected_model_call_skip_count: usize,
+    pub first_token_decision_record_preview_id: Option<String>,
+    pub first_token_decision_record_request_id: Option<String>,
+    pub lookup_approval_token_decision_record_preview_ready: bool,
+    pub lookup_approval_token_decision_record_request_ready: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub model_call_skip_authorized: bool,
+    pub reflection_reuse_execution_authorized: bool,
+    pub memory_lookup_performed: bool,
+    pub lookup_hit_assumed: bool,
+    pub failure_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+    pub token_decision_record_request_items:
+        Vec<SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
     pub proposal_id: String,
     pub source_round: Option<u64>,
@@ -29572,6 +29678,226 @@ impl SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPr
     }
 }
 
+impl SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestReport {
+    pub fn from_token_decision_record_preview(
+        report: &SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreviewReport,
+    ) -> Self {
+        let token_decision_record_request_preflight_ready = report
+            .lookup_approval_token_decision_record_preview_ready
+            && report.token_decision_record_preview_item_count > 0
+            && report.ready_token_decision_record_preview_count
+                == report.token_decision_record_preview_item_count
+            && report.pending_operator_token_count > 0
+            && report.approved_lookup_execution_count == 0
+            && report.blocked_item_count == 0
+            && report.approval_token_present_count
+                == report.token_decision_record_preview_item_count
+            && report.rejection_token_present_count
+                == report.token_decision_record_preview_item_count
+            && report.explicit_operator_approval_required
+            && report.validation_required
+            && report.rollback_required
+            && report.report_only
+            && report.candidate_only
+            && !report.auto_apply
+            && !report.commit_allowed
+            && !report.admission_write_authorized
+            && !report.model_call_skip_authorized
+            && !report.reflection_reuse_execution_authorized
+            && !report.memory_lookup_performed
+            && !report.lookup_hit_assumed
+            && !report.memory_store_write_allowed
+            && !report.ndkv_write_allowed;
+        let token_decision_record_request_items = report
+            .token_decision_record_preview_items
+            .iter()
+            .map(|item| {
+                SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestItem::from_token_decision_record_preview_item(
+                    item,
+                    token_decision_record_request_preflight_ready,
+                )
+            })
+            .collect::<Vec<_>>();
+        let ready_token_decision_record_request_count = token_decision_record_request_items
+            .iter()
+            .filter(|item| item.token_decision_record_request_ready)
+            .count();
+        let pending_operator_token_count = token_decision_record_request_items
+            .iter()
+            .filter(|item| item.pending_operator_approval)
+            .count();
+        let approved_lookup_execution_count = token_decision_record_request_items
+            .iter()
+            .filter(|item| item.lookup_execution_approval_granted)
+            .count();
+        let approval_token_present_count = token_decision_record_request_items
+            .iter()
+            .filter(|item| !item.approval_token.is_empty())
+            .count();
+        let rejection_token_present_count = token_decision_record_request_items
+            .iter()
+            .filter(|item| !item.rejection_token.is_empty())
+            .count();
+        let lookup_approval_token_decision_record_request_ready =
+            token_decision_record_request_preflight_ready
+                && ready_token_decision_record_request_count
+                    == token_decision_record_request_items.len()
+                && approved_lookup_execution_count == 0;
+
+        let mut failure_reasons = report.failure_reasons.clone();
+        if report.token_decision_record_preview_item_count == 0 {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request has no token decision record previews"
+                    .to_owned(),
+            );
+        }
+        if !report.lookup_approval_token_decision_record_preview_ready {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request requires ready token decision record preview"
+                    .to_owned(),
+            );
+        }
+        if report.ready_token_decision_record_preview_count
+            != report.token_decision_record_preview_item_count
+            || report.blocked_item_count > 0
+        {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request requires all token decision record previews ready"
+                    .to_owned(),
+            );
+        }
+        if report.pending_operator_token_count == 0 {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request requires pending operator tokens"
+                    .to_owned(),
+            );
+        }
+        if report.approved_lookup_execution_count > 0 {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request refuses already approved lookup execution"
+                    .to_owned(),
+            );
+        }
+        if token_decision_record_request_preflight_ready
+            && ready_token_decision_record_request_count
+                != token_decision_record_request_items.len()
+        {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request requires all derived record requests ready"
+                    .to_owned(),
+            );
+        }
+        if report.approval_token_present_count != report.token_decision_record_preview_item_count
+            || report.rejection_token_present_count
+                != report.token_decision_record_preview_item_count
+        {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request requires approval and rejection tokens"
+                    .to_owned(),
+            );
+        }
+        if report.commit_allowed || report.admission_write_authorized {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request input already authorized writes"
+                    .to_owned(),
+            );
+        }
+        if report.model_call_skip_authorized || report.reflection_reuse_execution_authorized {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request input already authorized execution"
+                    .to_owned(),
+            );
+        }
+        if report.memory_lookup_performed || report.lookup_hit_assumed {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request input already performed lookup"
+                    .to_owned(),
+            );
+        }
+        if report.auto_apply {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request input attempted auto apply"
+                    .to_owned(),
+            );
+        }
+        if report.memory_store_write_allowed {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request input allowed memory store writes"
+                    .to_owned(),
+            );
+        }
+        if report.ndkv_write_allowed {
+            failure_reasons.push(
+                "reflection reuse lookup approval token decision record request input allowed ndkv writes"
+                    .to_owned(),
+            );
+        }
+        failure_reasons.sort();
+        failure_reasons.dedup();
+
+        Self {
+            target_count: report.target_count,
+            preflight_item_count: report.preflight_item_count,
+            lookup_preview_item_count: report.lookup_preview_item_count,
+            ready_lookup_preview_count: report.ready_lookup_preview_count,
+            approval_request_item_count: report.approval_request_item_count,
+            ready_approval_request_count: report.ready_approval_request_count,
+            approval_decision_preview_item_count: report.approval_decision_preview_item_count,
+            ready_approval_decision_preview_count: report.ready_approval_decision_preview_count,
+            token_intake_preview_item_count: report.token_intake_preview_item_count,
+            ready_token_intake_preview_count: report.ready_token_intake_preview_count,
+            token_intake_decision_preview_item_count: report
+                .token_intake_decision_preview_item_count,
+            ready_token_intake_decision_preview_count: report
+                .ready_token_intake_decision_preview_count,
+            token_decision_record_preview_item_count: report
+                .token_decision_record_preview_item_count,
+            ready_token_decision_record_preview_count: report
+                .ready_token_decision_record_preview_count,
+            token_decision_record_request_item_count: token_decision_record_request_items.len(),
+            ready_token_decision_record_request_count,
+            requested_token_decision_record_count: ready_token_decision_record_request_count,
+            pending_operator_token_count,
+            approved_lookup_execution_count,
+            blocked_item_count: token_decision_record_request_items
+                .len()
+                .saturating_sub(ready_token_decision_record_request_count),
+            approval_token_present_count,
+            rejection_token_present_count,
+            duplicate_cluster_count: report.duplicate_cluster_count,
+            duplicate_reflection_item_count: report.duplicate_reflection_item_count,
+            projected_saved_reflection_count: report.projected_saved_reflection_count,
+            projected_model_call_skip_count: report.projected_model_call_skip_count,
+            first_token_decision_record_preview_id: report
+                .first_token_decision_record_preview_id
+                .clone(),
+            first_token_decision_record_request_id: token_decision_record_request_items
+                .first()
+                .map(|item| item.approval_token_decision_record_request_id.clone()),
+            lookup_approval_token_decision_record_preview_ready: report
+                .lookup_approval_token_decision_record_preview_ready,
+            lookup_approval_token_decision_record_request_ready,
+            explicit_operator_approval_required:
+                lookup_approval_token_decision_record_request_ready,
+            validation_required: lookup_approval_token_decision_record_request_ready,
+            rollback_required: lookup_approval_token_decision_record_request_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            model_call_skip_authorized: false,
+            reflection_reuse_execution_authorized: false,
+            memory_lookup_performed: false,
+            lookup_hit_assumed: false,
+            failure_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+            token_decision_record_request_items,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport {
     pub fn from_review_packet_and_reflection_usefulness(
         review: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport,
@@ -31225,6 +31551,20 @@ fn reflection_reuse_lookup_approval_token_decision_record_preview_id(
         reflection_text_digest(&format!(
             "{}:{}",
             item.approval_token_intake_decision_preview_id, item.content_digest
+        ))
+        .replace(':', "-")
+    )
+}
+
+fn reflection_reuse_lookup_approval_token_decision_record_request_id(
+    item: &SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreviewItem,
+) -> String {
+    format!(
+        "memory-reflection-reuse-lookup-approval-token-decision-record-request:{}:{}",
+        writer_plan_slug(&item.cluster_id),
+        reflection_text_digest(&format!(
+            "{}:{}",
+            item.approval_token_decision_record_preview_id, item.content_digest
         ))
         .replace(':', "-")
     )
@@ -34109,6 +34449,183 @@ impl SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPr
             explicit_operator_approval_required: token_decision_record_preview_ready,
             validation_required: token_decision_record_preview_ready,
             rollback_required: token_decision_record_preview_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            model_call_skip_authorized: false,
+            reflection_reuse_execution_authorized: false,
+            memory_lookup_performed: false,
+            lookup_hit_assumed: false,
+            blocked_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+        }
+    }
+}
+
+impl SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestItem {
+    fn from_token_decision_record_preview_item(
+        item: &SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreviewItem,
+        token_decision_record_request_preflight_ready: bool,
+    ) -> Self {
+        let token_decision_record_request_ready = token_decision_record_request_preflight_ready
+            && item.token_decision_record_preview_ready
+            && item.pending_operator_approval
+            && item.approval_token_recordable
+            && item.rejection_token_recordable
+            && item.explicit_operator_approval_required
+            && item.validation_required
+            && item.rollback_required
+            && item.report_only
+            && item.candidate_only
+            && !item.auto_apply
+            && !item.commit_allowed
+            && !item.admission_write_authorized
+            && !item.model_call_skip_authorized
+            && !item.reflection_reuse_execution_authorized
+            && !item.memory_lookup_performed
+            && !item.lookup_hit_assumed
+            && !item.memory_store_write_allowed
+            && !item.ndkv_write_allowed
+            && item.blocked_reasons.is_empty();
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if !token_decision_record_request_ready {
+            if !token_decision_record_request_preflight_ready {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_preflight_not_passed"
+                        .to_owned(),
+                );
+            }
+            if !item.token_decision_record_preview_ready {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_missing_ready_record_preview"
+                        .to_owned(),
+                );
+            }
+            if item.approval_token.is_empty()
+                || item.rejection_token.is_empty()
+                || !item.approval_token_recordable
+                || !item.rejection_token_recordable
+            {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_missing_recordable_operator_tokens"
+                        .to_owned(),
+                );
+            }
+            if item.lookup_execution_approval_granted {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_already_granted_execution"
+                        .to_owned(),
+                );
+            }
+            if !item.pending_operator_approval {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_missing_pending_approval"
+                        .to_owned(),
+                );
+            }
+            if !item.explicit_operator_approval_required {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_missing_explicit_approval"
+                        .to_owned(),
+                );
+            }
+            if !item.validation_required {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_missing_validation"
+                        .to_owned(),
+                );
+            }
+            if !item.rollback_required {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_missing_rollback"
+                        .to_owned(),
+                );
+            }
+            if item.commit_allowed || item.admission_write_authorized {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_already_authorized_write"
+                        .to_owned(),
+                );
+            }
+            if item.model_call_skip_authorized || item.reflection_reuse_execution_authorized {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_already_authorized_execution"
+                        .to_owned(),
+                );
+            }
+            if item.memory_lookup_performed || item.lookup_hit_assumed {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_lookup_already_performed"
+                        .to_owned(),
+                );
+            }
+            if item.auto_apply || item.memory_store_write_allowed || item.ndkv_write_allowed {
+                blocked_reasons.push(
+                    "reflection_reuse_lookup_approval_token_decision_record_request_attempted_side_effect"
+                        .to_owned(),
+                );
+            }
+        }
+        blocked_reasons.sort();
+        blocked_reasons.dedup();
+
+        Self {
+            cluster_id: item.cluster_id.clone(),
+            lookup_key: item.lookup_key.clone(),
+            approval_request_id: item.approval_request_id.clone(),
+            approval_decision_preview_id: item.approval_decision_preview_id.clone(),
+            approval_token_intake_preview_id: item.approval_token_intake_preview_id.clone(),
+            approval_token_intake_decision_preview_id: item
+                .approval_token_intake_decision_preview_id
+                .clone(),
+            approval_token_decision_record_preview_id: item
+                .approval_token_decision_record_preview_id
+                .clone(),
+            approval_token_decision_record_request_id:
+                reflection_reuse_lookup_approval_token_decision_record_request_id(item),
+            representative_proposal_id: item.representative_proposal_id.clone(),
+            duplicate_proposal_ids: item.duplicate_proposal_ids.clone(),
+            evidence_ids: item.evidence_ids.clone(),
+            projected_saved_reflection_count: item.projected_saved_reflection_count,
+            projected_model_call_skip_count: item.projected_model_call_skip_count,
+            lookup_preview_ready: item.lookup_preview_ready,
+            lookup_approval_request_ready: item.lookup_approval_request_ready,
+            lookup_approval_decision_preview_ready: item.lookup_approval_decision_preview_ready,
+            token_intake_ready: item.token_intake_ready,
+            token_intake_decision_preview_ready: item.token_intake_decision_preview_ready,
+            token_decision_record_preview_ready: item.token_decision_record_preview_ready,
+            token_decision_record_request_ready,
+            lookup_execution_approval_granted: false,
+            pending_operator_approval: item.pending_operator_approval,
+            token_decision_status: item.token_decision_status.clone(),
+            planned_operator_action: item.planned_operator_action.clone(),
+            decision_record_status: item.decision_record_status.clone(),
+            selected_operator_token_status: item.selected_operator_token_status.clone(),
+            record_request_status: if token_decision_record_request_ready {
+                "ready_to_request_explicit_reflection_reuse_lookup_token_decision_record".to_owned()
+            } else {
+                "blocked_until_lookup_approval_token_decision_record_preview_is_ready".to_owned()
+            },
+            requested_operator_action: if token_decision_record_request_ready {
+                "request_operator_record_explicit_reflection_reuse_lookup_token_decision_without_consuming_token"
+                    .to_owned()
+            } else {
+                "wait_for_ready_reflection_reuse_lookup_token_decision_record_preview".to_owned()
+            },
+            approval_token: item.approval_token.clone(),
+            rejection_token: item.rejection_token.clone(),
+            approval_token_recordable: item.approval_token_recordable,
+            rejection_token_recordable: item.rejection_token_recordable,
+            idempotency_key: item.idempotency_key.clone(),
+            content_digest: item.content_digest.clone(),
+            rollback_anchor_ids: item.rollback_anchor_ids.clone(),
+            operator_checklist: item.operator_checklist.clone(),
+            explicit_operator_approval_required: token_decision_record_request_ready,
+            validation_required: token_decision_record_request_ready,
+            rollback_required: token_decision_record_request_ready,
             commit_allowed: false,
             admission_write_authorized: false,
             model_call_skip_authorized: false,
@@ -46258,6 +46775,114 @@ mod tests {
         assert!(!lookup_approval_token_decision_record_preview_item.memory_store_write_allowed);
         assert!(!lookup_approval_token_decision_record_preview_item.ndkv_write_allowed);
 
+        let lookup_approval_token_decision_record_request =
+            SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestReport::from_token_decision_record_preview(
+                &lookup_approval_token_decision_record_preview,
+            );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.token_decision_record_preview_item_count,
+            1
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.ready_token_decision_record_preview_count,
+            0
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.token_decision_record_request_item_count,
+            1
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.ready_token_decision_record_request_count,
+            0
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.requested_token_decision_record_count,
+            0
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.pending_operator_token_count,
+            0
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.approved_lookup_execution_count,
+            0
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request.blocked_item_count,
+            1
+        );
+        assert!(
+            !lookup_approval_token_decision_record_request
+                .lookup_approval_token_decision_record_request_ready
+        );
+        assert!(!lookup_approval_token_decision_record_request.commit_allowed);
+        assert!(!lookup_approval_token_decision_record_request.admission_write_authorized);
+        assert!(!lookup_approval_token_decision_record_request.model_call_skip_authorized);
+        assert!(
+            !lookup_approval_token_decision_record_request.reflection_reuse_execution_authorized
+        );
+        assert!(!lookup_approval_token_decision_record_request.memory_lookup_performed);
+        assert!(!lookup_approval_token_decision_record_request.lookup_hit_assumed);
+        assert!(
+            lookup_approval_token_decision_record_request
+                .failure_reasons
+                .contains(
+                    &"reflection reuse lookup approval token decision record request requires ready token decision record preview"
+                        .to_owned()
+                )
+        );
+        assert!(lookup_approval_token_decision_record_request.report_only);
+        assert!(lookup_approval_token_decision_record_request.candidate_only);
+        assert!(!lookup_approval_token_decision_record_request.auto_apply);
+        assert!(!lookup_approval_token_decision_record_request.memory_store_write_allowed);
+        assert!(!lookup_approval_token_decision_record_request.ndkv_write_allowed);
+        let lookup_approval_token_decision_record_request_item =
+            lookup_approval_token_decision_record_request
+                .token_decision_record_request_items
+                .first()
+                .unwrap();
+        assert_eq!(
+            lookup_approval_token_decision_record_request_item
+                .approval_token_decision_record_preview_id,
+            lookup_approval_token_decision_record_preview_item
+                .approval_token_decision_record_preview_id
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request_item.idempotency_key,
+            lookup_approval_token_decision_record_preview_item.idempotency_key
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request_item.content_digest,
+            lookup_approval_token_decision_record_preview_item.content_digest
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request_item.rollback_anchor_ids,
+            lookup_approval_token_decision_record_preview_item.rollback_anchor_ids
+        );
+        assert_eq!(
+            lookup_approval_token_decision_record_request_item.operator_checklist,
+            lookup_approval_token_decision_record_preview_item.operator_checklist
+        );
+        assert!(
+            lookup_approval_token_decision_record_request_item
+                .approval_token_decision_record_request_id
+                .starts_with(
+                    "memory-reflection-reuse-lookup-approval-token-decision-record-request:"
+                )
+        );
+        assert!(
+            !lookup_approval_token_decision_record_request_item.token_decision_record_request_ready
+        );
+        assert!(
+            !lookup_approval_token_decision_record_request_item.lookup_execution_approval_granted
+        );
+        assert!(!lookup_approval_token_decision_record_request_item.memory_lookup_performed);
+        assert!(!lookup_approval_token_decision_record_request_item.lookup_hit_assumed);
+        assert!(!lookup_approval_token_decision_record_request_item.commit_allowed);
+        assert!(!lookup_approval_token_decision_record_request_item.admission_write_authorized);
+        assert!(!lookup_approval_token_decision_record_request_item.memory_store_write_allowed);
+        assert!(!lookup_approval_token_decision_record_request_item.ndkv_write_allowed);
+
         let mut repeated_reflection_usefulness = reflection_usefulness.clone();
         let mut repeated_reflection_item = reflection_item.clone();
         repeated_reflection_item.source_round = Some(393);
@@ -47005,6 +47630,161 @@ mod tests {
             !repeated_lookup_approval_token_decision_record_preview_item.memory_store_write_allowed
         );
         assert!(!repeated_lookup_approval_token_decision_record_preview_item.ndkv_write_allowed);
+
+        let repeated_lookup_approval_token_decision_record_request =
+            SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestReport::from_token_decision_record_preview(
+                &repeated_lookup_approval_token_decision_record_preview,
+            );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request
+                .token_decision_record_preview_item_count,
+            1
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request
+                .ready_token_decision_record_preview_count,
+            1
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request
+                .token_decision_record_request_item_count,
+            1
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request
+                .ready_token_decision_record_request_count,
+            1
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request
+                .requested_token_decision_record_count,
+            1
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request.pending_operator_token_count,
+            1
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request.approved_lookup_execution_count,
+            0
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request.blocked_item_count,
+            0
+        );
+        assert!(
+            repeated_lookup_approval_token_decision_record_request
+                .lookup_approval_token_decision_record_preview_ready
+        );
+        assert!(
+            repeated_lookup_approval_token_decision_record_request
+                .lookup_approval_token_decision_record_request_ready
+        );
+        assert!(
+            repeated_lookup_approval_token_decision_record_request
+                .explicit_operator_approval_required
+        );
+        assert!(repeated_lookup_approval_token_decision_record_request.validation_required);
+        assert!(repeated_lookup_approval_token_decision_record_request.rollback_required);
+        assert!(!repeated_lookup_approval_token_decision_record_request.commit_allowed);
+        assert!(!repeated_lookup_approval_token_decision_record_request.admission_write_authorized);
+        assert!(!repeated_lookup_approval_token_decision_record_request.model_call_skip_authorized);
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request
+                .reflection_reuse_execution_authorized
+        );
+        assert!(!repeated_lookup_approval_token_decision_record_request.memory_lookup_performed);
+        assert!(!repeated_lookup_approval_token_decision_record_request.lookup_hit_assumed);
+        assert!(
+            repeated_lookup_approval_token_decision_record_request
+                .failure_reasons
+                .is_empty()
+        );
+        assert!(repeated_lookup_approval_token_decision_record_request.report_only);
+        assert!(repeated_lookup_approval_token_decision_record_request.candidate_only);
+        assert!(!repeated_lookup_approval_token_decision_record_request.auto_apply);
+        assert!(!repeated_lookup_approval_token_decision_record_request.memory_store_write_allowed);
+        assert!(!repeated_lookup_approval_token_decision_record_request.ndkv_write_allowed);
+        let repeated_lookup_approval_token_decision_record_request_item =
+            repeated_lookup_approval_token_decision_record_request
+                .token_decision_record_request_items
+                .first()
+                .unwrap();
+        assert!(
+            repeated_lookup_approval_token_decision_record_request_item
+                .token_decision_record_request_ready
+        );
+        assert!(
+            repeated_lookup_approval_token_decision_record_request_item.pending_operator_approval
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item
+                .approval_token_decision_record_preview_id,
+            repeated_lookup_approval_token_decision_record_preview_item
+                .approval_token_decision_record_preview_id
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.approval_token,
+            repeated_lookup_approval_token_decision_record_preview_item.approval_token
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.rejection_token,
+            repeated_lookup_approval_token_decision_record_preview_item.rejection_token
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.idempotency_key,
+            repeated_lookup_approval_token_decision_record_preview_item.idempotency_key
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.content_digest,
+            repeated_lookup_approval_token_decision_record_preview_item.content_digest
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.rollback_anchor_ids,
+            repeated_lookup_approval_token_decision_record_preview_item.rollback_anchor_ids
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.operator_checklist,
+            repeated_lookup_approval_token_decision_record_preview_item.operator_checklist
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.record_request_status,
+            "ready_to_request_explicit_reflection_reuse_lookup_token_decision_record"
+        );
+        assert_eq!(
+            repeated_lookup_approval_token_decision_record_request_item.requested_operator_action,
+            "request_operator_record_explicit_reflection_reuse_lookup_token_decision_without_consuming_token"
+        );
+        assert!(
+            repeated_lookup_approval_token_decision_record_request_item
+                .approval_token_decision_record_request_id
+                .starts_with(
+                    "memory-reflection-reuse-lookup-approval-token-decision-record-request:"
+                )
+        );
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request_item
+                .lookup_execution_approval_granted
+        );
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request_item.model_call_skip_authorized
+        );
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request_item
+                .reflection_reuse_execution_authorized
+        );
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request_item.memory_lookup_performed
+        );
+        assert!(!repeated_lookup_approval_token_decision_record_request_item.lookup_hit_assumed);
+        assert!(!repeated_lookup_approval_token_decision_record_request_item.commit_allowed);
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request_item.admission_write_authorized
+        );
+        assert!(
+            !repeated_lookup_approval_token_decision_record_request_item.memory_store_write_allowed
+        );
+        assert!(!repeated_lookup_approval_token_decision_record_request_item.ndkv_write_allowed);
 
         let token_intake_preview =
             SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport::from_review_packet_and_reflection_usefulness(
