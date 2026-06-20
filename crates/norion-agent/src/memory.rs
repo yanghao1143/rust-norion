@@ -1032,6 +1032,7 @@ pub struct MemorySubmissionReport {
     pub submitted: Vec<MemoryNote>,
     pub failures: Vec<MemorySubmissionFailure>,
     pub blocked_reasons: Vec<String>,
+    pub note_quality: Option<MemoryNoteQualityReport>,
 }
 
 impl MemorySubmissionReport {
@@ -1054,6 +1055,9 @@ pub struct MemorySubmissionSummary {
     pub failed_notes: usize,
     pub blocked_reasons: usize,
     pub attempted_notes: usize,
+    pub quality_reviewed_notes: usize,
+    pub quality_admitted_notes: usize,
+    pub quality_rejected_notes: usize,
     pub clean: bool,
     pub port_attempted: bool,
     pub telemetry: Vec<String>,
@@ -1065,6 +1069,21 @@ impl MemorySubmissionSummary {
         let failed_notes = report.failures.len();
         let blocked_reasons = report.blocked_reasons.len();
         let attempted_notes = submitted_notes + failed_notes;
+        let quality_reviewed_notes = report
+            .note_quality
+            .as_ref()
+            .map(|quality| quality.decisions.len())
+            .unwrap_or_default();
+        let quality_admitted_notes = report
+            .note_quality
+            .as_ref()
+            .map(|quality| quality.admitted_notes)
+            .unwrap_or_default();
+        let quality_rejected_notes = report
+            .note_quality
+            .as_ref()
+            .map(|quality| quality.rejected_notes)
+            .unwrap_or_default();
         let clean = report.is_clean();
         let port_attempted = attempted_notes > 0;
         let telemetry = memory_submission_summary_telemetry(
@@ -1072,6 +1091,9 @@ impl MemorySubmissionSummary {
             failed_notes,
             blocked_reasons,
             attempted_notes,
+            quality_reviewed_notes,
+            quality_admitted_notes,
+            quality_rejected_notes,
             clean,
             port_attempted,
         );
@@ -1081,6 +1103,9 @@ impl MemorySubmissionSummary {
             failed_notes,
             blocked_reasons,
             attempted_notes,
+            quality_reviewed_notes,
+            quality_admitted_notes,
+            quality_rejected_notes,
             clean,
             port_attempted,
             telemetry,
@@ -1129,6 +1154,9 @@ pub struct MemorySubmissionDashboard {
     pub failed_notes: usize,
     pub blocked_reasons: usize,
     pub attempted_notes: usize,
+    pub quality_reviewed_notes: usize,
+    pub quality_admitted_notes: usize,
+    pub quality_rejected_notes: usize,
     pub port_attempted_records: usize,
     pub no_note_records: usize,
     pub clean_rate: f32,
@@ -1417,6 +1445,18 @@ impl MemorySubmissionDashboard {
             .iter()
             .map(|summary| summary.attempted_notes)
             .sum::<usize>();
+        let quality_reviewed_notes = summaries
+            .iter()
+            .map(|summary| summary.quality_reviewed_notes)
+            .sum::<usize>();
+        let quality_admitted_notes = summaries
+            .iter()
+            .map(|summary| summary.quality_admitted_notes)
+            .sum::<usize>();
+        let quality_rejected_notes = summaries
+            .iter()
+            .map(|summary| summary.quality_rejected_notes)
+            .sum::<usize>();
         let port_attempted_records = summaries
             .iter()
             .filter(|summary| summary.port_attempted)
@@ -1435,6 +1475,9 @@ impl MemorySubmissionDashboard {
             failed_notes,
             blocked_reasons,
             attempted_notes,
+            quality_reviewed_notes,
+            quality_admitted_notes,
+            quality_rejected_notes,
             port_attempted_records,
             no_note_records,
             clean_rate,
@@ -1449,6 +1492,9 @@ impl MemorySubmissionDashboard {
             failed_notes,
             blocked_reasons,
             attempted_notes,
+            quality_reviewed_notes,
+            quality_admitted_notes,
+            quality_rejected_notes,
             port_attempted_records,
             no_note_records,
             clean_rate,
@@ -1726,6 +1772,7 @@ impl MemoryHandoffSubmitter {
                 submitted: Vec::new(),
                 failures: Vec::new(),
                 blocked_reasons: handoff.blocked_reasons.clone(),
+                note_quality: None,
             };
         }
 
@@ -1742,6 +1789,7 @@ impl MemoryHandoffSubmitter {
                 submitted: Vec::new(),
                 failures: Vec::new(),
                 blocked_reasons,
+                note_quality: Some(note_quality),
             };
         }
 
@@ -1762,6 +1810,7 @@ impl MemoryHandoffSubmitter {
             submitted,
             failures,
             blocked_reasons: Vec::new(),
+            note_quality: Some(note_quality),
         }
     }
 }
@@ -2062,6 +2111,9 @@ fn memory_submission_summary_telemetry(
     failed_notes: usize,
     blocked_reasons: usize,
     attempted_notes: usize,
+    quality_reviewed_notes: usize,
+    quality_admitted_notes: usize,
+    quality_rejected_notes: usize,
     clean: bool,
     port_attempted: bool,
 ) -> Vec<String> {
@@ -2071,6 +2123,9 @@ fn memory_submission_summary_telemetry(
         format!("agent_memory_submission_summary_failed_notes={failed_notes}"),
         format!("agent_memory_submission_summary_blocked_reasons={blocked_reasons}"),
         format!("agent_memory_submission_summary_attempted_notes={attempted_notes}"),
+        format!("agent_memory_submission_summary_quality_reviewed_notes={quality_reviewed_notes}"),
+        format!("agent_memory_submission_summary_quality_admitted_notes={quality_admitted_notes}"),
+        format!("agent_memory_submission_summary_quality_rejected_notes={quality_rejected_notes}"),
         format!("agent_memory_submission_summary_clean={clean}"),
         format!("agent_memory_submission_summary_port_attempted={port_attempted}"),
     ]
@@ -2113,6 +2168,9 @@ fn memory_submission_dashboard_telemetry(
     failed_notes: usize,
     blocked_reasons: usize,
     attempted_notes: usize,
+    quality_reviewed_notes: usize,
+    quality_admitted_notes: usize,
+    quality_rejected_notes: usize,
     port_attempted_records: usize,
     no_note_records: usize,
     clean_rate: f32,
@@ -2127,6 +2185,15 @@ fn memory_submission_dashboard_telemetry(
         format!("agent_memory_submission_dashboard_failed_notes={failed_notes}"),
         format!("agent_memory_submission_dashboard_blocked_reasons={blocked_reasons}"),
         format!("agent_memory_submission_dashboard_attempted_notes={attempted_notes}"),
+        format!(
+            "agent_memory_submission_dashboard_quality_reviewed_notes={quality_reviewed_notes}"
+        ),
+        format!(
+            "agent_memory_submission_dashboard_quality_admitted_notes={quality_admitted_notes}"
+        ),
+        format!(
+            "agent_memory_submission_dashboard_quality_rejected_notes={quality_rejected_notes}"
+        ),
         format!("agent_memory_submission_dashboard_port_attempted={port_attempted_records}"),
         format!("agent_memory_submission_dashboard_no_note={no_note_records}"),
         format!("agent_memory_submission_dashboard_clean_rate={clean_rate:.3}"),
@@ -2159,6 +2226,10 @@ fn memory_submission_history_record_telemetry(
         format!(
             "agent_memory_submission_history_record_blocked_reasons={}",
             dashboard.blocked_reasons
+        ),
+        format!(
+            "agent_memory_submission_history_record_quality_rejected_notes={}",
+            dashboard.quality_rejected_notes
         ),
     ];
     telemetry.extend(
@@ -2360,11 +2431,37 @@ mod tests {
         assert_eq!(summary.submitted_notes, 1);
         assert_eq!(summary.failed_notes, 0);
         assert_eq!(summary.attempted_notes, 1);
+        assert_eq!(summary.quality_reviewed_notes, 4);
+        assert_eq!(summary.quality_admitted_notes, 1);
+        assert_eq!(summary.quality_rejected_notes, 3);
         assert!(summary.clean);
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_submission_summary_quality_rejected_notes=3")
+        );
 
         let gate = report.gate();
         assert!(gate.can_commit_submitted_notes);
         assert!(gate.reasons.is_empty());
+
+        let record = MemorySubmissionSummaryHistoryRecorder::new().record_report_with_health(
+            MemorySubmissionSummaryHistory::new(),
+            &report,
+            MemorySubmissionHealthPolicy::default(),
+        );
+        assert_eq!(record.dashboard.quality_reviewed_notes, 4);
+        assert_eq!(record.dashboard.quality_admitted_notes, 1);
+        assert_eq!(record.dashboard.quality_rejected_notes, 3);
+        assert_eq!(record.health.status, MemorySubmissionHealthStatus::Stable);
+        assert!(
+            record
+                .dashboard
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_submission_dashboard_quality_rejected_notes=3")
+        );
     }
 
     #[test]
@@ -2399,6 +2496,9 @@ mod tests {
         assert_eq!(summary.failed_notes, 0);
         assert_eq!(summary.blocked_reasons, 3);
         assert_eq!(summary.attempted_notes, 0);
+        assert_eq!(summary.quality_reviewed_notes, 2);
+        assert_eq!(summary.quality_admitted_notes, 0);
+        assert_eq!(summary.quality_rejected_notes, 2);
         assert!(!summary.clean);
         assert!(!summary.port_attempted);
 
@@ -3166,6 +3266,7 @@ mod tests {
             submitted: vec![MemoryNote::new("agent_cycle", "remember clean loop")],
             failures: Vec::new(),
             blocked_reasons: Vec::new(),
+            note_quality: None,
         };
 
         let record = MemorySubmissionSummaryHistoryRecorder::new().record_report_with_health(
@@ -3204,6 +3305,9 @@ mod tests {
             failed_notes: 0,
             blocked_reasons: 0,
             attempted_notes: 1,
+            quality_reviewed_notes: 0,
+            quality_admitted_notes: 0,
+            quality_rejected_notes: 0,
             clean: true,
             port_attempted: true,
             telemetry: Vec::new(),
@@ -3213,6 +3317,9 @@ mod tests {
             failed_notes: 1,
             blocked_reasons: 1,
             attempted_notes: 1,
+            quality_reviewed_notes: 0,
+            quality_admitted_notes: 0,
+            quality_rejected_notes: 0,
             clean: false,
             port_attempted: true,
             telemetry: Vec::new(),
@@ -3301,6 +3408,7 @@ mod tests {
             submitted: vec![MemoryNote::new("agent_cycle", "remember clean handoff")],
             failures: Vec::new(),
             blocked_reasons: Vec::new(),
+            note_quality: None,
         };
 
         MemorySubmissionSummaryHistoryRecorder::new()
@@ -3591,6 +3699,7 @@ mod tests {
             submitted: Vec::new(),
             failures: Vec::new(),
             blocked_reasons: vec!["unresolved_conflicts=1".to_owned()],
+            note_quality: None,
         };
         let memory_health = MemorySubmissionSummaryHistoryRecorder::new()
             .record_report_with_health(

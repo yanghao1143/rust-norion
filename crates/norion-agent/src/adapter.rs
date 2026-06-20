@@ -10878,6 +10878,9 @@ mod tests {
                 failed_notes: 0,
                 blocked_reasons: 0,
                 attempted_notes: usize::from(can_commit),
+                quality_reviewed_notes: 0,
+                quality_admitted_notes: 0,
+                quality_rejected_notes: 0,
                 clean: true,
                 port_attempted: can_commit,
                 telemetry: Vec::new(),
@@ -10998,6 +11001,7 @@ mod tests {
             submitted: vec![MemoryNote::new("agent_cycle", "remember clean handoff")],
             failures: Vec::new(),
             blocked_reasons: Vec::new(),
+            note_quality: None,
         };
 
         MemorySubmissionSummaryHistoryRecorder::new()
@@ -13793,6 +13797,9 @@ mod tests {
                 failed_notes: 0,
                 blocked_reasons: 0,
                 attempted_notes: 0,
+                quality_reviewed_notes: 0,
+                quality_admitted_notes: 0,
+                quality_rejected_notes: 0,
                 clean: true,
                 port_attempted: false,
                 telemetry: Vec::new(),
