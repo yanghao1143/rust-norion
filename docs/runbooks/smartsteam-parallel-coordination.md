@@ -4396,6 +4396,33 @@ System-error replacements:
   memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
   checks confirmed the reuse-plan report remains read-only, report-only,
   candidate-only, and write-disabled.
+- R88 main-window memory reflection reuse preflight report on 2026-06-20: added
+  a report-only gate after R87 reuse plans. The new
+  `SelfImproveProposalMemoryReflectionReusePreflightReport` requires every
+  reuse-plan item to be ready and requires positive projected savings before it
+  marks reuse preflight as passed. It separates "this duplicate reflection looks
+  worth reusing" from any execution authority: `model_call_skip_authorized=false`
+  and `reflection_reuse_execution_authorized=false` even when preflight passes.
+  `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_reflection_reuse_preflight_report_v1`, adds
+  prompt context `self_improve_memory_reflection_reuse_preflight=...`, and emits
+  `next_self_improve_should_request_memory_reflection_reuse_preflight_approval:true`
+  only when preflight passed and projected model-call skips are positive. The
+  report remains candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `auto_apply=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Validation passed with focused R88 tests, full `crates/norion-eval` tests
+  (`385` passed), full `tools/evolution-loop` tests (`414` passed),
+  PowerShell status parse plus `evolution_loop_status_selftest=PASS`, and
+  `git diff --check`. A report-only refresh to
+  `target\evolution\daemon\report-r88-memory-reflection-reuse-preflight.json`
+  from the local ledger showed `targets=0 plan_items=0 preflight_items=0
+  passed=0 projected_model_call_skips=0 reuse_preflight_passed=false
+  commit_allowed=false admission_write_authorized=false
+  model_call_skip_authorized=false reflection_reuse_execution_authorized=false
+  auto_apply=false memory_store_write_allowed=false ndkv_write_allowed=false`.
+  Direct JSON checks confirmed the preflight report remains read-only,
+  report-only, candidate-only, write-disabled, and execution-disabled.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT

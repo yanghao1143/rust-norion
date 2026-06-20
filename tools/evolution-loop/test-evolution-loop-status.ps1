@@ -747,6 +747,31 @@ Set-Content -Encoding ASCII -LiteralPath $report -Value (@{
         memory_store_write_allowed = $false
         ndkv_write_allowed = $false
     }
+    self_improve_proposal_memory_reflection_reuse_preflight_report_v1 = @{
+        target_count = 2
+        plan_item_count = 1
+        ready_reuse_plan_count = 1
+        preflight_item_count = 1
+        preflight_passed_item_count = 1
+        blocked_item_count = 0
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_preflight_item_id = "memory-reflection-dedupe:selfimprovehelpercontract:fnv1a64-0000000000001111"
+        reuse_preflight_passed = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
     self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1 = @{
         target_count = 2
         review_packet_item_count = 2
@@ -828,6 +853,9 @@ if ($reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_
 if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_source -ne "self_improve_proposal_memory_reflection_reuse_plan_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_duplicate_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_duplicate_reflection_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_projected_saved_reflection_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal memory reflection reuse plan was not exposed"
 }
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_source -ne "self_improve_proposal_memory_reflection_reuse_preflight_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_plan_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_passed_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_blocked_item_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_passed -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse preflight was not exposed"
+}
 if ($reportStatus.report.self_improve_proposal_memory_approval_token_intake_source -ne "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_approval_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal memory approval token intake preview was not exposed"
 }
@@ -871,6 +899,9 @@ if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_dedup
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_plan_report_v1: source=self_improve_proposal_memory_reflection_reuse_plan_report_v1" -or $reportHuman -notmatch "plan_items=1" -or $reportHuman -notmatch "ready=1" -or $reportHuman -notmatch "duplicate_clusters=1" -or $reportHuman -notmatch "duplicate_reflections=1" -or $reportHuman -notmatch "projected_saved_reflections=1" -or $reportHuman -notmatch "reflection_reuse_plan_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve memory reflection reuse plan"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_preflight_report_v1: source=self_improve_proposal_memory_reflection_reuse_preflight_report_v1" -or $reportHuman -notmatch "preflight_items=1" -or $reportHuman -notmatch "passed=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "reuse_preflight_passed=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse preflight"
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportHuman -notmatch "intake_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending_operator_tokens=2" -or $reportHuman -notmatch "approval_tokens=2" -or $reportHuman -notmatch "rejection_tokens=2" -or $reportHuman -notmatch "approval_token_intake_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve approval token intake preview"

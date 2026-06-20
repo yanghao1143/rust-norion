@@ -31,6 +31,8 @@ use norion_eval::{
     SelfImproveProposalMemoryReflectionDedupeClusterReport,
     SelfImproveProposalMemoryReflectionReusePlanItem,
     SelfImproveProposalMemoryReflectionReusePlanReport,
+    SelfImproveProposalMemoryReflectionReusePreflightItem,
+    SelfImproveProposalMemoryReflectionReusePreflightReport,
     SelfImproveProposalMemoryReflectionUsefulnessItem,
     SelfImproveProposalMemoryReflectionUsefulnessReport, SelfImproveProposalPromptGuidance,
 };
@@ -645,6 +647,71 @@ pub(crate) fn option_memory_reflection_reuse_plan_report_json(
     }
 }
 
+pub(crate) fn option_memory_reflection_reuse_preflight_report_json(
+    artifact: Option<&SelfImproveProposalArtifact>,
+) -> String {
+    match artifact {
+        Some(artifact) => memory_reflection_reuse_preflight_report_json(
+            &artifact.memory_reflection_reuse_preflight(),
+            true,
+        ),
+        None => {
+            let acceptance = SelfImproveProposalAcceptanceSummaryReport::from_reports(&[]);
+            let closure = empty_action_closure_report();
+            let request = SelfImproveProposalMemoryAdmissionRequestReport::from_readiness_report(
+                &SelfImproveProposalMemoryAdmissionReadinessReport::from_action_closure_report(
+                    &closure,
+                ),
+            );
+            let decision =
+                SelfImproveProposalMemoryAdmissionDecisionReport::strict_from_request_report(
+                    &request,
+                );
+            let writer_plan =
+                SelfImproveProposalMemoryAdmissionWriterPlanReport::from_request_and_decision(
+                    &request, &decision,
+                );
+            let dry_run = SelfImproveProposalMemoryAdmissionWriterDryRunReport::from_writer_plan(
+                &writer_plan,
+            );
+            let receipt =
+                SelfImproveProposalMemoryAdmissionWriterDryRunReceiptReport::from_dry_run(&dry_run);
+            let stage =
+                SelfImproveProposalMemoryAdmissionCommitRecordStageReport::from_dry_run_receipt(
+                    &receipt,
+                );
+            let approval_request =
+                SelfImproveProposalMemoryAdmissionCommitApprovalRequestReport::from_commit_record_stage(
+                    &stage,
+                );
+            let approval_decision =
+                SelfImproveProposalMemoryAdmissionCommitApprovalDecisionReport::from_commit_approval_request(
+                    &approval_request,
+                );
+            let review =
+                SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport::from_commit_approval_decision(
+                    &approval_decision,
+                );
+            let usefulness =
+                SelfImproveProposalMemoryReflectionUsefulnessReport::from_acceptance_closure_and_review_packet(
+                    &acceptance,
+                    &closure,
+                    &review,
+                );
+            let dedupe =
+                SelfImproveProposalMemoryReflectionDedupeClusterReport::from_reflection_usefulness(
+                    &usefulness,
+                );
+            let reuse =
+                SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster(&dedupe);
+            memory_reflection_reuse_preflight_report_json(
+                &SelfImproveProposalMemoryReflectionReusePreflightReport::from_reuse_plan(&reuse),
+                false,
+            )
+        }
+    }
+}
+
 pub(crate) fn option_memory_approval_token_intake_preview_report_json(
     artifact: Option<&SelfImproveProposalArtifact>,
 ) -> String {
@@ -852,6 +919,14 @@ impl SelfImproveProposalArtifact {
     ) -> SelfImproveProposalMemoryReflectionReusePlanReport {
         SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster(
             &self.memory_reflection_dedupe_cluster(),
+        )
+    }
+
+    pub(crate) fn memory_reflection_reuse_preflight(
+        &self,
+    ) -> SelfImproveProposalMemoryReflectionReusePreflightReport {
+        SelfImproveProposalMemoryReflectionReusePreflightReport::from_reuse_plan(
+            &self.memory_reflection_reuse_plan(),
         )
     }
 
@@ -2281,6 +2356,80 @@ fn memory_reflection_reuse_plan_item_json(
     )
 }
 
+fn memory_reflection_reuse_preflight_report_json(
+    report: &SelfImproveProposalMemoryReflectionReusePreflightReport,
+    artifact_loaded: bool,
+) -> String {
+    let items = report
+        .preflight_items
+        .iter()
+        .map(memory_reflection_reuse_preflight_item_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema\":\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\",\"consumer_surface\":\"evolution_loop_report_only_self_improve_memory_reflection_reuse_preflight\",\"read_only\":true,\"report_only\":{},\"candidate_only\":{},\"artifact_loaded\":{},\"auto_apply\":{},\"target_count\":{},\"plan_item_count\":{},\"ready_reuse_plan_count\":{},\"preflight_item_count\":{},\"preflight_passed_item_count\":{},\"blocked_item_count\":{},\"duplicate_cluster_count\":{},\"duplicate_reflection_item_count\":{},\"projected_saved_reflection_count\":{},\"projected_model_call_skip_count\":{},\"first_preflight_item_id\":{},\"reuse_preflight_passed\":{},\"explicit_operator_approval_required\":{},\"validation_required\":{},\"rollback_required\":{},\"commit_allowed\":{},\"admission_write_authorized\":{},\"model_call_skip_authorized\":{},\"reflection_reuse_execution_authorized\":{},\"failure_reasons\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"preflight_items\":[{}],\"side_effects\":{}}}",
+        report.report_only,
+        report.candidate_only,
+        artifact_loaded,
+        report.auto_apply,
+        report.target_count,
+        report.plan_item_count,
+        report.ready_reuse_plan_count,
+        report.preflight_item_count,
+        report.preflight_passed_item_count,
+        report.blocked_item_count,
+        report.duplicate_cluster_count,
+        report.duplicate_reflection_item_count,
+        report.projected_saved_reflection_count,
+        report.projected_model_call_skip_count,
+        option_string_json(report.first_preflight_item_id.as_deref()),
+        report.reuse_preflight_passed,
+        report.explicit_operator_approval_required,
+        report.validation_required,
+        report.rollback_required,
+        report.commit_allowed,
+        report.admission_write_authorized,
+        report.model_call_skip_authorized,
+        report.reflection_reuse_execution_authorized,
+        json_string_array(&report.failure_reasons),
+        report.memory_store_write_allowed,
+        report.ndkv_write_allowed,
+        items,
+        side_effects_json()
+    )
+}
+
+fn memory_reflection_reuse_preflight_item_json(
+    item: &SelfImproveProposalMemoryReflectionReusePreflightItem,
+) -> String {
+    format!(
+        "{{\"cluster_id\":{},\"representative_proposal_id\":{},\"duplicate_proposal_ids\":{},\"evidence_ids\":{},\"projected_saved_reflection_count\":{},\"reuse_plan_ready\":{},\"reuse_preflight_passed\":{},\"planned_reuse_action\":{},\"required_operator_action\":{},\"model_call_skip_candidate\":{},\"model_call_skip_authorized\":{},\"reflection_reuse_execution_authorized\":{},\"explicit_operator_approval_required\":{},\"validation_required\":{},\"rollback_required\":{},\"commit_allowed\":{},\"admission_write_authorized\":{},\"blocked_reasons\":{},\"report_only\":{},\"candidate_only\":{},\"auto_apply\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{}}}",
+        json_string(&item.cluster_id),
+        json_string(&item.representative_proposal_id),
+        json_string_array(&item.duplicate_proposal_ids),
+        json_string_array(&item.evidence_ids),
+        item.projected_saved_reflection_count,
+        item.reuse_plan_ready,
+        item.reuse_preflight_passed,
+        json_string(&item.planned_reuse_action),
+        json_string(&item.required_operator_action),
+        item.model_call_skip_candidate,
+        item.model_call_skip_authorized,
+        item.reflection_reuse_execution_authorized,
+        item.explicit_operator_approval_required,
+        item.validation_required,
+        item.rollback_required,
+        item.commit_allowed,
+        item.admission_write_authorized,
+        json_string_array(&item.blocked_reasons),
+        item.report_only,
+        item.candidate_only,
+        item.auto_apply,
+        item.memory_store_write_allowed,
+        item.ndkv_write_allowed
+    )
+}
+
 fn memory_approval_token_intake_preview_report_json(
     report: &SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport,
     artifact_loaded: bool,
@@ -2690,6 +2839,9 @@ mod tests {
         let memory_reflection_reuse_plan = artifact.memory_reflection_reuse_plan();
         let memory_reflection_reuse_plan_json =
             option_memory_reflection_reuse_plan_report_json(Some(&artifact));
+        let memory_reflection_reuse_preflight = artifact.memory_reflection_reuse_preflight();
+        let memory_reflection_reuse_preflight_json =
+            option_memory_reflection_reuse_preflight_report_json(Some(&artifact));
         let memory_approval_token_intake_preview = artifact.memory_approval_token_intake_preview();
         let memory_approval_token_intake_preview_json =
             option_memory_approval_token_intake_preview_report_json(Some(&artifact));
@@ -3074,6 +3226,63 @@ mod tests {
         assert!(memory_reflection_reuse_plan_json.contains("\"admission_write_authorized\":false"));
         assert!(memory_reflection_reuse_plan_json.contains("\"memory_store_write_allowed\":false"));
         assert!(memory_reflection_reuse_plan_json.contains("\"ndkv_write_allowed\":false"));
+        assert_eq!(memory_reflection_reuse_preflight.target_count, 1);
+        assert_eq!(memory_reflection_reuse_preflight.plan_item_count, 1);
+        assert_eq!(memory_reflection_reuse_preflight.ready_reuse_plan_count, 1);
+        assert_eq!(memory_reflection_reuse_preflight.preflight_item_count, 1);
+        assert_eq!(
+            memory_reflection_reuse_preflight.preflight_passed_item_count,
+            0
+        );
+        assert_eq!(memory_reflection_reuse_preflight.blocked_item_count, 1);
+        assert_eq!(
+            memory_reflection_reuse_preflight.projected_saved_reflection_count,
+            0
+        );
+        assert_eq!(
+            memory_reflection_reuse_preflight.projected_model_call_skip_count,
+            0
+        );
+        assert!(!memory_reflection_reuse_preflight.reuse_preflight_passed);
+        assert!(!memory_reflection_reuse_preflight.commit_allowed);
+        assert!(!memory_reflection_reuse_preflight.admission_write_authorized);
+        assert!(!memory_reflection_reuse_preflight.model_call_skip_authorized);
+        assert!(!memory_reflection_reuse_preflight.reflection_reuse_execution_authorized);
+        assert!(memory_reflection_reuse_preflight_json.contains(
+            "\"schema\":\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\""
+        ));
+        assert!(memory_reflection_reuse_preflight_json.contains("\"consumer_surface\":\"evolution_loop_report_only_self_improve_memory_reflection_reuse_preflight\""));
+        assert!(
+            memory_reflection_reuse_preflight_json.contains("\"reuse_preflight_passed\":false")
+        );
+        assert!(memory_reflection_reuse_preflight_json.contains("\"preflight_item_count\":1"));
+        assert!(
+            memory_reflection_reuse_preflight_json.contains("\"preflight_passed_item_count\":0")
+        );
+        assert!(memory_reflection_reuse_preflight_json.contains("\"blocked_item_count\":1"));
+        assert!(
+            memory_reflection_reuse_preflight_json
+                .contains("\"projected_model_call_skip_count\":0")
+        );
+        assert!(
+            memory_reflection_reuse_preflight_json.contains("\"model_call_skip_authorized\":false")
+        );
+        assert!(
+            memory_reflection_reuse_preflight_json
+                .contains("\"reflection_reuse_execution_authorized\":false")
+        );
+        assert!(
+            memory_reflection_reuse_preflight_json
+                .contains("\"reflection reuse preflight has no projected model-call savings\"")
+        );
+        assert!(memory_reflection_reuse_preflight_json.contains("\"commit_allowed\":false"));
+        assert!(
+            memory_reflection_reuse_preflight_json.contains("\"admission_write_authorized\":false")
+        );
+        assert!(
+            memory_reflection_reuse_preflight_json.contains("\"memory_store_write_allowed\":false")
+        );
+        assert!(memory_reflection_reuse_preflight_json.contains("\"ndkv_write_allowed\":false"));
         assert_eq!(memory_approval_token_intake_preview.target_count, 1);
         assert_eq!(
             memory_approval_token_intake_preview.review_packet_item_count,
