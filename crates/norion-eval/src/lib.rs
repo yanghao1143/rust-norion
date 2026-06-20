@@ -26835,6 +26835,67 @@ pub struct SelfImproveProposalMemoryReflectionUsefulnessReport {
     pub reflection_items: Vec<SelfImproveProposalMemoryReflectionUsefulnessItem>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
+    pub proposal_id: String,
+    pub source_round: Option<u64>,
+    pub token_intake_ready: bool,
+    pub intake_status: String,
+    pub planned_operator_action: String,
+    pub approval_token: String,
+    pub rejection_token: String,
+    pub preview_memory_record_id: String,
+    pub approval_review_packet_id: String,
+    pub idempotency_key: String,
+    pub content_digest: String,
+    pub evidence_ids: Vec<String>,
+    pub usefulness_evidence_ids: Vec<String>,
+    pub experiment_id: String,
+    pub rollback_anchor_ids: Vec<String>,
+    pub pending_operator_approval: bool,
+    pub useful_reflection_confirmed: bool,
+    pub approval_review_packet_ready: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub write_authorized: bool,
+    pub admission_write_authorized: bool,
+    pub blocked_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport {
+    pub target_count: usize,
+    pub review_packet_item_count: usize,
+    pub useful_reflection_item_count: usize,
+    pub intake_item_count: usize,
+    pub ready_intake_count: usize,
+    pub pending_operator_token_count: usize,
+    pub blocked_count: usize,
+    pub approval_token_present_count: usize,
+    pub rejection_token_present_count: usize,
+    pub first_intake_item_id: Option<String>,
+    pub approval_token_intake_ready: bool,
+    pub explicit_operator_approval_required: bool,
+    pub validation_required: bool,
+    pub rollback_required: bool,
+    pub commit_allowed: bool,
+    pub admission_write_authorized: bool,
+    pub failure_reasons: Vec<String>,
+    pub report_only: bool,
+    pub candidate_only: bool,
+    pub auto_apply: bool,
+    pub memory_store_write_allowed: bool,
+    pub ndkv_write_allowed: bool,
+    pub intake_items: Vec<SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem>,
+}
+
 impl SelfImproveProposalMemoryAdmissionWriterPlanReport {
     pub fn from_request_and_decision(
         request: &SelfImproveProposalMemoryAdmissionRequestReport,
@@ -27547,6 +27608,136 @@ impl SelfImproveProposalMemoryReflectionUsefulnessReport {
     }
 }
 
+impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport {
+    pub fn from_review_packet_and_reflection_usefulness(
+        review: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport,
+        usefulness: &SelfImproveProposalMemoryReflectionUsefulnessReport,
+    ) -> Self {
+        let approval_token_intake_ready = review.approval_review_packet_ready
+            && usefulness.reflection_usefulness_ready
+            && review.ready_review_packet_count > 0
+            && usefulness.useful_reflection_item_count > 0
+            && review.pending_approval_count > 0
+            && usefulness.pending_operator_approval_count > 0
+            && review.blocked_count == 0
+            && usefulness.blocked_count == 0
+            && review.explicit_operator_approval_required
+            && usefulness.explicit_operator_approval_required
+            && review.validation_required
+            && usefulness.validation_required
+            && review.rollback_required
+            && usefulness.rollback_required
+            && review.report_only
+            && usefulness.report_only
+            && review.candidate_only
+            && usefulness.candidate_only
+            && !review.auto_apply
+            && !usefulness.auto_apply
+            && !review.commit_allowed
+            && !usefulness.commit_allowed
+            && !review.admission_write_authorized
+            && !usefulness.admission_write_authorized
+            && !review.memory_store_write_allowed
+            && !usefulness.memory_store_write_allowed
+            && !review.ndkv_write_allowed
+            && !usefulness.ndkv_write_allowed;
+        let intake_items = review
+            .review_packet_items
+            .iter()
+            .map(|item| {
+                let usefulness_item = usefulness.reflection_items.iter().find(|candidate| {
+                    candidate.proposal_id == item.proposal_id
+                        && candidate.approval_review_packet_id == item.approval_review_packet_id
+                });
+                SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem::from_review_packet_and_usefulness_item(
+                    item,
+                    usefulness_item,
+                    approval_token_intake_ready,
+                )
+            })
+            .collect::<Vec<_>>();
+        let ready_intake_count = intake_items
+            .iter()
+            .filter(|item| item.token_intake_ready)
+            .count();
+        let pending_operator_token_count = intake_items
+            .iter()
+            .filter(|item| item.pending_operator_approval)
+            .count();
+        let approval_token_present_count = intake_items
+            .iter()
+            .filter(|item| !item.approval_token.is_empty())
+            .count();
+        let rejection_token_present_count = intake_items
+            .iter()
+            .filter(|item| !item.rejection_token.is_empty())
+            .count();
+        let mut failure_reasons = review.failure_reasons.clone();
+        failure_reasons.extend(usefulness.failure_reasons.clone());
+        if review.review_packet_item_count == 0 {
+            failure_reasons.push("approval token intake has no review packet items".to_owned());
+        }
+        if !review.approval_review_packet_ready {
+            failure_reasons
+                .push("approval token intake requires ready approval review packet".to_owned());
+        }
+        if !usefulness.reflection_usefulness_ready {
+            failure_reasons
+                .push("approval token intake requires useful reflection report".to_owned());
+        }
+        if review.pending_approval_count == 0 || usefulness.pending_operator_approval_count == 0 {
+            failure_reasons
+                .push("approval token intake requires pending operator approvals".to_owned());
+        }
+        if review.commit_allowed
+            || usefulness.commit_allowed
+            || review.admission_write_authorized
+            || usefulness.admission_write_authorized
+        {
+            failure_reasons
+                .push("approval token intake input already authorized writes".to_owned());
+        }
+        if review.auto_apply || usefulness.auto_apply {
+            failure_reasons.push("approval token intake input attempted auto apply".to_owned());
+        }
+        if review.memory_store_write_allowed || usefulness.memory_store_write_allowed {
+            failure_reasons
+                .push("approval token intake input allowed memory store writes".to_owned());
+        }
+        if review.ndkv_write_allowed || usefulness.ndkv_write_allowed {
+            failure_reasons.push("approval token intake input allowed ndkv writes".to_owned());
+        }
+        failure_reasons.sort();
+        failure_reasons.dedup();
+
+        Self {
+            target_count: review.target_count,
+            review_packet_item_count: review.review_packet_item_count,
+            useful_reflection_item_count: usefulness.useful_reflection_item_count,
+            intake_item_count: intake_items.len(),
+            ready_intake_count,
+            pending_operator_token_count,
+            blocked_count: intake_items.len().saturating_sub(ready_intake_count),
+            approval_token_present_count,
+            rejection_token_present_count,
+            first_intake_item_id: intake_items.first().map(|item| item.proposal_id.clone()),
+            approval_token_intake_ready,
+            explicit_operator_approval_required: approval_token_intake_ready,
+            validation_required: approval_token_intake_ready,
+            rollback_required: approval_token_intake_ready,
+            commit_allowed: false,
+            admission_write_authorized: false,
+            failure_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+            intake_items,
+        }
+    }
+}
+
 impl SelfImproveProposalMemoryAdmissionCommitRecordStageItem {
     pub fn from_receipt_item(
         item: &SelfImproveProposalMemoryAdmissionWriterDryRunReceiptItem,
@@ -28034,6 +28225,155 @@ impl SelfImproveProposalMemoryReflectionUsefulnessItem {
             validation_required: reflection_usefulness_ready,
             rollback_required: reflection_usefulness_ready,
             commit_allowed: false,
+            admission_write_authorized: false,
+            blocked_reasons,
+            report_only: true,
+            candidate_only: true,
+            auto_apply: false,
+            memory_store_write_allowed: false,
+            ndkv_write_allowed: false,
+        }
+    }
+}
+
+impl SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewItem {
+    pub fn from_review_packet_and_usefulness_item(
+        item: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem,
+        usefulness_item: Option<&SelfImproveProposalMemoryReflectionUsefulnessItem>,
+        approval_token_intake_ready: bool,
+    ) -> Self {
+        let useful_reflection_confirmed = usefulness_item.is_some_and(|candidate| {
+            candidate.reflection_usefulness_ready
+                && candidate.pending_operator_approval
+                && candidate.closed_action_confirmed
+                && candidate.adapter_safety_status == "adapter_safe_no_writes"
+                && candidate.idempotency_key == item.idempotency_key
+                && candidate.content_digest == item.content_digest
+                && candidate.approval_review_packet_id == item.approval_review_packet_id
+                && candidate.report_only
+                && candidate.candidate_only
+                && !candidate.auto_apply
+                && !candidate.commit_allowed
+                && !candidate.admission_write_authorized
+                && !candidate.memory_store_write_allowed
+                && !candidate.ndkv_write_allowed
+                && candidate.blocked_reasons.is_empty()
+        });
+        let pending_operator_approval = item.approval_review_packet_ready
+            && item.approval_decision == "pending_explicit_commit_approval"
+            && !item.approval_token.is_empty()
+            && !item.rejection_token.is_empty();
+        let token_intake_ready = approval_token_intake_ready
+            && item.approval_review_packet_ready
+            && pending_operator_approval
+            && useful_reflection_confirmed
+            && item.explicit_operator_approval_required
+            && item.validation_required
+            && item.rollback_required
+            && item.report_only
+            && item.candidate_only
+            && !item.auto_apply
+            && !item.commit_allowed
+            && !item.write_authorized
+            && !item.admission_write_authorized
+            && !item.memory_store_write_allowed
+            && !item.ndkv_write_allowed
+            && item.blocked_reasons.is_empty();
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if let Some(usefulness_item) = usefulness_item {
+            blocked_reasons.extend(usefulness_item.blocked_reasons.clone());
+        }
+        if !token_intake_ready {
+            if !approval_token_intake_ready {
+                blocked_reasons.push("approval_token_intake_preflight_not_passed".to_owned());
+            }
+            if !item.approval_review_packet_ready {
+                blocked_reasons.push("approval_token_intake_review_packet_not_ready".to_owned());
+            }
+            if !pending_operator_approval {
+                blocked_reasons.push("approval_token_intake_missing_operator_tokens".to_owned());
+            }
+            if usefulness_item.is_none() {
+                blocked_reasons.push("approval_token_intake_missing_usefulness_item".to_owned());
+            }
+            if let Some(usefulness_item) = usefulness_item {
+                if usefulness_item.idempotency_key != item.idempotency_key {
+                    blocked_reasons
+                        .push("approval_token_intake_idempotency_key_mismatch".to_owned());
+                }
+                if usefulness_item.content_digest != item.content_digest {
+                    blocked_reasons
+                        .push("approval_token_intake_content_digest_mismatch".to_owned());
+                }
+                if usefulness_item.approval_review_packet_id != item.approval_review_packet_id {
+                    blocked_reasons
+                        .push("approval_token_intake_review_packet_id_mismatch".to_owned());
+                }
+            }
+            if !useful_reflection_confirmed {
+                blocked_reasons.push("approval_token_intake_usefulness_not_confirmed".to_owned());
+            }
+            if !item.explicit_operator_approval_required {
+                blocked_reasons.push("approval_token_intake_missing_explicit_approval".to_owned());
+            }
+            if !item.validation_required {
+                blocked_reasons.push("approval_token_intake_missing_validation".to_owned());
+            }
+            if !item.rollback_required {
+                blocked_reasons.push("approval_token_intake_missing_rollback".to_owned());
+            }
+            if item.commit_allowed || item.write_authorized || item.admission_write_authorized {
+                blocked_reasons.push("approval_token_intake_already_authorized_write".to_owned());
+            }
+            if item.auto_apply {
+                blocked_reasons.push("approval_token_intake_attempted_auto_apply".to_owned());
+            }
+            if item.memory_store_write_allowed {
+                blocked_reasons.push("approval_token_intake_memory_store_write_allowed".to_owned());
+            }
+            if item.ndkv_write_allowed {
+                blocked_reasons.push("approval_token_intake_ndkv_write_allowed".to_owned());
+            }
+        }
+        blocked_reasons.sort();
+        blocked_reasons.dedup();
+
+        let usefulness_evidence_ids = usefulness_item
+            .map(|candidate| candidate.usefulness_evidence_ids.clone())
+            .unwrap_or_default();
+
+        Self {
+            proposal_id: item.proposal_id.clone(),
+            source_round: item.source_round,
+            token_intake_ready,
+            intake_status: if token_intake_ready {
+                "ready_for_explicit_operator_token_review".to_owned()
+            } else {
+                "blocked_until_operator_token_intake_preview_ready".to_owned()
+            },
+            planned_operator_action: if token_intake_ready {
+                "operator_may_choose_approval_or_rejection_token_for_next_dry_run".to_owned()
+            } else {
+                "hold_until_review_packet_and_usefulness_match".to_owned()
+            },
+            approval_token: item.approval_token.clone(),
+            rejection_token: item.rejection_token.clone(),
+            preview_memory_record_id: item.preview_memory_record_id.clone(),
+            approval_review_packet_id: item.approval_review_packet_id.clone(),
+            idempotency_key: item.idempotency_key.clone(),
+            content_digest: item.content_digest.clone(),
+            evidence_ids: item.evidence_ids.clone(),
+            usefulness_evidence_ids,
+            experiment_id: item.experiment_id.clone(),
+            rollback_anchor_ids: item.rollback_anchor_ids.clone(),
+            pending_operator_approval,
+            useful_reflection_confirmed,
+            approval_review_packet_ready: item.approval_review_packet_ready,
+            explicit_operator_approval_required: token_intake_ready,
+            validation_required: token_intake_ready,
+            rollback_required: token_intake_ready,
+            commit_allowed: false,
+            write_authorized: false,
             admission_write_authorized: false,
             blocked_reasons,
             report_only: true,
@@ -42031,6 +42371,67 @@ mod tests {
         assert!(!reflection_item.memory_store_write_allowed);
         assert!(!reflection_item.ndkv_write_allowed);
         assert!(reflection_item.blocked_reasons.is_empty());
+
+        let token_intake_preview =
+            SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport::from_review_packet_and_reflection_usefulness(
+                &approval_review,
+                &reflection_usefulness,
+            );
+        assert_eq!(token_intake_preview.target_count, 1);
+        assert_eq!(token_intake_preview.review_packet_item_count, 1);
+        assert_eq!(token_intake_preview.useful_reflection_item_count, 1);
+        assert_eq!(token_intake_preview.intake_item_count, 1);
+        assert_eq!(token_intake_preview.ready_intake_count, 1);
+        assert_eq!(token_intake_preview.pending_operator_token_count, 1);
+        assert_eq!(token_intake_preview.blocked_count, 0);
+        assert_eq!(token_intake_preview.approval_token_present_count, 1);
+        assert_eq!(token_intake_preview.rejection_token_present_count, 1);
+        assert!(token_intake_preview.approval_token_intake_ready);
+        assert!(token_intake_preview.explicit_operator_approval_required);
+        assert!(token_intake_preview.validation_required);
+        assert!(token_intake_preview.rollback_required);
+        assert!(!token_intake_preview.commit_allowed);
+        assert!(!token_intake_preview.admission_write_authorized);
+        assert!(token_intake_preview.failure_reasons.is_empty());
+        assert!(token_intake_preview.report_only);
+        assert!(token_intake_preview.candidate_only);
+        assert!(!token_intake_preview.auto_apply);
+        assert!(!token_intake_preview.memory_store_write_allowed);
+        assert!(!token_intake_preview.ndkv_write_allowed);
+        let intake_item = token_intake_preview.intake_items.first().unwrap();
+        assert_eq!(intake_item.proposal_id, review_item.proposal_id);
+        assert!(intake_item.token_intake_ready);
+        assert_eq!(
+            intake_item.intake_status,
+            "ready_for_explicit_operator_token_review"
+        );
+        assert_eq!(
+            intake_item.planned_operator_action,
+            "operator_may_choose_approval_or_rejection_token_for_next_dry_run"
+        );
+        assert_eq!(intake_item.approval_token, review_item.approval_token);
+        assert_eq!(intake_item.rejection_token, review_item.rejection_token);
+        assert_eq!(
+            intake_item.approval_review_packet_id,
+            review_item.approval_review_packet_id
+        );
+        assert_eq!(intake_item.content_digest, review_item.content_digest);
+        assert_eq!(intake_item.idempotency_key, review_item.idempotency_key);
+        assert!(intake_item.pending_operator_approval);
+        assert!(intake_item.useful_reflection_confirmed);
+        assert!(intake_item.approval_review_packet_ready);
+        assert!(intake_item.explicit_operator_approval_required);
+        assert!(intake_item.validation_required);
+        assert!(intake_item.rollback_required);
+        assert!(!intake_item.commit_allowed);
+        assert!(!intake_item.write_authorized);
+        assert!(!intake_item.admission_write_authorized);
+        assert!(intake_item.report_only);
+        assert!(intake_item.candidate_only);
+        assert!(!intake_item.auto_apply);
+        assert!(!intake_item.memory_store_write_allowed);
+        assert!(!intake_item.ndkv_write_allowed);
+        assert!(intake_item.blocked_reasons.is_empty());
     }
 
     #[test]

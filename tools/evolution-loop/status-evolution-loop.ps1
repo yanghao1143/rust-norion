@@ -910,6 +910,61 @@ function Get-SelfImproveProposalMemoryReflectionUsefulness {
     }
 }
 
+function Get-SelfImproveProposalMemoryApprovalTokenIntakePreview {
+    param([object]$Report)
+
+    $intake = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1"
+    if ($null -eq $intake) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            review_packet_item_count = $null
+            useful_reflection_item_count = $null
+            intake_item_count = $null
+            ready_intake_count = $null
+            pending_operator_token_count = $null
+            blocked_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            first_intake_item = $null
+            approval_token_intake_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "target_count")
+        review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "review_packet_item_count")
+        useful_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "useful_reflection_item_count")
+        intake_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "intake_item_count")
+        ready_intake_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "ready_intake_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "pending_operator_token_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "blocked_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "rejection_token_present_count")
+        first_intake_item = Get-PropertyValue -Object $intake -Name "first_intake_item_id"
+        approval_token_intake_ready = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "approval_token_intake_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $intake -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "ndkv_write_allowed")
+    }
+}
+
 function Select-FirstNonNull {
     param(
         [object]$Preferred,
@@ -1800,6 +1855,7 @@ function Read-ReportStatus {
         $proposalMemoryAdmissionCommitApprovalDecision = Get-SelfImproveProposalMemoryAdmissionCommitApprovalDecision -Report $report
         $proposalMemoryAdmissionCommitApprovalReviewPacket = Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket -Report $report
         $proposalMemoryReflectionUsefulness = Get-SelfImproveProposalMemoryReflectionUsefulness -Report $report
+        $proposalMemoryApprovalTokenIntakePreview = Get-SelfImproveProposalMemoryApprovalTokenIntakePreview -Report $report
 
         return [pscustomobject][ordered]@{
             path = $Path
@@ -2021,6 +2077,27 @@ function Read-ReportStatus {
             self_improve_proposal_memory_reflection_usefulness_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "auto_apply"
             self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "memory_store_write_allowed"
             self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_approval_token_intake_source = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "source"
+            self_improve_proposal_memory_approval_token_intake_target_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "target_count"
+            self_improve_proposal_memory_approval_token_intake_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "review_packet_item_count"
+            self_improve_proposal_memory_approval_token_intake_useful_reflection_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "useful_reflection_item_count"
+            self_improve_proposal_memory_approval_token_intake_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "intake_item_count"
+            self_improve_proposal_memory_approval_token_intake_ready_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "ready_intake_count"
+            self_improve_proposal_memory_approval_token_intake_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "pending_operator_token_count"
+            self_improve_proposal_memory_approval_token_intake_blocked_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "blocked_count"
+            self_improve_proposal_memory_approval_token_intake_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_approval_token_intake_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_approval_token_intake_first_item = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "first_intake_item"
+            self_improve_proposal_memory_approval_token_intake_ready = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "approval_token_intake_ready"
+            self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_approval_token_intake_validation_required = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "validation_required"
+            self_improve_proposal_memory_approval_token_intake_rollback_required = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "rollback_required"
+            self_improve_proposal_memory_approval_token_intake_commit_allowed = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "commit_allowed"
+            self_improve_proposal_memory_approval_token_intake_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_approval_token_intake_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "failure_reasons")
+            self_improve_proposal_memory_approval_token_intake_auto_apply = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "auto_apply"
+            self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "ndkv_write_allowed"
             ledger_lag_rounds = $lag
             stale = if ($null -eq $lag) { $null } else { [bool]($lag -gt 0) }
             remote_runtime_probed = Convert-ToNullableBool (Get-PropertyValue -Object $remoteRuntime -Name "probed")
@@ -3170,6 +3247,8 @@ if ($ReportPath.Trim().Length -gt 0) {
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_decision_item_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count) ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_first_item) approval_review_packet_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalReviewPacketFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed)"
     $proposalMemoryReflectionUsefulnessFailures = @($reportStatus.self_improve_proposal_memory_reflection_usefulness_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_target_count) projected=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_projected_report_count) accepted_memory=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_accepted_memory_admission_count) quarantined=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_quarantined_candidate_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_review_packet_item_count) useful=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_useful_count) pending_operator_approval=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_blocked_count) wasted_compute_guard=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count) adapter_safe=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_first_item) reflection_usefulness_ready=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_admission_write_authorized) failure_reasons=$proposalMemoryReflectionUsefulnessFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed)"
+    $proposalMemoryApprovalTokenIntakeFailures = @($reportStatus.self_improve_proposal_memory_approval_token_intake_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_approval_token_intake_source) targets=$($reportStatus.self_improve_proposal_memory_approval_token_intake_target_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_approval_token_intake_review_packet_item_count) useful_reflections=$($reportStatus.self_improve_proposal_memory_approval_token_intake_useful_reflection_item_count) intake_items=$($reportStatus.self_improve_proposal_memory_approval_token_intake_item_count) ready=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ready_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count) blocked=$($reportStatus.self_improve_proposal_memory_approval_token_intake_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count) first_item=$($reportStatus.self_improve_proposal_memory_approval_token_intake_first_item) approval_token_intake_ready=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_approval_token_intake_admission_write_authorized) failure_reasons=$proposalMemoryApprovalTokenIntakeFailures auto_apply=$($reportStatus.self_improve_proposal_memory_approval_token_intake_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed)"
 }
 Write-Host "next_round_decision: schema=$($nextRoundDecision.schema) display_state=$($nextRoundDecision.display_state) safe_to_wait_current_round_active=$($nextRoundDecision.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecision.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecision.operator_attention_blocked) reason=$($nextRoundDecision.reason_code) read_only=$($nextRoundDecision.read_only) report_only=$($nextRoundDecision.report_only) side_effects=$($nextRoundDecision.side_effects)"
 Write-Host "next_round_decision_report_v1: schema=$($nextRoundDecisionReportV1.schema) display_state=$($nextRoundDecisionReportV1.display_state) safe_to_wait_current_round_active=$($nextRoundDecisionReportV1.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecisionReportV1.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecisionReportV1.operator_attention_blocked) reason=$($nextRoundDecisionReportV1.reason_code) read_only=$($nextRoundDecisionReportV1.read_only) report_only=$($nextRoundDecisionReportV1.report_only) side_effects=$($nextRoundDecisionReportV1.side_effects)"

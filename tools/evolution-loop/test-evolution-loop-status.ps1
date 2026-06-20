@@ -706,6 +706,28 @@ Set-Content -Encoding ASCII -LiteralPath $report -Value (@{
         memory_store_write_allowed = $false
         ndkv_write_allowed = $false
     }
+    self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1 = @{
+        target_count = 2
+        review_packet_item_count = 2
+        useful_reflection_item_count = 2
+        intake_item_count = 2
+        ready_intake_count = 2
+        pending_operator_token_count = 2
+        blocked_count = 0
+        approval_token_present_count = 2
+        rejection_token_present_count = 2
+        first_intake_item_id = "self-improve-r392-helper-contract"
+        approval_token_intake_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
     remote_chain = @{
         remote_runtime = @{
             probed = $false
@@ -759,6 +781,9 @@ if ($reportStatus.report.self_improve_proposal_memory_admission_commit_approval_
 if ($reportStatus.report.self_improve_proposal_memory_reflection_usefulness_source -ne "self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_useful_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal memory reflection usefulness was not exposed"
 }
+if ($reportStatus.report.self_improve_proposal_memory_approval_token_intake_source -ne "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_approval_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory approval token intake preview was not exposed"
+}
 if ($reportStatus.next_round_decision.display_state -ne "blocked-operator-attention" -or $reportStatus.next_round_decision.operator_attention_blocked -ne $true -or $reportStatus.next_round_decision.reason_code -ne "report_gate_failed_operator_attention_required") {
     throw "failed report gate did not surface blocked next-round decision"
 }
@@ -793,6 +818,9 @@ if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_commit
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportHuman -notmatch "useful=2" -or $reportHuman -notmatch "pending_operator_approval=2" -or $reportHuman -notmatch "wasted_compute_guard=2" -or $reportHuman -notmatch "adapter_safe=2" -or $reportHuman -notmatch "reflection_usefulness_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve memory reflection usefulness"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportHuman -notmatch "intake_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending_operator_tokens=2" -or $reportHuman -notmatch "approval_tokens=2" -or $reportHuman -notmatch "rejection_tokens=2" -or $reportHuman -notmatch "approval_token_intake_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve approval token intake preview"
 }
 if ($reportHuman -notmatch "next_round_decision: schema=next_round_decision_evidence_v1 display_state=blocked-operator-attention") {
     throw "human status did not summarize blocked next-round decision"

@@ -4285,6 +4285,51 @@ System-error replacements:
   daemon/model start-stop, SSH, download, model-cache warming, Forge/Web Lab
   start, prompt/stream/model call, live memory mutation, or `.ndkv` write was
   performed.
+- R85 main-window operator approval token intake preview on 2026-06-20: added
+  the next report-only layer after R83/R84 that lines up approval-review packet
+  tokens with confirmed reflection usefulness evidence. The new
+  `SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport`
+  exposes ready intake counts, pending operator token counts, approval/rejection
+  token presence, first item ids, digest/idempotency continuity, usefulness
+  evidence ids, validation/rollback requirements, and blocked reasons. It is a
+  preview for the future explicit approval-token consumer only; it does not
+  parse human approval text, grant commit authority, mutate memory, or write
+  `.ndkv`. `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1`,
+  adds prompt context
+  `self_improve_memory_admission_operator_approval_token_intake_preview=...`,
+  emits
+  `next_self_improve_should_preview_operator_approval_token_intake:true` when
+  the preview is ready, and exposes the same data through status `-JsonStatus`
+  and human-readable status output. The report remains candidate-only/report-only
+  with `commit_allowed=false`, `admission_write_authorized=false`,
+  `auto_apply=false`, `memory_store_write_allowed=false`, and
+  `ndkv_write_allowed=false`. Verification passed: focused `cargo test -q
+  --manifest-path crates\norion-eval\Cargo.toml memory_admission --target-dir
+  target\r85-eval-focused-memory` with `2 passed`, focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r85-tool-focused-self-improve` with `29 passed`,
+  focused report/prompt tests with `1 passed` each, full `cargo test -q
+  --manifest-path crates\norion-eval\Cargo.toml --target-dir
+  target\r85-eval-full` with `385 passed`, full `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml --target-dir
+  target\r85-tool-full` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r85-approval-token-intake-preview.json` from
+  the daemon ledger showed `430` rounds, `419/430` successes, approval review
+  packet `review_packet_items=8 ready=8 pending=8 blocked=0`, reflection
+  usefulness `useful=8 pending_operator_approval=8 blocked=0`, and token
+  intake preview `intake_items=8 ready=8 pending_operator_tokens=8
+  approval_tokens=8 rejection_tokens=8 blocked=0
+  approval_token_intake_ready=true commit_allowed=false
+  admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON and
+  status checks confirmed the first intake item is ready, contains approval and
+  rejection tokens, and keeps `write_authorized=false`. No daemon/model
+  start-stop, SSH, download, model-cache warming, Forge/Web Lab start,
+  prompt/stream/model call, live memory mutation, or `.ndkv` write was
+  performed.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT
