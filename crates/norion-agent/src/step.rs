@@ -1158,6 +1158,10 @@ pub struct AgentClosedLoopPreparedDispatch {
 
 impl AgentClosedLoopPreparedDispatch {
     pub fn can_dispatch(&self) -> bool {
+        if !self.skipped_reasons.is_empty() {
+            return false;
+        }
+
         self.dispatch
             .as_ref()
             .is_some_and(|dispatch| !dispatch.assigned_tasks.is_empty())
@@ -1315,11 +1319,18 @@ impl AgentClosedLoopDispatchPreparer {
             policy,
             max_parallel_tasks,
         );
-        let skipped_reasons = if dispatch.assigned_tasks.is_empty() {
-            vec!["dispatch_empty".to_owned()]
-        } else {
-            Vec::new()
-        };
+        let mut skipped_reasons = Vec::new();
+        if dispatch.assigned_tasks.is_empty() {
+            skipped_reasons.push("dispatch_empty".to_owned());
+        }
+        if turn_plan.requires_repair_first()
+            && dispatch
+                .assigned_tasks
+                .iter()
+                .all(|task| !is_repair_task(task))
+        {
+            skipped_reasons.push("repair_first_task_missing".to_owned());
+        }
 
         AgentClosedLoopPreparedDispatch {
             turn_plan,
@@ -1327,6 +1338,10 @@ impl AgentClosedLoopDispatchPreparer {
             skipped_reasons,
         }
     }
+}
+
+fn is_repair_task(task: &AgentTask) -> bool {
+    task.lane.contains("repair") || task.id.contains("repair")
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4089,6 +4104,74 @@ mod tests {
             dispatch.remaining_queue.tasks()[0].dependencies,
             repair_task_ids
         );
+    }
+
+    #[test]
+    fn closed_loop_dispatch_preparer_blocks_repair_plan_health_without_repair_task() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    1,
+                    0,
+                    1,
+                    vec!["memory_reuse_preflight_not_executable"],
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let repair_task_plan =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+                memory_health,
+                next_queue(),
+            );
+        let repair_health =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecorder::new()
+                .record_plan_with_health(
+                    AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory::new(),
+                    &repair_task_plan,
+                    AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy::default(),
+                )
+                .health;
+        let turn_plan = history
+            .next_turn_plan(
+                next_queue(),
+                AgentClosedLoopExecutionHealthPolicy::default(),
+            )
+            .with_memory_reuse_preflight_repair_task_plan_health(repair_health);
+        let budget = BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(8, 1, 1));
+
+        let prepared = AgentClosedLoopDispatchPreparer::new().prepare(
+            turn_plan,
+            &BTreeSet::new(),
+            budget,
+            &BudgetPolicy::strict(),
+            2,
+        );
+
+        assert_eq!(prepared.turn_plan.mode, AgentClosedLoopNextTurnMode::Repair);
+        assert!(!prepared.can_dispatch());
+        assert_eq!(prepared.assigned_task_ids(), vec!["next-turn"]);
+        assert_eq!(prepared.skipped_reasons, vec!["repair_first_task_missing"]);
+        let dispatch = prepared.dispatch.expect("dispatch audit");
+        assert_eq!(dispatch.dispatch.assignments.len(), 1);
+        assert_eq!(dispatch.dispatch.assignments[0].lane, "default");
+        assert!(dispatch.dispatch.rejections.is_empty());
     }
 
     #[test]
