@@ -1,0 +1,64 @@
+name: PR Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pr-validation.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "LICENSE"
+      - "crates/norion-eval/**"
+      - "crates/norion-test/**"
+      - "tools/evolution-loop/**"
+  push:
+    paths:
+      - ".github/workflows/pr-validation.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "LICENSE"
+      - "crates/norion-eval/**"
+      - "crates/norion-test/**"
+      - "tools/evolution-loop/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused-rust:
+    name: norion-eval and evolution-loop
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust tooling
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+
+      - name: Check formatting for norion-eval
+        run: cargo +stable fmt --package norion-eval --check
+
+      - name: Check formatting for evolution-loop
+        run: cargo +stable fmt --manifest-path tools/evolution-loop/Cargo.toml --check
+
+      - name: Test norion-eval
+        run: cargo +stable test --locked --package norion-eval
+
+      - name: Test evolution-loop
+        run: cargo +stable test --locked --manifest-path tools/evolution-loop/Cargo.toml
+
+      - name: Guard against private or generated artifacts
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)target/|\.ndkv$|\.safetensors$|\.gguf$|\.bin$|\.pt$|\.pth$|\.ckpt$|\.onnx$|\.log$'; then
+            echo "::error::Tracked private/generated artifact found"
+            exit 1
+          fi

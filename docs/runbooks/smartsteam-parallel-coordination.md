@@ -4423,6 +4423,24 @@ System-error replacements:
   auto_apply=false memory_store_write_allowed=false ndkv_write_allowed=false`.
   Direct JSON checks confirmed the preflight report remains read-only,
   report-only, candidate-only, write-disabled, and execution-disabled.
+- R88 parallel-window integration on 2026-06-20: merged three clean worker
+  outputs into the main branch after the main-window preflight commit. Worker A
+  added a `norion-test` contract surface for
+  `self_improve_proposal_memory_reflection_reuse_plan_report_v1` and marked both
+  the reuse-plan and reuse-preflight reports as optional additive legacy replay
+  surfaces. Worker B added `.github/workflows/pr-validation.yml`, a read-only PR
+  workflow for formatting and locked tests on `crates/norion-eval` plus the
+  standalone `tools/evolution-loop`, with an artifact guard for `.ndkv`, model
+  weight, log, and `target/` files. Worker D added
+  `docs/architecture/external-agent-baselines.md`, a clean-room note that keeps
+  `fortunto2/rust-code` in the MIT-compatible idea bucket and
+  `Kuberwastaken/claurst` in the GPL-only architecture-inspiration bucket. Local
+  validation passed with `cargo fmt --manifest-path crates\norion-test\Cargo.toml`,
+  `cargo fmt --package norion-eval --check`, `cargo fmt --manifest-path
+  tools\evolution-loop\Cargo.toml --check`, focused `norion-test` contract and
+  replay tests, full `norion-test` (`104` passed), locked `norion-eval` (`385`
+  passed), locked `tools/evolution-loop` (`414` passed), `git diff --check`, and
+  the tracked-artifact guard.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT

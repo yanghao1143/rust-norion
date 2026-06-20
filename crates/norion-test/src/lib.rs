@@ -1787,6 +1787,8 @@ impl LegacyLedgerReplayPlan {
                 "adapter_fixture_contract_report_v1".to_owned(),
                 "current_runner_compatibility_report_v1".to_owned(),
                 "feedback_self_improve_report_v1".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_preflight_report_v1".to_owned(),
                 "self_evolution_continuity_report_v1".to_owned(),
                 "self_evolution_regression_report_v1".to_owned(),
                 "self_evolution_unattended_prerequisites_report_v1".to_owned(),
@@ -5581,6 +5583,268 @@ impl SelfImproveProposalActionAssignmentPlan {
                 "ndkv_write",
                 "runtime_side_effect_execution",
                 "promotion_action_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionReusePlanReportPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub report_schema_name: String,
+    pub consumer_surface: String,
+    pub eval_entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub produced_report_fields: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_report_only: bool,
+    pub require_candidate_only: bool,
+    pub require_write_disabled: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl SelfImproveProposalMemoryReflectionReusePlanReportPlan {
+    pub fn memory_reflection_reuse_plan(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            report_schema_name:
+                "self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned(),
+            consumer_surface:
+                "evolution_loop_report_only_self_improve_memory_reflection_reuse_plan".to_owned(),
+            eval_entrypoints: vec![
+                "SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster"
+                    .to_owned(),
+                "SelfImproveProposalMemoryReflectionReusePlanItem::from_dedupe_cluster_item"
+                    .to_owned(),
+                "SelfImproveProposalArtifact::memory_reflection_reuse_plan".to_owned(),
+                "option_memory_reflection_reuse_plan_report_json".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "SelfImproveProposalMemoryReflectionDedupeClusterReport".to_owned(),
+                "SelfImproveProposalMemoryReflectionDedupeClusterItem".to_owned(),
+                "target_count".to_owned(),
+                "reflection_cluster_count".to_owned(),
+                "duplicate_cluster_count".to_owned(),
+                "duplicate_reflection_item_count".to_owned(),
+                "approval_review_packet_ids".to_owned(),
+                "evidence_ids".to_owned(),
+                "dedupe_recommendation".to_owned(),
+                "report_only".to_owned(),
+                "candidate_only".to_owned(),
+            ],
+            produced_outputs: vec![
+                "SelfImproveProposalMemoryReflectionReusePlanReport".to_owned(),
+                "SelfImproveProposalMemoryReflectionReusePlanItem".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned(),
+            ],
+            produced_report_fields: vec![
+                "self_improve_proposal.memory_reflection_reuse_plan.read_only".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.report_only".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.candidate_only".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.target_count".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.reflection_cluster_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item_count".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.ready_reuse_plan_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.duplicate_cluster_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.duplicate_reflection_item_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.projected_saved_reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.first_plan_item_id".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.reflection_reuse_plan_ready"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.explicit_operator_approval_required"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.validation_required"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.rollback_required".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.commit_allowed".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.admission_write_authorized"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.auto_apply".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.memory_store_write_allowed"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.ndkv_write_allowed".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.failure_reasons".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_items".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.side_effects".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.cluster_id"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.representative_proposal_id"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_proposal_ids"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.approval_review_packet_ids"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.evidence_ids"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.projected_saved_reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reuse_plan_ready"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.planned_reuse_action"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.dedupe_recommendation"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.blocked_reasons"
+                    .to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "old_thread_read".to_owned(),
+                "old_window_read".to_owned(),
+                "raw_old_window_payload".to_owned(),
+                "chat_transcript_read".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "report_directory_scan".to_owned(),
+                "http_sse".to_owned(),
+                "process_spawn".to_owned(),
+                "validation_command_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "runner_state".to_owned(),
+                "remote_mac_call".to_owned(),
+                "model_download".to_owned(),
+                "model_call".to_owned(),
+                "helper_prose_parse".to_owned(),
+                "chat_stream".to_owned(),
+                "prompt_parse".to_owned(),
+                "prompt_skip_execution".to_owned(),
+                "live_write".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_admission_write".to_owned(),
+                "ndkv_write".to_owned(),
+                "approval_token_consumption".to_owned(),
+                "reuse_action_execution".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_report_only: true,
+            require_candidate_only: true,
+            require_write_disabled: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-eval\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn may_block_current_runner(&self) -> bool {
+        false
+    }
+
+    pub fn may_execute_reuse_action(&self) -> bool {
+        false
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.eval_entrypoints
+            .iter()
+            .any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs
+            .iter()
+            .any(|produced| produced == output)
+    }
+
+    pub fn produces_report_field(&self, field: &str) -> bool {
+        self.produced_report_fields
+            .iter()
+            .any(|produced| produced == field)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn stays_pure_data_boundary(&self) -> bool {
+        self.report_schema_name == "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+            && self.consumer_surface
+                == "evolution_loop_report_only_self_improve_memory_reflection_reuse_plan"
+            && self.require_read_only
+            && self.require_report_only
+            && self.require_candidate_only
+            && self.require_write_disabled
+            && self.exposes_entrypoint(
+                "SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster",
+            )
+            && self.exposes_entrypoint("SelfImproveProposalArtifact::memory_reflection_reuse_plan")
+            && self.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterReport")
+            && self.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterItem")
+            && !self.allows_input("EvolutionLoopRunner")
+            && !self.allows_input("MemoryStore")
+            && !self.allows_input("NdkvStore")
+            && !self.allows_input("ModelClient")
+            && !self.allows_input("PromptExecutor")
+            && !self.allows_input("ApprovalTokenConsumer")
+            && self.produces_output("SelfImproveProposalMemoryReflectionReusePlanReport")
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.reflection_reuse_plan_ready",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.projected_saved_reflection_count",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.planned_reuse_action",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.commit_allowed",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.admission_write_authorized",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.memory_store_write_allowed",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.ndkv_write_allowed",
+            )
+            && [
+                "jsonl_io",
+                "file_io",
+                "report_directory_scan",
+                "http_sse",
+                "process_spawn",
+                "validation_command_spawn",
+                "daemon_control",
+                "runner_state",
+                "remote_mac_call",
+                "model_download",
+                "model_call",
+                "helper_prose_parse",
+                "chat_stream",
+                "prompt_parse",
+                "prompt_skip_execution",
+                "live_write",
+                "memory_store_write",
+                "memory_admission_write",
+                "ndkv_write",
+                "approval_token_consumption",
+                "reuse_action_execution",
+                "runtime_side_effect_execution",
             ]
             .iter()
             .all(|capability| self.forbids_capability(capability))
@@ -9618,6 +9882,14 @@ mod tests {
                 .contains(&"feedback_self_improve_report_v1".to_owned())
         );
         assert!(
+            plan.optional_additive_reports.contains(
+                &"self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned()
+            )
+        );
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_preflight_report_v1".to_owned()
+        ));
+        assert!(
             plan.optional_additive_reports
                 .contains(&"self_evolution_continuity_report_v1".to_owned())
         );
@@ -11930,6 +12202,146 @@ mod tests {
         assert!(enforced.stays_pure_data_boundary());
         assert!(!report.may_block_current_runner());
         assert!(!enforced.may_block_current_runner());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-eval\Cargo.toml"
+        );
+        assert!(report.stays_pure_data_boundary());
+    }
+
+    #[test]
+    fn self_improve_proposal_memory_reflection_reuse_plan_report_tracks_r87_contract() {
+        let report =
+            SelfImproveProposalMemoryReflectionReusePlanReportPlan::memory_reflection_reuse_plan(
+                "memory-reflection-reuse-plan-report",
+                AdapterAcceptanceStage::ReportOnly,
+            );
+        let enforced =
+            SelfImproveProposalMemoryReflectionReusePlanReportPlan::memory_reflection_reuse_plan(
+                "memory-reflection-reuse-plan-enforced",
+                AdapterAcceptanceStage::Enforced,
+            );
+
+        assert_eq!(
+            enforced.report_schema_name,
+            "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+        );
+        assert_eq!(
+            enforced.consumer_surface,
+            "evolution_loop_report_only_self_improve_memory_reflection_reuse_plan"
+        );
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_report_only);
+        assert!(enforced.require_candidate_only);
+        assert!(enforced.require_write_disabled);
+        assert!(enforced.exposes_entrypoint(
+            "SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster"
+        ));
+        assert!(enforced.exposes_entrypoint(
+            "SelfImproveProposalMemoryReflectionReusePlanItem::from_dedupe_cluster_item"
+        ));
+        assert!(
+            enforced
+                .exposes_entrypoint("SelfImproveProposalArtifact::memory_reflection_reuse_plan")
+        );
+        assert!(enforced.exposes_entrypoint("option_memory_reflection_reuse_plan_report_json"));
+        assert!(enforced.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterReport"));
+        assert!(enforced.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterItem"));
+        assert!(enforced.allows_input("dedupe_recommendation"));
+        assert!(enforced.allows_input("approval_review_packet_ids"));
+        assert!(enforced.allows_input("evidence_ids"));
+        assert!(!enforced.allows_input("EvolutionLoopRunner"));
+        assert!(!enforced.allows_input("MemoryStore"));
+        assert!(!enforced.allows_input("NdkvStore"));
+        assert!(!enforced.allows_input("ModelClient"));
+        assert!(!enforced.allows_input("PromptExecutor"));
+        assert!(!enforced.allows_input("ApprovalTokenConsumer"));
+        assert!(enforced.produces_output("SelfImproveProposalMemoryReflectionReusePlanReport"));
+        assert!(enforced.produces_output("SelfImproveProposalMemoryReflectionReusePlanItem"));
+        assert!(
+            enforced
+                .produces_output("self_improve_proposal_memory_reflection_reuse_plan_report_v1")
+        );
+        for field in [
+            "self_improve_proposal.memory_reflection_reuse_plan.read_only",
+            "self_improve_proposal.memory_reflection_reuse_plan.report_only",
+            "self_improve_proposal.memory_reflection_reuse_plan.candidate_only",
+            "self_improve_proposal.memory_reflection_reuse_plan.target_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.reflection_cluster_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.ready_reuse_plan_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.duplicate_cluster_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.duplicate_reflection_item_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.projected_saved_reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.reflection_reuse_plan_ready",
+            "self_improve_proposal.memory_reflection_reuse_plan.explicit_operator_approval_required",
+            "self_improve_proposal.memory_reflection_reuse_plan.validation_required",
+            "self_improve_proposal.memory_reflection_reuse_plan.rollback_required",
+            "self_improve_proposal.memory_reflection_reuse_plan.commit_allowed",
+            "self_improve_proposal.memory_reflection_reuse_plan.admission_write_authorized",
+            "self_improve_proposal.memory_reflection_reuse_plan.auto_apply",
+            "self_improve_proposal.memory_reflection_reuse_plan.memory_store_write_allowed",
+            "self_improve_proposal.memory_reflection_reuse_plan.ndkv_write_allowed",
+            "self_improve_proposal.memory_reflection_reuse_plan.failure_reasons",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_items",
+            "self_improve_proposal.memory_reflection_reuse_plan.side_effects",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.cluster_id",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.representative_proposal_id",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_proposal_ids",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.approval_review_packet_ids",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.evidence_ids",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.projected_saved_reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reuse_plan_ready",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.planned_reuse_action",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.dedupe_recommendation",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.blocked_reasons",
+        ] {
+            assert!(
+                enforced.produces_report_field(field),
+                "missing R87 report field {field}"
+            );
+        }
+        for forbidden in [
+            "old_thread_read",
+            "old_window_read",
+            "raw_old_window_payload",
+            "chat_transcript_read",
+            "jsonl_io",
+            "file_io",
+            "report_directory_scan",
+            "http_sse",
+            "process_spawn",
+            "validation_command_spawn",
+            "daemon_control",
+            "runner_state",
+            "remote_mac_call",
+            "model_download",
+            "model_call",
+            "helper_prose_parse",
+            "chat_stream",
+            "prompt_parse",
+            "prompt_skip_execution",
+            "live_write",
+            "memory_store_write",
+            "memory_admission_write",
+            "ndkv_write",
+            "approval_token_consumption",
+            "reuse_action_execution",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_pure_data_boundary());
+        assert!(!report.may_block_current_runner());
+        assert!(!enforced.may_block_current_runner());
+        assert!(!report.may_execute_reuse_action());
+        assert!(!enforced.may_execute_reuse_action());
         assert!(enforced.preserves_legacy_runner);
         assert_eq!(
             enforced.verification_plan.commands[0].display_line(),
