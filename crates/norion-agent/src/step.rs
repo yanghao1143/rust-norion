@@ -1583,6 +1583,7 @@ pub struct AgentClosedLoopMemoryReusePreflightExecutionDashboard {
     pub total_reports: usize,
     pub clean_reports: usize,
     pub blocked_reports: usize,
+    pub dispatch_blocked_reports: usize,
     pub missing_preflight_reports: usize,
     pub saved_compute_reports: usize,
     pub clean_rate: f32,
@@ -1603,6 +1604,10 @@ impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
         let blocked_reports = summaries
             .iter()
             .filter(|summary| !summary.can_enter_execution || !summary.blocked_reasons.is_empty())
+            .count();
+        let dispatch_blocked_reports = summaries
+            .iter()
+            .filter(|summary| memory_reuse_preflight_dispatch_blocked(summary))
             .count();
         let missing_preflight_reports = summaries
             .iter()
@@ -1632,6 +1637,7 @@ impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
             total_reports,
             clean_reports,
             blocked_reports,
+            dispatch_blocked_reports,
             missing_preflight_reports,
             saved_compute_reports,
             planned_engine_calls,
@@ -1643,6 +1649,7 @@ impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
             total_reports,
             clean_reports,
             blocked_reports,
+            dispatch_blocked_reports,
             missing_preflight_reports,
             saved_compute_reports,
             clean_rate: rate(clean_reports, total_reports),
@@ -1728,6 +1735,12 @@ impl AgentClosedLoopMemoryReusePreflightExecutionHealth {
                 dashboard.missing_preflight_reports, policy.maximum_missing_preflight_reports
             ));
         }
+        if dashboard.dispatch_blocked_reports > 0 {
+            repair_reasons.push(format!(
+                "memory_reuse_dispatch_blocked_reports={}>0",
+                dashboard.dispatch_blocked_reports
+            ));
+        }
         if dashboard.blocked_reports > policy.maximum_blocked_reports {
             repair_reasons.push(format!(
                 "memory_reuse_blocked_reports={}>{}",
@@ -1790,6 +1803,26 @@ impl AgentClosedLoopMemoryReusePreflightExecutionHealth {
     pub fn requires_repair_first(&self) -> bool {
         self.status == AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
     }
+}
+
+fn memory_reuse_preflight_dispatch_blocked(
+    summary: &AgentClosedLoopMemoryReusePreflightExecutionSummary,
+) -> bool {
+    !summary.preflight_present
+        && summary
+            .blocked_reasons
+            .iter()
+            .any(|reason| memory_reuse_preflight_dispatch_blocked_reason(reason))
+}
+
+fn memory_reuse_preflight_dispatch_blocked_reason(reason: &str) -> bool {
+    matches!(
+        reason,
+        "prepared_dispatch_not_executable"
+            | "dispatch_empty"
+            | "next_queue_empty"
+            | "repair_first_task_missing"
+    )
 }
 
 impl AgentClosedLoopMemoryReusePreflightExecutor {
@@ -2103,6 +2136,7 @@ fn memory_reuse_preflight_execution_dashboard_telemetry(
     total_reports: usize,
     clean_reports: usize,
     blocked_reports: usize,
+    dispatch_blocked_reports: usize,
     missing_preflight_reports: usize,
     saved_compute_reports: usize,
     planned_engine_calls: usize,
@@ -2114,6 +2148,9 @@ fn memory_reuse_preflight_execution_dashboard_telemetry(
         format!("agent_memory_reuse_preflight_execution_reports={total_reports}"),
         format!("agent_memory_reuse_preflight_execution_clean_reports={clean_reports}"),
         format!("agent_memory_reuse_preflight_execution_blocked_reports={blocked_reports}"),
+        format!(
+            "agent_memory_reuse_preflight_execution_dispatch_blocked_reports={dispatch_blocked_reports}"
+        ),
         format!(
             "agent_memory_reuse_preflight_execution_missing_preflight_reports={missing_preflight_reports}"
         ),
@@ -4552,6 +4589,113 @@ mod tests {
         assert_eq!(
             health.status,
             AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+        );
+    }
+
+    #[test]
+    fn closed_loop_memory_reuse_preflight_execution_reports_repair_first_dispatch_block() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    1,
+                    0,
+                    1,
+                    vec!["memory_reuse_preflight_not_executable"],
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let repair_task_plan =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+                memory_health,
+                next_queue(),
+            );
+        let repair_health =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistoryRecorder::new()
+                .record_plan_with_health(
+                    AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummaryHistory::new(),
+                    &repair_task_plan,
+                    AgentClosedLoopMemoryReusePreflightRepairTaskPlanHealthPolicy::default(),
+                )
+                .health;
+        let turn_plan = history
+            .next_turn_plan(
+                next_queue(),
+                AgentClosedLoopExecutionHealthPolicy::default(),
+            )
+            .with_memory_reuse_preflight_repair_task_plan_health(repair_health);
+        let budget = BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(8, 1, 1));
+        let prepared_dispatch = AgentClosedLoopDispatchPreparer::new().prepare(
+            turn_plan,
+            &BTreeSet::new(),
+            budget,
+            &BudgetPolicy::strict(),
+            2,
+        );
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: Vec::new(),
+            telemetry: Vec::new(),
+        };
+        let prepared_preflight = AgentClosedLoopPreparedMemoryReusePreflightPlanner::new().plan(
+            prepared_dispatch,
+            &recall_plan,
+            &[],
+        );
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+
+        let report = AgentClosedLoopMemoryReusePreflightExecutor::new()
+            .execute_with_report(prepared_preflight, &mut engine);
+
+        assert_eq!(engine.calls, 0);
+        assert!(!report.is_clean());
+        assert!(report.saved_compute());
+        assert!(report.preflight.is_none());
+        assert_eq!(report.planned_engine_calls, 1);
+        assert_eq!(report.executed_engine_calls, 0);
+        assert_eq!(report.skipped_engine_calls, 1);
+        assert_eq!(report.blocked_reasons, vec!["repair_first_task_missing"]);
+        assert!(report.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_blocked_reason=repair_first_task_missing"
+        }));
+        let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
+        history.record_report(&report);
+        let dashboard = history.dashboard();
+        let health =
+            dashboard.health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        assert_eq!(dashboard.dispatch_blocked_reports, 1);
+        assert_eq!(dashboard.missing_preflight_reports, 1);
+        assert!(dashboard.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_execution_dispatch_blocked_reports=1"
+        }));
+        assert_eq!(
+            health.status,
+            AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+        );
+        assert!(
+            health
+                .reasons
+                .iter()
+                .any(|reason| { reason == "memory_reuse_dispatch_blocked_reports=1>0" })
         );
     }
 
