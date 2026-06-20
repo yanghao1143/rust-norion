@@ -14629,6 +14629,95 @@ mod tests {
     }
 
     #[test]
+    fn runtime_service_loop_run_daemon_request_summary_history_repairs_repair_first_task_missing() {
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+        let mut memory = FakeMemory::default();
+        let repair_history = AgentClosedLoopExecutionHistory::from_summaries(vec![
+            AgentClosedLoopExecutionSummary {
+                run_id: "run-service-loop-daemon-request-summary-repair-prior".to_owned(),
+                clean: false,
+                report_accepted: true,
+                loopback_promoted: true,
+                service_clean: false,
+                reward_total: 0.42,
+                admission_status: AgentCycleLedgerAdmissionStatus::Repair,
+                command_count: 2,
+                missing_command_count: 0,
+                failed_command_count: 0,
+                skipped_command_count: 0,
+                next_queue_tasks: 1,
+                next_queue_task_ids: vec!["runtime-turn".to_owned()],
+                blocked_reasons: vec!["repair_admission".to_owned()],
+            },
+        ]);
+        let continuation =
+            daemon_continuation_for_runtime_input(AgentClosedLoopRuntimeTurnInput::new(
+                repair_history,
+                queue(),
+                budget(),
+                AgentCycleEvidence::default(),
+            ));
+        let request_plan = AgentClosedLoopRuntimeServiceLoopRunDaemonRequestPlanner::new().plan(
+            &continuation,
+            AgentClosedLoopRuntimeBusinessInput::new(
+                "run-service-loop-daemon-request-summary-repair-first-missing",
+                crate::ledger::AgentCycleLedger::new(),
+                report_evidence(),
+            ),
+        );
+        let request_record = AgentClosedLoopRuntimeServiceLoopRunDaemonRequestRunner::new().run(
+            request_plan,
+            &mut engine,
+            &mut memory,
+        );
+
+        let summary = request_record.summary();
+        let history_record =
+            AgentClosedLoopRuntimeServiceLoopRunDaemonRequestSummaryHistoryRecorder::new().record(
+                AgentClosedLoopRuntimeServiceLoopRunDaemonRequestSummaryHistory::new(),
+                summary.clone(),
+                AgentClosedLoopRuntimeServiceLoopRunDaemonRequestHealthPolicy::default(),
+            );
+
+        assert_eq!(engine.calls, 0);
+        assert_eq!(memory.submitted.len(), 0);
+        assert!(!request_record.is_executable());
+        assert!(request_record.command_plan().is_none());
+        assert_eq!(
+            request_record.skipped_reasons(),
+            &["repair_first_task_missing".to_owned()]
+        );
+        assert!(!summary.executable);
+        assert_eq!(summary.command_count, 0);
+        assert!(!summary.command_gate_allowed);
+        assert_eq!(summary.side_effect_gate_count, 0);
+        assert_eq!(summary.blocked_side_effect_gate_count, 0);
+        assert_eq!(summary.skipped_reasons, vec!["repair_first_task_missing"]);
+        assert_eq!(history_record.dashboard.skipped_records, 1);
+        assert_eq!(
+            history_record.dashboard.latest_skipped_reasons,
+            vec!["repair_first_task_missing"]
+        );
+        assert_eq!(
+            history_record.health.status,
+            AgentClosedLoopExecutionHealthStatus::Repair
+        );
+        assert!(
+            history_record
+                .health
+                .reasons
+                .iter()
+                .any(|reason| reason == "service_loop_run_daemon_request_skipped_records=1>0")
+        );
+        assert!(history_record.health.reasons.iter().any(|reason| {
+            reason == "service_loop_run_daemon_request_latest_skipped=repair_first_task_missing"
+        }));
+    }
+
+    #[test]
     fn runtime_service_loop_run_daemon_request_monitored_close_records_clean_request_and_daemon() {
         let mut engine = CountingEngine {
             calls: 0,
