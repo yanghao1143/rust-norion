@@ -1,4 +1,4 @@
-use crate::hierarchy::TaskProfile;
+use crate::hierarchy::{HierarchyWeights, TaskProfile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Route {
@@ -48,6 +48,7 @@ pub struct RoutingContext {
     pub latency_budget_ms: Option<u64>,
     pub hardware_pressure: f32,
     pub compute_headroom: f32,
+    pub hierarchy: HierarchyWeights,
 }
 
 impl Default for RoutingContext {
@@ -59,6 +60,7 @@ impl Default for RoutingContext {
             latency_budget_ms: None,
             hardware_pressure: 0.0,
             compute_headroom: 0.5,
+            hierarchy: HierarchyWeights::default(),
         }
     }
 }

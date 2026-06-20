@@ -1,5 +1,5 @@
 use super::*;
-use crate::hierarchy::TaskProfile;
+use crate::hierarchy::{HierarchyWeights, TaskProfile};
 
 #[test]
 fn poor_quality_lowers_threshold() {
@@ -165,10 +165,10 @@ fn hardware_pressure_conserves_attention_budget() {
 #[test]
 fn accelerator_headroom_spends_attention_on_borderline_tokens() {
     let router = NoironRouter::new();
-    let normal = router.route_entropy("token", 0.68);
+    let normal = router.route_entropy("token", 0.62);
     let accelerated = router.route_entropy_with_context(
         "token",
-        0.68,
+        0.62,
         RoutingContext {
             compute_headroom: 1.0,
             ..RoutingContext::default()
@@ -178,4 +178,29 @@ fn accelerator_headroom_spends_attention_on_borderline_tokens() {
     assert_eq!(normal.route, Route::FastProjection);
     assert!(accelerated.route.uses_attention_budget());
     assert!(accelerated.score > normal.score);
+}
+
+#[test]
+fn hierarchy_bias_spends_attention_on_borderline_tokens() {
+    let router = NoironRouter::new();
+    let local_heavy = router.route_entropy_with_context(
+        "token",
+        0.665,
+        RoutingContext {
+            hierarchy: HierarchyWeights::new(0.0, 1.0, 0.0),
+            ..RoutingContext::default()
+        },
+    );
+    let global_heavy = router.route_entropy_with_context(
+        "token",
+        0.665,
+        RoutingContext {
+            hierarchy: HierarchyWeights::new(1.0, 0.0, 0.0),
+            ..RoutingContext::default()
+        },
+    );
+
+    assert_eq!(local_heavy.route, Route::FastProjection);
+    assert!(global_heavy.route.uses_attention_budget());
+    assert!(global_heavy.score > local_heavy.score);
 }

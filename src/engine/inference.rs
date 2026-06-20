@@ -82,6 +82,7 @@ impl NoironEngine {
             latency_budget_ms: hardware_plan.latency_budget_ms,
             hardware_pressure: hardware_plan.pressure,
             compute_headroom: hardware_plan.compute_headroom(),
+            hierarchy: hardware_plan.hierarchy,
         };
         let route_budget = self
             .router
