@@ -96,6 +96,7 @@ impl AgentTeamPlanner {
             notes: Vec::new(),
         };
         plan.agents.truncate(self.max_agents);
+        retain_active_agent_dependencies(&mut plan);
 
         push_message(
             &mut plan,
@@ -245,6 +246,7 @@ impl AgentTeamPlanner {
             input.hardware_plan.pressure,
             plan.collision_free()
         ));
+        retain_active_conflicts(&mut plan);
         plan.messages.truncate(self.max_messages);
         plan
     }
@@ -320,6 +322,10 @@ fn push_message(
     confidence: f32,
     evidence: Vec<String>,
 ) {
+    if !plan.has_role(role) {
+        return;
+    }
+
     let id = format!("{}-msg-{}", plan.run_id, plan.messages.len());
     plan.messages.push(AgentMessage {
         id,
@@ -329,5 +335,32 @@ fn push_message(
         content: content.to_owned(),
         confidence: confidence.clamp(0.0, 1.0),
         evidence,
+    });
+}
+
+fn retain_active_agent_dependencies(plan: &mut AgentTeamPlan) {
+    let active_roles = plan
+        .agents
+        .iter()
+        .map(|agent| agent.role.as_str())
+        .collect::<Vec<_>>();
+    for agent in &mut plan.agents {
+        agent
+            .dependencies
+            .retain(|dependency| active_roles.iter().any(|role| role == dependency));
+    }
+}
+
+fn retain_active_conflicts(plan: &mut AgentTeamPlan) {
+    let active_roles = plan
+        .agents
+        .iter()
+        .map(|agent| agent.role)
+        .collect::<Vec<_>>();
+    plan.conflicts.retain(|conflict| {
+        conflict
+            .roles
+            .iter()
+            .all(|role| active_roles.iter().any(|active| active == role))
     });
 }
