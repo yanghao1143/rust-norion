@@ -2,6 +2,7 @@ use crate::aggregate::AggregationConflictReviewTrendGateDecision;
 use crate::budget::AgentBudget;
 use crate::cycle::AgentCycleDispatch;
 use crate::cycle::AgentCycleHandoff;
+use crate::execute::AgentWaveExecution;
 use crate::ports::{MemoryNote, MemoryPort, MemoryRecord};
 use crate::reflection::ReflectionLoopHistoryGateDecision;
 use crate::task::{AgentRole, AgentTask};
@@ -528,6 +529,202 @@ impl AgentWaveMemoryRecallPlanner {
 
         AgentWaveMemoryRecallPlan {
             contexts,
+            telemetry,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AgentRecallOutcomeAttributionPolicy {
+    pub reinforce_amount: f32,
+    pub rejected_penalty_amount: f32,
+    pub failure_penalty_amount: f32,
+}
+
+impl Default for AgentRecallOutcomeAttributionPolicy {
+    fn default() -> Self {
+        Self {
+            reinforce_amount: 0.24,
+            rejected_penalty_amount: 0.18,
+            failure_penalty_amount: 0.32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentRecallOutcomeAttributionAction {
+    Reinforce,
+    Penalize,
+}
+
+impl AgentRecallOutcomeAttributionAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Reinforce => "reinforce",
+            Self::Penalize => "penalize",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRecallOutcomeAttribution {
+    pub task_id: String,
+    pub record_id: String,
+    pub source: String,
+    pub action: AgentRecallOutcomeAttributionAction,
+    pub amount: f32,
+    pub reason_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRecallOutcomeAttributionReport {
+    pub attributions: Vec<AgentRecallOutcomeAttribution>,
+    pub reinforced_count: usize,
+    pub penalized_count: usize,
+    pub skipped_rejected_recall_count: usize,
+    pub skipped_missing_outcome_task_ids: Vec<String>,
+    pub read_only: bool,
+    pub memory_store_write_allowed: bool,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentRecallOutcomeAttributionReport {
+    pub fn has_updates(&self) -> bool {
+        !self.attributions.is_empty()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "agent_recall_outcome_attribution read_only={} memory_store_write_allowed={} updates={} reinforce={} penalize={} skipped_rejected_recall={} skipped_missing_outcome_tasks={}",
+            self.read_only,
+            self.memory_store_write_allowed,
+            self.attributions.len(),
+            self.reinforced_count,
+            self.penalized_count,
+            self.skipped_rejected_recall_count,
+            self.skipped_missing_outcome_task_ids.len(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentRecallOutcomeAttributionPlanner {
+    pub policy: AgentRecallOutcomeAttributionPolicy,
+}
+
+impl Default for AgentRecallOutcomeAttributionPlanner {
+    fn default() -> Self {
+        Self {
+            policy: AgentRecallOutcomeAttributionPolicy::default(),
+        }
+    }
+}
+
+impl AgentRecallOutcomeAttributionPlanner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_policy(mut self, policy: AgentRecallOutcomeAttributionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn plan(
+        &self,
+        recall_plan: &AgentWaveMemoryRecallPlan,
+        execution: &AgentWaveExecution,
+    ) -> AgentRecallOutcomeAttributionReport {
+        let mut attributions = Vec::new();
+        let mut skipped_missing_outcome_task_ids = BTreeSet::new();
+        let mut skipped_rejected_recall_count = 0usize;
+
+        for context in &recall_plan.contexts {
+            skipped_rejected_recall_count =
+                skipped_rejected_recall_count.saturating_add(context.rejected_count());
+            let Some(status) = recall_outcome_task_status(&context.task_id, execution) else {
+                if context.accepted_count() > 0 {
+                    skipped_missing_outcome_task_ids.insert(context.task_id.clone());
+                }
+                continue;
+            };
+
+            for decision in &context.decisions {
+                let Some(item) = decision.item.as_ref() else {
+                    continue;
+                };
+                if !decision.kind.accepted() {
+                    continue;
+                }
+
+                let (action, amount, outcome_reason) = match status {
+                    RecallOutcomeTaskStatus::Accepted => (
+                        AgentRecallOutcomeAttributionAction::Reinforce,
+                        attribution_amount(self.policy.reinforce_amount),
+                        "result_accepted",
+                    ),
+                    RecallOutcomeTaskStatus::Rejected => (
+                        AgentRecallOutcomeAttributionAction::Penalize,
+                        attribution_amount(self.policy.rejected_penalty_amount),
+                        "result_rejected",
+                    ),
+                    RecallOutcomeTaskStatus::Failed => (
+                        AgentRecallOutcomeAttributionAction::Penalize,
+                        attribution_amount(self.policy.failure_penalty_amount),
+                        "execution_failed",
+                    ),
+                };
+
+                let mut reason_codes = BTreeSet::new();
+                reason_codes.insert("recall_admitted".to_owned());
+                reason_codes.insert(outcome_reason.to_owned());
+                if context.read_only {
+                    reason_codes.insert("recall_read_only".to_owned());
+                }
+                reason_codes.extend(decision.reasons.iter().cloned());
+
+                attributions.push(AgentRecallOutcomeAttribution {
+                    task_id: context.task_id.clone(),
+                    record_id: item.id.clone(),
+                    source: item.source.clone(),
+                    action,
+                    amount,
+                    reason_codes: reason_codes.into_iter().collect(),
+                });
+            }
+        }
+
+        let reinforced_count = attributions
+            .iter()
+            .filter(|attribution| {
+                attribution.action == AgentRecallOutcomeAttributionAction::Reinforce
+            })
+            .count();
+        let penalized_count = attributions
+            .iter()
+            .filter(|attribution| {
+                attribution.action == AgentRecallOutcomeAttributionAction::Penalize
+            })
+            .count();
+        let skipped_missing_outcome_task_ids = skipped_missing_outcome_task_ids
+            .into_iter()
+            .collect::<Vec<_>>();
+        let telemetry = recall_outcome_attribution_telemetry(
+            attributions.len(),
+            reinforced_count,
+            penalized_count,
+            skipped_rejected_recall_count,
+            skipped_missing_outcome_task_ids.len(),
+        );
+
+        AgentRecallOutcomeAttributionReport {
+            attributions,
+            reinforced_count,
+            penalized_count,
+            skipped_rejected_recall_count,
+            skipped_missing_outcome_task_ids,
+            read_only: true,
+            memory_store_write_allowed: false,
             telemetry,
         }
     }
@@ -1471,6 +1668,56 @@ fn compact_summary(summary: &str, max_summary_chars: usize) -> String {
     out.trim().to_owned()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecallOutcomeTaskStatus {
+    Accepted,
+    Rejected,
+    Failed,
+}
+
+fn recall_outcome_task_status(
+    task_id: &str,
+    execution: &AgentWaveExecution,
+) -> Option<RecallOutcomeTaskStatus> {
+    if execution
+        .failures
+        .iter()
+        .any(|failure| failure.task_id == task_id)
+    {
+        return Some(RecallOutcomeTaskStatus::Failed);
+    }
+
+    let mut has_accepted_result = false;
+    let mut has_rejected_result = false;
+    for result in execution
+        .results
+        .iter()
+        .filter(|result| result.task_id == task_id)
+    {
+        if result.accepted {
+            has_accepted_result = true;
+        } else {
+            has_rejected_result = true;
+        }
+    }
+
+    if has_rejected_result {
+        Some(RecallOutcomeTaskStatus::Rejected)
+    } else if has_accepted_result {
+        Some(RecallOutcomeTaskStatus::Accepted)
+    } else {
+        None
+    }
+}
+
+fn attribution_amount(amount: f32) -> f32 {
+    if amount.is_finite() {
+        amount.clamp(0.01, 1.0)
+    } else {
+        0.01
+    }
+}
+
 fn memory_recall_context_telemetry(
     task_id: &str,
     returned: usize,
@@ -1486,6 +1733,29 @@ fn memory_recall_context_telemetry(
         format!("agent_memory_recall_context_rejected={rejected}"),
         format!("agent_memory_recall_context_failed={failed}"),
         "agent_memory_recall_context_read_only=true".to_owned(),
+    ]
+}
+
+fn recall_outcome_attribution_telemetry(
+    attribution_count: usize,
+    reinforced_count: usize,
+    penalized_count: usize,
+    skipped_rejected_recall_count: usize,
+    skipped_missing_outcome_task_count: usize,
+) -> Vec<String> {
+    vec![
+        "agent_recall_outcome_attribution=true".to_owned(),
+        "agent_recall_outcome_attribution_read_only=true".to_owned(),
+        "agent_recall_outcome_attribution_memory_store_write_allowed=false".to_owned(),
+        format!("agent_recall_outcome_attribution_updates={attribution_count}"),
+        format!("agent_recall_outcome_attribution_reinforce={reinforced_count}"),
+        format!("agent_recall_outcome_attribution_penalize={penalized_count}"),
+        format!(
+            "agent_recall_outcome_attribution_skipped_rejected_recall={skipped_rejected_recall_count}"
+        ),
+        format!(
+            "agent_recall_outcome_attribution_skipped_missing_outcome_tasks={skipped_missing_outcome_task_count}"
+        ),
     ]
 }
 
@@ -1814,6 +2084,7 @@ mod tests {
         AggregationConflictReviewer, AggregationHealthPolicy, AggregationSummaryHistory,
     };
     use crate::conflict::{ConflictReportHealthPolicy, ConflictReportSummaryHistory};
+    use crate::execute::{AgentExecutionFailure, AgentWaveExecution};
     use crate::message::{AgentMessage, AgentMessageKind};
     use crate::reflection::{
         ReflectionLoop, ReflectionLoopHealthPolicy, ReflectionLoopSummaryHistory,
@@ -2188,6 +2459,235 @@ mod tests {
                 .iter()
                 .any(|line| { line == "agent_memory_recall_dry_run_evidence_safe=false" })
         );
+    }
+
+    #[test]
+    fn recall_outcome_attribution_reinforces_accepted_recall_for_accepted_result() {
+        let task = AgentTask::new(
+            "runtime-coder",
+            AgentRole::Coder,
+            "reuse runtime memory",
+            AgentBudget::new(8, 1, 1),
+        );
+        let recall_context = MemoryRecallContextPlanner::new()
+            .with_policy(MemoryRecallPolicy {
+                limit_per_task: 3,
+                max_context_records_per_task: 1,
+                max_summary_chars: 64,
+            })
+            .plan_from_records(
+                &task,
+                "role:coder lane:default objective:reuse runtime memory".to_owned(),
+                vec![
+                    MemoryRecord::new("lesson-1", "reuse this accepted lesson", "long_term"),
+                    MemoryRecord::new("lesson-2", "budget should reject this", "long_term"),
+                ],
+            );
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![recall_context],
+            telemetry: Vec::new(),
+        };
+        let execution = AgentWaveExecution {
+            results: vec![crate::task::AgentResult::accepted(
+                &task,
+                "runtime reuse worked",
+                Vec::new(),
+                AgentBudget::new(1, 1, 1),
+            )],
+            failures: Vec::new(),
+        };
+
+        let report = AgentRecallOutcomeAttributionPlanner::new().plan(&recall_plan, &execution);
+
+        assert!(report.read_only);
+        assert!(!report.memory_store_write_allowed);
+        assert!(report.has_updates());
+        assert_eq!(report.reinforced_count, 1);
+        assert_eq!(report.penalized_count, 0);
+        assert_eq!(report.skipped_rejected_recall_count, 1);
+        assert!(report.skipped_missing_outcome_task_ids.is_empty());
+        assert_eq!(report.attributions.len(), 1);
+        assert_eq!(report.attributions[0].task_id, "runtime-coder");
+        assert_eq!(report.attributions[0].record_id, "lesson-1");
+        assert_eq!(report.attributions[0].source, "long_term");
+        assert_eq!(
+            report.attributions[0].action,
+            AgentRecallOutcomeAttributionAction::Reinforce
+        );
+        assert_eq!(report.attributions[0].amount, 0.24);
+        assert!(
+            report.attributions[0]
+                .reason_codes
+                .contains(&"result_accepted".to_owned())
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_recall_outcome_attribution_reinforce=1")
+        );
+        assert!(report.summary_line().contains("updates=1"));
+    }
+
+    #[test]
+    fn recall_outcome_attribution_penalizes_failed_and_rejected_results_only() {
+        let failed_task = AgentTask::new(
+            "runtime-coder",
+            AgentRole::Coder,
+            "reuse runtime memory",
+            AgentBudget::new(8, 1, 1),
+        );
+        let rejected_task = AgentTask::new(
+            "runtime-reviewer",
+            AgentRole::Reviewer,
+            "review runtime memory",
+            AgentBudget::new(8, 1, 1),
+        );
+        let unsafe_task = AgentTask::new(
+            "unsafe-sidecar",
+            AgentRole::MemoryCurator,
+            "inspect unsafe dry run",
+            AgentBudget::new(4, 1, 1),
+        );
+        let planner = MemoryRecallContextPlanner::new();
+        let failed_context = planner.plan_from_records(
+            &failed_task,
+            "role:coder lane:default objective:reuse runtime memory".to_owned(),
+            vec![MemoryRecord::new(
+                "lesson-fail",
+                "failed lesson",
+                "long_term",
+            )],
+        );
+        let rejected_context = planner.plan_from_records(
+            &rejected_task,
+            "role:reviewer lane:default objective:review runtime memory".to_owned(),
+            vec![MemoryRecord::new(
+                "lesson-reject",
+                "rejected lesson",
+                "long_term",
+            )],
+        );
+        let unsafe_evidence = MemoryRecallDryRunEvidence {
+            source: "unsafe_dry_run".to_owned(),
+            read_only: true,
+            candidate_count: 1,
+            long_term_match_count: 1,
+            context_decision_count: 1,
+            accepted_context_count: 1,
+            rejected_context_count: 0,
+            used_tokens: 32,
+            requested_kv_count: 1,
+            kv_promote_count: 1,
+            kv_missing_count: 0,
+            kv_already_hot_count: 0,
+            kv_duplicate_count: 0,
+            kv_backend_available: true,
+            memory_store_write_allowed: true,
+            kv_prefetch_apply_allowed: false,
+            reason_codes: vec!["read_only".to_owned()],
+            detail_codes: Vec::new(),
+        };
+        let unsafe_context = planner.plan_from_dry_run_evidence(&unsafe_task, &unsafe_evidence);
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![failed_context, rejected_context, unsafe_context],
+            telemetry: Vec::new(),
+        };
+        let execution = AgentWaveExecution {
+            results: vec![
+                crate::task::AgentResult::rejected(&rejected_task, "review rejected memory use"),
+                crate::task::AgentResult::accepted(
+                    &unsafe_task,
+                    "unsafe sidecar task finished",
+                    Vec::new(),
+                    AgentBudget::new(1, 1, 1),
+                ),
+            ],
+            failures: vec![AgentExecutionFailure {
+                task_id: failed_task.id.clone(),
+                role: failed_task.role.clone(),
+                reason: "engine failed".to_owned(),
+            }],
+        };
+
+        let report = AgentRecallOutcomeAttributionPlanner::new().plan(&recall_plan, &execution);
+
+        assert_eq!(report.attributions.len(), 2);
+        assert_eq!(report.reinforced_count, 0);
+        assert_eq!(report.penalized_count, 2);
+        assert_eq!(report.skipped_rejected_recall_count, 1);
+        assert!(report.skipped_missing_outcome_task_ids.is_empty());
+        assert!(report.attributions.iter().all(|attribution| {
+            attribution.action == AgentRecallOutcomeAttributionAction::Penalize
+        }));
+        let failed = report
+            .attributions
+            .iter()
+            .find(|attribution| attribution.record_id == "lesson-fail")
+            .unwrap();
+        assert_eq!(failed.amount, 0.32);
+        assert!(failed.reason_codes.contains(&"execution_failed".to_owned()));
+        let rejected = report
+            .attributions
+            .iter()
+            .find(|attribution| attribution.record_id == "lesson-reject")
+            .unwrap();
+        assert_eq!(rejected.amount, 0.18);
+        assert!(
+            rejected
+                .reason_codes
+                .contains(&"result_rejected".to_owned())
+        );
+        assert!(
+            report
+                .attributions
+                .iter()
+                .all(|attribution| attribution.task_id != "unsafe-sidecar")
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_recall_outcome_attribution_penalize=2")
+        );
+    }
+
+    #[test]
+    fn recall_outcome_attribution_skips_accepted_recall_without_execution_outcome() {
+        let task = AgentTask::new(
+            "missing-outcome",
+            AgentRole::Coder,
+            "reuse memory but execution is absent",
+            AgentBudget::new(8, 1, 1),
+        );
+        let recall_context = MemoryRecallContextPlanner::new().plan_from_records(
+            &task,
+            "role:coder lane:default objective:reuse memory but execution is absent".to_owned(),
+            vec![MemoryRecord::new(
+                "lesson-missing",
+                "needs execution result before attribution",
+                "long_term",
+            )],
+        );
+        let recall_plan = AgentWaveMemoryRecallPlan {
+            contexts: vec![recall_context],
+            telemetry: Vec::new(),
+        };
+        let execution = AgentWaveExecution {
+            results: Vec::new(),
+            failures: Vec::new(),
+        };
+
+        let report = AgentRecallOutcomeAttributionPlanner::new().plan(&recall_plan, &execution);
+
+        assert!(!report.has_updates());
+        assert_eq!(
+            report.skipped_missing_outcome_task_ids,
+            vec!["missing-outcome".to_owned()]
+        );
+        assert!(report.telemetry.iter().any(|line| {
+            line == "agent_recall_outcome_attribution_skipped_missing_outcome_tasks=1"
+        }));
     }
 
     #[test]

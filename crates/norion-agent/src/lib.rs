@@ -581,14 +581,16 @@ pub use loopback::{
 };
 pub use memory::{
     AgentMemoryReuseExecutionPreflightPlanner, AgentMemoryReuseExecutionPreflightPolicy,
-    AgentMemoryReuseExecutionPreflightReport, AgentWaveMemoryRecallPlan,
-    AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter, MemoryPromotionGate,
-    MemoryPromotionGateDecision, MemoryRecallContext, MemoryRecallContextPlanner,
-    MemoryRecallDecision, MemoryRecallDecisionKind, MemoryRecallDryRunEvidence, MemoryRecallItem,
-    MemoryRecallPolicy, MemorySubmissionDashboard, MemorySubmissionFailure,
-    MemorySubmissionGateDecision, MemorySubmissionHealth, MemorySubmissionHealthPolicy,
-    MemorySubmissionHealthStatus, MemorySubmissionReport, MemorySubmissionSummary,
-    MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
+    AgentMemoryReuseExecutionPreflightReport, AgentRecallOutcomeAttribution,
+    AgentRecallOutcomeAttributionAction, AgentRecallOutcomeAttributionPlanner,
+    AgentRecallOutcomeAttributionPolicy, AgentRecallOutcomeAttributionReport,
+    AgentWaveMemoryRecallPlan, AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter,
+    MemoryPromotionGate, MemoryPromotionGateDecision, MemoryRecallContext,
+    MemoryRecallContextPlanner, MemoryRecallDecision, MemoryRecallDecisionKind,
+    MemoryRecallDryRunEvidence, MemoryRecallItem, MemoryRecallPolicy, MemorySubmissionDashboard,
+    MemorySubmissionFailure, MemorySubmissionGateDecision, MemorySubmissionHealth,
+    MemorySubmissionHealthPolicy, MemorySubmissionHealthStatus, MemorySubmissionReport,
+    MemorySubmissionSummary, MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
     MemorySubmissionSummaryHistoryRecorder,
 };
 pub use message::{AgentMessage, AgentMessageKind};
