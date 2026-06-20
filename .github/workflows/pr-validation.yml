@@ -7,7 +7,9 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
       - "LICENSE"
+      - "crates/norion-agent/**"
       - "crates/norion-eval/**"
+      - "crates/norion-memory/**"
       - "crates/norion-test/**"
       - "tools/evolution-loop/**"
   push:
@@ -16,7 +18,9 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
       - "LICENSE"
+      - "crates/norion-agent/**"
       - "crates/norion-eval/**"
+      - "crates/norion-memory/**"
       - "crates/norion-test/**"
       - "tools/evolution-loop/**"
   workflow_dispatch:
@@ -30,7 +34,7 @@ concurrency:
 
 jobs:
   focused-rust:
-    name: norion-eval and evolution-loop
+    name: focused Rust crates
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -51,6 +55,12 @@ jobs:
 
       - name: Test norion-eval
         run: cargo +stable test --locked --package norion-eval
+
+      - name: Test norion-agent
+        run: cargo +stable test --locked --package norion-agent
+
+      - name: Test norion-memory
+        run: cargo +stable test --locked --package norion-memory
 
       - name: Test evolution-loop
         run: cargo +stable test --locked --manifest-path tools/evolution-loop/Cargo.toml

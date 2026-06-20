@@ -5869,6 +5869,358 @@ impl SelfImproveProposalMemoryReflectionReusePlanReportPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryRecallSidecarContractPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub context_surface_name: String,
+    pub wave_surface_name: String,
+    pub dry_run_evidence_surface_name: String,
+    pub entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_sidecar_only: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl AgentMemoryRecallSidecarContractPlan {
+    pub fn memory_recall_sidecar(name: impl Into<String>, stage: AdapterAcceptanceStage) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            context_surface_name: "agent_memory_recall_context".to_owned(),
+            wave_surface_name: "agent_wave_memory_recall".to_owned(),
+            dry_run_evidence_surface_name: "agent_memory_recall_dry_run_evidence".to_owned(),
+            entrypoints: vec![
+                "MemoryRecallContextPlanner::plan_for_task".to_owned(),
+                "MemoryRecallContextPlanner::plan_from_records".to_owned(),
+                "MemoryRecallContextPlanner::plan_from_dry_run_evidence".to_owned(),
+                "AgentWaveMemoryRecallPlanner::plan_dispatch".to_owned(),
+                "MemoryRecallContext::summary_line".to_owned(),
+                "AgentWaveMemoryRecallPlan::summary_line".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "AgentTask".to_owned(),
+                "AgentCycleDispatch".to_owned(),
+                "MemoryRecallPolicy".to_owned(),
+                "MemoryPort::recall".to_owned(),
+                "MemoryRecord".to_owned(),
+                "MemoryRecallDryRunEvidence".to_owned(),
+                "role".to_owned(),
+                "lane".to_owned(),
+                "objective".to_owned(),
+            ],
+            produced_outputs: vec![
+                "MemoryRecallContext".to_owned(),
+                "MemoryRecallDecision".to_owned(),
+                "MemoryRecallItem".to_owned(),
+                "MemoryRecallDryRunEvidence".to_owned(),
+                "AgentWaveMemoryRecallPlan".to_owned(),
+                "agent_memory_recall_context".to_owned(),
+                "agent_wave_memory_recall".to_owned(),
+                "agent_memory_recall_dry_run_evidence".to_owned(),
+            ],
+            required_fields: vec![
+                "memory_recall_policy.limit_per_task".to_owned(),
+                "memory_recall_policy.max_context_records_per_task".to_owned(),
+                "memory_recall_policy.max_summary_chars".to_owned(),
+                "memory_recall_context.task_id".to_owned(),
+                "memory_recall_context.query".to_owned(),
+                "memory_recall_context.requested_limit".to_owned(),
+                "memory_recall_context.returned_records".to_owned(),
+                "memory_recall_context.read_only".to_owned(),
+                "memory_recall_context.decisions".to_owned(),
+                "memory_recall_context.failure".to_owned(),
+                "memory_recall_context.telemetry".to_owned(),
+                "memory_recall_decision.kind".to_owned(),
+                "memory_recall_decision.reasons".to_owned(),
+                "memory_recall_item.id".to_owned(),
+                "memory_recall_item.source".to_owned(),
+                "memory_recall_item.summary".to_owned(),
+                "memory_recall_dry_run_evidence.read_only".to_owned(),
+                "memory_recall_dry_run_evidence.memory_store_write_allowed".to_owned(),
+                "memory_recall_dry_run_evidence.kv_prefetch_apply_allowed".to_owned(),
+                "memory_recall_dry_run_evidence.reason_codes".to_owned(),
+                "memory_recall_dry_run_evidence.detail_codes".to_owned(),
+                "agent_memory_recall_context.read_only".to_owned(),
+                "agent_memory_recall_context.reason_codes".to_owned(),
+                "agent_memory_recall_context.detail_codes".to_owned(),
+                "agent_wave_memory_recall.read_only".to_owned(),
+                "agent_memory_recall_dry_run_evidence.safe".to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "MemoryPort::propose_note".to_owned(),
+                "memory_note_submit".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_promotion_commit".to_owned(),
+                "ndkv_write".to_owned(),
+                "kv_prefetch_apply".to_owned(),
+                "model_call".to_owned(),
+                "prompt_execution".to_owned(),
+                "prompt_injection".to_owned(),
+                "task_dispatch".to_owned(),
+                "engine_run_task".to_owned(),
+                "process_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "http_sse".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_sidecar_only: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-agent\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.entrypoints.iter().any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs.iter().any(|item| item == output)
+    }
+
+    pub fn requires_field(&self, field: &str) -> bool {
+        self.required_fields
+            .iter()
+            .any(|required| required == field)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn may_write_memory(&self) -> bool {
+        false
+    }
+
+    pub fn may_dispatch_tasks(&self) -> bool {
+        false
+    }
+
+    pub fn may_inject_prompt_context(&self) -> bool {
+        false
+    }
+
+    pub fn stays_read_only_sidecar_boundary(&self) -> bool {
+        self.context_surface_name == "agent_memory_recall_context"
+            && self.wave_surface_name == "agent_wave_memory_recall"
+            && self.dry_run_evidence_surface_name == "agent_memory_recall_dry_run_evidence"
+            && self.require_read_only
+            && self.require_sidecar_only
+            && self.exposes_entrypoint("MemoryRecallContextPlanner::plan_for_task")
+            && self.exposes_entrypoint("MemoryRecallContextPlanner::plan_from_dry_run_evidence")
+            && self.exposes_entrypoint("AgentWaveMemoryRecallPlanner::plan_dispatch")
+            && self.allows_input("MemoryPort::recall")
+            && self.allows_input("MemoryRecallDryRunEvidence")
+            && !self.allows_input("EnginePort")
+            && !self.allows_input("ToolBuildPort")
+            && self.produces_output("MemoryRecallContext")
+            && self.produces_output("AgentWaveMemoryRecallPlan")
+            && self.requires_field("memory_recall_context.read_only")
+            && self.requires_field("memory_recall_dry_run_evidence.memory_store_write_allowed")
+            && self.requires_field("memory_recall_dry_run_evidence.kv_prefetch_apply_allowed")
+            && self.requires_field("agent_memory_recall_dry_run_evidence.safe")
+            && [
+                "MemoryPort::propose_note",
+                "memory_store_write",
+                "memory_promotion_commit",
+                "ndkv_write",
+                "kv_prefetch_apply",
+                "model_call",
+                "prompt_execution",
+                "prompt_injection",
+                "task_dispatch",
+                "engine_run_task",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryReuseDryRunSummaryContractPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub summary_surface_name: String,
+    pub entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_dry_run_only: bool,
+    pub require_write_disabled: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl MemoryReuseDryRunSummaryContractPlan {
+    pub fn memory_reuse_dry_run_summary(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            summary_surface_name: "memory_reuse_dry_run".to_owned(),
+            entrypoints: vec![
+                "DefaultMemoryReusePlanner::plan_from_candidates".to_owned(),
+                "DefaultMemoryReusePlanner::plan_from_long_term".to_owned(),
+                "MemoryReusePlan::dry_run_summary".to_owned(),
+                "MemoryReusePlan::summary_line".to_owned(),
+                "DefaultMemoryReusePlanner::descriptor".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "ContextCandidate".to_owned(),
+                "MemoryRequestContext".to_owned(),
+                "LongTermMemory".to_owned(),
+                "LongTermQuery".to_owned(),
+                "ContextInjectionGate".to_owned(),
+                "KvSwap::plan_prefetch".to_owned(),
+                "kv_metadata".to_owned(),
+            ],
+            produced_outputs: vec![
+                "MemoryReusePlan".to_owned(),
+                "MemoryReuseDryRunSummary".to_owned(),
+                "memory_reuse_dry_run".to_owned(),
+            ],
+            required_fields: vec![
+                "memory_reuse_plan.read_only".to_owned(),
+                "memory_reuse_plan.candidate_count".to_owned(),
+                "memory_reuse_plan.long_term_matches".to_owned(),
+                "memory_reuse_plan.context_plan".to_owned(),
+                "memory_reuse_plan.requested_kv_ids".to_owned(),
+                "memory_reuse_plan.kv_prefetch_plan".to_owned(),
+                "memory_reuse_dry_run.read_only".to_owned(),
+                "memory_reuse_dry_run.candidate_count".to_owned(),
+                "memory_reuse_dry_run.long_term_match_count".to_owned(),
+                "memory_reuse_dry_run.context_decision_count".to_owned(),
+                "memory_reuse_dry_run.accepted_context_count".to_owned(),
+                "memory_reuse_dry_run.rejected_context_count".to_owned(),
+                "memory_reuse_dry_run.used_tokens".to_owned(),
+                "memory_reuse_dry_run.requested_kv_count".to_owned(),
+                "memory_reuse_dry_run.kv_promote_count".to_owned(),
+                "memory_reuse_dry_run.kv_missing_count".to_owned(),
+                "memory_reuse_dry_run.kv_already_hot_count".to_owned(),
+                "memory_reuse_dry_run.kv_duplicate_count".to_owned(),
+                "memory_reuse_dry_run.kv_backend_available".to_owned(),
+                "memory_reuse_dry_run.memory_store_write_allowed".to_owned(),
+                "memory_reuse_dry_run.kv_prefetch_apply_allowed".to_owned(),
+                "memory_reuse_dry_run.reason_codes".to_owned(),
+                "memory_reuse_dry_run.detail_codes".to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "long_term_memory_write".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_promotion_commit".to_owned(),
+                "kv_prefetch_apply".to_owned(),
+                "kv_swap_mutation".to_owned(),
+                "ndkv_write".to_owned(),
+                "model_call".to_owned(),
+                "prompt_execution".to_owned(),
+                "process_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "http_sse".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_dry_run_only: true,
+            require_write_disabled: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-memory\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.entrypoints.iter().any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs.iter().any(|item| item == output)
+    }
+
+    pub fn requires_field(&self, field: &str) -> bool {
+        self.required_fields
+            .iter()
+            .any(|required| required == field)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn may_write_memory(&self) -> bool {
+        false
+    }
+
+    pub fn may_apply_kv_prefetch(&self) -> bool {
+        false
+    }
+
+    pub fn stays_read_only_dry_run_boundary(&self) -> bool {
+        self.summary_surface_name == "memory_reuse_dry_run"
+            && self.require_read_only
+            && self.require_dry_run_only
+            && self.require_write_disabled
+            && self.exposes_entrypoint("DefaultMemoryReusePlanner::plan_from_candidates")
+            && self.exposes_entrypoint("MemoryReusePlan::dry_run_summary")
+            && self.exposes_entrypoint("MemoryReusePlan::summary_line")
+            && self.allows_input("ContextCandidate")
+            && self.allows_input("MemoryRequestContext")
+            && self.allows_input("KvSwap::plan_prefetch")
+            && !self.allows_input("KvSwap::apply_prefetch")
+            && !self.allows_input("LongTermMemoryWriter")
+            && !self.allows_input("MemoryStoreWriter")
+            && self.produces_output("MemoryReusePlan")
+            && self.produces_output("MemoryReuseDryRunSummary")
+            && self.requires_field("memory_reuse_dry_run.read_only")
+            && self.requires_field("memory_reuse_dry_run.memory_store_write_allowed")
+            && self.requires_field("memory_reuse_dry_run.kv_prefetch_apply_allowed")
+            && self.requires_field("memory_reuse_dry_run.reason_codes")
+            && [
+                "long_term_memory_write",
+                "memory_store_write",
+                "memory_promotion_commit",
+                "kv_prefetch_apply",
+                "kv_swap_mutation",
+                "ndkv_write",
+                "model_call",
+                "prompt_execution",
+                "process_spawn",
+                "daemon_control",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HelperStageRepairPlan {
     pub name: String,
     pub stage: AdapterAcceptanceStage,
@@ -12402,6 +12754,157 @@ mod tests {
             r"cargo test --manifest-path .\crates\norion-eval\Cargo.toml"
         );
         assert!(report.stays_pure_data_boundary());
+    }
+
+    #[test]
+    fn agent_memory_recall_sidecar_contract_is_read_only() {
+        let report = AgentMemoryRecallSidecarContractPlan::memory_recall_sidecar(
+            "agent-memory-recall-sidecar-report",
+            AdapterAcceptanceStage::ReportOnly,
+        );
+        let enforced = AgentMemoryRecallSidecarContractPlan::memory_recall_sidecar(
+            "agent-memory-recall-sidecar-enforced",
+            AdapterAcceptanceStage::Enforced,
+        );
+
+        assert_eq!(enforced.context_surface_name, "agent_memory_recall_context");
+        assert_eq!(enforced.wave_surface_name, "agent_wave_memory_recall");
+        assert_eq!(
+            enforced.dry_run_evidence_surface_name,
+            "agent_memory_recall_dry_run_evidence"
+        );
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_sidecar_only);
+        assert!(enforced.exposes_entrypoint("MemoryRecallContextPlanner::plan_for_task"));
+        assert!(enforced.exposes_entrypoint("MemoryRecallContextPlanner::plan_from_records"));
+        assert!(
+            enforced.exposes_entrypoint("MemoryRecallContextPlanner::plan_from_dry_run_evidence")
+        );
+        assert!(enforced.exposes_entrypoint("AgentWaveMemoryRecallPlanner::plan_dispatch"));
+        assert!(enforced.allows_input("MemoryPort::recall"));
+        assert!(enforced.allows_input("MemoryRecallDryRunEvidence"));
+        assert!(!enforced.allows_input("EnginePort"));
+        assert!(!enforced.allows_input("ToolBuildPort"));
+        assert!(enforced.produces_output("MemoryRecallContext"));
+        assert!(enforced.produces_output("MemoryRecallDryRunEvidence"));
+        assert!(enforced.produces_output("AgentWaveMemoryRecallPlan"));
+        assert!(enforced.requires_field("memory_recall_context.read_only"));
+        assert!(
+            enforced.requires_field("memory_recall_dry_run_evidence.memory_store_write_allowed")
+        );
+        assert!(
+            enforced.requires_field("memory_recall_dry_run_evidence.kv_prefetch_apply_allowed")
+        );
+        assert!(enforced.requires_field("agent_memory_recall_dry_run_evidence.safe"));
+        for forbidden in [
+            "MemoryPort::propose_note",
+            "memory_store_write",
+            "memory_promotion_commit",
+            "ndkv_write",
+            "kv_prefetch_apply",
+            "model_call",
+            "prompt_execution",
+            "prompt_injection",
+            "task_dispatch",
+            "engine_run_task",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden memory recall capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_read_only_sidecar_boundary());
+        assert!(!report.may_write_memory());
+        assert!(!report.may_dispatch_tasks());
+        assert!(!report.may_inject_prompt_context());
+        assert!(!enforced.may_write_memory());
+        assert!(!enforced.may_dispatch_tasks());
+        assert!(!enforced.may_inject_prompt_context());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-agent\Cargo.toml"
+        );
+        assert!(report.stays_read_only_sidecar_boundary());
+    }
+
+    #[test]
+    fn memory_reuse_dry_run_summary_contract_disables_writes_and_apply() {
+        let report = MemoryReuseDryRunSummaryContractPlan::memory_reuse_dry_run_summary(
+            "memory-reuse-dry-run-summary-report",
+            AdapterAcceptanceStage::ReportOnly,
+        );
+        let enforced = MemoryReuseDryRunSummaryContractPlan::memory_reuse_dry_run_summary(
+            "memory-reuse-dry-run-summary-enforced",
+            AdapterAcceptanceStage::Enforced,
+        );
+
+        assert_eq!(enforced.summary_surface_name, "memory_reuse_dry_run");
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_dry_run_only);
+        assert!(enforced.require_write_disabled);
+        assert!(enforced.exposes_entrypoint("DefaultMemoryReusePlanner::plan_from_candidates"));
+        assert!(enforced.exposes_entrypoint("DefaultMemoryReusePlanner::plan_from_long_term"));
+        assert!(enforced.exposes_entrypoint("MemoryReusePlan::dry_run_summary"));
+        assert!(enforced.exposes_entrypoint("MemoryReusePlan::summary_line"));
+        assert!(enforced.allows_input("ContextCandidate"));
+        assert!(enforced.allows_input("MemoryRequestContext"));
+        assert!(enforced.allows_input("KvSwap::plan_prefetch"));
+        assert!(!enforced.allows_input("KvSwap::apply_prefetch"));
+        assert!(!enforced.allows_input("LongTermMemoryWriter"));
+        assert!(!enforced.allows_input("MemoryStoreWriter"));
+        assert!(enforced.produces_output("MemoryReusePlan"));
+        assert!(enforced.produces_output("MemoryReuseDryRunSummary"));
+        assert!(enforced.produces_output("memory_reuse_dry_run"));
+        for field in [
+            "memory_reuse_plan.read_only",
+            "memory_reuse_plan.kv_prefetch_plan",
+            "memory_reuse_dry_run.read_only",
+            "memory_reuse_dry_run.accepted_context_count",
+            "memory_reuse_dry_run.rejected_context_count",
+            "memory_reuse_dry_run.requested_kv_count",
+            "memory_reuse_dry_run.kv_promote_count",
+            "memory_reuse_dry_run.kv_missing_count",
+            "memory_reuse_dry_run.memory_store_write_allowed",
+            "memory_reuse_dry_run.kv_prefetch_apply_allowed",
+            "memory_reuse_dry_run.reason_codes",
+            "memory_reuse_dry_run.detail_codes",
+        ] {
+            assert!(
+                enforced.requires_field(field),
+                "missing memory reuse dry-run field {field}"
+            );
+        }
+        for forbidden in [
+            "long_term_memory_write",
+            "memory_store_write",
+            "memory_promotion_commit",
+            "kv_prefetch_apply",
+            "kv_swap_mutation",
+            "ndkv_write",
+            "model_call",
+            "prompt_execution",
+            "process_spawn",
+            "daemon_control",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden dry-run capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_read_only_dry_run_boundary());
+        assert!(!report.may_write_memory());
+        assert!(!report.may_apply_kv_prefetch());
+        assert!(!enforced.may_write_memory());
+        assert!(!enforced.may_apply_kv_prefetch());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-memory\Cargo.toml"
+        );
+        assert!(report.stays_read_only_dry_run_boundary());
     }
 
     #[test]
