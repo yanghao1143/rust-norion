@@ -178,10 +178,16 @@ fn gemma4_12b_defaults_can_populate_cli_runtime_fields_once() {
 #[test]
 fn local_snapshot_path_infers_hf_cache_root() {
     let snapshot = "D:\\hf-cache\\hub\\models--google--gemma-4-12B-it\\snapshots\\5926caa";
+    let unix_snapshot =
+        "/home/runner/.cache/huggingface/hub/models--google--gemma-4-12B-it/snapshots/5926caa";
 
     assert_eq!(
         infer_hf_cache_from_local_snapshot(snapshot),
         Some(PathBuf::from("D:\\hf-cache"))
+    );
+    assert_eq!(
+        infer_hf_cache_from_local_snapshot(unix_snapshot),
+        Some(PathBuf::from("/home/runner/.cache/huggingface"))
     );
     assert_eq!(
         infer_hf_cache_from_local_snapshot(GEMMA4_12B_MODEL_ID),

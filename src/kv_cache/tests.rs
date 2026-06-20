@@ -59,6 +59,37 @@ fn runtime_kv_memories_do_not_fuse_with_semantic_memories() {
 }
 
 #[test]
+fn runtime_kv_memories_only_fuse_within_the_same_slot() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let first = cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+    let same_slot = cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: prompt lesson memory followup",
+        vec![0.99, 0.01, 0.0],
+        0.9,
+    );
+    let other_layer = cache.store_or_fuse(
+        "runtime_kv:l1h0:0-1 :: prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+    let other_token_range = cache.store_or_fuse(
+        "runtime_kv:l0h0:1-2 :: prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+
+    assert_eq!(first, same_slot);
+    assert_ne!(first, other_layer);
+    assert_ne!(first, other_token_range);
+    assert_ne!(other_layer, other_token_range);
+    assert_eq!(cache.len(), 3);
+}
+
+#[test]
 fn gist_memories_do_not_fuse_with_semantic_memories() {
     let mut cache = KvFusionCache::with_limits(0.7, 16);
     let semantic = cache.store_or_fuse("prompt lesson memory", vec![1.0, 0.0, 0.0], 0.9);
@@ -231,6 +262,43 @@ fn compaction_does_not_merge_runtime_kv_with_semantic_memory() {
     assert!(report.merged.is_empty());
     assert!(cache.entries().iter().any(|entry| entry.id == semantic));
     assert!(cache.entries().iter().any(|entry| entry.id == runtime_kv));
+}
+
+#[test]
+fn compaction_does_not_merge_different_runtime_kv_slots() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let first = cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: semantic duplicate",
+        vec![1.0, 0.0, 0.0],
+        0.95,
+    );
+    let other_layer = cache.store_or_fuse(
+        "runtime_kv:l1h0:0-1 :: semantic duplicate",
+        vec![1.0, 0.0, 0.0],
+        0.95,
+    );
+    let other_token_range = cache.store_or_fuse(
+        "runtime_kv:l0h0:1-2 :: semantic duplicate",
+        vec![1.0, 0.0, 0.0],
+        0.95,
+    );
+
+    let report = cache.compact_similar(MemoryCompactionPolicy {
+        similarity_threshold: 0.90,
+        max_candidates: 16,
+        max_merges: 8,
+    });
+
+    assert_eq!(report.after, 3);
+    assert!(report.merged.is_empty());
+    assert!(cache.entries().iter().any(|entry| entry.id == first));
+    assert!(cache.entries().iter().any(|entry| entry.id == other_layer));
+    assert!(
+        cache
+            .entries()
+            .iter()
+            .any(|entry| entry.id == other_token_range)
+    );
 }
 
 #[test]
