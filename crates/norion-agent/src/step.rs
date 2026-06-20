@@ -889,6 +889,321 @@ impl AgentClosedLoopMemoryReusePreflightExecutionReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightExecutionSummary {
+    pub clean: bool,
+    pub preflight_present: bool,
+    pub preflight_clean: bool,
+    pub memory_reuse_ready: bool,
+    pub can_enter_execution: bool,
+    pub execution_complete: bool,
+    pub saved_compute: bool,
+    pub planned_engine_calls: usize,
+    pub executed_engine_calls: usize,
+    pub skipped_engine_calls: usize,
+    pub blocked_reasons: Vec<String>,
+}
+
+impl AgentClosedLoopMemoryReusePreflightExecutionSummary {
+    pub fn from_report(report: &AgentClosedLoopMemoryReusePreflightExecutionReport) -> Self {
+        Self {
+            clean: report.is_clean(),
+            preflight_present: report.preflight.is_some(),
+            preflight_clean: report.preflight_clean,
+            memory_reuse_ready: report.memory_reuse_ready,
+            can_enter_execution: report.can_enter_execution,
+            execution_complete: report.execution_complete,
+            saved_compute: report.saved_compute(),
+            planned_engine_calls: report.planned_engine_calls,
+            executed_engine_calls: report.executed_engine_calls,
+            skipped_engine_calls: report.skipped_engine_calls,
+            blocked_reasons: report.blocked_reasons.clone(),
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "agent_memory_reuse_preflight_execution_summary clean={} preflight_present={} memory_reuse_ready={} can_enter_execution={} execution_complete={} saved_compute={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} blocked_reasons={}",
+            self.clean,
+            self.preflight_present,
+            self.memory_reuse_ready,
+            self.can_enter_execution,
+            self.execution_complete,
+            self.saved_compute,
+            self.planned_engine_calls,
+            self.executed_engine_calls,
+            self.skipped_engine_calls,
+            self.blocked_reasons.len(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct AgentClosedLoopMemoryReusePreflightExecutionHistory {
+    summaries: Vec<AgentClosedLoopMemoryReusePreflightExecutionSummary>,
+}
+
+impl AgentClosedLoopMemoryReusePreflightExecutionHistory {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_summaries(
+        summaries: Vec<AgentClosedLoopMemoryReusePreflightExecutionSummary>,
+    ) -> Self {
+        Self { summaries }
+    }
+
+    pub fn push(&mut self, summary: AgentClosedLoopMemoryReusePreflightExecutionSummary) {
+        self.summaries.push(summary);
+    }
+
+    pub fn record_report(&mut self, report: &AgentClosedLoopMemoryReusePreflightExecutionReport) {
+        self.push(AgentClosedLoopMemoryReusePreflightExecutionSummary::from_report(report));
+    }
+
+    pub fn summaries(&self) -> &[AgentClosedLoopMemoryReusePreflightExecutionSummary] {
+        &self.summaries
+    }
+
+    pub fn latest(&self) -> Option<&AgentClosedLoopMemoryReusePreflightExecutionSummary> {
+        self.summaries.last()
+    }
+
+    pub fn len(&self) -> usize {
+        self.summaries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.summaries.is_empty()
+    }
+
+    pub fn dashboard(&self) -> AgentClosedLoopMemoryReusePreflightExecutionDashboard {
+        AgentClosedLoopMemoryReusePreflightExecutionDashboard::from_summaries(&self.summaries)
+    }
+
+    pub fn health(
+        &self,
+        policy: AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy,
+    ) -> AgentClosedLoopMemoryReusePreflightExecutionHealth {
+        self.dashboard().health(policy)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightExecutionDashboard {
+    pub total_reports: usize,
+    pub clean_reports: usize,
+    pub blocked_reports: usize,
+    pub missing_preflight_reports: usize,
+    pub saved_compute_reports: usize,
+    pub clean_rate: f32,
+    pub planned_engine_calls: usize,
+    pub executed_engine_calls: usize,
+    pub skipped_engine_calls: usize,
+    pub skipped_engine_call_rate: f32,
+    pub latest_blocked_reasons: Vec<String>,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentClosedLoopMemoryReusePreflightExecutionDashboard {
+    pub fn from_summaries(
+        summaries: &[AgentClosedLoopMemoryReusePreflightExecutionSummary],
+    ) -> Self {
+        let total_reports = summaries.len();
+        let clean_reports = summaries.iter().filter(|summary| summary.clean).count();
+        let blocked_reports = summaries
+            .iter()
+            .filter(|summary| !summary.can_enter_execution || !summary.blocked_reasons.is_empty())
+            .count();
+        let missing_preflight_reports = summaries
+            .iter()
+            .filter(|summary| !summary.preflight_present)
+            .count();
+        let saved_compute_reports = summaries
+            .iter()
+            .filter(|summary| summary.saved_compute)
+            .count();
+        let planned_engine_calls = summaries
+            .iter()
+            .map(|summary| summary.planned_engine_calls)
+            .sum::<usize>();
+        let executed_engine_calls = summaries
+            .iter()
+            .map(|summary| summary.executed_engine_calls)
+            .sum::<usize>();
+        let skipped_engine_calls = summaries
+            .iter()
+            .map(|summary| summary.skipped_engine_calls)
+            .sum::<usize>();
+        let latest_blocked_reasons = summaries
+            .last()
+            .map(|summary| summary.blocked_reasons.clone())
+            .unwrap_or_default();
+        let telemetry = memory_reuse_preflight_execution_dashboard_telemetry(
+            total_reports,
+            clean_reports,
+            blocked_reports,
+            missing_preflight_reports,
+            saved_compute_reports,
+            planned_engine_calls,
+            executed_engine_calls,
+            skipped_engine_calls,
+        );
+
+        Self {
+            total_reports,
+            clean_reports,
+            blocked_reports,
+            missing_preflight_reports,
+            saved_compute_reports,
+            clean_rate: rate(clean_reports, total_reports),
+            planned_engine_calls,
+            executed_engine_calls,
+            skipped_engine_calls,
+            skipped_engine_call_rate: rate(skipped_engine_calls, planned_engine_calls),
+            latest_blocked_reasons,
+            telemetry,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.total_reports == 0
+    }
+
+    pub fn health(
+        &self,
+        policy: AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy,
+    ) -> AgentClosedLoopMemoryReusePreflightExecutionHealth {
+        AgentClosedLoopMemoryReusePreflightExecutionHealth::from_dashboard(self.clone(), policy)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentClosedLoopMemoryReusePreflightExecutionHealthStatus {
+    Stable,
+    Watch,
+    Repair,
+}
+
+impl AgentClosedLoopMemoryReusePreflightExecutionHealthStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Watch => "watch",
+            Self::Repair => "repair",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy {
+    pub minimum_clean_rate: f32,
+    pub maximum_blocked_reports: usize,
+    pub maximum_missing_preflight_reports: usize,
+    pub maximum_skipped_engine_calls: usize,
+}
+
+impl Default for AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy {
+    fn default() -> Self {
+        Self {
+            minimum_clean_rate: 1.0,
+            maximum_blocked_reports: 0,
+            maximum_missing_preflight_reports: 0,
+            maximum_skipped_engine_calls: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightExecutionHealth {
+    pub status: AgentClosedLoopMemoryReusePreflightExecutionHealthStatus,
+    pub reasons: Vec<String>,
+    pub dashboard: AgentClosedLoopMemoryReusePreflightExecutionDashboard,
+}
+
+impl AgentClosedLoopMemoryReusePreflightExecutionHealth {
+    pub fn from_dashboard(
+        dashboard: AgentClosedLoopMemoryReusePreflightExecutionDashboard,
+        policy: AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy,
+    ) -> Self {
+        let mut repair_reasons = Vec::new();
+        let mut watch_reasons = Vec::new();
+
+        if dashboard.is_empty() {
+            watch_reasons.push("memory_reuse_preflight_execution_history_empty".to_owned());
+        }
+
+        if dashboard.missing_preflight_reports > policy.maximum_missing_preflight_reports {
+            repair_reasons.push(format!(
+                "memory_reuse_missing_preflight_reports={}>{}",
+                dashboard.missing_preflight_reports, policy.maximum_missing_preflight_reports
+            ));
+        }
+        if dashboard.blocked_reports > policy.maximum_blocked_reports {
+            repair_reasons.push(format!(
+                "memory_reuse_blocked_reports={}>{}",
+                dashboard.blocked_reports, policy.maximum_blocked_reports
+            ));
+        }
+
+        if !dashboard.is_empty() && dashboard.clean_rate < policy.minimum_clean_rate {
+            watch_reasons.push(format!(
+                "memory_reuse_clean_rate={:.3}<{}",
+                dashboard.clean_rate, policy.minimum_clean_rate
+            ));
+        }
+        if dashboard.skipped_engine_calls > policy.maximum_skipped_engine_calls {
+            watch_reasons.push(format!(
+                "memory_reuse_skipped_engine_calls={}>{}",
+                dashboard.skipped_engine_calls, policy.maximum_skipped_engine_calls
+            ));
+        }
+        if !dashboard.latest_blocked_reasons.is_empty() {
+            watch_reasons.push(format!(
+                "memory_reuse_latest_blocked={}",
+                dashboard.latest_blocked_reasons.join(";")
+            ));
+        }
+
+        let (status, reasons) = if !repair_reasons.is_empty() {
+            repair_reasons.extend(watch_reasons);
+            (
+                AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair,
+                repair_reasons,
+            )
+        } else if !watch_reasons.is_empty() {
+            (
+                AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Watch,
+                watch_reasons,
+            )
+        } else {
+            (
+                AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Stable,
+                Vec::new(),
+            )
+        };
+
+        Self {
+            status,
+            reasons,
+            dashboard,
+        }
+    }
+
+    pub fn is_stable(&self) -> bool {
+        self.status == AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Stable
+    }
+
+    pub fn allows_execution_advance(&self) -> bool {
+        self.status != AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+    }
+
+    pub fn requires_repair_first(&self) -> bool {
+        self.status == AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+    }
+}
+
 impl AgentClosedLoopMemoryReusePreflightExecutor {
     pub fn new() -> Self {
         Self {
@@ -1194,6 +1509,39 @@ fn memory_reuse_preflight_execution_telemetry(
             .map(|reason| format!("agent_memory_reuse_preflight_blocked_reason={reason}")),
     );
     telemetry
+}
+
+fn memory_reuse_preflight_execution_dashboard_telemetry(
+    total_reports: usize,
+    clean_reports: usize,
+    blocked_reports: usize,
+    missing_preflight_reports: usize,
+    saved_compute_reports: usize,
+    planned_engine_calls: usize,
+    executed_engine_calls: usize,
+    skipped_engine_calls: usize,
+) -> Vec<String> {
+    vec![
+        "agent_memory_reuse_preflight_execution_dashboard=true".to_owned(),
+        format!("agent_memory_reuse_preflight_execution_reports={total_reports}"),
+        format!("agent_memory_reuse_preflight_execution_clean_reports={clean_reports}"),
+        format!("agent_memory_reuse_preflight_execution_blocked_reports={blocked_reports}"),
+        format!(
+            "agent_memory_reuse_preflight_execution_missing_preflight_reports={missing_preflight_reports}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_saved_compute_reports={saved_compute_reports}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_planned_engine_calls={planned_engine_calls}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_executed_engine_calls={executed_engine_calls}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_skipped_engine_calls={skipped_engine_calls}"
+        ),
+    ]
 }
 
 #[cfg(test)]
@@ -1552,6 +1900,35 @@ mod tests {
         }
     }
 
+    fn memory_reuse_preflight_execution_summary(
+        clean: bool,
+        preflight_present: bool,
+        memory_reuse_ready: bool,
+        can_enter_execution: bool,
+        execution_complete: bool,
+        planned_engine_calls: usize,
+        executed_engine_calls: usize,
+        skipped_engine_calls: usize,
+        blocked_reasons: Vec<&str>,
+    ) -> AgentClosedLoopMemoryReusePreflightExecutionSummary {
+        AgentClosedLoopMemoryReusePreflightExecutionSummary {
+            clean,
+            preflight_present,
+            preflight_clean: clean,
+            memory_reuse_ready,
+            can_enter_execution,
+            execution_complete,
+            saved_compute: skipped_engine_calls > 0,
+            planned_engine_calls,
+            executed_engine_calls,
+            skipped_engine_calls,
+            blocked_reasons: blocked_reasons
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        }
+    }
+
     #[test]
     fn closed_loop_execution_history_summarizes_dashboard_pressure() {
         let history = AgentClosedLoopExecutionHistory::from_summaries(vec![
@@ -1620,6 +1997,142 @@ mod tests {
             vec!["service_command_failed=emit_telemetry:writer offline"]
         );
         assert!(!dashboard.is_service_clean());
+    }
+
+    #[test]
+    fn memory_reuse_preflight_execution_history_marks_clean_reports_stable() {
+        let history = AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+            memory_reuse_preflight_execution_summary(
+                true,
+                true,
+                true,
+                true,
+                true,
+                1,
+                1,
+                0,
+                Vec::new(),
+            ),
+            memory_reuse_preflight_execution_summary(
+                true,
+                true,
+                true,
+                true,
+                true,
+                2,
+                2,
+                0,
+                Vec::new(),
+            ),
+        ]);
+
+        let dashboard = history.dashboard();
+        let health =
+            dashboard.health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        assert_eq!(history.len(), 2);
+        assert_eq!(dashboard.total_reports, 2);
+        assert_eq!(dashboard.clean_reports, 2);
+        assert_eq!(dashboard.blocked_reports, 0);
+        assert_eq!(dashboard.missing_preflight_reports, 0);
+        assert_eq!(dashboard.saved_compute_reports, 0);
+        assert_eq!(dashboard.planned_engine_calls, 3);
+        assert_eq!(dashboard.executed_engine_calls, 3);
+        assert_eq!(dashboard.skipped_engine_calls, 0);
+        assert_eq!(dashboard.clean_rate, 1.0);
+        assert_eq!(dashboard.skipped_engine_call_rate, 0.0);
+        assert!(health.is_stable());
+        assert_eq!(
+            health.status.as_str(),
+            AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Stable.as_str()
+        );
+        assert!(health.reasons.is_empty());
+        assert!(health.allows_execution_advance());
+        assert!(!health.requires_repair_first());
+        assert!(
+            dashboard
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_memory_reuse_preflight_execution_clean_reports=2")
+        );
+    }
+
+    #[test]
+    fn memory_reuse_preflight_execution_history_repairs_missing_or_blocked_preflight() {
+        let history = AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+            memory_reuse_preflight_execution_summary(
+                true,
+                true,
+                true,
+                true,
+                true,
+                1,
+                1,
+                0,
+                Vec::new(),
+            ),
+            memory_reuse_preflight_execution_summary(
+                false,
+                false,
+                false,
+                false,
+                false,
+                1,
+                0,
+                1,
+                vec!["memory_reuse_preflight_not_executable"],
+            ),
+        ]);
+
+        let dashboard = history.dashboard();
+        let health =
+            history.health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        assert_eq!(dashboard.total_reports, 2);
+        assert_eq!(dashboard.clean_reports, 1);
+        assert_eq!(dashboard.blocked_reports, 1);
+        assert_eq!(dashboard.missing_preflight_reports, 1);
+        assert_eq!(dashboard.saved_compute_reports, 1);
+        assert_eq!(dashboard.planned_engine_calls, 2);
+        assert_eq!(dashboard.executed_engine_calls, 1);
+        assert_eq!(dashboard.skipped_engine_calls, 1);
+        assert!((dashboard.clean_rate - 0.5).abs() < 0.01);
+        assert!((dashboard.skipped_engine_call_rate - 0.5).abs() < 0.01);
+        assert_eq!(
+            dashboard.latest_blocked_reasons,
+            vec!["memory_reuse_preflight_not_executable"]
+        );
+        assert_eq!(
+            health.status,
+            AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+        );
+        assert!(!health.allows_execution_advance());
+        assert!(health.requires_repair_first());
+        assert!(
+            health
+                .reasons
+                .iter()
+                .any(|reason| reason == "memory_reuse_missing_preflight_reports=1>0")
+        );
+        assert!(
+            health
+                .reasons
+                .iter()
+                .any(|reason| reason == "memory_reuse_blocked_reports=1>0")
+        );
+        assert!(
+            health
+                .reasons
+                .iter()
+                .any(|reason| reason == "memory_reuse_skipped_engine_calls=1>0")
+        );
+        assert!(
+            history
+                .latest()
+                .unwrap()
+                .summary_line()
+                .contains("saved_compute=true")
+        );
     }
 
     #[test]
@@ -2244,6 +2757,14 @@ mod tests {
                 .any(|line| line == "agent_memory_reuse_skipped_engine_calls=0")
         );
         assert!(report.summary_line().contains("execution_complete=true"));
+        let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
+        history.record_report(&report);
+        assert_eq!(history.latest().unwrap().executed_engine_calls, 1);
+        assert!(
+            history
+                .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default())
+                .is_stable()
+        );
     }
 
     #[test]
@@ -2323,6 +2844,14 @@ mod tests {
                 .any(|line| line == "agent_memory_reuse_skipped_engine_calls=1")
         );
         assert!(report.summary_line().contains("skipped_engine_calls=1"));
+        let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
+        history.record_report(&report);
+        let health =
+            history.health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        assert_eq!(
+            health.status,
+            AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+        );
     }
 
     #[test]
