@@ -6221,6 +6221,232 @@ impl MemoryReuseDryRunSummaryContractPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryReuseExecutionPreflightReportContractPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub report_surface_name: String,
+    pub prepared_surface_name: String,
+    pub entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub required_false_flags: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_report_only: bool,
+    pub require_clean_report_before_execution: bool,
+    pub require_repair_first_on_block: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl AgentMemoryReuseExecutionPreflightReportContractPlan {
+    pub fn memory_reuse_execution_preflight(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            report_surface_name: "agent_memory_reuse_execution_preflight".to_owned(),
+            prepared_surface_name: "agent_closed_loop_prepared_memory_reuse_preflight".to_owned(),
+            entrypoints: vec![
+                "AgentMemoryReuseExecutionPreflightPlanner::plan_for_dispatch".to_owned(),
+                "AgentMemoryReuseExecutionPreflightReport::summary_line".to_owned(),
+                "AgentMemoryReuseExecutionPreflightReport::reason_codes".to_owned(),
+                "AgentMemoryReuseExecutionPreflightReport::is_clean".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflightPlanner::plan".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflight::can_enter_execution".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflight::requires_repair_first".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "AgentCycleDispatch".to_owned(),
+                "AgentTask".to_owned(),
+                "AgentWaveMemoryRecallPlan".to_owned(),
+                "MemoryRecallContext".to_owned(),
+                "MemoryRecallDryRunEvidence".to_owned(),
+                "AgentMemoryReuseExecutionPreflightPolicy".to_owned(),
+                "read_only_recall_context".to_owned(),
+                "dry_run_summary_evidence".to_owned(),
+            ],
+            produced_outputs: vec![
+                "AgentMemoryReuseExecutionPreflightReport".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflight".to_owned(),
+                "agent_memory_reuse_execution_preflight".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight".to_owned(),
+            ],
+            required_fields: vec![
+                "agent_memory_reuse_execution_preflight.task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.missing_recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.unexpected_recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.failed_recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.dry_run_evidence_sources".to_owned(),
+                "agent_memory_reuse_execution_preflight.unsafe_dry_run_sources".to_owned(),
+                "agent_memory_reuse_execution_preflight.read_only".to_owned(),
+                "agent_memory_reuse_execution_preflight.memory_reuse_ready".to_owned(),
+                "agent_memory_reuse_execution_preflight.can_enter_execution".to_owned(),
+                "agent_memory_reuse_execution_preflight.requires_repair_first".to_owned(),
+                "agent_memory_reuse_execution_preflight.prompt_injection_allowed".to_owned(),
+                "agent_memory_reuse_execution_preflight.engine_port_touched".to_owned(),
+                "agent_memory_reuse_execution_preflight.memory_store_write_allowed".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed".to_owned(),
+                "agent_memory_reuse_execution_preflight.accepted_recall_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.rejected_recall_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.dry_run_evidence_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_requested_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_promote_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_missing_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_already_hot_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_duplicate_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.blocked_reasons".to_owned(),
+                "agent_memory_reuse_execution_preflight.reason_codes".to_owned(),
+                "agent_memory_reuse_execution_preflight.telemetry".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.preflight".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.skipped_reasons".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.can_enter_execution".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.requires_repair_first"
+                    .to_owned(),
+            ],
+            required_false_flags: vec![
+                "agent_memory_reuse_execution_preflight.prompt_injection_allowed=false".to_owned(),
+                "agent_memory_reuse_execution_preflight.engine_port_touched=false".to_owned(),
+                "agent_memory_reuse_execution_preflight.memory_store_write_allowed=false"
+                    .to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed=false".to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "EnginePort::run_task".to_owned(),
+                "engine_run_task".to_owned(),
+                "MemoryPort::propose_note".to_owned(),
+                "memory_note_submit".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_promotion_commit".to_owned(),
+                "kv_prefetch_apply".to_owned(),
+                "kv_swap_mutation".to_owned(),
+                "ndkv_write".to_owned(),
+                "model_call".to_owned(),
+                "prompt_execution".to_owned(),
+                "prompt_injection".to_owned(),
+                "task_dispatch".to_owned(),
+                "process_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "http_sse".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_report_only: true,
+            require_clean_report_before_execution: true,
+            require_repair_first_on_block: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-agent\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.entrypoints.iter().any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs.iter().any(|item| item == output)
+    }
+
+    pub fn requires_field(&self, field: &str) -> bool {
+        self.required_fields
+            .iter()
+            .any(|required| required == field)
+    }
+
+    pub fn requires_false_flag(&self, flag: &str) -> bool {
+        self.required_false_flags
+            .iter()
+            .any(|required| required == flag)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn may_touch_engine_port(&self) -> bool {
+        false
+    }
+
+    pub fn may_write_memory(&self) -> bool {
+        false
+    }
+
+    pub fn may_apply_kv_prefetch(&self) -> bool {
+        false
+    }
+
+    pub fn may_dispatch_tasks(&self) -> bool {
+        false
+    }
+
+    pub fn may_inject_prompt_context(&self) -> bool {
+        false
+    }
+
+    pub fn stays_report_only_execution_preflight_boundary(&self) -> bool {
+        self.report_surface_name == "agent_memory_reuse_execution_preflight"
+            && self.prepared_surface_name == "agent_closed_loop_prepared_memory_reuse_preflight"
+            && self.require_read_only
+            && self.require_report_only
+            && self.require_clean_report_before_execution
+            && self.require_repair_first_on_block
+            && self
+                .exposes_entrypoint("AgentMemoryReuseExecutionPreflightPlanner::plan_for_dispatch")
+            && self.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::is_clean")
+            && self.exposes_entrypoint("AgentClosedLoopPreparedMemoryReusePreflightPlanner::plan")
+            && self.allows_input("AgentCycleDispatch")
+            && self.allows_input("AgentWaveMemoryRecallPlan")
+            && self.allows_input("MemoryRecallDryRunEvidence")
+            && !self.allows_input("EnginePort")
+            && !self.allows_input("MemoryStoreWriter")
+            && self.produces_output("AgentMemoryReuseExecutionPreflightReport")
+            && self.produces_output("AgentClosedLoopPreparedMemoryReusePreflight")
+            && self.requires_field("agent_memory_reuse_execution_preflight.read_only")
+            && self.requires_field("agent_memory_reuse_execution_preflight.can_enter_execution")
+            && self.requires_field("agent_memory_reuse_execution_preflight.requires_repair_first")
+            && self.requires_field("agent_memory_reuse_execution_preflight.reason_codes")
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.prompt_injection_allowed=false",
+            )
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.engine_port_touched=false",
+            )
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.memory_store_write_allowed=false",
+            )
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed=false",
+            )
+            && [
+                "EnginePort::run_task",
+                "MemoryPort::propose_note",
+                "memory_store_write",
+                "kv_prefetch_apply",
+                "ndkv_write",
+                "prompt_injection",
+                "task_dispatch",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolExtensionContractRow {
     pub operation: String,
     pub owning_crate: String,
@@ -13250,6 +13476,140 @@ mod tests {
             r"cargo test --manifest-path .\crates\norion-memory\Cargo.toml"
         );
         assert!(report.stays_read_only_dry_run_boundary());
+    }
+
+    #[test]
+    fn agent_memory_reuse_execution_preflight_contract_gates_execution_without_side_effects() {
+        let report =
+            AgentMemoryReuseExecutionPreflightReportContractPlan::memory_reuse_execution_preflight(
+                "memory-reuse-execution-preflight-report",
+                AdapterAcceptanceStage::ReportOnly,
+            );
+        let enforced =
+            AgentMemoryReuseExecutionPreflightReportContractPlan::memory_reuse_execution_preflight(
+                "memory-reuse-execution-preflight-enforced",
+                AdapterAcceptanceStage::Enforced,
+            );
+
+        assert_eq!(
+            enforced.report_surface_name,
+            "agent_memory_reuse_execution_preflight"
+        );
+        assert_eq!(
+            enforced.prepared_surface_name,
+            "agent_closed_loop_prepared_memory_reuse_preflight"
+        );
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_report_only);
+        assert!(enforced.require_clean_report_before_execution);
+        assert!(enforced.require_repair_first_on_block);
+        assert!(
+            enforced
+                .exposes_entrypoint("AgentMemoryReuseExecutionPreflightPlanner::plan_for_dispatch")
+        );
+        assert!(enforced.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::is_clean"));
+        assert!(
+            enforced.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::summary_line")
+        );
+        assert!(
+            enforced.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::reason_codes")
+        );
+        assert!(
+            enforced.exposes_entrypoint("AgentClosedLoopPreparedMemoryReusePreflightPlanner::plan")
+        );
+        assert!(enforced.exposes_entrypoint(
+            "AgentClosedLoopPreparedMemoryReusePreflight::can_enter_execution"
+        ));
+        assert!(enforced.allows_input("AgentCycleDispatch"));
+        assert!(enforced.allows_input("AgentTask"));
+        assert!(enforced.allows_input("AgentWaveMemoryRecallPlan"));
+        assert!(enforced.allows_input("MemoryRecallDryRunEvidence"));
+        assert!(enforced.allows_input("AgentMemoryReuseExecutionPreflightPolicy"));
+        assert!(!enforced.allows_input("EnginePort"));
+        assert!(!enforced.allows_input("MemoryStoreWriter"));
+        assert!(enforced.produces_output("AgentMemoryReuseExecutionPreflightReport"));
+        assert!(enforced.produces_output("AgentClosedLoopPreparedMemoryReusePreflight"));
+        for field in [
+            "agent_memory_reuse_execution_preflight.task_ids",
+            "agent_memory_reuse_execution_preflight.recall_task_ids",
+            "agent_memory_reuse_execution_preflight.dry_run_evidence_sources",
+            "agent_memory_reuse_execution_preflight.read_only",
+            "agent_memory_reuse_execution_preflight.memory_reuse_ready",
+            "agent_memory_reuse_execution_preflight.can_enter_execution",
+            "agent_memory_reuse_execution_preflight.requires_repair_first",
+            "agent_memory_reuse_execution_preflight.prompt_injection_allowed",
+            "agent_memory_reuse_execution_preflight.engine_port_touched",
+            "agent_memory_reuse_execution_preflight.memory_store_write_allowed",
+            "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed",
+            "agent_memory_reuse_execution_preflight.accepted_recall_count",
+            "agent_memory_reuse_execution_preflight.rejected_recall_count",
+            "agent_memory_reuse_execution_preflight.dry_run_evidence_count",
+            "agent_memory_reuse_execution_preflight.kv_requested_count",
+            "agent_memory_reuse_execution_preflight.kv_promote_count",
+            "agent_memory_reuse_execution_preflight.kv_missing_count",
+            "agent_memory_reuse_execution_preflight.blocked_reasons",
+            "agent_memory_reuse_execution_preflight.reason_codes",
+            "agent_memory_reuse_execution_preflight.telemetry",
+            "agent_closed_loop_prepared_memory_reuse_preflight.preflight",
+            "agent_closed_loop_prepared_memory_reuse_preflight.skipped_reasons",
+            "agent_closed_loop_prepared_memory_reuse_preflight.can_enter_execution",
+            "agent_closed_loop_prepared_memory_reuse_preflight.requires_repair_first",
+        ] {
+            assert!(
+                enforced.requires_field(field),
+                "missing memory reuse execution preflight field {field}"
+            );
+        }
+        for flag in [
+            "agent_memory_reuse_execution_preflight.prompt_injection_allowed=false",
+            "agent_memory_reuse_execution_preflight.engine_port_touched=false",
+            "agent_memory_reuse_execution_preflight.memory_store_write_allowed=false",
+            "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed=false",
+        ] {
+            assert!(
+                enforced.requires_false_flag(flag),
+                "missing memory reuse execution preflight false flag {flag}"
+            );
+        }
+        for forbidden in [
+            "EnginePort::run_task",
+            "engine_run_task",
+            "MemoryPort::propose_note",
+            "memory_store_write",
+            "memory_promotion_commit",
+            "kv_prefetch_apply",
+            "kv_swap_mutation",
+            "ndkv_write",
+            "model_call",
+            "prompt_execution",
+            "prompt_injection",
+            "task_dispatch",
+            "process_spawn",
+            "daemon_control",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden memory reuse execution preflight capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_report_only_execution_preflight_boundary());
+        assert!(!report.may_touch_engine_port());
+        assert!(!report.may_write_memory());
+        assert!(!report.may_apply_kv_prefetch());
+        assert!(!report.may_dispatch_tasks());
+        assert!(!report.may_inject_prompt_context());
+        assert!(!enforced.may_touch_engine_port());
+        assert!(!enforced.may_write_memory());
+        assert!(!enforced.may_apply_kv_prefetch());
+        assert!(!enforced.may_dispatch_tasks());
+        assert!(!enforced.may_inject_prompt_context());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-agent\Cargo.toml"
+        );
+        assert!(report.stays_report_only_execution_preflight_boundary());
     }
 
     #[test]
