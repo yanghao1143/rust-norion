@@ -20,6 +20,7 @@ pub mod placement;
 pub mod repair;
 pub mod replay;
 pub mod retention;
+pub mod reuse;
 pub mod runtime_projection;
 pub mod service;
 pub mod short_term;
@@ -103,6 +104,9 @@ pub use retention::{
     DefaultMemoryRetentionPlanner, MemoryCompactionMerge, MemoryCompactionPlan,
     MemoryCompactionPlanner, MemoryCompactionPolicy, MemoryDecay, MemoryRetentionPlan,
     MemoryRetentionPlanner, MemoryRetentionPolicy, MemoryRetentionRemoval, RetentionMemoryEntry,
+};
+pub use reuse::{
+    DefaultMemoryReusePlanner, MemoryReusePlan, MemoryReusePlanner, MemoryReusePolicy,
 };
 pub use runtime_projection::{
     AdaptiveStateMemoryProjection, DefaultRuntimeStateProjector, MemoryProjectionAudit,
