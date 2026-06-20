@@ -1792,6 +1792,8 @@ impl LegacyLedgerReplayPlan {
                 "self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1".to_owned(),
                 "self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1"
                     .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1"
+                    .to_owned(),
                 "self_evolution_continuity_report_v1".to_owned(),
                 "self_evolution_regression_report_v1".to_owned(),
                 "self_evolution_unattended_prerequisites_report_v1".to_owned(),
@@ -9901,6 +9903,10 @@ mod tests {
                     .to_owned()
             )
         );
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1"
+                .to_owned()
+        ));
         assert!(
             plan.optional_additive_reports
                 .contains(&"self_evolution_continuity_report_v1".to_owned())
