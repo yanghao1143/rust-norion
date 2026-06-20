@@ -1282,6 +1282,14 @@ impl MemoryNoteQualityReport {
             .flat_map(|decision| decision.reasons.iter().cloned())
             .collect()
     }
+
+    pub fn admitted_indexes(&self) -> Vec<usize> {
+        self.decisions
+            .iter()
+            .filter(|decision| decision.kind.accepted())
+            .map(|decision| decision.index)
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1721,9 +1729,26 @@ impl MemoryHandoffSubmitter {
             };
         }
 
+        let note_quality = MemoryNoteQualityReport::from_notes(&handoff.memory_notes);
+        if !handoff.memory_notes.is_empty() && note_quality.admitted_notes == 0 {
+            let mut blocked_reasons = vec!["memory_submission_no_admitted_notes".to_owned()];
+            blocked_reasons.extend(
+                note_quality
+                    .rejection_reasons()
+                    .into_iter()
+                    .map(|reason| format!("memory_submission_note_quality:{reason}")),
+            );
+            return MemorySubmissionReport {
+                submitted: Vec::new(),
+                failures: Vec::new(),
+                blocked_reasons,
+            };
+        }
+
         let mut submitted = Vec::new();
         let mut failures = Vec::new();
-        for note in &handoff.memory_notes {
+        for index in note_quality.admitted_indexes() {
+            let note = &handoff.memory_notes[index];
             match memory.propose_note(note.clone()) {
                 Ok(()) => submitted.push(note.clone()),
                 Err(error) => failures.push(MemorySubmissionFailure {
@@ -2305,6 +2330,90 @@ mod tests {
         assert!(gate.can_commit_submitted_notes);
         assert!(!gate.requires_repair_first);
         assert!(gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn submitter_filters_invalid_handoff_notes_before_memory_port() {
+        let handoff = AgentCycleHandoff {
+            memory_notes: vec![
+                MemoryNote::new("agent_cycle", "remember clean loop"),
+                MemoryNote::new("", "missing topic"),
+                MemoryNote::new("agent_cycle", "remember   clean   loop"),
+                MemoryNote::new("agent_cycle", "   "),
+            ],
+            follow_up_tasks: Vec::new(),
+            blocked_reasons: Vec::new(),
+        };
+        let mut memory = FakeMemoryPort::default();
+
+        let report = MemoryHandoffSubmitter::new().submit(&handoff, &mut memory);
+
+        assert!(report.is_clean());
+        assert_eq!(report.submitted.len(), 1);
+        assert_eq!(report.submitted[0].content, "remember clean loop");
+        assert_eq!(memory.submitted.len(), 1);
+        assert_eq!(memory.submitted[0].topic, "agent_cycle");
+        assert!(report.failures.is_empty());
+        assert!(report.blocked_reasons.is_empty());
+
+        let summary = report.summary();
+        assert_eq!(summary.submitted_notes, 1);
+        assert_eq!(summary.failed_notes, 0);
+        assert_eq!(summary.attempted_notes, 1);
+        assert!(summary.clean);
+
+        let gate = report.gate();
+        assert!(gate.can_commit_submitted_notes);
+        assert!(gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn submitter_blocks_all_invalid_handoff_notes_without_memory_port_call() {
+        let handoff = AgentCycleHandoff {
+            memory_notes: vec![
+                MemoryNote::new("", "missing topic"),
+                MemoryNote::new("agent_cycle", "   "),
+            ],
+            follow_up_tasks: Vec::new(),
+            blocked_reasons: Vec::new(),
+        };
+        let mut memory = FakeMemoryPort::default();
+
+        let report = MemoryHandoffSubmitter::new().submit(&handoff, &mut memory);
+
+        assert!(!report.is_clean());
+        assert!(report.submitted.is_empty());
+        assert!(report.failures.is_empty());
+        assert!(memory.submitted.is_empty());
+        assert_eq!(
+            report.blocked_reasons,
+            vec![
+                "memory_submission_no_admitted_notes",
+                "memory_submission_note_quality:memory_note_quality_empty_topic index=0",
+                "memory_submission_note_quality:memory_note_quality_empty_content index=1",
+            ]
+        );
+
+        let summary = report.summary();
+        assert_eq!(summary.submitted_notes, 0);
+        assert_eq!(summary.failed_notes, 0);
+        assert_eq!(summary.blocked_reasons, 3);
+        assert_eq!(summary.attempted_notes, 0);
+        assert!(!summary.clean);
+        assert!(!summary.port_attempted);
+
+        let gate = report.gate();
+        assert!(!gate.can_continue_loop);
+        assert!(!gate.can_commit_submitted_notes);
+        assert!(gate.requires_repair_first);
+        assert_eq!(
+            gate.reasons,
+            vec![
+                "memory_handoff_blocked reason=memory_submission_no_admitted_notes",
+                "memory_handoff_blocked reason=memory_submission_note_quality:memory_note_quality_empty_topic index=0",
+                "memory_handoff_blocked reason=memory_submission_note_quality:memory_note_quality_empty_content index=1",
+            ]
+        );
     }
 
     #[test]
