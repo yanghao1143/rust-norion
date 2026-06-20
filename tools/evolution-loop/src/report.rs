@@ -1860,6 +1860,40 @@ fn print_report(
         self_improve_proposal_memory_admission_commit_approval_decision.memory_store_write_allowed,
         self_improve_proposal_memory_admission_commit_approval_decision.ndkv_write_allowed
     );
+    let self_improve_proposal_memory_admission_commit_approval_review_packet =
+        self_improve_proposal_artifact.memory_admission_commit_approval_review_packet();
+    let first_commit_approval_review_packet_item =
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .first_review_packet_item_id
+            .as_deref()
+            .unwrap_or("-");
+    println!(
+        "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: targets={} requests={} approval_decision_items={} review_packet_items={} ready={} pending={} blocked={} first_item={} approval_review_packet_ready={} explicit_operator_approval_required={} validation_required={} rollback_required={} commit_allowed={} admission_write_authorized={} auto_apply={} memory_store_write_allowed={} ndkv_write_allowed={}",
+        self_improve_proposal_memory_admission_commit_approval_review_packet.target_count,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.request_count,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .approval_decision_item_count,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .review_packet_item_count,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .ready_review_packet_count,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.pending_approval_count,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.blocked_count,
+        first_commit_approval_review_packet_item,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .approval_review_packet_ready,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .explicit_operator_approval_required,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.validation_required,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.rollback_required,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.commit_allowed,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .admission_write_authorized,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.auto_apply,
+        self_improve_proposal_memory_admission_commit_approval_review_packet
+            .memory_store_write_allowed,
+        self_improve_proposal_memory_admission_commit_approval_review_packet.ndkv_write_allowed
+    );
     if let Some(last) = &summary.last {
         println!(
             "last: round={} case={} success={} runtime_tokens={} feedback_applied={} round_wall_elapsed_ms={}",
@@ -3087,6 +3121,7 @@ fn allocation_value(item: &str, key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+#[cfg(test)]
 fn prompt_context_text(summary: &ReportSummary) -> String {
     prompt_context_text_with_self_improve_proposals(summary, None)
 }
@@ -3573,6 +3608,44 @@ fn prompt_context_text_with_self_improve_proposals(
             if commit_approval_decision.commit_approval_decision_ready {
                 lines.push(
                     "next_self_improve_should_record_memory_admission_commit_approval_decision:true"
+                        .to_owned(),
+                );
+            }
+            let commit_approval_review = artifact.memory_admission_commit_approval_review_packet();
+            let first_review_packet_item = commit_approval_review
+                .first_review_packet_item_id
+                .as_deref()
+                .unwrap_or("none");
+            let commit_approval_review_failures =
+                if commit_approval_review.failure_reasons.is_empty() {
+                    "none".to_owned()
+                } else {
+                    commit_approval_review.failure_reasons.join(",")
+                };
+            lines.push(format!(
+                "self_improve_memory_admission_commit_approval_review_packet=targets:{} requests:{} approval_decision_items:{} review_packet_items:{} ready:{} pending:{} blocked:{} first_item:{} approval_review_packet_ready:{} explicit_operator_approval_required:{} validation_required:{} rollback_required:{} commit_allowed:{} admission_write_authorized:{} failure_reasons:{} auto_apply:{} memory_store_write_allowed:{} ndkv_write_allowed:{}",
+                commit_approval_review.target_count,
+                commit_approval_review.request_count,
+                commit_approval_review.approval_decision_item_count,
+                commit_approval_review.review_packet_item_count,
+                commit_approval_review.ready_review_packet_count,
+                commit_approval_review.pending_approval_count,
+                commit_approval_review.blocked_count,
+                first_review_packet_item,
+                commit_approval_review.approval_review_packet_ready,
+                commit_approval_review.explicit_operator_approval_required,
+                commit_approval_review.validation_required,
+                commit_approval_review.rollback_required,
+                commit_approval_review.commit_allowed,
+                commit_approval_review.admission_write_authorized,
+                commit_approval_review_failures,
+                commit_approval_review.auto_apply,
+                commit_approval_review.memory_store_write_allowed,
+                commit_approval_review.ndkv_write_allowed
+            ));
+            if commit_approval_review.approval_review_packet_ready {
+                lines.push(
+                    "next_self_improve_should_review_memory_admission_commit_approval_packet:true"
                         .to_owned(),
                 );
             }
@@ -4422,7 +4495,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -4502,6 +4575,9 @@ fn report_json_with_remote_chain_and_required_latest_roles(
             self_improve_proposal_artifact
         ),
         self_improve_proposal_artifact::option_memory_admission_commit_approval_decision_report_json(
+            self_improve_proposal_artifact
+        ),
+        self_improve_proposal_artifact::option_memory_admission_commit_approval_review_packet_report_json(
             self_improve_proposal_artifact
         ),
         summary.state_gate_passed,
@@ -8209,6 +8285,13 @@ mod tests {
                 "\"commit_allowed\":false",
                 "\"admission_write_authorized\":false",
                 "\"commit approval decision requires ready approval request\"",
+                "\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{\"schema\":\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\"",
+                "\"consumer_surface\":\"evolution_loop_report_only_self_improve_memory_admission_commit_approval_review_packet\"",
+                "\"ready_review_packet_count\":0",
+                "\"approval_review_packet_ready\":false",
+                "\"commit_allowed\":false",
+                "\"admission_write_authorized\":false",
+                "\"commit approval review packet requires ready approval decision\"",
             ],
         );
         assert_occurrences(&json, "\"self_improve_proposal_artifact_v1\":{", 1);
@@ -8266,6 +8349,11 @@ mod tests {
         assert_occurrences(
             &json,
             "\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{",
+            1,
+        );
+        assert_occurrences(
+            &json,
+            "\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{",
             1,
         );
     }
@@ -8339,6 +8427,9 @@ mod tests {
         assert!(context.contains(
             "self_improve_memory_admission_commit_approval_decision=targets:1 requests:1 approval_request_items:1 approval_decision_items:1 recorded:1 approved:0 pending:1 blocked:0 first_item:self-improve-r392-helper_contract-updatethevalidationcomma commit_approval_decision_ready:true explicit_commit_approval_required:true validation_required:true rollback_required:true commit_allowed:false admission_write_authorized:false failure_reasons:none auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
         ));
+        assert!(context.contains(
+            "self_improve_memory_admission_commit_approval_review_packet=targets:1 requests:1 approval_decision_items:1 review_packet_items:1 ready:1 pending:1 blocked:0 first_item:self-improve-r392-helper_contract-updatethevalidationcomma approval_review_packet_ready:true explicit_operator_approval_required:true validation_required:true rollback_required:true commit_allowed:false admission_write_authorized:false failure_reasons:none auto_apply:false memory_store_write_allowed:false ndkv_write_allowed:false"
+        ));
         assert!(!context.contains(
             "next_self_improve_should_convert_advisory_to_evidence_backed_business_improvement:true"
         ));
@@ -8374,6 +8465,9 @@ mod tests {
         );
         assert!(context.contains(
             "next_self_improve_should_record_memory_admission_commit_approval_decision:true"
+        ));
+        assert!(context.contains(
+            "next_self_improve_should_review_memory_admission_commit_approval_packet:true"
         ));
     }
 

@@ -662,6 +662,27 @@ Set-Content -Encoding ASCII -LiteralPath $report -Value (@{
             )
         }
     }
+    self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1 = @{
+        target_count = 2
+        request_count = 2
+        approval_request_item_count = 2
+        approval_decision_item_count = 2
+        review_packet_item_count = 2
+        ready_review_packet_count = 2
+        pending_approval_count = 2
+        blocked_count = 0
+        first_review_packet_item_id = "self-improve-r392-helper-contract"
+        approval_review_packet_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
     remote_chain = @{
         remote_runtime = @{
             probed = $false
@@ -709,6 +730,9 @@ $reportProposalFirstMissing = @($reportStatus.report.self_improve_proposal_actio
 if ($reportProposalFirstMissing.Count -ne 2 -or $reportProposalFirstMissing[0] -ne "accepted_memory_admission" -or $reportProposalFirstMissing[1] -ne "evidence_backed_business_improvement") {
     throw "report self-improve proposal action assignment missing requirements were not exposed"
 }
+if ($reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_source -ne "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1" -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal commit approval review packet was not exposed"
+}
 if ($reportStatus.next_round_decision.display_state -ne "blocked-operator-attention" -or $reportStatus.next_round_decision.operator_attention_blocked -ne $true -or $reportStatus.next_round_decision.reason_code -ne "report_gate_failed_operator_attention_required") {
     throw "failed report gate did not surface blocked next-round decision"
 }
@@ -737,6 +761,9 @@ if ($reportHuman -notmatch "remote_runtime_probed=False" -or $reportHuman -notma
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_acceptance_summary_v1: source=self_improve_proposal_acceptance_summary_v1" -or $reportHuman -notmatch "advisory_only=2" -or $reportHuman -notmatch "convert_advisory_to_business_evidence=True" -or $reportHuman -notmatch "repair_unvalidated_or_unaccepted=False" -or $reportHuman -notmatch "requires_validation_and_memory_admission=True" -or $reportHuman -notmatch "action_required=True" -or $reportHuman -notmatch "primary_action=convert_advisory_to_evidence_backed_business_improvement" -or $reportHuman -notmatch "actions=convert_advisory_to_evidence_backed_business_improvement,require_checked_passed_validation_and_accepted_memory_admission" -or $reportHuman -notmatch "action_plan_requires_validation_and_memory_admission=True" -or $reportHuman -notmatch "action_assignment_targets=2" -or $reportHuman -notmatch "action_assignment_first_target=self-improve-r392-helper-contract" -or $reportHuman -notmatch "action_assignment_first_missing=accepted_memory_admission,evidence_backed_business_improvement") {
     throw "human status did not summarize self-improve proposal prompt guidance"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1" -or $reportHuman -notmatch "review_packet_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending=2" -or $reportHuman -notmatch "approval_review_packet_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve approval review packet"
 }
 if ($reportHuman -notmatch "next_round_decision: schema=next_round_decision_evidence_v1 display_state=blocked-operator-attention") {
     throw "human status did not summarize blocked next-round decision"

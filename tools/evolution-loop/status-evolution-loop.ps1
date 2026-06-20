@@ -800,6 +800,59 @@ function Get-SelfImproveProposalMemoryAdmissionCommitApprovalDecision {
     }
 }
 
+function Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket {
+    param([object]$Report)
+
+    $review = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1"
+    if ($null -eq $review) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            request_count = $null
+            approval_request_item_count = $null
+            approval_decision_item_count = $null
+            review_packet_item_count = $null
+            ready_review_packet_count = $null
+            pending_approval_count = $null
+            blocked_count = $null
+            first_review_packet_item = $null
+            approval_review_packet_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "target_count")
+        request_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "request_count")
+        approval_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "approval_request_item_count")
+        approval_decision_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "approval_decision_item_count")
+        review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "review_packet_item_count")
+        ready_review_packet_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "ready_review_packet_count")
+        pending_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "pending_approval_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "blocked_count")
+        first_review_packet_item = Get-PropertyValue -Object $review -Name "first_review_packet_item_id"
+        approval_review_packet_ready = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "approval_review_packet_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $review -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "ndkv_write_allowed")
+    }
+}
+
 function Select-FirstNonNull {
     param(
         [object]$Preferred,
@@ -1688,6 +1741,7 @@ function Read-ReportStatus {
         $proposalMemoryAdmissionCommitRecordStage = Get-SelfImproveProposalMemoryAdmissionCommitRecordStage -Report $report
         $proposalMemoryAdmissionCommitApprovalRequest = Get-SelfImproveProposalMemoryAdmissionCommitApprovalRequest -Report $report
         $proposalMemoryAdmissionCommitApprovalDecision = Get-SelfImproveProposalMemoryAdmissionCommitApprovalDecision -Report $report
+        $proposalMemoryAdmissionCommitApprovalReviewPacket = Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket -Report $report
 
         return [pscustomobject][ordered]@{
             path = $Path
@@ -1867,6 +1921,26 @@ function Read-ReportStatus {
             self_improve_proposal_memory_admission_commit_approval_decision_auto_apply = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalDecision -Name "auto_apply"
             self_improve_proposal_memory_admission_commit_approval_decision_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalDecision -Name "memory_store_write_allowed"
             self_improve_proposal_memory_admission_commit_approval_decision_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalDecision -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_source = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "source"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_target_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "target_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_request_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "request_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_request_item_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "approval_request_item_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_decision_item_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "approval_decision_item_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "review_packet_item_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "ready_review_packet_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "pending_approval_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_blocked_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "blocked_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_first_item = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "first_review_packet_item"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_ready = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "approval_review_packet_ready"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_validation_required = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "validation_required"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_rollback_required = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "rollback_required"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "commit_allowed"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "admission_write_authorized"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "failure_reasons")
+            self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "auto_apply"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "ndkv_write_allowed"
             ledger_lag_rounds = $lag
             stale = if ($null -eq $lag) { $null } else { [bool]($lag -gt 0) }
             remote_runtime_probed = Convert-ToNullableBool (Get-PropertyValue -Object $remoteRuntime -Name "probed")
@@ -3012,6 +3086,8 @@ if ($ReportPath.Trim().Length -gt 0) {
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_request_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_request_count) commit_record_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_commit_record_item_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_item_count) requested=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_requested_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_first_item) commit_approval_request_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_ready) explicit_commit_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_explicit_commit_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalRequestFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_ndkv_write_allowed)"
     $proposalAdmissionCommitApprovalDecisionFailures = @($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_decision_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_item_count) recorded=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_recorded_count) approved=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_approved_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_first_item) commit_approval_decision_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_ready) explicit_commit_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_explicit_commit_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalDecisionFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_ndkv_write_allowed)"
+    $proposalAdmissionCommitApprovalReviewPacketFailures = @($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_decision_item_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count) ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_first_item) approval_review_packet_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalReviewPacketFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed)"
 }
 Write-Host "next_round_decision: schema=$($nextRoundDecision.schema) display_state=$($nextRoundDecision.display_state) safe_to_wait_current_round_active=$($nextRoundDecision.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecision.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecision.operator_attention_blocked) reason=$($nextRoundDecision.reason_code) read_only=$($nextRoundDecision.read_only) report_only=$($nextRoundDecision.report_only) side_effects=$($nextRoundDecision.side_effects)"
 Write-Host "next_round_decision_report_v1: schema=$($nextRoundDecisionReportV1.schema) display_state=$($nextRoundDecisionReportV1.display_state) safe_to_wait_current_round_active=$($nextRoundDecisionReportV1.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecisionReportV1.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecisionReportV1.operator_attention_blocked) reason=$($nextRoundDecisionReportV1.reason_code) read_only=$($nextRoundDecisionReportV1.read_only) report_only=$($nextRoundDecisionReportV1.report_only) side_effects=$($nextRoundDecisionReportV1.side_effects)"

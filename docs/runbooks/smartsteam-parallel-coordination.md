@@ -4200,6 +4200,51 @@ System-error replacements:
   daemon/model start-stop, SSH, download, model-cache warming, Forge/Web Lab
   start, prompt/stream/model call, live memory mutation, or `.ndkv` write was
   performed.
+- R83 main-window memory admission commit-approval review packet on
+  2026-06-20: added the report-only human review packet that sits after R81
+  pending commit-approval decisions. The new
+  `SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport` exposes
+  stable approval/rejection tokens, operator checklist items, content digests,
+  idempotency keys, evidence ids, experiment ids, rollback anchors, and
+  per-item packet ids so a human can approve or reject memory-admission commits
+  without granting automatic write authority. `tools/evolution-loop` now emits
+  additive top-level
+  `self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1`,
+  includes prompt context
+  `self_improve_memory_admission_commit_approval_review_packet=...`, and
+  exposes status `-JsonStatus` fields plus a human-readable status line. The
+  report remains candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `memory_store_write_allowed=false`, and
+  `ndkv_write_allowed=false`. The slice also filters the stale
+  `No specific small next change grounded in the same evidence` helper echo so
+  it no longer reopens already closed self-improve work, and marks the
+  test-only `prompt_context_text` wrapper as test-only to avoid future report
+  build warning noise. Verification passed: focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r83-tool-focused-self-improve-v3` with `29 passed`,
+  focused `cargo test -q --manifest-path crates\norion-eval\Cargo.toml
+  commit_approval --target-dir target\r83-eval-focused-approval-v3` with `1
+  passed`, full `cargo test -q --manifest-path crates\norion-eval\Cargo.toml
+  --target-dir target\r83-eval-full-final` with `385 passed`, full `cargo
+  test -q --manifest-path tools\evolution-loop\Cargo.toml --target-dir
+  target\r83-tool-full-final` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r83-commit-approval-review-packet.json` from
+  the daemon ledger showed `425` rounds, `414/425` successes, action closure
+  `targets=8 closed=8 open=0`, approval decision
+  `approval_decision_items=8 recorded=8 approved=0 pending=8 blocked=0
+  commit_approval_decision_ready=true`, and review packet
+  `review_packet_items=8 ready=8 pending=8 blocked=0
+  approval_review_packet_ready=true explicit_operator_approval_required=true
+  validation_required=true rollback_required=true commit_allowed=false
+  admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the first review item includes approval/rejection tokens,
+  checklist entries, content digest, idempotency key, evidence ids, experiment
+  id, and rollback anchors. No daemon/model start-stop, SSH, download,
+  model-cache warming, Forge/Web Lab start, prompt/stream/model call, live
+  memory mutation, or `.ndkv` write was performed.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT
