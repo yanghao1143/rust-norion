@@ -580,11 +580,14 @@ pub use loopback::{
     AgentLoopbackPlanSummaryHistoryRecorder, AgentLoopbackPlanner,
 };
 pub use memory::{
-    MemoryHandoffSubmitter, MemoryPromotionGate, MemoryPromotionGateDecision,
-    MemorySubmissionDashboard, MemorySubmissionFailure, MemorySubmissionGateDecision,
-    MemorySubmissionHealth, MemorySubmissionHealthPolicy, MemorySubmissionHealthStatus,
-    MemorySubmissionReport, MemorySubmissionSummary, MemorySubmissionSummaryHistory,
-    MemorySubmissionSummaryHistoryRecord, MemorySubmissionSummaryHistoryRecorder,
+    AgentWaveMemoryRecallPlan, AgentWaveMemoryRecallPlanner, MemoryHandoffSubmitter,
+    MemoryPromotionGate, MemoryPromotionGateDecision, MemoryRecallContext,
+    MemoryRecallContextPlanner, MemoryRecallDecision, MemoryRecallDecisionKind, MemoryRecallItem,
+    MemoryRecallPolicy, MemorySubmissionDashboard, MemorySubmissionFailure,
+    MemorySubmissionGateDecision, MemorySubmissionHealth, MemorySubmissionHealthPolicy,
+    MemorySubmissionHealthStatus, MemorySubmissionReport, MemorySubmissionSummary,
+    MemorySubmissionSummaryHistory, MemorySubmissionSummaryHistoryRecord,
+    MemorySubmissionSummaryHistoryRecorder,
 };
 pub use message::{AgentMessage, AgentMessageKind};
 pub use ports::{

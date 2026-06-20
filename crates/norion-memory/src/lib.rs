@@ -106,7 +106,8 @@ pub use retention::{
     MemoryRetentionPlanner, MemoryRetentionPolicy, MemoryRetentionRemoval, RetentionMemoryEntry,
 };
 pub use reuse::{
-    DefaultMemoryReusePlanner, MemoryReusePlan, MemoryReusePlanner, MemoryReusePolicy,
+    DefaultMemoryReusePlanner, MemoryReuseDryRunSummary, MemoryReusePlan, MemoryReusePlanner,
+    MemoryReusePolicy,
 };
 pub use runtime_projection::{
     AdaptiveStateMemoryProjection, DefaultRuntimeStateProjector, MemoryProjectionAudit,

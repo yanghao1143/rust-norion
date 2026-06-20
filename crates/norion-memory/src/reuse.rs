@@ -39,6 +39,27 @@ pub struct MemoryReusePlan {
     pub kv_prefetch_plan: Option<KvPrefetchPlan>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryReuseDryRunSummary {
+    pub read_only: bool,
+    pub candidate_count: usize,
+    pub long_term_match_count: usize,
+    pub context_decision_count: usize,
+    pub accepted_context_count: usize,
+    pub rejected_context_count: usize,
+    pub used_tokens: usize,
+    pub requested_kv_count: usize,
+    pub kv_promote_count: usize,
+    pub kv_missing_count: usize,
+    pub kv_already_hot_count: usize,
+    pub kv_duplicate_count: usize,
+    pub kv_backend_available: bool,
+    pub memory_store_write_allowed: bool,
+    pub kv_prefetch_apply_allowed: bool,
+    pub reason_codes: Vec<String>,
+    pub detail_codes: Vec<String>,
+}
+
 impl MemoryReusePlan {
     pub fn is_read_only(&self) -> bool {
         self.read_only
@@ -74,6 +95,28 @@ impl MemoryReusePlan {
         self.kv_prefetch_plan
             .as_ref()
             .map_or(0, KvPrefetchPlan::duplicate_count)
+    }
+
+    pub fn dry_run_summary(&self) -> MemoryReuseDryRunSummary {
+        MemoryReuseDryRunSummary {
+            read_only: self.read_only,
+            candidate_count: self.candidate_count,
+            long_term_match_count: self.long_term_matches.len(),
+            context_decision_count: self.context_plan.decisions.len(),
+            accepted_context_count: self.accepted_context_count(),
+            rejected_context_count: self.rejected_context_count(),
+            used_tokens: self.context_plan.used_tokens,
+            requested_kv_count: self.requested_kv_ids.len(),
+            kv_promote_count: self.kv_promote_count(),
+            kv_missing_count: self.kv_missing_count(),
+            kv_already_hot_count: self.kv_already_hot_count(),
+            kv_duplicate_count: self.kv_duplicate_count(),
+            kv_backend_available: self.kv_prefetch_plan.is_some(),
+            memory_store_write_allowed: false,
+            kv_prefetch_apply_allowed: false,
+            reason_codes: self.reason_codes(),
+            detail_codes: self.detail_codes(),
+        }
     }
 
     pub fn reason_codes(&self) -> Vec<String> {
@@ -405,6 +448,29 @@ mod tests {
         assert_eq!(prefetch.missing_ids, vec!["missing-a".to_owned()]);
         assert!(swap.hot_bytes("cold-a").is_none());
         assert_eq!(swap.metadata("cold-a").unwrap().tier, KvTier::Cold);
+
+        let summary = plan.dry_run_summary();
+        assert!(summary.read_only);
+        assert_eq!(summary.candidate_count, 1);
+        assert_eq!(summary.long_term_match_count, 1);
+        assert_eq!(summary.context_decision_count, 1);
+        assert_eq!(summary.accepted_context_count, 1);
+        assert_eq!(summary.rejected_context_count, 0);
+        assert_eq!(summary.requested_kv_count, 3);
+        assert_eq!(summary.kv_promote_count, 1);
+        assert_eq!(summary.kv_already_hot_count, 1);
+        assert_eq!(summary.kv_missing_count, 1);
+        assert_eq!(summary.kv_duplicate_count, 0);
+        assert!(summary.kv_backend_available);
+        assert!(!summary.memory_store_write_allowed);
+        assert!(!summary.kv_prefetch_apply_allowed);
+        assert!(summary.reason_codes.contains(&"read_only".to_owned()));
+        assert!(
+            summary
+                .detail_codes
+                .iter()
+                .any(|code| code.starts_with("kv_prefetch:promote:"))
+        );
         assert!(plan.summary_line().contains("read_only=true"));
     }
 

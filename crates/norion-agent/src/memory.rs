@@ -1,9 +1,396 @@
 use crate::aggregate::AggregationConflictReviewTrendGateDecision;
 use crate::budget::AgentBudget;
+use crate::cycle::AgentCycleDispatch;
 use crate::cycle::AgentCycleHandoff;
-use crate::ports::{MemoryNote, MemoryPort};
+use crate::ports::{MemoryNote, MemoryPort, MemoryRecord};
 use crate::reflection::ReflectionLoopHistoryGateDecision;
 use crate::task::{AgentRole, AgentTask};
+use std::collections::BTreeSet;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryRecallPolicy {
+    pub limit_per_task: usize,
+    pub max_context_records_per_task: usize,
+    pub max_summary_chars: usize,
+}
+
+impl Default for MemoryRecallPolicy {
+    fn default() -> Self {
+        Self {
+            limit_per_task: 4,
+            max_context_records_per_task: 4,
+            max_summary_chars: 240,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryRecallDecisionKind {
+    Admit,
+    RejectBudget,
+    RejectDuplicate,
+    RejectEmptyId,
+    RejectEmptySummary,
+}
+
+impl MemoryRecallDecisionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Admit => "admit",
+            Self::RejectBudget => "reject_budget",
+            Self::RejectDuplicate => "reject_duplicate",
+            Self::RejectEmptyId => "reject_empty_id",
+            Self::RejectEmptySummary => "reject_empty_summary",
+        }
+    }
+
+    pub fn accepted(self) -> bool {
+        self == Self::Admit
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRecallItem {
+    pub id: String,
+    pub source: String,
+    pub summary: String,
+}
+
+impl MemoryRecallItem {
+    pub fn from_record(record: &MemoryRecord, max_summary_chars: usize) -> Self {
+        Self {
+            id: record.id.trim().to_owned(),
+            source: normalized_source(&record.source),
+            summary: compact_summary(&record.summary, max_summary_chars),
+        }
+    }
+
+    pub fn context_line(&self) -> String {
+        format!(
+            "memory source={} id={} summary={}",
+            self.source, self.id, self.summary
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRecallDecision {
+    pub record_id: String,
+    pub kind: MemoryRecallDecisionKind,
+    pub item: Option<MemoryRecallItem>,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRecallContext {
+    pub task_id: String,
+    pub query: String,
+    pub requested_limit: usize,
+    pub returned_records: usize,
+    pub read_only: bool,
+    pub decisions: Vec<MemoryRecallDecision>,
+    pub failure: Option<String>,
+    pub telemetry: Vec<String>,
+}
+
+impl MemoryRecallContext {
+    pub fn accepted_items(&self) -> Vec<&MemoryRecallItem> {
+        self.decisions
+            .iter()
+            .filter_map(|decision| decision.item.as_ref())
+            .collect()
+    }
+
+    pub fn accepted_count(&self) -> usize {
+        self.accepted_items().len()
+    }
+
+    pub fn rejected_count(&self) -> usize {
+        self.decisions
+            .iter()
+            .filter(|decision| !decision.kind.accepted())
+            .count()
+    }
+
+    pub fn failed(&self) -> bool {
+        self.failure.is_some()
+    }
+
+    pub fn context_lines(&self) -> Vec<String> {
+        self.accepted_items()
+            .into_iter()
+            .map(MemoryRecallItem::context_line)
+            .collect()
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        let mut codes = BTreeSet::new();
+        codes.insert("read_only".to_owned());
+        if self.failed() {
+            codes.insert("recall_failed".to_owned());
+        }
+        if self.returned_records > 0 {
+            codes.insert("records_returned".to_owned());
+        }
+        if self.accepted_count() > 0 {
+            codes.insert("records_admitted".to_owned());
+        }
+        if self.rejected_count() > 0 {
+            codes.insert("records_rejected".to_owned());
+        }
+        codes.extend(
+            self.decisions
+                .iter()
+                .flat_map(|decision| decision.reasons.iter().cloned()),
+        );
+        codes.into_iter().collect()
+    }
+
+    pub fn detail_codes(&self) -> Vec<String> {
+        let mut codes = BTreeSet::new();
+        if self.failed() {
+            codes.insert(format!("failure:{}", hex_id(&self.task_id)));
+        }
+        codes.extend(self.decisions.iter().flat_map(|decision| {
+            decision.reasons.iter().map(move |reason| {
+                format!(
+                    "{}:{}:{}",
+                    decision.kind.as_str(),
+                    reason,
+                    hex_id(&decision.record_id)
+                )
+            })
+        }));
+        codes.into_iter().collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "agent_memory_recall_context read_only={} task_id={} requested_limit={} returned={} admitted={} rejected={} failed={} reason_codes={} detail_codes={}",
+            self.read_only,
+            self.task_id,
+            self.requested_limit,
+            self.returned_records,
+            self.accepted_count(),
+            self.rejected_count(),
+            self.failed(),
+            join_codes(self.reason_codes()),
+            join_codes(self.detail_codes()),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentWaveMemoryRecallPlan {
+    pub contexts: Vec<MemoryRecallContext>,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentWaveMemoryRecallPlan {
+    pub fn task_count(&self) -> usize {
+        self.contexts.len()
+    }
+
+    pub fn accepted_count(&self) -> usize {
+        self.contexts
+            .iter()
+            .map(MemoryRecallContext::accepted_count)
+            .sum()
+    }
+
+    pub fn rejected_count(&self) -> usize {
+        self.contexts
+            .iter()
+            .map(MemoryRecallContext::rejected_count)
+            .sum()
+    }
+
+    pub fn failed_count(&self) -> usize {
+        self.contexts
+            .iter()
+            .filter(|context| context.failed())
+            .count()
+    }
+
+    pub fn read_only(&self) -> bool {
+        self.contexts.iter().all(|context| context.read_only)
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "agent_wave_memory_recall read_only={} tasks={} admitted={} rejected={} failed={}",
+            self.read_only(),
+            self.task_count(),
+            self.accepted_count(),
+            self.rejected_count(),
+            self.failed_count(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRecallContextPlanner {
+    pub policy: MemoryRecallPolicy,
+}
+
+impl Default for MemoryRecallContextPlanner {
+    fn default() -> Self {
+        Self {
+            policy: MemoryRecallPolicy::default(),
+        }
+    }
+}
+
+impl MemoryRecallContextPlanner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_policy(mut self, policy: MemoryRecallPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn plan_for_task<P>(&self, task: &AgentTask, memory: &P) -> MemoryRecallContext
+    where
+        P: MemoryPort,
+        P::Error: ToString,
+    {
+        let query = memory_recall_query(task);
+        match memory.recall(&query, self.policy.limit_per_task.max(1)) {
+            Ok(records) => self.plan_from_records(task, query, records),
+            Err(error) => failed_memory_recall_context(
+                task,
+                query,
+                self.policy.limit_per_task.max(1),
+                error.to_string(),
+            ),
+        }
+    }
+
+    pub fn plan_from_records(
+        &self,
+        task: &AgentTask,
+        query: String,
+        records: Vec<MemoryRecord>,
+    ) -> MemoryRecallContext {
+        let mut decisions = Vec::new();
+        let mut seen_ids = BTreeSet::new();
+        let mut accepted = 0usize;
+
+        for record in &records {
+            let record_id = record.id.trim().to_owned();
+            let summary = record.summary.trim();
+            let (kind, item, reasons) = if record_id.is_empty() {
+                (
+                    MemoryRecallDecisionKind::RejectEmptyId,
+                    None,
+                    vec!["empty_id".to_owned()],
+                )
+            } else if summary.is_empty() {
+                (
+                    MemoryRecallDecisionKind::RejectEmptySummary,
+                    None,
+                    vec!["empty_summary".to_owned()],
+                )
+            } else if !seen_ids.insert(record_id.clone()) {
+                (
+                    MemoryRecallDecisionKind::RejectDuplicate,
+                    None,
+                    vec!["duplicate_id".to_owned()],
+                )
+            } else if accepted >= self.policy.max_context_records_per_task {
+                (
+                    MemoryRecallDecisionKind::RejectBudget,
+                    None,
+                    vec!["max_context_records".to_owned()],
+                )
+            } else {
+                accepted = accepted.saturating_add(1);
+                (
+                    MemoryRecallDecisionKind::Admit,
+                    Some(MemoryRecallItem::from_record(
+                        record,
+                        self.policy.max_summary_chars,
+                    )),
+                    vec!["admitted".to_owned()],
+                )
+            };
+
+            decisions.push(MemoryRecallDecision {
+                record_id,
+                kind,
+                item,
+                reasons,
+            });
+        }
+
+        let telemetry = memory_recall_context_telemetry(
+            &task.id,
+            records.len(),
+            accepted,
+            decisions.len().saturating_sub(accepted),
+            false,
+        );
+
+        MemoryRecallContext {
+            task_id: task.id.clone(),
+            query,
+            requested_limit: self.policy.limit_per_task.max(1),
+            returned_records: records.len(),
+            read_only: true,
+            decisions,
+            failure: None,
+            telemetry,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentWaveMemoryRecallPlanner {
+    pub context_planner: MemoryRecallContextPlanner,
+}
+
+impl Default for AgentWaveMemoryRecallPlanner {
+    fn default() -> Self {
+        Self {
+            context_planner: MemoryRecallContextPlanner::default(),
+        }
+    }
+}
+
+impl AgentWaveMemoryRecallPlanner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_context_planner(mut self, context_planner: MemoryRecallContextPlanner) -> Self {
+        self.context_planner = context_planner;
+        self
+    }
+
+    pub fn plan_dispatch<P>(
+        &self,
+        dispatch: &AgentCycleDispatch,
+        memory: &P,
+    ) -> AgentWaveMemoryRecallPlan
+    where
+        P: MemoryPort,
+        P::Error: ToString,
+    {
+        let contexts = dispatch
+            .assigned_tasks
+            .iter()
+            .map(|task| self.context_planner.plan_for_task(task, memory))
+            .collect::<Vec<_>>();
+        let telemetry = agent_wave_memory_recall_telemetry(&contexts);
+
+        AgentWaveMemoryRecallPlan {
+            contexts,
+            telemetry,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemorySubmissionReport {
@@ -591,6 +978,115 @@ impl MemoryHandoffSubmitter {
     }
 }
 
+fn failed_memory_recall_context(
+    task: &AgentTask,
+    query: String,
+    requested_limit: usize,
+    failure: String,
+) -> MemoryRecallContext {
+    let telemetry = memory_recall_context_telemetry(&task.id, 0, 0, 0, true);
+    MemoryRecallContext {
+        task_id: task.id.clone(),
+        query,
+        requested_limit,
+        returned_records: 0,
+        read_only: true,
+        decisions: Vec::new(),
+        failure: Some(failure),
+        telemetry,
+    }
+}
+
+fn memory_recall_query(task: &AgentTask) -> String {
+    format!(
+        "role:{} lane:{} objective:{}",
+        task.role.as_str(),
+        task.lane,
+        task.objective
+    )
+}
+
+fn normalized_source(source: &str) -> String {
+    let source = source.trim();
+    if source.is_empty() {
+        "unknown".to_owned()
+    } else {
+        source.to_owned()
+    }
+}
+
+fn compact_summary(summary: &str, max_summary_chars: usize) -> String {
+    let max_summary_chars = max_summary_chars.max(1);
+    let mut out = String::new();
+    let mut previous_space = false;
+    for ch in summary.trim().chars().take(max_summary_chars) {
+        if ch.is_whitespace() {
+            if !previous_space {
+                out.push(' ');
+                previous_space = true;
+            }
+        } else {
+            out.push(ch);
+            previous_space = false;
+        }
+    }
+    out.trim().to_owned()
+}
+
+fn memory_recall_context_telemetry(
+    task_id: &str,
+    returned: usize,
+    admitted: usize,
+    rejected: usize,
+    failed: bool,
+) -> Vec<String> {
+    vec![
+        "agent_memory_recall_context=true".to_owned(),
+        format!("agent_memory_recall_context_task={task_id}"),
+        format!("agent_memory_recall_context_returned={returned}"),
+        format!("agent_memory_recall_context_admitted={admitted}"),
+        format!("agent_memory_recall_context_rejected={rejected}"),
+        format!("agent_memory_recall_context_failed={failed}"),
+        "agent_memory_recall_context_read_only=true".to_owned(),
+    ]
+}
+
+fn agent_wave_memory_recall_telemetry(contexts: &[MemoryRecallContext]) -> Vec<String> {
+    let plan = AgentWaveMemoryRecallPlan {
+        contexts: contexts.to_vec(),
+        telemetry: Vec::new(),
+    };
+    vec![
+        "agent_wave_memory_recall=true".to_owned(),
+        format!("agent_wave_memory_recall_tasks={}", plan.task_count()),
+        format!(
+            "agent_wave_memory_recall_admitted={}",
+            plan.accepted_count()
+        ),
+        format!(
+            "agent_wave_memory_recall_rejected={}",
+            plan.rejected_count()
+        ),
+        format!("agent_wave_memory_recall_failed={}", plan.failed_count()),
+        format!("agent_wave_memory_recall_read_only={}", plan.read_only()),
+    ]
+}
+
+fn join_codes(codes: Vec<String>) -> String {
+    if codes.is_empty() {
+        "none".to_owned()
+    } else {
+        codes.join("|")
+    }
+}
+
+fn hex_id(id: &str) -> String {
+    id.as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
+}
+
 fn memory_submission_summary_telemetry(
     submitted_notes: usize,
     failed_notes: usize,
@@ -793,11 +1289,15 @@ mod tests {
         ReflectionLoop, ReflectionLoopHealthPolicy, ReflectionLoopSummaryHistory,
         ReflectionLoopSummaryHistoryRecorder, ReflectionStage,
     };
-    use crate::task::{AgentRole, AgentTask};
+    use crate::schedule::AgentExecutionWave;
+    use crate::task::{AgentRole, AgentTask, TaskAssignment, TaskDispatchPlan};
 
     #[derive(Debug, Default)]
     struct FakeMemoryPort {
         fail_topic: Option<String>,
+        fail_recall: bool,
+        records: Vec<MemoryRecord>,
+        recall_queries: std::cell::RefCell<Vec<(String, usize)>>,
         submitted: Vec<MemoryNote>,
     }
 
@@ -806,10 +1306,16 @@ mod tests {
 
         fn recall(
             &self,
-            _query: &str,
-            _limit: usize,
+            query: &str,
+            limit: usize,
         ) -> Result<Vec<crate::ports::MemoryRecord>, Self::Error> {
-            Ok(Vec::new())
+            self.recall_queries
+                .borrow_mut()
+                .push((query.to_owned(), limit));
+            if self.fail_recall {
+                return Err("recall backend unavailable".to_owned());
+            }
+            Ok(self.records.clone())
         }
 
         fn propose_note(&mut self, note: MemoryNote) -> Result<(), Self::Error> {
@@ -899,7 +1405,7 @@ mod tests {
         };
         let mut memory = FakeMemoryPort {
             fail_topic: Some("agent_cycle".to_owned()),
-            submitted: Vec::new(),
+            ..FakeMemoryPort::default()
         };
 
         let report = MemoryHandoffSubmitter::new().submit(&handoff, &mut memory);
@@ -925,6 +1431,173 @@ mod tests {
             gate.reasons,
             vec!["memory_submission_failed topic=agent_cycle reason=memory rejected agent_cycle"]
         );
+    }
+
+    #[test]
+    fn recall_context_planner_builds_read_only_task_sidecar() {
+        let task = AgentTask::new(
+            "runtime-coder",
+            AgentRole::Coder,
+            "repair runtime memory reuse",
+            AgentBudget::new(8, 1, 1),
+        )
+        .with_lane("runtime");
+        let memory = FakeMemoryPort {
+            records: vec![
+                MemoryRecord::new(
+                    "lesson-1",
+                    "Use context gate before runtime KV prefetch so dirty records stay out",
+                    "long_term",
+                ),
+                MemoryRecord::new("lesson-1", "duplicate should be rejected", "long_term"),
+                MemoryRecord::new("empty-summary", "   ", "long_term"),
+                MemoryRecord::new("lesson-2", "second accepted memory", ""),
+                MemoryRecord::new("overflow", "budget rejects this", "long_term"),
+            ],
+            ..FakeMemoryPort::default()
+        };
+        let planner = MemoryRecallContextPlanner::new().with_policy(MemoryRecallPolicy {
+            limit_per_task: 5,
+            max_context_records_per_task: 2,
+            max_summary_chars: 32,
+        });
+
+        let context = planner.plan_for_task(&task, &memory);
+
+        assert!(context.read_only);
+        assert_eq!(context.task_id, "runtime-coder");
+        assert!(context.query.contains("role:coder"));
+        assert!(context.query.contains("lane:runtime"));
+        assert!(context.query.contains("repair runtime memory reuse"));
+        assert_eq!(
+            memory.recall_queries.borrow().as_slice(),
+            &[(
+                "role:coder lane:runtime objective:repair runtime memory reuse".to_owned(),
+                5
+            )]
+        );
+        assert_eq!(context.returned_records, 5);
+        assert_eq!(context.accepted_count(), 2);
+        assert_eq!(context.rejected_count(), 3);
+        assert_eq!(
+            context
+                .accepted_items()
+                .into_iter()
+                .map(|item| (item.id.as_str(), item.source.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("lesson-1", "long_term"), ("lesson-2", "unknown")]
+        );
+        assert!(context.context_lines()[0].contains("Use context gate before runtime"));
+        assert!(context.decisions.iter().any(|decision| {
+            decision.kind == MemoryRecallDecisionKind::RejectDuplicate
+                && decision.reasons == vec!["duplicate_id"]
+        }));
+        assert!(context.decisions.iter().any(|decision| {
+            decision.kind == MemoryRecallDecisionKind::RejectEmptySummary
+                && decision.reasons == vec!["empty_summary"]
+        }));
+        assert!(context.decisions.iter().any(|decision| {
+            decision.kind == MemoryRecallDecisionKind::RejectBudget
+                && decision.reasons == vec!["max_context_records"]
+        }));
+        assert!(context.summary_line().contains("read_only=true"));
+    }
+
+    #[test]
+    fn wave_recall_planner_builds_contexts_for_assigned_tasks_only() {
+        let coder = AgentTask::new(
+            "coder",
+            AgentRole::Coder,
+            "write memory reuse code",
+            AgentBudget::new(4, 1, 1),
+        );
+        let reviewer = AgentTask::new(
+            "reviewer",
+            AgentRole::Reviewer,
+            "review memory reuse code",
+            AgentBudget::new(4, 1, 1),
+        );
+        let memory = FakeMemoryPort {
+            records: vec![MemoryRecord::new(
+                "shared",
+                "shared lesson for the wave",
+                "long_term",
+            )],
+            ..FakeMemoryPort::default()
+        };
+        let dispatch = AgentCycleDispatch {
+            wave: AgentExecutionWave {
+                wave: 0,
+                task_ids: vec!["coder".to_owned(), "reviewer".to_owned()],
+                parallel_count: 2,
+            },
+            dispatch: TaskDispatchPlan {
+                assignments: vec![
+                    TaskAssignment {
+                        task_id: "coder".to_owned(),
+                        role: AgentRole::Coder,
+                        lane: "default".to_owned(),
+                        budget_reserved: AgentBudget::new(4, 1, 1),
+                    },
+                    TaskAssignment {
+                        task_id: "reviewer".to_owned(),
+                        role: AgentRole::Reviewer,
+                        lane: "default".to_owned(),
+                        budget_reserved: AgentBudget::new(4, 1, 1),
+                    },
+                ],
+                ..TaskDispatchPlan::default()
+            },
+            assigned_tasks: vec![coder, reviewer],
+            blocked_task_ids: vec!["blocked".to_owned()],
+            remaining_queue: crate::task::AgentTaskQueue::new(),
+        };
+
+        let plan = AgentWaveMemoryRecallPlanner::new().plan_dispatch(&dispatch, &memory);
+
+        assert!(plan.read_only());
+        assert_eq!(plan.task_count(), 2);
+        assert_eq!(plan.accepted_count(), 2);
+        assert_eq!(plan.rejected_count(), 0);
+        assert_eq!(plan.failed_count(), 0);
+        assert_eq!(memory.recall_queries.borrow().len(), 2);
+        assert!(
+            plan.telemetry
+                .iter()
+                .any(|line| line == "agent_wave_memory_recall_read_only=true")
+        );
+        assert_eq!(
+            plan.summary_line(),
+            "agent_wave_memory_recall read_only=true tasks=2 admitted=2 rejected=0 failed=0"
+        );
+    }
+
+    #[test]
+    fn recall_context_planner_reports_failures_without_writes() {
+        let task = AgentTask::new(
+            "tester",
+            AgentRole::Tester,
+            "validate memory recall",
+            AgentBudget::new(4, 1, 1),
+        );
+        let memory = FakeMemoryPort {
+            fail_recall: true,
+            ..FakeMemoryPort::default()
+        };
+
+        let context = MemoryRecallContextPlanner::new().plan_for_task(&task, &memory);
+
+        assert!(context.read_only);
+        assert!(context.failed());
+        assert_eq!(
+            context.failure.as_deref(),
+            Some("recall backend unavailable")
+        );
+        assert_eq!(context.accepted_count(), 0);
+        assert_eq!(context.rejected_count(), 0);
+        assert_eq!(memory.submitted.len(), 0);
+        assert!(context.reason_codes().contains(&"recall_failed".to_owned()));
+        assert!(context.summary_line().contains("failed=true"));
     }
 
     #[test]
