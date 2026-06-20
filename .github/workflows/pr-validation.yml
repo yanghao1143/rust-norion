@@ -4,9 +4,13 @@ on:
   pull_request:
     paths:
       - ".github/workflows/pr-validation.yml"
+      - ".github/CODEOWNERS"
+      - ".github/pull_request_template.md"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "CONTRIBUTING.md"
       - "LICENSE"
+      - "README.md"
       - "src/**"
       - "crates/norion-agent/**"
       - "crates/norion-eval/**"
@@ -16,9 +20,13 @@ on:
   push:
     paths:
       - ".github/workflows/pr-validation.yml"
+      - ".github/CODEOWNERS"
+      - ".github/pull_request_template.md"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "CONTRIBUTING.md"
       - "LICENSE"
+      - "README.md"
       - "src/**"
       - "crates/norion-agent/**"
       - "crates/norion-eval/**"
@@ -74,3 +82,16 @@ jobs:
             echo "::error::Tracked private/generated artifact found"
             exit 1
           fi
+
+      - name: Guard collaboration and license policy surfaces
+        shell: bash
+        run: |
+          grep -Fq "Rust-Norion Research Deployment Non-Commercial License" LICENSE
+          grep -Fq "Commercial use is not permitted without prior written permission" LICENSE
+          grep -Fq "Commercial licenses, exceptions, or deployment permissions may be granted only" LICENSE
+          grep -Fq "public for non-commercial research" README.md
+          grep -Fq "owner or maintainer review and approval" README.md
+          grep -Fq "CODEOWNER approval" CONTRIBUTING.md
+          grep -Fq "no commercial-use permission is being requested" CONTRIBUTING.md
+          grep -Fq "No commercial-use permission, license exception, or commercial deployment approval is requested by this PR" .github/pull_request_template.md
+          grep -Fxq "* @yanghao1143" .github/CODEOWNERS
