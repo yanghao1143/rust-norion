@@ -4425,11 +4425,10 @@ fn prompt_context_text_with_self_improve_proposals(
             }
             let lookup_approval_token_intake_preview =
                 artifact.memory_reflection_reuse_lookup_approval_token_intake_preview();
-            let first_lookup_approval_token_intake_preview =
-                lookup_approval_token_intake_preview
-                    .first_token_intake_preview_id
-                    .as_deref()
-                    .unwrap_or("none");
+            let first_lookup_approval_token_intake_preview = lookup_approval_token_intake_preview
+                .first_token_intake_preview_id
+                .as_deref()
+                .unwrap_or("none");
             let lookup_approval_token_intake_preview_failures =
                 if lookup_approval_token_intake_preview
                     .failure_reasons
@@ -4485,8 +4484,8 @@ fn prompt_context_text_with_self_improve_proposals(
                         .to_owned(),
                 );
             }
-            let lookup_approval_token_intake_decision_preview = artifact
-                .memory_reflection_reuse_lookup_approval_token_intake_decision_preview();
+            let lookup_approval_token_intake_decision_preview =
+                artifact.memory_reflection_reuse_lookup_approval_token_intake_decision_preview();
             let first_lookup_approval_token_intake_decision_preview =
                 lookup_approval_token_intake_decision_preview
                     .first_token_intake_decision_preview_id

@@ -31,12 +31,12 @@ use norion_eval::{
     SelfImproveProposalMemoryReflectionDedupeClusterReport,
     SelfImproveProposalMemoryReflectionReuseLookupApprovalDecisionPreviewItem,
     SelfImproveProposalMemoryReflectionReuseLookupApprovalDecisionPreviewReport,
+    SelfImproveProposalMemoryReflectionReuseLookupApprovalRequestItem,
+    SelfImproveProposalMemoryReflectionReuseLookupApprovalRequestReport,
     SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewItem,
     SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewReport,
     SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakePreviewItem,
     SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakePreviewReport,
-    SelfImproveProposalMemoryReflectionReuseLookupApprovalRequestItem,
-    SelfImproveProposalMemoryReflectionReuseLookupApprovalRequestReport,
     SelfImproveProposalMemoryReflectionReuseLookupPreviewItem,
     SelfImproveProposalMemoryReflectionReuseLookupPreviewReport,
     SelfImproveProposalMemoryReflectionReusePlanItem,
@@ -1026,10 +1026,12 @@ pub(crate) fn option_memory_reflection_reuse_lookup_approval_token_intake_decisi
     artifact: Option<&SelfImproveProposalArtifact>,
 ) -> String {
     match artifact {
-        Some(artifact) => memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_json(
-            &artifact.memory_reflection_reuse_lookup_approval_token_intake_decision_preview(),
-            true,
-        ),
+        Some(artifact) => {
+            memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_json(
+                &artifact.memory_reflection_reuse_lookup_approval_token_intake_decision_preview(),
+                true,
+            )
+        }
         None => {
             let acceptance = SelfImproveProposalAcceptanceSummaryReport::from_reports(&[]);
             let closure = empty_action_closure_report();
@@ -1359,7 +1361,8 @@ impl SelfImproveProposalArtifact {
 
     pub(crate) fn memory_reflection_reuse_lookup_approval_token_intake_decision_preview(
         &self,
-    ) -> SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewReport {
+    ) -> SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewReport
+    {
         SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewReport::from_token_intake_preview(
             &self.memory_reflection_reuse_lookup_approval_token_intake_preview(),
         )
@@ -4441,9 +4444,7 @@ mod tests {
             !memory_reflection_reuse_lookup_approval_decision_preview
                 .reflection_reuse_execution_authorized
         );
-        assert!(
-            !memory_reflection_reuse_lookup_approval_decision_preview.memory_lookup_performed
-        );
+        assert!(!memory_reflection_reuse_lookup_approval_decision_preview.memory_lookup_performed);
         assert!(!memory_reflection_reuse_lookup_approval_decision_preview.lookup_hit_assumed);
         assert!(memory_reflection_reuse_lookup_approval_decision_preview_json.contains(
             "\"schema\":\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\""
