@@ -22,6 +22,17 @@ impl FromStr for TaskProfile {
     }
 }
 
+impl TaskProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::General => "general",
+            Self::Coding => "coding",
+            Self::Writing => "writing",
+            Self::LongDocument => "long_document",
+        }
+    }
+}
+
 impl Default for TaskProfile {
     fn default() -> Self {
         Self::General
@@ -75,6 +86,45 @@ pub struct ProfileHierarchyObservations {
     pub coding: u64,
     pub writing: u64,
     pub long_document: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HierarchyAdjustmentFeedback {
+    pub profile: TaskProfile,
+    pub quality: f32,
+    pub perplexity: f32,
+    pub contradiction_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HierarchyAdjustmentFeedbackSummary {
+    pub profile: TaskProfile,
+    pub quality: f32,
+    pub perplexity: f32,
+    pub contradiction_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskAwareHierarchyAdjustmentReport {
+    pub profile: TaskProfile,
+    pub feedback: HierarchyAdjustmentFeedbackSummary,
+    pub previous: HierarchyWeights,
+    pub target: HierarchyWeights,
+    pub adjusted: HierarchyWeights,
+    pub observations_before: u64,
+    pub observations_after: u64,
+    pub learning_rate: f32,
+    pub can_commit: bool,
+    pub requires_repair_first: bool,
+    pub reason_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TaskAwareHierarchyAdjustmentPolicy {
+    weights: ProfileHierarchyWeights,
+    baseline: ProfileHierarchyWeights,
+    observations: ProfileHierarchyObservations,
+    learning_rate: f32,
 }
 
 impl HierarchyWeights {
@@ -404,6 +454,263 @@ impl ProfileHierarchyObservations {
     }
 }
 
+impl HierarchyAdjustmentFeedback {
+    pub fn new(
+        profile: TaskProfile,
+        quality: f32,
+        perplexity: f32,
+        contradiction_count: usize,
+    ) -> Self {
+        Self {
+            profile,
+            quality,
+            perplexity,
+            contradiction_count,
+        }
+    }
+
+    pub fn feedback_summary(self) -> HierarchyAdjustmentFeedbackSummary {
+        HierarchyAdjustmentFeedbackSummary {
+            profile: self.profile,
+            quality: self.quality,
+            perplexity: self.perplexity,
+            contradiction_count: self.contradiction_count,
+        }
+    }
+}
+
+impl HierarchyAdjustmentFeedbackSummary {
+    pub fn is_low_quality(self) -> bool {
+        self.quality < 0.58
+    }
+
+    pub fn is_high_quality(self) -> bool {
+        self.quality > 0.82 && self.perplexity <= 9.0
+    }
+
+    pub fn has_contradictions(self) -> bool {
+        self.contradiction_count > 0
+    }
+
+    pub fn quality_shape_is_valid(self) -> bool {
+        finite_unit(self.quality)
+    }
+
+    pub fn perplexity_shape_is_valid(self) -> bool {
+        self.perplexity.is_finite() && self.perplexity >= 0.0
+    }
+
+    pub fn feedback_signal_component_count(self) -> usize {
+        usize::from(self.is_low_quality())
+            + usize::from(self.is_high_quality())
+            + usize::from(self.has_contradictions())
+            + usize::from(self.perplexity > 0.0 && self.perplexity_shape_is_valid())
+    }
+
+    pub fn feedback_problem_component_count(self) -> usize {
+        usize::from(!self.quality_shape_is_valid()) + usize::from(!self.perplexity_shape_is_valid())
+    }
+
+    pub fn feedback_accounting_is_consistent(self) -> bool {
+        let expected_signal_count = usize::from(self.is_low_quality())
+            .saturating_add(usize::from(self.is_high_quality()))
+            .saturating_add(usize::from(self.has_contradictions()))
+            .saturating_add(usize::from(
+                self.perplexity > 0.0 && self.perplexity_shape_is_valid(),
+            ));
+        let expected_problem_count = usize::from(!self.quality_shape_is_valid())
+            .saturating_add(usize::from(!self.perplexity_shape_is_valid()));
+
+        self.feedback_signal_component_count() == expected_signal_count
+            && self.feedback_problem_component_count() == expected_problem_count
+    }
+
+    pub fn feedback_shape_is_clean(self) -> bool {
+        self.feedback_problem_component_count() == 0 && self.feedback_accounting_is_consistent()
+    }
+
+    pub fn can_use_feedback(self) -> bool {
+        self.feedback_shape_is_clean()
+    }
+}
+
+impl TaskAwareHierarchyAdjustmentReport {
+    pub fn has_weight_delta(&self) -> bool {
+        !hierarchy_weights_close(self.previous, self.adjusted)
+    }
+
+    pub fn adjusted_weights_are_clean(&self) -> bool {
+        self.previous.summary().can_use_hierarchy_weights()
+            && self.target.summary().can_use_hierarchy_weights()
+            && self.adjusted.summary().can_use_hierarchy_weights()
+    }
+
+    pub fn observation_advanced(&self) -> bool {
+        self.observations_after == self.observations_before.saturating_add(1)
+    }
+
+    pub fn learning_rate_is_valid(&self) -> bool {
+        self.learning_rate.is_finite() && self.learning_rate >= 0.0
+    }
+
+    pub fn adjustment_signal_component_count(&self) -> usize {
+        usize::from(self.feedback.feedback_signal_component_count() > 0)
+            + usize::from(self.has_weight_delta())
+            + usize::from(self.adjusted_weights_are_clean())
+            + usize::from(self.observation_advanced())
+            + usize::from(self.can_commit)
+    }
+
+    pub fn adjustment_problem_component_count(&self) -> usize {
+        usize::from(!self.feedback.can_use_feedback())
+            + usize::from(!self.adjusted_weights_are_clean())
+            + usize::from(!self.learning_rate_is_valid())
+            + usize::from(!self.observation_advanced())
+            + usize::from(self.requires_repair_first && self.can_commit)
+    }
+
+    pub fn adjustment_accounting_is_consistent(&self) -> bool {
+        let expected_signal_count =
+            usize::from(self.feedback.feedback_signal_component_count() > 0)
+                .saturating_add(usize::from(self.has_weight_delta()))
+                .saturating_add(usize::from(self.adjusted_weights_are_clean()))
+                .saturating_add(usize::from(self.observation_advanced()))
+                .saturating_add(usize::from(self.can_commit));
+        let expected_problem_count = usize::from(!self.feedback.can_use_feedback())
+            .saturating_add(usize::from(!self.adjusted_weights_are_clean()))
+            .saturating_add(usize::from(!self.learning_rate_is_valid()))
+            .saturating_add(usize::from(!self.observation_advanced()))
+            .saturating_add(usize::from(self.requires_repair_first && self.can_commit));
+
+        self.adjustment_signal_component_count() == expected_signal_count
+            && self.adjustment_problem_component_count() == expected_problem_count
+    }
+
+    pub fn adjustment_shape_is_clean(&self) -> bool {
+        self.adjustment_problem_component_count() == 0 && self.adjustment_accounting_is_consistent()
+    }
+}
+
+impl TaskAwareHierarchyAdjustmentPolicy {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_learning_rate(mut self, learning_rate: f32) -> Self {
+        self.learning_rate = learning_rate;
+        self
+    }
+
+    pub fn hierarchy_for(&self, profile: TaskProfile) -> HierarchyWeights {
+        self.weights.get(profile)
+    }
+
+    pub fn observations(&self) -> ProfileHierarchyObservations {
+        self.observations
+    }
+
+    pub fn weights(&self) -> ProfileHierarchyWeights {
+        self.weights
+    }
+
+    pub fn preview_adjustment(
+        &self,
+        feedback: HierarchyAdjustmentFeedback,
+    ) -> TaskAwareHierarchyAdjustmentReport {
+        self.plan_adjustment(feedback)
+    }
+
+    pub fn observe(
+        &mut self,
+        feedback: HierarchyAdjustmentFeedback,
+    ) -> TaskAwareHierarchyAdjustmentReport {
+        let report = self.plan_adjustment(feedback);
+        if report.can_commit {
+            self.weights.set(report.profile, report.adjusted);
+            self.observations.bump(report.profile);
+        }
+        report
+    }
+
+    fn plan_adjustment(
+        &self,
+        feedback: HierarchyAdjustmentFeedback,
+    ) -> TaskAwareHierarchyAdjustmentReport {
+        let feedback = feedback.feedback_summary();
+        let previous = self.weights.get(feedback.profile);
+        let observations_before = self.observations.get(feedback.profile);
+        let mut reason_codes = vec![format!("profile:{}", feedback.profile.as_str())];
+        let mut target = self.baseline.get(feedback.profile);
+
+        if feedback.is_low_quality() {
+            reason_codes.push("quality_low".to_owned());
+            target = target.blend(low_quality_target(feedback.profile), 0.75);
+        } else if feedback.is_high_quality() {
+            reason_codes.push("quality_high_stabilize".to_owned());
+        } else {
+            reason_codes.push("quality_neutral".to_owned());
+            target = previous;
+        }
+
+        if feedback.has_contradictions() {
+            reason_codes.push("contradiction_pressure".to_owned());
+            target = target.blend(fusion_pressure_target(target), 0.55);
+        }
+
+        if !feedback.can_use_feedback() {
+            reason_codes.push("feedback_invalid".to_owned());
+        }
+
+        let learning_rate = self.learning_rate.clamp(0.0, 1.0);
+        let feedback_pressure = if feedback.has_contradictions() {
+            1.0 + (feedback.contradiction_count as f32 * 0.08).min(0.40)
+        } else if feedback.is_high_quality() {
+            0.45
+        } else {
+            1.0
+        };
+        let blend_rate = (learning_rate * feedback_pressure).clamp(0.0, 1.0);
+        let adjusted = previous.blend(target, blend_rate);
+        let observations_after = observations_before.saturating_add(1);
+        let can_commit = feedback.can_use_feedback()
+            && self.learning_rate.is_finite()
+            && self.learning_rate >= 0.0
+            && previous.summary().can_use_hierarchy_weights()
+            && target.summary().can_use_hierarchy_weights()
+            && adjusted.summary().can_use_hierarchy_weights();
+        let requires_repair_first = !can_commit;
+
+        if requires_repair_first {
+            reason_codes.push("repair_first".to_owned());
+        }
+
+        TaskAwareHierarchyAdjustmentReport {
+            profile: feedback.profile,
+            feedback,
+            previous,
+            target,
+            adjusted,
+            observations_before,
+            observations_after,
+            learning_rate: self.learning_rate,
+            can_commit,
+            requires_repair_first,
+            reason_codes,
+        }
+    }
+}
+
+impl Default for TaskAwareHierarchyAdjustmentPolicy {
+    fn default() -> Self {
+        Self {
+            weights: ProfileHierarchyWeights::target_defaults(),
+            baseline: ProfileHierarchyWeights::target_defaults(),
+            observations: ProfileHierarchyObservations::default(),
+            learning_rate: 0.12,
+        }
+    }
+}
+
 impl HierarchyWeightsSummary {
     pub fn weights_are_finite(self) -> bool {
         self.global.is_finite()
@@ -506,6 +813,10 @@ fn finite_positive(value: f32) -> bool {
     value.is_finite() && value > 0.0
 }
 
+fn finite_unit(value: f32) -> bool {
+    value.is_finite() && (0.0..=1.0).contains(&value)
+}
+
 fn finite_nonnegative(value: f32) -> f32 {
     if value.is_finite() {
         value.max(0.0)
@@ -540,6 +851,29 @@ fn dominant_focus_for_values(global: f32, local: f32, fusion: f32) -> HierarchyW
     } else {
         HierarchyWeightFocus::Fusion
     }
+}
+
+fn low_quality_target(profile: TaskProfile) -> HierarchyWeights {
+    match profile {
+        TaskProfile::General => HierarchyWeights::new(0.32, 0.38, 0.30),
+        TaskProfile::Coding => HierarchyWeights::new(0.18, 0.66, 0.16),
+        TaskProfile::Writing => HierarchyWeights::new(0.66, 0.22, 0.12),
+        TaskProfile::LongDocument => HierarchyWeights::new(0.24, 0.18, 0.58),
+    }
+}
+
+fn fusion_pressure_target(current: HierarchyWeights) -> HierarchyWeights {
+    HierarchyWeights::new(
+        current.global * 0.88,
+        current.local * 0.82,
+        current.fusion + 0.24,
+    )
+}
+
+fn hierarchy_weights_close(left: HierarchyWeights, right: HierarchyWeights) -> bool {
+    float_close(left.global, right.global)
+        && float_close(left.local, right.local)
+        && float_close(left.fusion, right.fusion)
 }
 
 #[cfg(test)]
@@ -794,5 +1128,108 @@ mod tests {
         assert!(observations.profile_observation_accounting_is_consistent());
         assert!(observations.profile_observation_shape_is_clean());
         assert!(!observations.can_use_profile_hierarchy_observations());
+    }
+
+    #[test]
+    fn task_aware_hierarchy_adjustment_moves_coding_low_quality_toward_local_focus() {
+        let mut policy = TaskAwareHierarchyAdjustmentPolicy::new();
+        let previous = policy.hierarchy_for(TaskProfile::Coding);
+
+        let report = policy.observe(HierarchyAdjustmentFeedback::new(
+            TaskProfile::Coding,
+            0.32,
+            18.0,
+            0,
+        ));
+
+        assert!(report.can_commit);
+        assert!(!report.requires_repair_first);
+        assert_eq!(report.profile, TaskProfile::Coding);
+        assert_eq!(report.observations_before, 0);
+        assert_eq!(report.observations_after, 1);
+        assert!(report.observation_advanced());
+        assert!(report.has_weight_delta());
+        assert!(report.adjusted.local > previous.local);
+        assert_eq!(
+            report.target.summary().dominant,
+            HierarchyWeightFocus::Local
+        );
+        assert!(report.reason_codes.iter().any(|code| code == "quality_low"));
+        assert!(
+            report
+                .reason_codes
+                .iter()
+                .any(|code| code == "profile:coding")
+        );
+        assert!(report.adjustment_shape_is_clean());
+        assert!(policy.hierarchy_for(TaskProfile::Coding).local > previous.local);
+        assert_eq!(policy.observations().get(TaskProfile::Coding), 1);
+    }
+
+    #[test]
+    fn task_aware_hierarchy_adjustment_raises_fusion_for_long_document_contradictions() {
+        let mut policy = TaskAwareHierarchyAdjustmentPolicy::new();
+        let previous = policy.hierarchy_for(TaskProfile::LongDocument);
+
+        let report = policy.observe(HierarchyAdjustmentFeedback::new(
+            TaskProfile::LongDocument,
+            0.72,
+            7.0,
+            3,
+        ));
+
+        assert!(report.can_commit);
+        assert!(!report.requires_repair_first);
+        assert!(report.target.fusion > previous.fusion);
+        assert!(report.adjusted.fusion > previous.fusion);
+        assert_eq!(
+            report.target.summary().dominant,
+            HierarchyWeightFocus::Fusion
+        );
+        assert!(
+            report
+                .reason_codes
+                .iter()
+                .any(|code| code == "contradiction_pressure")
+        );
+        assert!(report.feedback.has_contradictions());
+        assert!(report.adjusted_weights_are_clean());
+        assert!(report.adjustment_accounting_is_consistent());
+        assert!(policy.hierarchy_for(TaskProfile::LongDocument).fusion > previous.fusion);
+        assert_eq!(policy.observations().get(TaskProfile::LongDocument), 1);
+    }
+
+    #[test]
+    fn task_aware_hierarchy_adjustment_rejects_invalid_feedback_without_mutation() {
+        let mut policy = TaskAwareHierarchyAdjustmentPolicy::new();
+        let previous = policy.hierarchy_for(TaskProfile::Writing);
+
+        let report = policy.observe(HierarchyAdjustmentFeedback {
+            profile: TaskProfile::Writing,
+            quality: f32::NAN,
+            perplexity: 3.0,
+            contradiction_count: 0,
+        });
+
+        assert!(!report.can_commit);
+        assert!(report.requires_repair_first);
+        assert!(!report.feedback.can_use_feedback());
+        assert!(
+            report
+                .reason_codes
+                .iter()
+                .any(|code| code == "feedback_invalid")
+        );
+        assert!(
+            report
+                .reason_codes
+                .iter()
+                .any(|code| code == "repair_first")
+        );
+        assert_eq!(policy.hierarchy_for(TaskProfile::Writing), previous);
+        assert_eq!(policy.observations().get(TaskProfile::Writing), 0);
+        assert_eq!(report.adjustment_problem_component_count(), 1);
+        assert!(report.adjustment_accounting_is_consistent());
+        assert!(!report.adjustment_shape_is_clean());
     }
 }
