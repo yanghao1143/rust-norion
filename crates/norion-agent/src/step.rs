@@ -605,17 +605,18 @@ impl AgentClosedLoopNextTurnPlan {
         self,
         memory_health: AgentClosedLoopMemoryReusePreflightExecutionHealth,
     ) -> Self {
-        let repair_tasks = memory_reuse_preflight_repair_tasks(&memory_health);
+        let repair_task_plan =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+                memory_health.clone(),
+                self.next_queue.clone(),
+            );
+        let repair_task_summary = repair_task_plan.summary();
         let mut plan = self.with_memory_reuse_preflight_health(memory_health);
-        if repair_tasks.is_empty() {
+        if repair_task_summary.repair_tasks == 0 {
             return plan;
         }
 
-        let repair_task_ids = repair_tasks
-            .iter()
-            .map(|task| task.id.clone())
-            .collect::<Vec<_>>();
-        plan.next_queue = plan.next_queue.with_repair_first(&repair_tasks);
+        plan.next_queue = repair_task_plan.next_queue;
         let next_queue_tasks = plan.next_queue.len();
         if let Some(line) = plan
             .telemetry
@@ -629,17 +630,19 @@ impl AgentClosedLoopNextTurnPlan {
         }
         plan.reasons.push(format!(
             "memory_reuse_preflight:repair_tasks={}",
-            repair_tasks.len()
+            repair_task_summary.repair_tasks
         ));
         plan.telemetry.push(format!(
             "memory_reuse_preflight_repair_tasks={}",
-            repair_tasks.len()
+            repair_task_summary.repair_tasks
         ));
         plan.telemetry.extend(
-            repair_task_ids
+            repair_task_summary
+                .repair_task_ids
                 .iter()
                 .map(|task_id| format!("memory_reuse_preflight_repair_task_id={task_id}")),
         );
+        plan.telemetry.extend(repair_task_plan.telemetry);
 
         plan
     }
@@ -654,6 +657,98 @@ impl AgentClosedLoopNextTurnPlan {
 
     pub fn allows_service_advance(&self) -> bool {
         !self.requires_repair_first()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlan {
+    pub memory_health: AgentClosedLoopMemoryReusePreflightExecutionHealth,
+    pub requires_repair_first: bool,
+    pub repair_tasks: Vec<AgentTask>,
+    pub next_queue: AgentTaskQueue,
+    pub reasons: Vec<String>,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlan {
+    pub fn from_health_and_queue(
+        memory_health: AgentClosedLoopMemoryReusePreflightExecutionHealth,
+        next_queue: AgentTaskQueue,
+    ) -> Self {
+        let requires_repair_first = memory_health.requires_repair_first();
+        let reasons = memory_health.reasons.clone();
+        let repair_tasks = memory_reuse_preflight_repair_tasks(&memory_health);
+        let next_queue = next_queue.with_repair_first(&repair_tasks);
+        let repair_task_ids = repair_tasks
+            .iter()
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+        let next_queue_task_ids = next_queue.task_ids();
+        let telemetry = memory_reuse_preflight_repair_task_plan_telemetry(
+            memory_health.status,
+            requires_repair_first,
+            repair_task_ids.len(),
+            next_queue_task_ids.len(),
+            reasons.len(),
+            &repair_task_ids,
+            &next_queue_task_ids,
+        );
+
+        Self {
+            memory_health,
+            requires_repair_first,
+            repair_tasks,
+            next_queue,
+            reasons,
+            telemetry,
+        }
+    }
+
+    pub fn summary(&self) -> AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary {
+        AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary::from_plan(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary {
+    pub memory_health_status: AgentClosedLoopMemoryReusePreflightExecutionHealthStatus,
+    pub requires_repair_first: bool,
+    pub repair_tasks: usize,
+    pub next_queue_tasks: usize,
+    pub reasons: usize,
+    pub repair_task_ids: Vec<String>,
+    pub next_queue_task_ids: Vec<String>,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentClosedLoopMemoryReusePreflightRepairTaskPlanSummary {
+    pub fn from_plan(plan: &AgentClosedLoopMemoryReusePreflightRepairTaskPlan) -> Self {
+        let repair_task_ids = plan
+            .repair_tasks
+            .iter()
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+        let next_queue_task_ids = plan.next_queue.task_ids();
+        let telemetry = memory_reuse_preflight_repair_task_plan_summary_telemetry(
+            plan.memory_health.status,
+            plan.requires_repair_first,
+            repair_task_ids.len(),
+            next_queue_task_ids.len(),
+            plan.reasons.len(),
+            &repair_task_ids,
+            &next_queue_task_ids,
+        );
+
+        Self {
+            memory_health_status: plan.memory_health.status,
+            requires_repair_first: plan.requires_repair_first,
+            repair_tasks: repair_task_ids.len(),
+            next_queue_tasks: next_queue_task_ids.len(),
+            reasons: plan.reasons.len(),
+            repair_task_ids,
+            next_queue_task_ids,
+            telemetry,
+        }
     }
 }
 
@@ -1643,6 +1738,76 @@ fn memory_reuse_preflight_execution_dashboard_telemetry(
             "agent_memory_reuse_preflight_execution_skipped_engine_calls={skipped_engine_calls}"
         ),
     ]
+}
+
+fn memory_reuse_preflight_repair_task_plan_telemetry(
+    memory_health_status: AgentClosedLoopMemoryReusePreflightExecutionHealthStatus,
+    requires_repair_first: bool,
+    repair_tasks: usize,
+    next_queue_tasks: usize,
+    reasons: usize,
+    repair_task_ids: &[String],
+    next_queue_task_ids: &[String],
+) -> Vec<String> {
+    let mut telemetry = vec![
+        "agent_memory_reuse_preflight_repair_task_plan=true".to_owned(),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_health_status={}",
+            memory_health_status.as_str()
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_requires_repair_first={requires_repair_first}"
+        ),
+        format!("agent_memory_reuse_preflight_repair_task_plan_repair_tasks={repair_tasks}"),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_next_queue_tasks={next_queue_tasks}"
+        ),
+        format!("agent_memory_reuse_preflight_repair_task_plan_reasons={reasons}"),
+    ];
+    telemetry.extend(repair_task_ids.iter().map(|task_id| {
+        format!("agent_memory_reuse_preflight_repair_task_plan_repair_task_id={task_id}")
+    }));
+    telemetry.extend(next_queue_task_ids.iter().map(|task_id| {
+        format!("agent_memory_reuse_preflight_repair_task_plan_next_queue_task_id={task_id}")
+    }));
+    telemetry
+}
+
+fn memory_reuse_preflight_repair_task_plan_summary_telemetry(
+    memory_health_status: AgentClosedLoopMemoryReusePreflightExecutionHealthStatus,
+    requires_repair_first: bool,
+    repair_tasks: usize,
+    next_queue_tasks: usize,
+    reasons: usize,
+    repair_task_ids: &[String],
+    next_queue_task_ids: &[String],
+) -> Vec<String> {
+    let mut telemetry = vec![
+        "agent_memory_reuse_preflight_repair_task_plan_summary=true".to_owned(),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_summary_health_status={}",
+            memory_health_status.as_str()
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_summary_requires_repair_first={requires_repair_first}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_summary_repair_tasks={repair_tasks}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_summary_next_queue_tasks={next_queue_tasks}"
+        ),
+        format!("agent_memory_reuse_preflight_repair_task_plan_summary_reasons={reasons}"),
+    ];
+    telemetry.extend(repair_task_ids.iter().map(|task_id| {
+        format!("agent_memory_reuse_preflight_repair_task_plan_summary_repair_task_id={task_id}")
+    }));
+    telemetry.extend(next_queue_task_ids.iter().map(|task_id| {
+        format!(
+            "agent_memory_reuse_preflight_repair_task_plan_summary_next_queue_task_id={task_id}"
+        )
+    }));
+    telemetry
 }
 
 fn memory_reuse_preflight_repair_tasks(
@@ -2707,6 +2872,47 @@ mod tests {
     }
 
     #[test]
+    fn closed_loop_memory_reuse_preflight_repair_task_plan_summarizes_stable_health() {
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    1,
+                    1,
+                    0,
+                    Vec::new(),
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+
+        let repair_task_plan =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+                memory_health,
+                next_queue(),
+            );
+        let summary = repair_task_plan.summary();
+
+        assert_eq!(
+            summary.memory_health_status,
+            AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Stable
+        );
+        assert!(!summary.requires_repair_first);
+        assert_eq!(summary.repair_tasks, 0);
+        assert_eq!(summary.next_queue_tasks, 1);
+        assert!(summary.repair_task_ids.is_empty());
+        assert_eq!(summary.next_queue_task_ids, vec!["next-turn"]);
+        assert_eq!(repair_task_plan.repair_tasks, Vec::<AgentTask>::new());
+        assert_eq!(repair_task_plan.next_queue.task_ids(), vec!["next-turn"]);
+        assert!(summary.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_repair_task_plan_summary_repair_tasks=0"
+        }));
+    }
+
+    #[test]
     fn closed_loop_next_turn_plan_observes_memory_reuse_preflight_watch_health() {
         let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
             "run-1",
@@ -2921,6 +3127,139 @@ mod tests {
         assert!(plan.telemetry.iter().any(|line| {
             line == "memory_reuse_preflight_repair_task_id=memory-reuse-preflight-repair-0"
         }));
+        assert!(plan.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_repair_task_plan_repair_task_id=memory-reuse-preflight-repair-0"
+        }));
+    }
+
+    #[test]
+    fn closed_loop_memory_reuse_preflight_repair_task_plan_summarizes_repair_queue() {
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    1,
+                    0,
+                    1,
+                    vec!["memory_reuse_preflight_not_executable"],
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let repair_task_count = memory_health.reasons.len();
+        let repair_task_ids = (0..repair_task_count)
+            .map(|index| format!("memory-reuse-preflight-repair-{index}"))
+            .collect::<Vec<_>>();
+
+        let repair_task_plan =
+            AgentClosedLoopMemoryReusePreflightRepairTaskPlan::from_health_and_queue(
+                memory_health,
+                next_queue(),
+            );
+        let summary = repair_task_plan.summary();
+
+        assert_eq!(
+            summary.memory_health_status,
+            AgentClosedLoopMemoryReusePreflightExecutionHealthStatus::Repair
+        );
+        assert!(summary.requires_repair_first);
+        assert_eq!(summary.repair_tasks, repair_task_count);
+        assert_eq!(summary.reasons, repair_task_count);
+        assert_eq!(summary.repair_task_ids, repair_task_ids);
+        assert_eq!(
+            &summary.next_queue_task_ids[..repair_task_count],
+            summary.repair_task_ids.as_slice()
+        );
+        assert_eq!(
+            summary.next_queue_task_ids.last().map(String::as_str),
+            Some("next-turn")
+        );
+        assert_eq!(
+            repair_task_plan.repair_tasks[0].role,
+            AgentRole::MemoryCurator
+        );
+        assert!(
+            repair_task_plan
+                .next_queue
+                .tasks()
+                .iter()
+                .find(|task| task.id == "next-turn")
+                .expect("next-turn task")
+                .dependencies
+                .iter()
+                .all(|dependency| dependency.starts_with("memory-reuse-preflight-repair-"))
+        );
+        assert!(summary.telemetry.iter().any(|line| {
+            line == &format!(
+                "agent_memory_reuse_preflight_repair_task_plan_summary_repair_tasks={repair_task_count}"
+            )
+        }));
+    }
+
+    #[test]
+    fn closed_loop_dispatch_preparer_dispatches_memory_reuse_preflight_repairs_before_next_turn() {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let memory_health =
+            AgentClosedLoopMemoryReusePreflightExecutionHistory::from_summaries(vec![
+                memory_reuse_preflight_execution_summary(
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    1,
+                    0,
+                    1,
+                    vec!["memory_reuse_preflight_not_executable"],
+                ),
+            ])
+            .health(AgentClosedLoopMemoryReusePreflightExecutionHealthPolicy::default());
+        let repair_task_count = memory_health.reasons.len();
+        let repair_task_ids = (0..repair_task_count)
+            .map(|index| format!("memory-reuse-preflight-repair-{index}"))
+            .collect::<Vec<_>>();
+        let turn_plan = history
+            .next_turn_plan(
+                next_queue(),
+                AgentClosedLoopExecutionHealthPolicy::default(),
+            )
+            .with_memory_reuse_preflight_repair_tasks(memory_health);
+        let budget = BudgetLedger::new()
+            .with_budget(AgentRole::MemoryCurator, AgentBudget::new(64, 8, 8))
+            .with_budget(AgentRole::Planner, AgentBudget::new(8, 1, 1));
+
+        let prepared = AgentClosedLoopDispatchPreparer::new().prepare(
+            turn_plan,
+            &BTreeSet::new(),
+            budget,
+            &BudgetPolicy::strict(),
+            repair_task_count + 1,
+        );
+
+        assert!(prepared.can_dispatch());
+        assert_eq!(prepared.assigned_task_ids(), repair_task_ids);
+        assert!(prepared.skipped_reasons.is_empty());
+        let dispatch = prepared.dispatch.expect("dispatch");
+        assert_eq!(dispatch.wave.task_ids, repair_task_ids);
+        assert_eq!(dispatch.remaining_queue.task_ids(), vec!["next-turn"]);
+        assert_eq!(
+            dispatch.remaining_queue.tasks()[0].dependencies,
+            repair_task_ids
+        );
     }
 
     #[test]
