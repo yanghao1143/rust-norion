@@ -193,19 +193,25 @@ impl AgentAdapterBoundaryGate {
     }
 
     pub fn from_dispatch_gate(decision: &TaskDispatchGateDecision) -> Self {
+        let can_dispatch = decision.is_dispatchable();
+        let can_promote_side_effects = decision.is_side_effect_safe();
         let mut gate = if decision.requires_repair_first {
             Self::repair(
                 AgentAdapterBoundaryOwner::NorionCore,
                 first_reason_or(&decision.reasons, "dispatch_requires_repair_first"),
             )
-        } else if decision.can_dispatch {
+        } else if can_dispatch && can_promote_side_effects {
             Self::stable(AgentAdapterBoundaryOwner::NorionCore)
         } else {
             Self::watch(
                 AgentAdapterBoundaryOwner::NorionCore,
                 first_reason_or(&decision.reasons, "dispatch_observe_only"),
             )
-        };
+        }
+        .with_dispatch_allowed(can_dispatch)
+        .with_service_command_allowed(can_dispatch)
+        .with_memory_note_allowed(can_promote_side_effects)
+        .with_adaptive_state_allowed(can_promote_side_effects);
 
         extend_ordered_unique(&mut gate.blocked_reasons, decision.reasons.clone());
         gate
@@ -10164,11 +10170,17 @@ mod tests {
                 remaining_tokens: 8,
                 remaining_steps: 1,
                 remaining_messages: 1,
+                remaining_zero_budget_roles: 0,
+                remaining_partially_depleted_roles: 0,
+                remaining_token_depleted_roles: 0,
+                remaining_step_depleted_roles: 0,
+                remaining_message_depleted_roles: 0,
                 assigned_rate: 1.0,
                 rejected_rate: 0.0,
                 telemetry: Vec::new(),
             },
             can_dispatch: true,
+            can_promote_side_effects: true,
             requires_repair_first: false,
             reasons: Vec::new(),
             telemetry: Vec::new(),
@@ -11473,11 +11485,17 @@ mod tests {
                 remaining_tokens: 8,
                 remaining_steps: 1,
                 remaining_messages: 1,
+                remaining_zero_budget_roles: 0,
+                remaining_partially_depleted_roles: 0,
+                remaining_token_depleted_roles: 0,
+                remaining_step_depleted_roles: 0,
+                remaining_message_depleted_roles: 0,
                 assigned_rate: 1.0,
                 rejected_rate: 0.0,
                 telemetry: Vec::new(),
             },
             can_dispatch: true,
+            can_promote_side_effects: true,
             requires_repair_first: false,
             reasons: Vec::new(),
             telemetry: Vec::new(),
@@ -11490,11 +11508,17 @@ mod tests {
                 remaining_tokens: 0,
                 remaining_steps: 0,
                 remaining_messages: 0,
+                remaining_zero_budget_roles: 1,
+                remaining_partially_depleted_roles: 0,
+                remaining_token_depleted_roles: 1,
+                remaining_step_depleted_roles: 1,
+                remaining_message_depleted_roles: 1,
                 assigned_rate: 0.0,
                 rejected_rate: 1.0,
                 telemetry: Vec::new(),
             },
             can_dispatch: false,
+            can_promote_side_effects: false,
             requires_repair_first: true,
             reasons: vec![
                 "dispatch_rejection task=review role=reviewer reason=insufficient budget"
@@ -11514,6 +11538,37 @@ mod tests {
         assert_eq!(
             dirty_gate.blocked_reasons,
             vec!["dispatch_rejection task=review role=reviewer reason=insufficient budget"]
+        );
+    }
+
+    #[test]
+    fn adapter_gate_projects_partial_dispatch_depletion_as_side_effect_watch() {
+        let mut planner = DispatchPlanner::new(
+            BudgetLedger::new().with_budget(AgentRole::Coder, AgentBudget::new(20, 1, 2)),
+        );
+        let task = AgentTask::new(
+            "coder-step-limited",
+            AgentRole::Coder,
+            "consume dispatch step budget",
+            AgentBudget::new(8, 1, 1),
+        );
+        let dispatch = planner
+            .plan_with_policy(vec![task], &BudgetPolicy::strict())
+            .gate();
+
+        let gate = AgentAdapterBoundaryGate::from_dispatch_gate(&dispatch);
+
+        assert!(dispatch.can_dispatch);
+        assert!(!dispatch.can_promote_side_effects);
+        assert_eq!(gate.owner, AgentAdapterBoundaryOwner::NorionCore);
+        assert_eq!(gate.status, AgentAdapterBoundaryStatus::Watch);
+        assert!(gate.dispatch_allowed);
+        assert!(gate.service_command_allowed);
+        assert!(!gate.memory_note_allowed);
+        assert!(!gate.adaptive_state_allowed);
+        assert_eq!(
+            gate.blocked_reasons,
+            vec!["dispatch_remaining_partially_depleted_roles=1"]
         );
     }
 
