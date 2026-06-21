@@ -3,7 +3,8 @@ use std::path::Path;
 
 use crate::self_evolution::{
     SelfEvolutionAdmissionReport, SelfEvolutionExperimentRecord,
-    SelfEvolutionRollbackReplayGateReport, SelfEvolutionRollbackReplayPlan,
+    SelfEvolutionOperatorApprovalReport, SelfEvolutionRollbackReplayGateReport,
+    SelfEvolutionRollbackReplayPlan,
 };
 
 use super::writer::append_line;
@@ -57,5 +58,19 @@ pub fn append_self_evolution_rollback_replay_gate_trace_jsonl(
     report: &SelfEvolutionRollbackReplayGateReport,
 ) -> io::Result<()> {
     let line = self_evolution_rollback_replay_gate_trace_json_line(report);
+    append_line(path, &line)
+}
+
+pub fn self_evolution_operator_approval_trace_json_line(
+    report: &SelfEvolutionOperatorApprovalReport,
+) -> String {
+    report.json_line()
+}
+
+pub fn append_self_evolution_operator_approval_trace_jsonl(
+    path: impl AsRef<Path>,
+    report: &SelfEvolutionOperatorApprovalReport,
+) -> io::Result<()> {
+    let line = self_evolution_operator_approval_trace_json_line(report);
     append_line(path, &line)
 }

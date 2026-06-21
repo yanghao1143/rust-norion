@@ -37,6 +37,61 @@ fn admitted_self_evolution_admission_line() -> String {
     report.json_line()
 }
 
+fn operator_approval_trace_line(approved: bool) -> String {
+    let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        NoironRouter::new().state(),
+        TaskProfile::Coding,
+        GenerationMetrics {
+            perplexity: 36.0,
+            semantic_consistency: 0.20,
+            contradiction_count: 2,
+            token_count: 64,
+        },
+    );
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        "operator-approval-trace",
+        EvolutionLedger {
+            replay_rust_check_items: 1,
+            replay_rust_check_passed: 1,
+            replay_rust_check_failed: 0,
+            drift_rollbacks: 1,
+            rollback_router_threshold_delta: 0.02,
+            rollback_hierarchy_weight_delta: 0.03,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ))
+    .with_router_threshold_preview_report(&router_preview);
+    let admission = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    ledger.append_admission_report("operator-approval-experiment", &admission);
+    let replay_gate =
+        SelfEvolutionRollbackReplayGate::new().evaluate(&ledger.rollback_replay_plan());
+    let mut approval_evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+        "maintainer-jy",
+        "operator-approval-ticket",
+        &replay_gate.review_packet,
+        "approved for operator approval trace schema validation",
+    );
+    if !approved {
+        approval_evidence.approval_ticket_id.clear();
+    }
+    let approval = SelfEvolutionOperatorApprovalGate::new()
+        .evaluate(&replay_gate.review_packet, &approval_evidence);
+
+    assert_eq!(approval.operator_approved, approved);
+    approval.json_line()
+}
+
 #[test]
 fn self_evolution_admission_trace_schema_accepts_read_only_packet() {
     let line = admitted_self_evolution_admission_line();
@@ -76,6 +131,101 @@ fn self_evolution_admission_trace_schema_accepts_read_only_packet() {
             .contains("self_evolution_admission_review_packets=1")
     );
     cleanup(path);
+}
+
+#[test]
+fn self_evolution_operator_approval_trace_schema_accepts_redacted_read_only_approval() {
+    let line = operator_approval_trace_line(true);
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"schema\":\"rust-norion-self-evolution-operator-approval-v1\""));
+    assert!(line.contains("\"decision\":\"approved\""));
+    assert!(line.contains("\"operator_approved\":true"));
+    assert!(line.contains("\"operator_digest\":\"fnv64:"));
+    assert!(line.contains("\"approval_ticket_digest\":\"fnv64:"));
+    assert!(line.contains("\"approval_reason_digest\":\"fnv64:"));
+    assert!(line.contains("\"approved_review_packet_count\":1"));
+    assert!(!line.contains("\"operator_id\":"));
+    assert!(!line.contains("\"approval_ticket_id\":"));
+    assert!(!line.contains("\"approval_reason\":"));
+    assert!(!line.contains("maintainer-jy"));
+    assert!(!line.contains("operator-approval-ticket"));
+    assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("self-evolution-operator-approval-trace-schema");
+    fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.self_evolution_operator_approval_events, 1);
+    assert_eq!(report.self_evolution_operator_approval_approved, 1);
+    assert_eq!(report.self_evolution_operator_approval_held, 0);
+    assert_eq!(report.self_evolution_operator_approval_review_packets, 1);
+    assert!(report.self_evolution_operator_approval_evidence_ids > 0);
+    assert_eq!(report.self_evolution_operator_approval_write_allowed, 0);
+    assert_eq!(report.self_evolution_operator_approval_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_operator_approval_events=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn self_evolution_operator_approval_trace_schema_accepts_redacted_hold() {
+    let line = operator_approval_trace_line(false);
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"decision\":\"hold\""));
+    assert!(line.contains("\"operator_approved\":false"));
+    assert!(line.contains("\"blocked_reasons_count\":"));
+    assert!(!line.contains("\"blocked_reasons\":["));
+    assert!(!line.contains("operator-approval-ticket"));
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn self_evolution_operator_approval_trace_schema_rejects_write_or_raw_payload() {
+    let line = operator_approval_trace_line(true)
+        .replacen("\"write_allowed\":false", "\"write_allowed\":true", 1)
+        .replacen(
+            "\"operator_digest\":\"",
+            "\"operator_id\":\"maintainer-jy\",\"operator_digest\":\"",
+            1,
+        );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("write_allowed=true")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("must not expose raw operator_id")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn self_evolution_operator_approval_trace_schema_rejects_mismatched_decision() {
+    let line = operator_approval_trace_line(true).replacen(
+        "\"operator_approved\":true",
+        "\"operator_approved\":false",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("approved decision requires operator_approved=true")),
+        "{failures:?}"
+    );
 }
 
 #[test]
