@@ -69,6 +69,12 @@ fn summary_records_memory_governance_evidence() {
         summary.total_memory_admission_review_packets(),
         summary.total_memory_admission_candidates()
     );
+    assert_eq!(
+        summary.total_memory_admission_ledger_records(),
+        summary.total_memory_admission_candidates()
+    );
+    assert_eq!(summary.total_memory_admission_ledger_authorized(), 0);
+    assert_eq!(summary.total_memory_admission_ledger_applied(), 0);
     assert!(summary.total_memory_retention_decayed() >= 1);
     assert!(summary.total_memory_retention_removed() >= 1);
     assert_eq!(summary.total_memory_compaction_pair_evidence(), 1);
@@ -90,6 +96,16 @@ fn summary_records_memory_governance_evidence() {
         summary
             .summary_line()
             .contains("memory_admission_review_packets=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("memory_admission_ledger_records=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("memory_admission_ledger_authorized=0")
     );
     assert!(
         summary

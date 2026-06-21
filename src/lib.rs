@@ -99,6 +99,8 @@ pub use local_runtime::LocalTransformerRuntime;
 pub use memory_admission::{
     MemoryAdmissionApprovalState, MemoryAdmissionCandidate, MemoryAdmissionDecision,
     MemoryAdmissionInput, MemoryAdmissionKind, MemoryAdmissionPreview, MemoryAdmissionReviewPacket,
+    MemoryKvLedgerRecord, MemoryKvLedgerWriteDecision, MemoryKvLedgerWritePlan,
+    MemoryKvLedgerWritePolicy, MemoryPrivacyClassification,
 };
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,

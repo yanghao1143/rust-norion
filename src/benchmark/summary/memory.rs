@@ -53,6 +53,55 @@ impl BenchmarkSummary {
             .memory_admission_review_packets
     }
 
+    pub fn total_memory_admission_ledger_records(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_records
+    }
+
+    pub fn total_memory_admission_ledger_authorized(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_authorized
+    }
+
+    pub fn total_memory_admission_ledger_applied(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_applied
+    }
+
+    pub fn total_memory_admission_ledger_preview_only(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_preview_only
+    }
+
+    pub fn total_memory_admission_ledger_held(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_ledger_held
+    }
+
+    pub fn total_memory_admission_ledger_rejected(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_rejected
+    }
+
+    pub fn total_memory_admission_ledger_duplicate(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_duplicate
+    }
+
+    pub fn total_memory_admission_ledger_decayed(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_decayed
+    }
+
+    pub fn total_memory_admission_ledger_merged(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_merged
+    }
+
+    pub fn total_memory_admission_ledger_rollback(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_ledger_rollback
+    }
+
     pub fn total_memory_retention_decayed(&self) -> usize {
         self.memory_governance_evidence.total_retention_decayed
     }

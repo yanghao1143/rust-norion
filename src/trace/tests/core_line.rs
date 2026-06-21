@@ -230,6 +230,17 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"candidate_summaries\":"));
     assert!(line.contains("\"review_packets\":"));
     assert!(line.contains("\"review_packet_summaries\":"));
+    assert!(line.contains("\"ledger_records\":"));
+    assert!(line.contains("\"ledger_authorized\":"));
+    assert!(line.contains("\"ledger_applied\":"));
+    assert!(line.contains("\"ledger_preview_only\":"));
+    assert!(line.contains("\"ledger_held\":"));
+    assert!(line.contains("\"ledger_rejected\":"));
+    assert!(line.contains("\"ledger_duplicate\":"));
+    assert!(line.contains("\"ledger_decayed\":"));
+    assert!(line.contains("\"ledger_merged\":"));
+    assert!(line.contains("\"ledger_rollback\":"));
+    assert!(line.contains("\"ledger_summaries\":"));
     assert!(line.contains("\"read_only\":true"));
     assert!(line.contains("\"write_allowed\":false"));
     assert!(line.contains("\"stale_after\":"));

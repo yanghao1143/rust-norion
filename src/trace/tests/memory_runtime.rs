@@ -76,6 +76,18 @@ fn trace_json_line_emits_memory_admission_preview() {
         extract_json_usize_field(admission, "review_packets"),
         extract_json_usize_field(admission, "candidates")
     );
+    assert_eq!(
+        extract_json_usize_field(admission, "ledger_records"),
+        extract_json_usize_field(admission, "candidates")
+    );
+    assert_eq!(
+        extract_json_usize_field(admission, "ledger_authorized"),
+        Some(0)
+    );
+    assert_eq!(
+        extract_json_usize_field(admission, "ledger_applied"),
+        Some(0)
+    );
     assert!(
         extract_json_string_array_field(admission, "kinds")
             .unwrap()
@@ -104,6 +116,19 @@ fn trace_json_line_emits_memory_admission_preview() {
                     && summary.contains("next=")
                     && summary.contains("rollback=")
                     && summary.contains("write_allowed=false")
+            })
+    );
+    assert!(
+        extract_json_string_array_field(admission, "ledger_summaries")
+            .unwrap()
+            .iter()
+            .all(|summary| {
+                summary.contains("rollback=")
+                    && summary.contains("source_hash=")
+                    && summary.contains("privacy=")
+                    && summary.contains("validation=")
+                    && summary.contains("authorized=false")
+                    && summary.contains("applied=false")
             })
     );
 }

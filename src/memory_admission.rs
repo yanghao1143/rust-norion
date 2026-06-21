@@ -64,6 +64,324 @@ impl MemoryAdmissionApprovalState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryPrivacyClassification {
+    DigestOnly,
+    PublicSafe,
+    SensitiveBlocked,
+}
+
+impl MemoryPrivacyClassification {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::DigestOnly => "digest_only",
+            Self::PublicSafe => "public_safe",
+            Self::SensitiveBlocked => "sensitive_blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryKvLedgerWriteDecision {
+    PreviewOnly,
+    Admitted,
+    Held,
+    Rejected,
+    Duplicate,
+    Decayed,
+    Merged,
+    Rollback,
+}
+
+impl MemoryKvLedgerWriteDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PreviewOnly => "preview_only",
+            Self::Admitted => "admitted",
+            Self::Held => "held",
+            Self::Rejected => "rejected",
+            Self::Duplicate => "duplicate",
+            Self::Decayed => "decayed",
+            Self::Merged => "merged",
+            Self::Rollback => "rollback",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryKvLedgerWritePolicy {
+    pub durable_writes_enabled: bool,
+    pub operator_approved: bool,
+    pub rollback_requested: bool,
+    pub duplicate_source_hashes: Vec<String>,
+    pub decayed_candidate_ids: Vec<String>,
+    pub merged_candidate_ids: Vec<(String, String)>,
+}
+
+impl Default for MemoryKvLedgerWritePolicy {
+    fn default() -> Self {
+        Self {
+            durable_writes_enabled: false,
+            operator_approved: false,
+            rollback_requested: false,
+            duplicate_source_hashes: Vec::new(),
+            decayed_candidate_ids: Vec::new(),
+            merged_candidate_ids: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryKvLedgerRecord {
+    pub ledger_key: String,
+    pub candidate_id: String,
+    pub kind: MemoryAdmissionKind,
+    pub admission_decision: MemoryAdmissionDecision,
+    pub approval_state: MemoryAdmissionApprovalState,
+    pub write_decision: MemoryKvLedgerWriteDecision,
+    pub source_hash: String,
+    pub privacy_classification: MemoryPrivacyClassification,
+    pub rollback_anchor_id: String,
+    pub validation_evidence: Vec<String>,
+    pub rejection_reasons: Vec<String>,
+    pub duplicate_of: Option<String>,
+    pub merged_into: Option<String>,
+    pub append_only: bool,
+    pub durable_write_authorized: bool,
+    pub applied: bool,
+}
+
+impl MemoryKvLedgerRecord {
+    fn from_candidate(
+        candidate: &MemoryAdmissionCandidate,
+        packet: Option<&MemoryAdmissionReviewPacket>,
+        policy: &MemoryKvLedgerWritePolicy,
+    ) -> Self {
+        let approval_state = packet
+            .map(|packet| packet.approval_state)
+            .unwrap_or(MemoryAdmissionApprovalState::HeldForEvidence);
+        let mut rejection_reasons = writer_gate_failures(candidate, packet);
+        let duplicate_of = policy
+            .duplicate_source_hashes
+            .iter()
+            .find(|hash| *hash == &candidate.source_hash)
+            .cloned();
+        let merged_into = policy
+            .merged_candidate_ids
+            .iter()
+            .find(|(candidate_id, _)| candidate_id == &candidate.id)
+            .map(|(_, merged_into)| merged_into.clone());
+        let write_decision = if !rejection_reasons.is_empty() {
+            MemoryKvLedgerWriteDecision::Rejected
+        } else if policy.rollback_requested
+            || candidate.decision == MemoryAdmissionDecision::Quarantine
+            || approval_state == MemoryAdmissionApprovalState::Quarantined
+        {
+            rejection_reasons.push("rollback_or_quarantine_required".to_owned());
+            MemoryKvLedgerWriteDecision::Rollback
+        } else if candidate.decision == MemoryAdmissionDecision::Reject
+            || approval_state == MemoryAdmissionApprovalState::Rejected
+        {
+            rejection_reasons.push("candidate_rejected".to_owned());
+            MemoryKvLedgerWriteDecision::Rejected
+        } else if candidate.decision == MemoryAdmissionDecision::Hold
+            || approval_state == MemoryAdmissionApprovalState::HeldForEvidence
+        {
+            rejection_reasons.push("held_for_more_evidence".to_owned());
+            MemoryKvLedgerWriteDecision::Held
+        } else if duplicate_of.is_some() {
+            rejection_reasons.push("duplicate_source_hash".to_owned());
+            MemoryKvLedgerWriteDecision::Duplicate
+        } else if policy
+            .decayed_candidate_ids
+            .iter()
+            .any(|candidate_id| candidate_id == &candidate.id)
+        {
+            rejection_reasons.push("candidate_decayed_before_write".to_owned());
+            MemoryKvLedgerWriteDecision::Decayed
+        } else if merged_into.is_some() {
+            rejection_reasons.push("candidate_merged_before_write".to_owned());
+            MemoryKvLedgerWriteDecision::Merged
+        } else if !policy.durable_writes_enabled {
+            rejection_reasons.push("durable_writes_disabled".to_owned());
+            MemoryKvLedgerWriteDecision::PreviewOnly
+        } else if !policy.operator_approved {
+            rejection_reasons.push("operator_approval_missing".to_owned());
+            MemoryKvLedgerWriteDecision::Held
+        } else {
+            MemoryKvLedgerWriteDecision::Admitted
+        };
+        let durable_write_authorized = write_decision == MemoryKvLedgerWriteDecision::Admitted
+            && policy.durable_writes_enabled
+            && policy.operator_approved;
+
+        Self {
+            ledger_key: ledger_key_for_candidate(candidate),
+            candidate_id: candidate.id.clone(),
+            kind: candidate.kind,
+            admission_decision: candidate.decision,
+            approval_state,
+            write_decision,
+            source_hash: candidate.source_hash.clone(),
+            privacy_classification: candidate.privacy_classification,
+            rollback_anchor_id: candidate.rollback_anchor_id.clone(),
+            validation_evidence: candidate.validation_evidence.clone(),
+            rejection_reasons,
+            duplicate_of,
+            merged_into,
+            append_only: true,
+            durable_write_authorized,
+            applied: false,
+        }
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "{}:{}:{} approval={} authorized={} applied={} rollback={} source_hash={} privacy={} validation={} reasons={}",
+            self.write_decision.as_str(),
+            self.kind.as_str(),
+            self.candidate_id,
+            self.approval_state.as_str(),
+            self.durable_write_authorized,
+            self.applied,
+            self.rollback_anchor_id,
+            self.source_hash,
+            self.privacy_classification.as_str(),
+            self.validation_evidence.len(),
+            self.rejection_reasons.join("|")
+        )
+    }
+
+    pub fn serialized_value(&self) -> Vec<u8> {
+        format!(
+            "memory_kv_ledger_v1\tcandidate={}\tkind={}\tdecision={}\tapproval={}\tsource_hash={}\tprivacy={}\trollback={}\tvalidation={}\treasons={}\tappend_only={}\tauthorized={}\tapplied={}",
+            sanitize_review_text(&self.candidate_id),
+            self.kind.as_str(),
+            self.write_decision.as_str(),
+            self.approval_state.as_str(),
+            sanitize_review_text(&self.source_hash),
+            self.privacy_classification.as_str(),
+            sanitize_review_text(&self.rollback_anchor_id),
+            self.validation_evidence.len(),
+            self.rejection_reasons.join("|"),
+            self.append_only,
+            self.durable_write_authorized,
+            self.applied
+        )
+        .into_bytes()
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        !self.durable_write_authorized && !self.applied
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryKvLedgerWritePlan {
+    pub records: Vec<MemoryKvLedgerRecord>,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl Default for MemoryKvLedgerWritePlan {
+    fn default() -> Self {
+        Self {
+            records: Vec::new(),
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+}
+
+impl MemoryKvLedgerWritePlan {
+    pub fn from_preview(
+        preview: &MemoryAdmissionPreview,
+        policy: MemoryKvLedgerWritePolicy,
+    ) -> Self {
+        let records = preview
+            .candidates
+            .iter()
+            .map(|candidate| {
+                let packet = preview
+                    .review_packets
+                    .iter()
+                    .find(|packet| packet.candidate_id == candidate.id);
+                MemoryKvLedgerRecord::from_candidate(candidate, packet, &policy)
+            })
+            .collect::<Vec<_>>();
+        let write_allowed = records.iter().any(|record| record.durable_write_authorized);
+
+        Self {
+            records,
+            read_only: !write_allowed,
+            write_allowed,
+            applied: false,
+        }
+    }
+
+    pub fn append_authorized_records(
+        &mut self,
+        store: &mut crate::disk_kv::DiskKvStore,
+    ) -> std::io::Result<usize> {
+        let mut applied = 0;
+        for record in &mut self.records {
+            if !record.durable_write_authorized || record.applied {
+                continue;
+            }
+            let mut committed = record.clone();
+            committed.applied = true;
+            store.put(&record.ledger_key, committed.serialized_value())?;
+            record.applied = true;
+            applied += 1;
+        }
+        if applied > 0 {
+            self.applied = true;
+        }
+        Ok(applied)
+    }
+
+    pub fn record_count(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn authorized_count(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.durable_write_authorized)
+            .count()
+    }
+
+    pub fn applied_count(&self) -> usize {
+        self.records.iter().filter(|record| record.applied).count()
+    }
+
+    pub fn count_decision(&self, decision: MemoryKvLedgerWriteDecision) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.write_decision == decision)
+            .count()
+    }
+
+    pub fn summary_lines(&self) -> Vec<String> {
+        self.records
+            .iter()
+            .map(MemoryKvLedgerRecord::summary)
+            .collect()
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        self.read_only
+            && !self.write_allowed
+            && !self.applied
+            && self
+                .records
+                .iter()
+                .all(MemoryKvLedgerRecord::is_read_only_preview)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAdmissionCandidate {
     pub id: String,
@@ -71,6 +389,8 @@ pub struct MemoryAdmissionCandidate {
     pub decision: MemoryAdmissionDecision,
     pub profile: TaskProfile,
     pub prompt_digest: String,
+    pub source_hash: String,
+    pub privacy_classification: MemoryPrivacyClassification,
     pub prompt_chars: usize,
     pub quality: f32,
     pub process_reward: f32,
@@ -78,6 +398,7 @@ pub struct MemoryAdmissionCandidate {
     pub revision_actions: usize,
     pub rollback_anchor_id: String,
     pub evidence: Vec<String>,
+    pub validation_evidence: Vec<String>,
     pub privacy_checked: bool,
     pub durable_write_authorized: bool,
     pub applied: bool,
@@ -86,7 +407,7 @@ pub struct MemoryAdmissionCandidate {
 impl MemoryAdmissionCandidate {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} q={:.3} reward={:.3} critical={} revisions={} privacy_checked={} durable_write_authorized={} applied={}",
+            "{}:{}:{} q={:.3} reward={:.3} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.id,
@@ -94,6 +415,9 @@ impl MemoryAdmissionCandidate {
             self.process_reward,
             self.critical_reflection_issues,
             self.revision_actions,
+            self.source_hash,
+            self.privacy_classification.as_str(),
+            self.validation_evidence.len(),
             self.privacy_checked,
             self.durable_write_authorized,
             self.applied
@@ -113,7 +437,10 @@ pub struct MemoryAdmissionReviewPacket {
     pub decision: MemoryAdmissionDecision,
     pub approval_state: MemoryAdmissionApprovalState,
     pub rollback_anchor_id: String,
+    pub source_hash: String,
+    pub privacy_classification: MemoryPrivacyClassification,
     pub evidence: Vec<String>,
+    pub validation_evidence: Vec<String>,
     pub risk_flags: Vec<String>,
     pub next_action: String,
     pub read_only: bool,
@@ -124,7 +451,7 @@ pub struct MemoryAdmissionReviewPacket {
 impl MemoryAdmissionReviewPacket {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} approval={} next={} risks={} evidence={} rollback={} read_only={} write_allowed={} applied={}",
+            "{}:{}:{} approval={} next={} risks={} evidence={} validation={} source_hash={} privacy={} rollback={} read_only={} write_allowed={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.packet_id,
@@ -132,6 +459,9 @@ impl MemoryAdmissionReviewPacket {
             self.next_action,
             self.risk_flags.join("|"),
             self.evidence.join("|"),
+            self.validation_evidence.len(),
+            self.source_hash,
+            self.privacy_classification.as_str(),
             self.rollback_anchor_id,
             self.read_only,
             self.write_allowed,
@@ -148,6 +478,7 @@ impl MemoryAdmissionReviewPacket {
 pub struct MemoryAdmissionPreview {
     pub candidates: Vec<MemoryAdmissionCandidate>,
     pub review_packets: Vec<MemoryAdmissionReviewPacket>,
+    pub ledger_plan: MemoryKvLedgerWritePlan,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -158,6 +489,10 @@ impl Default for MemoryAdmissionPreview {
         Self {
             candidates: Vec::new(),
             review_packets: Vec::new(),
+            ledger_plan: MemoryKvLedgerWritePlan {
+                read_only: true,
+                ..MemoryKvLedgerWritePlan::default()
+            },
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -266,13 +601,20 @@ impl MemoryAdmissionPreview {
             .map(review_packet_for_candidate)
             .collect::<Vec<_>>();
 
-        Self {
+        let mut preview = Self {
             candidates,
             review_packets,
+            ledger_plan: MemoryKvLedgerWritePlan {
+                read_only: true,
+                ..MemoryKvLedgerWritePlan::default()
+            },
             read_only: true,
             write_allowed: false,
             applied: false,
-        }
+        };
+        preview.ledger_plan =
+            MemoryKvLedgerWritePlan::from_preview(&preview, MemoryKvLedgerWritePolicy::default());
+        preview
     }
 
     pub fn candidate_count(&self) -> usize {
@@ -310,6 +652,53 @@ impl MemoryAdmissionPreview {
         self.review_packets.len()
     }
 
+    pub fn ledger_record_count(&self) -> usize {
+        self.ledger_plan.record_count()
+    }
+
+    pub fn ledger_authorized_count(&self) -> usize {
+        self.ledger_plan.authorized_count()
+    }
+
+    pub fn ledger_applied_count(&self) -> usize {
+        self.ledger_plan.applied_count()
+    }
+
+    pub fn ledger_preview_only_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::PreviewOnly)
+    }
+
+    pub fn ledger_held_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::Held)
+    }
+
+    pub fn ledger_rejected_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::Rejected)
+    }
+
+    pub fn ledger_duplicate_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::Duplicate)
+    }
+
+    pub fn ledger_decayed_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::Decayed)
+    }
+
+    pub fn ledger_merged_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::Merged)
+    }
+
+    pub fn ledger_rollback_count(&self) -> usize {
+        self.ledger_plan
+            .count_decision(MemoryKvLedgerWriteDecision::Rollback)
+    }
+
     pub fn kind_summaries(&self) -> Vec<String> {
         unique_strings(
             self.candidates
@@ -340,6 +729,10 @@ impl MemoryAdmissionPreview {
             .collect()
     }
 
+    pub fn ledger_summaries(&self) -> Vec<String> {
+        self.ledger_plan.summary_lines()
+    }
+
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only
             && !self.write_allowed
@@ -352,6 +745,7 @@ impl MemoryAdmissionPreview {
                 .review_packets
                 .iter()
                 .all(MemoryAdmissionReviewPacket::is_read_only_preview)
+            && self.ledger_plan.is_read_only_preview()
     }
 
     fn count_decision(&self, decision: MemoryAdmissionDecision) -> usize {
@@ -373,8 +767,15 @@ fn review_packet_for_candidate(
         decision: candidate.decision,
         approval_state,
         rollback_anchor_id: candidate.rollback_anchor_id.clone(),
+        source_hash: candidate.source_hash.clone(),
+        privacy_classification: candidate.privacy_classification,
         evidence: candidate
             .evidence
+            .iter()
+            .map(|evidence| sanitize_review_text(evidence))
+            .collect(),
+        validation_evidence: candidate
+            .validation_evidence
             .iter()
             .map(|evidence| sanitize_review_text(evidence))
             .collect(),
@@ -491,6 +892,8 @@ fn candidate(
         decision,
         profile: input.profile,
         prompt_digest: prompt_digest.to_owned(),
+        source_hash: format!("sha256:{prompt_digest}"),
+        privacy_classification: MemoryPrivacyClassification::DigestOnly,
         prompt_chars,
         quality,
         process_reward,
@@ -498,6 +901,12 @@ fn candidate(
         revision_actions: input.report.revision_actions.len(),
         rollback_anchor_id: rollback_anchor_id.to_owned(),
         evidence,
+        validation_evidence: validation_evidence_for_candidate(
+            decision,
+            quality,
+            process_reward,
+            input.drift_report,
+        ),
         privacy_checked: true,
         durable_write_authorized: false,
         applied: false,
@@ -640,6 +1049,75 @@ fn option_score(value: Option<f32>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
+fn validation_evidence_for_candidate(
+    decision: MemoryAdmissionDecision,
+    quality: f32,
+    process_reward: f32,
+    drift: &DriftReport,
+) -> Vec<String> {
+    vec![
+        format!("admission_decision={}", decision.as_str()),
+        format!("quality={quality:.3}"),
+        format!("process_reward={process_reward:.3}"),
+        format!("drift_memory_write_allowed={}", drift.allow_memory_write),
+        format!(
+            "drift_runtime_kv_write_allowed={}",
+            drift.allow_runtime_kv_write
+        ),
+        format!("drift_rollback={}", drift.rollback_adaptive),
+        "privacy_checked=true".to_owned(),
+        "rollback_anchor_present=true".to_owned(),
+    ]
+}
+
+fn writer_gate_failures(
+    candidate: &MemoryAdmissionCandidate,
+    packet: Option<&MemoryAdmissionReviewPacket>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    if packet.is_none() {
+        failures.push("review_packet_missing".to_owned());
+    }
+    if candidate.rollback_anchor_id.trim().is_empty() {
+        failures.push("rollback_anchor_missing".to_owned());
+    }
+    if candidate.source_hash.trim().is_empty() {
+        failures.push("source_hash_missing".to_owned());
+    }
+    if !candidate.privacy_checked
+        || candidate.privacy_classification == MemoryPrivacyClassification::SensitiveBlocked
+    {
+        failures.push("privacy_gate_failed".to_owned());
+    }
+    if candidate.validation_evidence.is_empty() {
+        failures.push("validation_evidence_missing".to_owned());
+    }
+    if candidate.durable_write_authorized || candidate.applied {
+        failures.push("candidate_already_attempted_write".to_owned());
+    }
+    if let Some(packet) = packet {
+        if packet.rollback_anchor_id != candidate.rollback_anchor_id {
+            failures.push("review_packet_rollback_mismatch".to_owned());
+        }
+        if packet.source_hash != candidate.source_hash {
+            failures.push("review_packet_source_hash_mismatch".to_owned());
+        }
+        if packet.write_allowed || packet.applied {
+            failures.push("review_packet_write_attempt".to_owned());
+        }
+    }
+    failures
+}
+
+fn ledger_key_for_candidate(candidate: &MemoryAdmissionCandidate) -> String {
+    format!(
+        "memory-ledger/{}/{}/{}",
+        candidate.kind.as_str(),
+        sanitize_review_text(&candidate.source_hash),
+        sanitize_review_text(&candidate.id)
+    )
+}
+
 fn prompt_digest(prompt: &str) -> String {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     for byte in prompt.as_bytes() {
@@ -754,6 +1232,9 @@ mod tests {
         assert_eq!(preview.blocked_count(), 0);
         assert_eq!(preview.admitted_count(), 0);
         assert_eq!(preview.review_packet_count(), 1);
+        assert_eq!(preview.ledger_record_count(), 1);
+        assert_eq!(preview.ledger_preview_only_count(), 1);
+        assert_eq!(preview.ledger_authorized_count(), 0);
         assert!(preview.is_read_only_preview());
         assert_eq!(
             preview.review_packets[0].approval_state,
@@ -1009,5 +1490,329 @@ mod tests {
                 .any(|summary| summary.contains("approval=held_for_evidence")
                     && summary.contains("needs_more_evidence"))
         );
+    }
+
+    #[test]
+    fn writer_gate_accepts_and_appends_only_after_approval() {
+        let preview = ready_preview();
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(
+            &preview,
+            MemoryKvLedgerWritePolicy {
+                durable_writes_enabled: true,
+                operator_approved: true,
+                ..MemoryKvLedgerWritePolicy::default()
+            },
+        );
+        let path = temp_ledger_path("accepted");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.record_count(), 1);
+        assert_eq!(plan.authorized_count(), 1);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Admitted
+        );
+
+        let applied = plan.append_authorized_records(&mut store).unwrap();
+        let value = store.get(&plan.records[0].ledger_key).unwrap().unwrap();
+        let value = String::from_utf8(value).unwrap();
+
+        assert_eq!(applied, 1);
+        assert_eq!(plan.applied_count(), 1);
+        assert!(value.contains("memory_kv_ledger_v1"));
+        assert!(value.contains("decision=admitted"));
+        assert!(value.contains("authorized=true"));
+        assert!(value.contains("applied=true"));
+        assert!(!value.contains("approved memory prompt"));
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn writer_gate_refuses_missing_privacy_rollback_or_validation() {
+        let mut missing_privacy = ready_preview();
+        missing_privacy.candidates[0].privacy_checked = false;
+        let privacy_plan =
+            MemoryKvLedgerWritePlan::from_preview(&missing_privacy, approved_writer_policy());
+
+        let mut missing_rollback = ready_preview();
+        missing_rollback.candidates[0].rollback_anchor_id.clear();
+        let rollback_plan =
+            MemoryKvLedgerWritePlan::from_preview(&missing_rollback, approved_writer_policy());
+
+        let mut missing_validation = ready_preview();
+        missing_validation.candidates[0].validation_evidence.clear();
+        let validation_plan =
+            MemoryKvLedgerWritePlan::from_preview(&missing_validation, approved_writer_policy());
+
+        for (plan, marker) in [
+            (privacy_plan, "privacy_gate_failed"),
+            (rollback_plan, "rollback_anchor_missing"),
+            (validation_plan, "validation_evidence_missing"),
+        ] {
+            assert_eq!(plan.authorized_count(), 0);
+            assert_eq!(
+                plan.records[0].write_decision,
+                MemoryKvLedgerWriteDecision::Rejected
+            );
+            assert!(
+                plan.records[0]
+                    .rejection_reasons
+                    .iter()
+                    .any(|reason| reason == marker),
+                "{:?}",
+                plan.records[0].rejection_reasons
+            );
+        }
+    }
+
+    #[test]
+    fn writer_gate_classifies_held_rejected_duplicate_decayed_merged_and_rollback() {
+        let held_preview = tool_conflict_preview();
+        let held_plan =
+            MemoryKvLedgerWritePlan::from_preview(&held_preview, approved_writer_policy());
+        assert!(
+            held_plan
+                .records
+                .iter()
+                .any(|record| record.write_decision == MemoryKvLedgerWriteDecision::Held)
+        );
+
+        let rejected_preview = rejected_preview();
+        let rejected_plan =
+            MemoryKvLedgerWritePlan::from_preview(&rejected_preview, approved_writer_policy());
+        assert!(
+            rejected_plan
+                .records
+                .iter()
+                .any(|record| record.write_decision == MemoryKvLedgerWriteDecision::Rejected)
+        );
+
+        let duplicate_preview = ready_preview();
+        let duplicate_plan = MemoryKvLedgerWritePlan::from_preview(
+            &duplicate_preview,
+            MemoryKvLedgerWritePolicy {
+                duplicate_source_hashes: vec![duplicate_preview.candidates[0].source_hash.clone()],
+                ..approved_writer_policy()
+            },
+        );
+        assert_eq!(
+            duplicate_plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Duplicate
+        );
+
+        let decayed_preview = ready_preview();
+        let decayed_plan = MemoryKvLedgerWritePlan::from_preview(
+            &decayed_preview,
+            MemoryKvLedgerWritePolicy {
+                decayed_candidate_ids: vec![decayed_preview.candidates[0].id.clone()],
+                ..approved_writer_policy()
+            },
+        );
+        assert_eq!(
+            decayed_plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Decayed
+        );
+
+        let merged_preview = ready_preview();
+        let merged_plan = MemoryKvLedgerWritePlan::from_preview(
+            &merged_preview,
+            MemoryKvLedgerWritePolicy {
+                merged_candidate_ids: vec![(
+                    merged_preview.candidates[0].id.clone(),
+                    "memory_admission:coding:merged".to_owned(),
+                )],
+                ..approved_writer_policy()
+            },
+        );
+        assert_eq!(
+            merged_plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Merged
+        );
+
+        let rollback_preview = critical_preview();
+        let rollback_plan = MemoryKvLedgerWritePlan::from_preview(
+            &rollback_preview,
+            MemoryKvLedgerWritePolicy {
+                rollback_requested: true,
+                ..approved_writer_policy()
+            },
+        );
+        assert!(
+            rollback_plan
+                .records
+                .iter()
+                .any(|record| record.write_decision == MemoryKvLedgerWriteDecision::Rollback)
+        );
+    }
+
+    fn approved_writer_policy() -> MemoryKvLedgerWritePolicy {
+        MemoryKvLedgerWritePolicy {
+            durable_writes_enabled: true,
+            operator_approved: true,
+            ..MemoryKvLedgerWritePolicy::default()
+        }
+    }
+
+    fn ready_preview() -> MemoryAdmissionPreview {
+        let report = ReflectionReport {
+            quality: 0.86,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "approved memory answer".to_owned(),
+            store_as_memory: true,
+            lesson: "store approved memory safely".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.88,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Reinforce,
+            notes: Vec::new(),
+        };
+        let drift = stable_drift();
+        preview_from_parts(
+            "approved memory prompt should stay private",
+            &report,
+            &reward,
+            &drift,
+            true,
+            false,
+        )
+    }
+
+    fn rejected_preview() -> MemoryAdmissionPreview {
+        let report = ReflectionReport {
+            quality: 0.58,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "do not store".to_owned(),
+            store_as_memory: false,
+            lesson: "rejected memory".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.30,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Penalize,
+            notes: Vec::new(),
+        };
+        let drift = stable_drift();
+        preview_from_parts("rejected prompt", &report, &reward, &drift, false, false)
+    }
+
+    fn tool_conflict_preview() -> MemoryAdmissionPreview {
+        let report = ReflectionReport {
+            quality: 0.70,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "adapter mismatch needs review".to_owned(),
+            store_as_memory: true,
+            lesson: "review runtime adapter mismatch".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.66,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Hold,
+            notes: Vec::new(),
+        };
+        let drift = stable_drift();
+        preview_from_parts("held prompt", &report, &reward, &drift, false, true)
+    }
+
+    fn critical_preview() -> MemoryAdmissionPreview {
+        let report = ReflectionReport {
+            quality: 0.20,
+            contradictions: vec!["critical".to_owned()],
+            issues: vec![ReflectionIssue::new(
+                "critical",
+                ReflectionSeverity::Critical,
+                "critical failure",
+            )],
+            revision_actions: vec!["rollback".to_owned()],
+            revision_passes: 0,
+            revised_answer: "[critical]".to_owned(),
+            store_as_memory: false,
+            lesson: "rollback unsafe memory".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.20,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Penalize,
+            notes: Vec::new(),
+        };
+        let drift = DriftReport {
+            severity: DriftSeverity::Rollback,
+            allow_memory_write: false,
+            allow_runtime_kv_write: false,
+            penalize_used_memory: true,
+            rollback_adaptive: true,
+            notes: Vec::new(),
+        };
+        preview_from_parts("critical prompt", &report, &reward, &drift, false, false)
+    }
+
+    fn preview_from_parts(
+        prompt: &str,
+        report: &ReflectionReport,
+        reward: &ProcessRewardReport,
+        drift: &DriftReport,
+        stored_memory: bool,
+        tool_conflict: bool,
+    ) -> MemoryAdmissionPreview {
+        MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
+            prompt,
+            profile: TaskProfile::Coding,
+            report,
+            process_reward: reward,
+            drift_report: drift,
+            stored_memory,
+            gist_records: 0,
+            stored_gist_memories: 0,
+            exported_runtime_kv_blocks: 0,
+            stored_runtime_kv_memories: 0,
+            runtime_kv_hold: false,
+            used_memories: 1,
+            memory_feedback_updates: 0,
+            runtime_adapter_observations: usize::from(tool_conflict),
+            runtime_adapter_selection_mismatch: tool_conflict,
+            runtime_adapter_best_score: Some(0.91),
+            runtime_adapter_best_reward: Some(reward.total),
+            runtime_adapter_best_quality: Some(report.quality),
+            toolsmith_blueprints: usize::from(tool_conflict),
+            toolsmith_ready: 0,
+            toolsmith_held: usize::from(tool_conflict),
+            toolsmith_rejected: usize::from(tool_conflict),
+            toolsmith_gate_passed: !tool_conflict,
+        })
+    }
+
+    fn stable_drift() -> DriftReport {
+        DriftReport {
+            severity: DriftSeverity::Stable,
+            allow_memory_write: true,
+            allow_runtime_kv_write: true,
+            penalize_used_memory: false,
+            rollback_adaptive: false,
+            notes: Vec::new(),
+        }
+    }
+
+    fn temp_ledger_path(label: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-memory-ledger-{label}-{}-{nanos}.ndkv",
+            std::process::id()
+        ))
+    }
+
+    fn cleanup_ledger(path: std::path::PathBuf) {
+        let _ = std::fs::remove_file(path);
     }
 }

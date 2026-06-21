@@ -129,6 +129,19 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     let review_packets = extract_json_usize_field(admission, "review_packets").unwrap_or(0);
     let review_summaries =
         extract_json_string_array_field(admission, "review_packet_summaries").unwrap_or_default();
+    let ledger_records = extract_json_usize_field(admission, "ledger_records").unwrap_or(0);
+    let ledger_authorized = extract_json_usize_field(admission, "ledger_authorized").unwrap_or(0);
+    let ledger_applied = extract_json_usize_field(admission, "ledger_applied").unwrap_or(0);
+    let ledger_preview_only =
+        extract_json_usize_field(admission, "ledger_preview_only").unwrap_or(0);
+    let ledger_held = extract_json_usize_field(admission, "ledger_held").unwrap_or(0);
+    let ledger_rejected = extract_json_usize_field(admission, "ledger_rejected").unwrap_or(0);
+    let ledger_duplicate = extract_json_usize_field(admission, "ledger_duplicate").unwrap_or(0);
+    let ledger_decayed = extract_json_usize_field(admission, "ledger_decayed").unwrap_or(0);
+    let ledger_merged = extract_json_usize_field(admission, "ledger_merged").unwrap_or(0);
+    let ledger_rollback = extract_json_usize_field(admission, "ledger_rollback").unwrap_or(0);
+    let ledger_summaries =
+        extract_json_string_array_field(admission, "ledger_summaries").unwrap_or_default();
     let read_only = extract_json_bool_field(admission, "read_only");
     let write_allowed = extract_json_bool_field(admission, "write_allowed");
     let applied = extract_json_bool_field(admission, "applied");
@@ -170,6 +183,35 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
             review_summaries.len()
         ));
     }
+    if ledger_records != candidates {
+        failures.push(format!(
+            "memory_admission ledger_records {ledger_records} do not match candidates {candidates}"
+        ));
+    }
+    let ledger_decision_total = ledger_preview_only
+        .saturating_add(ledger_held)
+        .saturating_add(ledger_rejected)
+        .saturating_add(ledger_duplicate)
+        .saturating_add(ledger_decayed)
+        .saturating_add(ledger_merged)
+        .saturating_add(ledger_rollback)
+        .saturating_add(ledger_authorized);
+    if ledger_decision_total != ledger_records {
+        failures.push(format!(
+            "memory_admission ledger decision counts {ledger_decision_total} do not match ledger_records {ledger_records}"
+        ));
+    }
+    if ledger_summaries.len() != ledger_records {
+        failures.push(format!(
+            "memory_admission ledger_summaries {} do not match ledger_records {ledger_records}",
+            ledger_summaries.len()
+        ));
+    }
+    if ledger_applied > ledger_authorized {
+        failures.push(format!(
+            "memory_admission ledger_applied {ledger_applied} exceeds ledger_authorized {ledger_authorized}"
+        ));
+    }
     if candidates > 0 && kinds.is_empty() {
         failures.push("memory_admission candidates require non-empty kinds".to_owned());
     }
@@ -200,6 +242,12 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     if read_only == Some(true) && admitted > 0 {
         failures.push("memory_admission read-only preview requires admitted=0".to_owned());
     }
+    if read_only == Some(true) && (ledger_authorized > 0 || ledger_applied > 0) {
+        failures.push(
+            "memory_admission read-only preview requires ledger_authorized=0 and ledger_applied=0"
+                .to_owned(),
+        );
+    }
     if summaries
         .iter()
         .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
@@ -218,6 +266,15 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
                 .to_owned(),
         );
     }
+    if ledger_summaries
+        .iter()
+        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    {
+        failures.push(
+            "memory_admission ledger_summaries must not leak raw prompt or answer payloads"
+                .to_owned(),
+        );
+    }
     for (index, summary) in review_summaries.iter().enumerate() {
         for marker in ["approval=", "next=", "rollback="] {
             if !summary.contains(marker) {
@@ -229,6 +286,20 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
         if !summary.contains("write_allowed=false") || !summary.contains("applied=false") {
             failures.push(format!(
                 "memory_admission review packet {index} must remain write-disabled and unapplied"
+            ));
+        }
+    }
+    for (index, summary) in ledger_summaries.iter().enumerate() {
+        for marker in ["rollback=", "source_hash=", "privacy=", "validation="] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "memory_admission ledger record {index} missing {marker} evidence"
+                ));
+            }
+        }
+        if summary.contains("authorized=true") || summary.contains("applied=true") {
+            failures.push(format!(
+                "memory_admission ledger record {index} must remain write-disabled in trace preview"
             ));
         }
     }

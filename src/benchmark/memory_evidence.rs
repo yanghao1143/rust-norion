@@ -15,6 +15,16 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub memory_admission_reject: usize,
     pub memory_admission_quarantine: usize,
     pub memory_admission_review_packets: usize,
+    pub memory_admission_ledger_records: usize,
+    pub memory_admission_ledger_authorized: usize,
+    pub memory_admission_ledger_applied: usize,
+    pub memory_admission_ledger_preview_only: usize,
+    pub memory_admission_ledger_held: usize,
+    pub memory_admission_ledger_rejected: usize,
+    pub memory_admission_ledger_duplicate: usize,
+    pub memory_admission_ledger_decayed: usize,
+    pub memory_admission_ledger_merged: usize,
+    pub memory_admission_ledger_rollback: usize,
     pub retention_activity_cases: usize,
     pub compaction_activity_cases: usize,
     pub total_retention_decayed: usize,
@@ -45,6 +55,16 @@ impl BenchmarkMemoryGovernanceEvidence {
         self.memory_admission_reject += admission.reject_count();
         self.memory_admission_quarantine += admission.quarantine_count();
         self.memory_admission_review_packets += admission.review_packet_count();
+        self.memory_admission_ledger_records += admission.ledger_record_count();
+        self.memory_admission_ledger_authorized += admission.ledger_authorized_count();
+        self.memory_admission_ledger_applied += admission.ledger_applied_count();
+        self.memory_admission_ledger_preview_only += admission.ledger_preview_only_count();
+        self.memory_admission_ledger_held += admission.ledger_held_count();
+        self.memory_admission_ledger_rejected += admission.ledger_rejected_count();
+        self.memory_admission_ledger_duplicate += admission.ledger_duplicate_count();
+        self.memory_admission_ledger_decayed += admission.ledger_decayed_count();
+        self.memory_admission_ledger_merged += admission.ledger_merged_count();
+        self.memory_admission_ledger_rollback += admission.ledger_rollback_count();
         if admission_candidates > 0 {
             self.memory_admission_cases += 1;
             push_unique_device(&mut self.memory_admission_devices, device);
@@ -308,6 +328,42 @@ fn validate_memory_admission_preview(
             candidates
         ));
     }
+    if admission.ledger_record_count() != candidates {
+        failures.push(format!(
+            "{}:{} memory_admission ledger records {} do not match candidates {}",
+            device.as_str(),
+            case_name,
+            admission.ledger_record_count(),
+            candidates
+        ));
+    }
+    if admission.ledger_applied_count() > admission.ledger_authorized_count() {
+        failures.push(format!(
+            "{}:{} memory_admission ledger applied {} exceeds authorized {}",
+            device.as_str(),
+            case_name,
+            admission.ledger_applied_count(),
+            admission.ledger_authorized_count()
+        ));
+    }
+    if admission.read_only
+        && (admission.ledger_authorized_count() > 0 || admission.ledger_applied_count() > 0)
+    {
+        failures.push(format!(
+            "{}:{} memory_admission preview must not authorize or apply ledger writes",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if admission.ledger_summaries().len() != admission.ledger_record_count() {
+        failures.push(format!(
+            "{}:{} memory_admission ledger summaries {} do not match ledger records {}",
+            device.as_str(),
+            case_name,
+            admission.ledger_summaries().len(),
+            admission.ledger_record_count()
+        ));
+    }
     if review_summaries.len() != admission.review_packet_count() {
         failures.push(format!(
             "{}:{} memory_admission review summaries {} do not match review packets {}",
@@ -327,10 +383,11 @@ fn validate_memory_admission_preview(
     if summaries
         .iter()
         .chain(review_summaries.iter())
+        .chain(admission.ledger_summaries().iter())
         .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
     {
         failures.push(format!(
-            "{}:{} memory_admission summaries or review packets must not leak raw prompt or answer payloads",
+            "{}:{} memory_admission summaries, review packets, or ledger rows must not leak raw prompt or answer payloads",
             device.as_str(),
             case_name
         ));
@@ -379,6 +436,21 @@ fn validate_memory_admission_preview(
         if candidate.prompt_digest.is_empty() || candidate.prompt_digest.len() > 32 {
             failures.push(format!(
                 "{}:{} memory_admission candidate {index} has invalid prompt digest evidence",
+                device.as_str(),
+                case_name
+            ));
+        }
+        if candidate.source_hash.trim().is_empty() || !candidate.source_hash.starts_with("sha256:")
+        {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} has invalid source hash evidence",
+                device.as_str(),
+                case_name
+            ));
+        }
+        if candidate.validation_evidence.is_empty() {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} is missing validation evidence",
                 device.as_str(),
                 case_name
             ));
