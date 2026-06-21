@@ -64,6 +64,11 @@ fn summary_records_memory_governance_evidence() {
     assert_eq!(summary.memory_admission_cases(), 1);
     assert_eq!(summary.memory_admission_device_profiles(), 1);
     assert!(summary.total_memory_admission_candidates() >= 1);
+    assert_eq!(summary.total_memory_admission_admitted(), 0);
+    assert_eq!(
+        summary.total_memory_admission_review_packets(),
+        summary.total_memory_admission_candidates()
+    );
     assert!(summary.total_memory_retention_decayed() >= 1);
     assert!(summary.total_memory_retention_removed() >= 1);
     assert_eq!(summary.total_memory_compaction_pair_evidence(), 1);
@@ -75,6 +80,17 @@ fn summary_records_memory_governance_evidence() {
     );
     assert!(summary.summary_line().contains("memory_admission_cases=1"));
     assert!(summary.summary_line().contains("memory_admission_ready="));
+    assert!(summary.summary_line().contains("memory_admission_blocked="));
+    assert!(
+        summary
+            .summary_line()
+            .contains("memory_admission_admitted=0")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("memory_admission_review_packets=")
+    );
     assert!(
         summary
             .summary_line()

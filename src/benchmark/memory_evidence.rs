@@ -9,9 +9,12 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub memory_admission_cases: usize,
     pub memory_admission_candidates: usize,
     pub memory_admission_ready: usize,
+    pub memory_admission_blocked: usize,
+    pub memory_admission_admitted: usize,
     pub memory_admission_hold: usize,
     pub memory_admission_reject: usize,
     pub memory_admission_quarantine: usize,
+    pub memory_admission_review_packets: usize,
     pub retention_activity_cases: usize,
     pub compaction_activity_cases: usize,
     pub total_retention_decayed: usize,
@@ -36,9 +39,12 @@ impl BenchmarkMemoryGovernanceEvidence {
         let admission_candidates = admission.candidate_count();
         self.memory_admission_candidates += admission_candidates;
         self.memory_admission_ready += admission.ready_count();
+        self.memory_admission_blocked += admission.blocked_count();
+        self.memory_admission_admitted += admission.admitted_count();
         self.memory_admission_hold += admission.hold_count();
         self.memory_admission_reject += admission.reject_count();
         self.memory_admission_quarantine += admission.quarantine_count();
+        self.memory_admission_review_packets += admission.review_packet_count();
         if admission_candidates > 0 {
             self.memory_admission_cases += 1;
             push_unique_device(&mut self.memory_admission_devices, device);
@@ -268,6 +274,7 @@ fn validate_memory_admission_preview(
         ));
     }
     let summaries = admission.candidate_summaries();
+    let review_summaries = admission.review_packet_summaries();
     if summaries.len() != candidates {
         failures.push(format!(
             "{}:{} memory_admission summaries {} do not match candidates {}",
@@ -275,6 +282,39 @@ fn validate_memory_admission_preview(
             case_name,
             summaries.len(),
             candidates
+        ));
+    }
+    if admission.blocked_count()
+        != admission
+            .hold_count()
+            .saturating_add(admission.quarantine_count())
+    {
+        failures.push(format!(
+            "{}:{} memory_admission blocked {} does not match hold+quarantine {}",
+            device.as_str(),
+            case_name,
+            admission.blocked_count(),
+            admission
+                .hold_count()
+                .saturating_add(admission.quarantine_count())
+        ));
+    }
+    if admission.review_packet_count() != candidates {
+        failures.push(format!(
+            "{}:{} memory_admission review_packets {} do not match candidates {}",
+            device.as_str(),
+            case_name,
+            admission.review_packet_count(),
+            candidates
+        ));
+    }
+    if review_summaries.len() != admission.review_packet_count() {
+        failures.push(format!(
+            "{}:{} memory_admission review summaries {} do not match review packets {}",
+            device.as_str(),
+            case_name,
+            review_summaries.len(),
+            admission.review_packet_count()
         ));
     }
     if !admission.is_read_only_preview() {
@@ -286,13 +326,33 @@ fn validate_memory_admission_preview(
     }
     if summaries
         .iter()
+        .chain(review_summaries.iter())
         .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
     {
         failures.push(format!(
-            "{}:{} memory_admission summaries must not leak raw prompt or answer payloads",
+            "{}:{} memory_admission summaries or review packets must not leak raw prompt or answer payloads",
             device.as_str(),
             case_name
         ));
+    }
+    if admission.read_only && admission.admitted_count() > 0 {
+        failures.push(format!(
+            "{}:{} memory_admission read-only preview must not report admitted packets",
+            device.as_str(),
+            case_name
+        ));
+    }
+    for (index, summary) in review_summaries.iter().enumerate() {
+        if !summary.contains("approval=")
+            || !summary.contains("next=")
+            || !summary.contains("rollback=")
+        {
+            failures.push(format!(
+                "{}:{} memory_admission review packet {index} is missing approval, next action, or rollback evidence",
+                device.as_str(),
+                case_name
+            ));
+        }
     }
 
     let prompt_chars = prompt.chars().count();

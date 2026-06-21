@@ -97,8 +97,8 @@ pub use kv_exchange::{RuntimeKvBlock, RuntimeKvBlockValidationError};
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
 pub use local_runtime::LocalTransformerRuntime;
 pub use memory_admission::{
-    MemoryAdmissionCandidate, MemoryAdmissionDecision, MemoryAdmissionInput, MemoryAdmissionKind,
-    MemoryAdmissionPreview,
+    MemoryAdmissionApprovalState, MemoryAdmissionCandidate, MemoryAdmissionDecision,
+    MemoryAdmissionInput, MemoryAdmissionKind, MemoryAdmissionPreview, MemoryAdmissionReviewPacket,
 };
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,

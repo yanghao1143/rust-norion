@@ -31,6 +31,8 @@ pub(super) const MEMORY_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("memory_admission", "\"memory_admission\":{"),
     required_field("memory_admission_candidates", "\"candidates\":"),
     required_field("memory_admission_ready", "\"ready\":"),
+    required_field("memory_admission_blocked", "\"blocked\":"),
+    required_field("memory_admission_admitted", "\"admitted\":"),
     required_field("memory_admission_hold", "\"hold\":"),
     required_field("memory_admission_reject", "\"reject\":"),
     required_field("memory_admission_quarantine", "\"quarantine\":"),
@@ -39,6 +41,11 @@ pub(super) const MEMORY_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field(
         "memory_admission_candidate_summaries",
         "\"candidate_summaries\":",
+    ),
+    required_field("memory_admission_review_packets", "\"review_packets\":"),
+    required_field(
+        "memory_admission_review_packet_summaries",
+        "\"review_packet_summaries\":",
     ),
     required_field("memory_admission_read_only", "\"read_only\":"),
     required_field("memory_admission_write_allowed", "\"write_allowed\":"),

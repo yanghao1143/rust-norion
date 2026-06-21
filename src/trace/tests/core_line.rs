@@ -210,7 +210,11 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"feedback_strength_delta\":"));
     assert!(line.contains("\"feedback_update_summaries\":"));
     assert!(line.contains("\"memory_admission\":"));
+    assert!(line.contains("\"blocked\":"));
+    assert!(line.contains("\"admitted\":"));
     assert!(line.contains("\"candidate_summaries\":"));
+    assert!(line.contains("\"review_packets\":"));
+    assert!(line.contains("\"review_packet_summaries\":"));
     assert!(line.contains("\"read_only\":true"));
     assert!(line.contains("\"write_allowed\":false"));
     assert!(line.contains("\"stale_after\":"));

@@ -117,6 +117,8 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
 
     let candidates = extract_json_usize_field(admission, "candidates").unwrap_or(0);
     let ready = extract_json_usize_field(admission, "ready").unwrap_or(0);
+    let blocked = extract_json_usize_field(admission, "blocked").unwrap_or(0);
+    let admitted = extract_json_usize_field(admission, "admitted").unwrap_or(0);
     let hold = extract_json_usize_field(admission, "hold").unwrap_or(0);
     let reject = extract_json_usize_field(admission, "reject").unwrap_or(0);
     let quarantine = extract_json_usize_field(admission, "quarantine").unwrap_or(0);
@@ -124,6 +126,9 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     let decisions = extract_json_string_array_field(admission, "decisions").unwrap_or_default();
     let summaries =
         extract_json_string_array_field(admission, "candidate_summaries").unwrap_or_default();
+    let review_packets = extract_json_usize_field(admission, "review_packets").unwrap_or(0);
+    let review_summaries =
+        extract_json_string_array_field(admission, "review_packet_summaries").unwrap_or_default();
     let read_only = extract_json_bool_field(admission, "read_only");
     let write_allowed = extract_json_bool_field(admission, "write_allowed");
     let applied = extract_json_bool_field(admission, "applied");
@@ -137,10 +142,32 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
             "memory_admission decisions {decision_total} do not match candidates {candidates}"
         ));
     }
+    let expected_blocked = hold.saturating_add(quarantine);
+    if blocked != expected_blocked {
+        failures.push(format!(
+            "memory_admission blocked {blocked} does not match hold+quarantine {expected_blocked}"
+        ));
+    }
+    if admitted > candidates {
+        failures.push(format!(
+            "memory_admission admitted {admitted} exceeds candidates {candidates}"
+        ));
+    }
     if summaries.len() != candidates {
         failures.push(format!(
             "memory_admission candidate_summaries {} do not match candidates {candidates}",
             summaries.len()
+        ));
+    }
+    if review_packets != candidates {
+        failures.push(format!(
+            "memory_admission review_packets {review_packets} do not match candidates {candidates}"
+        ));
+    }
+    if review_summaries.len() != review_packets {
+        failures.push(format!(
+            "memory_admission review_packet_summaries {} do not match review_packets {review_packets}",
+            review_summaries.len()
         ));
     }
     if candidates > 0 && kinds.is_empty() {
@@ -170,6 +197,9 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     if applied != Some(false) {
         failures.push("memory_admission applied must be false".to_owned());
     }
+    if read_only == Some(true) && admitted > 0 {
+        failures.push("memory_admission read-only preview requires admitted=0".to_owned());
+    }
     if summaries
         .iter()
         .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
@@ -178,6 +208,29 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
             "memory_admission candidate_summaries must not leak raw prompt or answer payloads"
                 .to_owned(),
         );
+    }
+    if review_summaries
+        .iter()
+        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    {
+        failures.push(
+            "memory_admission review_packet_summaries must not leak raw prompt or answer payloads"
+                .to_owned(),
+        );
+    }
+    for (index, summary) in review_summaries.iter().enumerate() {
+        for marker in ["approval=", "next=", "rollback="] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "memory_admission review packet {index} missing {marker} evidence"
+                ));
+            }
+        }
+        if !summary.contains("write_allowed=false") || !summary.contains("applied=false") {
+            failures.push(format!(
+                "memory_admission review packet {index} must remain write-disabled and unapplied"
+            ));
+        }
     }
 
     failures

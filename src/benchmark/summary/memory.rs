@@ -28,6 +28,14 @@ impl BenchmarkSummary {
         self.memory_governance_evidence.memory_admission_ready
     }
 
+    pub fn total_memory_admission_blocked(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_blocked
+    }
+
+    pub fn total_memory_admission_admitted(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_admitted
+    }
+
     pub fn total_memory_admission_hold(&self) -> usize {
         self.memory_governance_evidence.memory_admission_hold
     }
@@ -38,6 +46,11 @@ impl BenchmarkSummary {
 
     pub fn total_memory_admission_quarantine(&self) -> usize {
         self.memory_governance_evidence.memory_admission_quarantine
+    }
+
+    pub fn total_memory_admission_review_packets(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_review_packets
     }
 
     pub fn total_memory_retention_decayed(&self) -> usize {

@@ -41,6 +41,27 @@ impl MemoryAdmissionDecision {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryAdmissionApprovalState {
+    PendingApproval,
+    HeldForEvidence,
+    Rejected,
+    Quarantined,
+    Admitted,
+}
+
+impl MemoryAdmissionApprovalState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PendingApproval => "pending_approval",
+            Self::HeldForEvidence => "held_for_evidence",
+            Self::Rejected => "rejected",
+            Self::Quarantined => "quarantined",
+            Self::Admitted => "admitted",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAdmissionCandidate {
     pub id: String,
@@ -83,8 +104,48 @@ impl MemoryAdmissionCandidate {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MemoryAdmissionReviewPacket {
+    pub packet_id: String,
+    pub candidate_id: String,
+    pub kind: MemoryAdmissionKind,
+    pub decision: MemoryAdmissionDecision,
+    pub approval_state: MemoryAdmissionApprovalState,
+    pub rollback_anchor_id: String,
+    pub evidence: Vec<String>,
+    pub risk_flags: Vec<String>,
+    pub next_action: String,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl MemoryAdmissionReviewPacket {
+    pub fn summary(&self) -> String {
+        format!(
+            "{}:{}:{} approval={} next={} risks={} evidence={} rollback={} read_only={} write_allowed={} applied={}",
+            self.decision.as_str(),
+            self.kind.as_str(),
+            self.packet_id,
+            self.approval_state.as_str(),
+            self.next_action,
+            self.risk_flags.join("|"),
+            self.evidence.join("|"),
+            self.rollback_anchor_id,
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAdmissionPreview {
     pub candidates: Vec<MemoryAdmissionCandidate>,
+    pub review_packets: Vec<MemoryAdmissionReviewPacket>,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -94,6 +155,7 @@ impl Default for MemoryAdmissionPreview {
     fn default() -> Self {
         Self {
             candidates: Vec::new(),
+            review_packets: Vec::new(),
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -182,8 +244,14 @@ impl MemoryAdmissionPreview {
             ));
         }
 
+        let review_packets = candidates
+            .iter()
+            .map(review_packet_for_candidate)
+            .collect::<Vec<_>>();
+
         Self {
             candidates,
+            review_packets,
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -210,6 +278,21 @@ impl MemoryAdmissionPreview {
         self.count_decision(MemoryAdmissionDecision::Quarantine)
     }
 
+    pub fn blocked_count(&self) -> usize {
+        self.hold_count().saturating_add(self.quarantine_count())
+    }
+
+    pub fn admitted_count(&self) -> usize {
+        self.review_packets
+            .iter()
+            .filter(|packet| packet.approval_state == MemoryAdmissionApprovalState::Admitted)
+            .count()
+    }
+
+    pub fn review_packet_count(&self) -> usize {
+        self.review_packets.len()
+    }
+
     pub fn kind_summaries(&self) -> Vec<String> {
         unique_strings(
             self.candidates
@@ -233,6 +316,13 @@ impl MemoryAdmissionPreview {
             .collect()
     }
 
+    pub fn review_packet_summaries(&self) -> Vec<String> {
+        self.review_packets
+            .iter()
+            .map(MemoryAdmissionReviewPacket::summary)
+            .collect()
+    }
+
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only
             && !self.write_allowed
@@ -241,6 +331,10 @@ impl MemoryAdmissionPreview {
                 .candidates
                 .iter()
                 .all(MemoryAdmissionCandidate::is_read_only_preview)
+            && self
+                .review_packets
+                .iter()
+                .all(MemoryAdmissionReviewPacket::is_read_only_preview)
     }
 
     fn count_decision(&self, decision: MemoryAdmissionDecision) -> usize {
@@ -248,6 +342,81 @@ impl MemoryAdmissionPreview {
             .iter()
             .filter(|candidate| candidate.decision == decision)
             .count()
+    }
+}
+
+fn review_packet_for_candidate(
+    candidate: &MemoryAdmissionCandidate,
+) -> MemoryAdmissionReviewPacket {
+    let approval_state = approval_state_for_candidate(candidate);
+    MemoryAdmissionReviewPacket {
+        packet_id: format!("review:{}", candidate.id),
+        candidate_id: candidate.id.clone(),
+        kind: candidate.kind,
+        decision: candidate.decision,
+        approval_state,
+        rollback_anchor_id: candidate.rollback_anchor_id.clone(),
+        evidence: candidate
+            .evidence
+            .iter()
+            .map(|evidence| sanitize_review_text(evidence))
+            .collect(),
+        risk_flags: risk_flags_for_candidate(candidate),
+        next_action: next_action_for_state(approval_state).to_owned(),
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn approval_state_for_candidate(
+    candidate: &MemoryAdmissionCandidate,
+) -> MemoryAdmissionApprovalState {
+    if candidate.applied {
+        MemoryAdmissionApprovalState::Admitted
+    } else {
+        match candidate.decision {
+            MemoryAdmissionDecision::Ready => MemoryAdmissionApprovalState::PendingApproval,
+            MemoryAdmissionDecision::Hold => MemoryAdmissionApprovalState::HeldForEvidence,
+            MemoryAdmissionDecision::Reject => MemoryAdmissionApprovalState::Rejected,
+            MemoryAdmissionDecision::Quarantine => MemoryAdmissionApprovalState::Quarantined,
+        }
+    }
+}
+
+fn risk_flags_for_candidate(candidate: &MemoryAdmissionCandidate) -> Vec<String> {
+    let mut risks = Vec::new();
+    if candidate.critical_reflection_issues > 0 {
+        risks.push("critical_reflection".to_owned());
+    }
+    if candidate.quality < 0.35 {
+        risks.push("low_quality".to_owned());
+    }
+    if candidate.process_reward < 0.35 {
+        risks.push("low_process_reward".to_owned());
+    }
+    match candidate.decision {
+        MemoryAdmissionDecision::Ready => risks.push("requires_approval_gate".to_owned()),
+        MemoryAdmissionDecision::Hold => risks.push("needs_more_evidence".to_owned()),
+        MemoryAdmissionDecision::Reject => risks.push("reject_without_write".to_owned()),
+        MemoryAdmissionDecision::Quarantine => risks.push("quarantine_required".to_owned()),
+    }
+    if !candidate.privacy_checked {
+        risks.push("privacy_unchecked".to_owned());
+    }
+    if candidate.durable_write_authorized || candidate.applied {
+        risks.push("durable_write_attempt".to_owned());
+    }
+    risks
+}
+
+fn next_action_for_state(state: MemoryAdmissionApprovalState) -> &'static str {
+    match state {
+        MemoryAdmissionApprovalState::PendingApproval => "review_for_durable_write_gate",
+        MemoryAdmissionApprovalState::HeldForEvidence => "collect_more_evidence",
+        MemoryAdmissionApprovalState::Rejected => "do_not_store",
+        MemoryAdmissionApprovalState::Quarantined => "quarantine_and_require_repair",
+        MemoryAdmissionApprovalState::Admitted => "audit_admitted_memory",
     }
 }
 
@@ -387,6 +556,18 @@ fn prompt_digest(prompt: &str) -> String {
     format!("{hash:016x}")
 }
 
+fn sanitize_review_text(value: &str) -> String {
+    let mut out = String::with_capacity(value.len().min(96));
+    for ch in value.chars().take(96) {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '=' | ':' | '.' | '/') {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    out
+}
+
 fn unique_strings(values: impl Iterator<Item = String>) -> Vec<String> {
     let mut out = Vec::new();
     for value in values {
@@ -467,10 +648,27 @@ mod tests {
 
         assert_eq!(preview.candidate_count(), 1);
         assert_eq!(preview.ready_count(), 1);
+        assert_eq!(preview.blocked_count(), 0);
+        assert_eq!(preview.admitted_count(), 0);
+        assert_eq!(preview.review_packet_count(), 1);
         assert!(preview.is_read_only_preview());
+        assert_eq!(
+            preview.review_packets[0].approval_state,
+            MemoryAdmissionApprovalState::PendingApproval
+        );
+        assert_eq!(
+            preview.review_packets[0].next_action,
+            "review_for_durable_write_gate"
+        );
         assert!(
             !preview
                 .candidate_summaries()
+                .iter()
+                .any(|summary| summary.contains("secret prompt text"))
+        );
+        assert!(
+            !preview
+                .review_packet_summaries()
                 .iter()
                 .any(|summary| summary.contains("secret prompt text"))
         );
@@ -526,7 +724,22 @@ mod tests {
         assert_eq!(preview.candidate_count(), 3);
         assert_eq!(preview.quarantine_count(), 2);
         assert_eq!(preview.hold_count(), 1);
+        assert_eq!(preview.blocked_count(), 3);
+        assert_eq!(preview.admitted_count(), 0);
+        assert_eq!(preview.review_packet_count(), 3);
         assert!(preview.is_read_only_preview());
+        assert!(
+            preview
+                .review_packet_summaries()
+                .iter()
+                .any(|summary| summary.contains("approval=held_for_evidence"))
+        );
+        assert!(
+            preview
+                .review_packet_summaries()
+                .iter()
+                .any(|summary| summary.contains("risk") || summary.contains("quarantine_required"))
+        );
         assert!(
             preview
                 .candidates

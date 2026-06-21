@@ -69,6 +69,11 @@ fn trace_json_line_emits_memory_admission_preview() {
 
     assert!(failures.is_empty(), "{failures:?}");
     assert!(extract_json_usize_field(admission, "candidates").unwrap_or(0) >= 1);
+    assert_eq!(
+        extract_json_usize_field(admission, "review_packets"),
+        extract_json_usize_field(admission, "candidates")
+    );
+    assert_eq!(extract_json_usize_field(admission, "admitted"), Some(0));
     assert_eq!(extract_json_bool_field(admission, "read_only"), Some(true));
     assert_eq!(
         extract_json_bool_field(admission, "write_allowed"),
@@ -80,6 +85,17 @@ fn trace_json_line_emits_memory_admission_preview() {
             .unwrap()
             .iter()
             .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    );
+    assert!(
+        extract_json_string_array_field(admission, "review_packet_summaries")
+            .unwrap()
+            .iter()
+            .all(|summary| {
+                summary.contains("approval=")
+                    && summary.contains("next=")
+                    && summary.contains("rollback=")
+                    && summary.contains("write_allowed=false")
+            })
     );
 }
 
@@ -105,6 +121,35 @@ fn trace_schema_gate_rejects_memory_admission_count_mismatch() {
         failures
             .iter()
             .any(|failure| failure.contains("memory_admission decisions")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_memory_admission_review_packet_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace memory admission packet mismatch",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace memory admission packet mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let line = increment_trace_object_usize(&line, "memory_admission", "review_packets");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("memory_admission review_packet_summaries")),
         "{failures:?}"
     );
 }
