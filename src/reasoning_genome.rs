@@ -1,7 +1,13 @@
+mod fixtures;
 mod model;
 mod schema;
 mod splicing;
 
+pub use fixtures::{
+    MutationFixtureKind, MutationRepairCandidateFixture, MutationRepairFixture,
+    MutationRepairFixtureCorpus, MutationRepairFixtureGateReport, MutationRepairFixtureReport,
+    MutationRepairFixtureResult, default_mutation_repair_fixture_corpus,
+};
 pub use model::{
     GeneLifecycleAction, GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,
     GeneScissorsIntent, GeneValidationStatus, GenomeExpression, GenomeExpressionInput,

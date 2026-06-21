@@ -989,6 +989,177 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
 }
 
 #[test]
+fn mutation_fixture_corpus_classifies_all_expected_categories() {
+    let report = MutationRepairFixtureCorpus::default().evaluate();
+
+    assert!(report.passed(), "{:?}", report.failures);
+    assert_eq!(report.results.len(), 8);
+    assert!(report.preview_only);
+    assert!(report.total_repair_candidate_count >= 7);
+    assert!(report.total_review_packet_line_count >= report.results.len());
+    assert!(report.missing_fixture_kinds.is_empty());
+    assert!(
+        report
+            .summary()
+            .contains("mutation_fixture_corpus passed=true")
+    );
+
+    let insertion = report
+        .result_for_kind(MutationFixtureKind::Insertion)
+        .expect("insertion fixture");
+    assert!(insertion.has_finding_kind(GeneVariantKind::Insertion));
+    assert_eq!(
+        insertion.mutated_disposition,
+        Some(GeneSegmentDisposition::RepairCandidate)
+    );
+    assert!(insertion.protected_segments_retained);
+
+    let deletion = report
+        .result_for_kind(MutationFixtureKind::Deletion)
+        .expect("deletion fixture");
+    assert!(deletion.has_finding_kind(GeneVariantKind::Deletion));
+    assert_eq!(
+        deletion.lifecycle_state,
+        Some(GeneScissorsLifecycleState::RepairCandidate)
+    );
+
+    let truncation = report
+        .result_for_kind(MutationFixtureKind::Truncation)
+        .expect("truncation fixture");
+    assert!(truncation.has_finding_kind(GeneVariantKind::Truncation));
+
+    let schema_drift = report
+        .result_for_kind(MutationFixtureKind::SchemaDrift)
+        .expect("schema drift fixture");
+    assert!(schema_drift.has_finding_kind(GeneVariantKind::Schema));
+    assert!(schema_drift.has_finding_kind(GeneVariantKind::Drift));
+    assert_eq!(
+        schema_drift.mutated_disposition,
+        Some(GeneSegmentDisposition::Quarantined)
+    );
+
+    let contradiction = report
+        .result_for_kind(MutationFixtureKind::ContradictoryPolicy)
+        .expect("contradictory policy fixture");
+    assert!(contradiction.has_finding_kind(GeneVariantKind::Contradiction));
+
+    let stale = report
+        .result_for_kind(MutationFixtureKind::StaleLabel)
+        .expect("stale label fixture");
+    assert!(stale.has_finding_kind(GeneVariantKind::StaleLabel));
+}
+
+#[test]
+fn mutation_fixture_malicious_payload_stays_inert_and_quarantined() {
+    let report = MutationRepairFixtureCorpus::default().evaluate();
+    let malicious = report
+        .result_for_kind(MutationFixtureKind::MaliciousInstruction)
+        .expect("malicious fixture");
+
+    assert!(malicious.passed(), "{:?}", malicious.failures);
+    assert!(malicious.has_finding_kind(GeneVariantKind::Drift));
+    assert!(malicious.has_finding_kind(GeneVariantKind::Privacy));
+    assert_eq!(
+        malicious.mutated_disposition,
+        Some(GeneSegmentDisposition::Quarantined)
+    );
+    assert_eq!(
+        malicious.lifecycle_state,
+        Some(GeneScissorsLifecycleState::Quarantined)
+    );
+    assert!(malicious.protected_segments_retained);
+    assert!(malicious.payload_digest.starts_with("fixture-digest:"));
+    assert!(malicious.sanitized_payload_summary.contains("digest-only"));
+    assert!(
+        !malicious
+            .review_packet_lines
+            .iter()
+            .any(|line| contains_executable_payload_marker(line))
+    );
+}
+
+#[test]
+fn mutation_fixture_repair_candidates_have_digests_and_preview_gates() {
+    let report = MutationRepairFixtureCorpus::default().evaluate();
+
+    assert!(report.passed(), "{:?}", report.failures);
+    for result in report
+        .results
+        .iter()
+        .filter(|result| result.mutated_segment_id.is_some())
+    {
+        assert!(
+            result
+                .before_digest
+                .as_deref()
+                .is_some_and(|digest| digest.starts_with("fixture-digest:")),
+            "missing before digest for {}",
+            result.fixture_id
+        );
+        assert!(
+            !result.repair_candidates.is_empty(),
+            "missing repair candidates for {}",
+            result.fixture_id
+        );
+        for candidate in &result.repair_candidates {
+            assert!(candidate.before_digest.starts_with("fixture-digest:"));
+            assert!(candidate.after_digest.starts_with("fixture-digest:"));
+            assert_ne!(candidate.before_digest, candidate.after_digest);
+            assert_eq!(candidate.rollback_anchor_id, "genome:fixture:stable");
+            assert!(!candidate.validation_gates.is_empty());
+            assert_eq!(candidate.validation_status, GeneValidationStatus::Pending);
+            assert!(candidate.preview_only);
+            assert!(!candidate.admission_write_authorized);
+            assert!(!candidate.applied);
+        }
+        assert!(
+            result
+                .review_packet_lines
+                .iter()
+                .any(|line| line.contains("mutation_fixture_repair"))
+        );
+    }
+}
+
+#[test]
+fn mutation_fixture_gate_fails_when_required_coverage_is_missing() {
+    let mut corpus = MutationRepairFixtureCorpus::default();
+    corpus
+        .fixtures
+        .retain(|fixture| fixture.kind != MutationFixtureKind::MaliciousInstruction);
+
+    let report = corpus.evaluate();
+    let gate = report.gate_report();
+
+    assert!(!report.passed());
+    assert!(!gate.passed);
+    assert!(
+        gate.missing_fixture_kinds
+            .contains(&MutationFixtureKind::MaliciousInstruction)
+    );
+    assert!(gate.failures.iter().any(|failure| {
+        failure.contains("mutation_fixture_coverage_missing:malicious_instruction")
+    }));
+}
+
+fn contains_executable_payload_marker(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    [
+        "rm ",
+        "curl ",
+        "wget ",
+        "powershell",
+        "cmd.exe",
+        "sudo ",
+        "api_key",
+        "private key",
+        "secret=",
+    ]
+    .iter()
+    .any(|marker| line.contains(marker))
+}
+
+#[test]
 fn dual_chain_schema_round_trips_expression_and_memory_records() {
     let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
     let source = DnaGeneSourceEvidence::new(

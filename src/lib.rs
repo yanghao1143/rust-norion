@@ -137,8 +137,11 @@ pub use reasoning_genome::{
     DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
     DnaGeneSchemaError, DnaGeneSourceEvidence, GeneLifecycleAction, GeneLifecycleRecord,
     GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
-    GenomeExpression, GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind,
-    ReasoningGeneStatus, ReasoningGenome,
+    GenomeExpression, GenomeExpressionInput, MutationFixtureKind, MutationPlan,
+    MutationRepairCandidateFixture, MutationRepairFixture, MutationRepairFixtureCorpus,
+    MutationRepairFixtureGateReport, MutationRepairFixtureReport, MutationRepairFixtureResult,
+    ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
+    default_mutation_repair_fixture_corpus,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,
