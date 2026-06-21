@@ -182,7 +182,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, live-inference online reward feedback counters, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, replay live-feedback consumption, structured live-evolution replay consumption, online reward feedback, recursive-cost mutations, and drift rollback safety audits
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, live memory-feedback write and auto-replay consumption gates, live/replay online reward feedback/reinforcement/penalty gates with all-device coverage floors, cumulative evolution-ledger replay live-feedback consumption gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, runtime-KV hold, device-adapter-contract, and best-adapter selection gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, Reasoning Genome expression/splice and Gene Scissors proposal coverage gates, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, live memory-feedback write and auto-replay consumption gates, live/replay online reward feedback/reinforcement/penalty gates with all-device coverage floors, cumulative evolution-ledger replay live-feedback consumption gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, runtime-KV hold, device-adapter-contract, and best-adapter selection gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, severity-scaled used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering and vector-carrying import decisions
@@ -811,12 +811,14 @@ runtime KV import/export counts and device coverage,
 runtime adapter contract coverage, adapter-kind diversity, runtime KV storage
 device coverage, runtime adapter
 observation counts, best scores, and best-adapter selection mismatch counts,
+Reasoning Genome expression/splice coverage, Gene Scissors proposal coverage,
 reflection issue/critical issue coverage, revision action coverage,
 auto-replay router/hierarchy/memory update counts, recursive pressure, covered
 device profiles, cumulative evolution-ledger replay/mutation/memory/live-feedback/recursive
 cost counters, drift rollback safety counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
 diagnostics, missing runtime KV precision evidence, missing KV exchange, missing runtime KV import/export coverage across required devices, missing runtime KV storage coverage across required devices, missing runtime KV hold coverage across required devices, missing runtime adapter observation reuse, mismatched runtime adapter selection,
+missing Reasoning Genome expression/splice or Gene Scissors proposal evidence,
 missing closed-loop reflection diagnostics or revision evidence,
 missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
@@ -824,7 +826,7 @@ recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence、runtime token uncertainty 设备覆盖、runtime token evidence 设备覆盖、hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV 长期准入设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / online reward / recursive cost 计数、live 与 replay live-evolution 在线奖励设备覆盖、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime token uncertainty 没有覆盖要求的设备、runtime token-level entropy/logprob 证据没有覆盖要求的设备、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV 长期准入没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、闭环 reflection diagnostics 或 revision 证据缺失、在线奖励反馈没有产生 reinforcement / penalty 证据、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence、runtime token uncertainty 设备覆盖、runtime token evidence 设备覆盖、hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV 长期准入设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、Reasoning Genome expression / splice 覆盖、Gene Scissors proposal 覆盖、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / online reward / recursive cost 计数、live 与 replay live-evolution 在线奖励设备覆盖、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime token uncertainty 没有覆盖要求的设备、runtime token-level entropy/logprob 证据没有覆盖要求的设备、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV 长期准入没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、Reasoning Genome expression / splice 或 Gene Scissors proposal 证据缺失、闭环 reflection diagnostics 或 revision 证据缺失、在线奖励反馈没有产生 reinforcement / penalty 证据、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 Use `--benchmark-min-runtime-kv-import-device-profiles` and
 `--benchmark-min-runtime-kv-export-device-profiles` when an all-device run must
 prove KV exchange on more than one hardware class. Use
@@ -849,6 +851,22 @@ entropy/logprob 的 token 证据已经跨足够多硬件类别出现时，使用
 `--benchmark-min-runtime-kv-stored-device-profiles`。当还必须证明“已导出但被 hold 的
 runtime KV”跨多个硬件类别都出现过时，使用
 `--benchmark-min-runtime-kv-hold-device-profiles`，避免只靠单个 fast-path watch 样本通过安全门禁。
+
+Use the Reasoning Genome benchmark gates when an experiment must prove the DNA
+chain path is producing auditable expression/splice evidence and Gene Scissors
+repair proposals:
+`--benchmark-min-reasoning-genome-expression-cases`,
+`--benchmark-min-reasoning-genome-splice-cases`, and
+`--benchmark-min-gene-scissors-proposal-cases`. With `--benchmark-all-devices`,
+or by using the matching `*-device-profiles` flags, the same audit can require
+those genome signals across explicit hardware profiles.
+
+当实验必须证明 DNA 基因链路径已经产生可审计的 expression / splice 证据，并且 Gene
+Scissors 已经输出修复 proposal 时，可以使用
+`--benchmark-min-reasoning-genome-expression-cases`、
+`--benchmark-min-reasoning-genome-splice-cases` 和
+`--benchmark-min-gene-scissors-proposal-cases`。配合 `--benchmark-all-devices`，
+或者直接使用对应的 `*-device-profiles` 参数时，可以要求这些基因证据覆盖指定数量的显式硬件 profile。
 
 Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
 online inference itself mutated control policy, updated live memory feedback,
