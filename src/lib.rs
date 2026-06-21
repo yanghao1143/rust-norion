@@ -17,6 +17,7 @@ pub mod kv_exchange;
 pub mod kv_quant;
 pub mod local_runtime;
 pub mod memory_admission;
+pub mod no_weight_retrain;
 pub mod process_reward;
 pub mod production_runtime;
 pub mod reasoning_genome;
@@ -125,6 +126,10 @@ pub use memory_admission::{
     MemoryKvLedgerWritePolicy, MemoryPrivacyClassification, ReinforcedKvFusionCandidate,
     ReinforcedKvFusionDecision, ReinforcedKvFusionDecisionRecord, ReinforcedKvFusionPlan,
     ReinforcedKvFusionPolicy, ReinforcedKvFusionScoreComponents, ReinforcedKvFusionSource,
+};
+pub use no_weight_retrain::{
+    AdapterTrainingHandoffState, NoWeightImprovementCandidate, NoWeightImprovementLane,
+    NoWeightRetrainDecision, NoWeightRetrainGate, NoWeightRetrainPolicy, NoWeightRetrainScorecard,
 };
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
