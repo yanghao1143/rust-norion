@@ -37,6 +37,7 @@ pub fn trace_json_line_with_case(
         .iter()
         .map(|adapter| adapter.as_str().to_owned())
         .collect::<Vec<_>>();
+    let runtime_budget = runtime_budget_json(&outcome.hardware_plan);
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = AutoReplayTraceFields::from(outcome.auto_replay_report.as_ref());
     let best_adapter_observation = outcome.runtime_adapter_observations.first();
@@ -111,7 +112,7 @@ pub fn trace_json_line_with_case(
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
-         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
+         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"runtime_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{},\"runtime_calls\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
@@ -310,6 +311,7 @@ pub fn trace_json_line_with_case(
         option_u64_json(outcome.hardware_plan.latency_budget_ms),
         outcome.hardware_plan.local_kv_token_budget,
         outcome.hardware_plan.global_kv_token_budget,
+        runtime_budget,
         outcome.hardware_plan.execution.primary_lane.as_str(),
         outcome.hardware_plan.execution.fallback_lane.as_str(),
         outcome.hardware_plan.execution.memory_mode.as_str(),
@@ -726,6 +728,33 @@ fn memory_compaction_pairs_json(pairs: &[crate::kv_cache::MemoryCompactionMerge]
         .collect::<Vec<_>>()
         .join(",");
     format!("[{values}]")
+}
+
+fn runtime_budget_json(plan: &crate::hardware::HardwarePlan) -> String {
+    let budget = &plan.runtime_budget;
+    format!(
+        "{{\"requested_device\":\"{}\",\"selected_device\":\"{}\",\"selected_adapter\":\"{}\",\"backend_family\":\"{}\",\"quantization_profile\":\"{}\",\"weight_quantization_bits\":{},\"kv_cache_quantization_bits\":{},\"gene_cache_quantization_bits\":{},\"model_weight_bytes\":{},\"kv_cache_bytes\":{},\"gene_segment_cache_bytes\":{},\"routing_reflection_overhead_bytes\":{},\"total_required_bytes\":{},\"available_budget_bytes\":{},\"memory_pressure\":{:.6},\"fallback_reason\":\"{}\",\"fail_closed_cpu_stub\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
+        budget.requested_device.as_str(),
+        budget.selected_device.as_str(),
+        budget.selected_adapter.as_str(),
+        json_escape(budget.backend_family),
+        budget.quantization_profile.as_str(),
+        budget.weight_quantization_bits,
+        budget.kv_cache_quantization_bits,
+        budget.gene_cache_quantization_bits,
+        budget.model_weight_bytes,
+        budget.kv_cache_bytes,
+        budget.gene_segment_cache_bytes,
+        budget.routing_reflection_overhead_bytes,
+        budget.total_required_bytes,
+        budget.available_budget_bytes,
+        budget.memory_pressure,
+        budget.fallback_reason.as_str(),
+        budget.fail_closed_cpu_stub,
+        budget.read_only,
+        budget.write_allowed,
+        budget.applied
+    )
 }
 
 fn hierarchy_summary(weights: crate::hierarchy::HierarchyWeights) -> String {

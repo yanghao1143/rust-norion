@@ -54,6 +54,17 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("cold_kv_bits", "\"cold_kv_bits\":"),
     required_field("local_kv_token_budget", "\"local_kv_token_budget\":"),
     required_field("global_kv_token_budget", "\"global_kv_token_budget\":"),
+    required_field("runtime_budget", "\"runtime_budget\":{"),
+    required_field("runtime_budget_selected_device", "\"selected_device\":"),
+    required_field(
+        "runtime_budget_quantization_profile",
+        "\"quantization_profile\":",
+    ),
+    required_field("runtime_budget_fallback_reason", "\"fallback_reason\":"),
+    required_field(
+        "runtime_budget_fail_closed_cpu_stub",
+        "\"fail_closed_cpu_stub\":",
+    ),
     required_field("recursive", "\"recursive\":{"),
     required_field("execution_waves", "\"execution_waves\":"),
     required_field("recursive_runtime_calls", "\"runtime_calls\":"),

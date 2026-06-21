@@ -1,7 +1,8 @@
 use super::fields::{
-    extract_json_bool_field, extract_json_nullable_f32_field, extract_json_nullable_string_field,
-    extract_json_string_field, extract_json_usize_field, has_non_empty_trace_text,
-    json_object_after_field,
+    extract_json_bool_field, extract_json_f32_field, extract_json_nullable_f32_field,
+    extract_json_nullable_string_field, extract_json_nullable_u64_field,
+    extract_json_string_array_field, extract_json_string_field, extract_json_usize_field,
+    has_non_empty_trace_text, json_object_after_field,
 };
 
 pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String> {
@@ -15,6 +16,14 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
     let Some(execution) = json_object_after_field(hardware, "execution") else {
         return failures;
     };
+    match json_object_after_field(hardware, "runtime_budget") {
+        Some(runtime_budget) => failures.extend(evaluate_trace_runtime_budget(
+            runtime_budget,
+            hardware,
+            execution,
+        )),
+        None => failures.push("hardware runtime_budget missing".to_owned()),
+    }
 
     let has_forward_signal =
         extract_json_bool_field(runtime_diagnostics, "has_forward_signal").unwrap_or(false);
@@ -173,6 +182,223 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
         cold_kv_precision_bits,
         extract_json_usize_field(execution, "cold_kv_bits"),
     );
+
+    failures
+}
+
+fn evaluate_trace_runtime_budget(budget: &str, hardware: &str, execution: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let requested_device = extract_json_string_field(budget, "requested_device");
+    let selected_device = extract_json_string_field(budget, "selected_device");
+    let selected_adapter = extract_json_string_field(budget, "selected_adapter");
+    let backend_family = extract_json_string_field(budget, "backend_family");
+    let quantization_profile = extract_json_string_field(budget, "quantization_profile");
+    let fallback_reason = extract_json_string_field(budget, "fallback_reason");
+    let fail_closed_cpu_stub =
+        extract_json_bool_field(budget, "fail_closed_cpu_stub").unwrap_or(false);
+    let read_only = extract_json_bool_field(budget, "read_only").unwrap_or(false);
+    let write_allowed = extract_json_bool_field(budget, "write_allowed").unwrap_or(false);
+    let applied = extract_json_bool_field(budget, "applied").unwrap_or(false);
+    let weight_bits = extract_json_usize_field(budget, "weight_quantization_bits");
+    let kv_bits = extract_json_usize_field(budget, "kv_cache_quantization_bits");
+    let gene_bits = extract_json_usize_field(budget, "gene_cache_quantization_bits");
+    let model_weight_bytes = extract_json_nullable_u64_field(budget, "model_weight_bytes");
+    let kv_cache_bytes = extract_json_nullable_u64_field(budget, "kv_cache_bytes");
+    let gene_segment_cache_bytes =
+        extract_json_nullable_u64_field(budget, "gene_segment_cache_bytes");
+    let routing_reflection_overhead_bytes =
+        extract_json_nullable_u64_field(budget, "routing_reflection_overhead_bytes");
+    let total_required_bytes = extract_json_nullable_u64_field(budget, "total_required_bytes");
+    let available_budget_bytes = extract_json_nullable_u64_field(budget, "available_budget_bytes");
+    let memory_pressure = extract_json_f32_field(budget, "memory_pressure");
+
+    for (name, value) in [
+        ("requested_device", requested_device.as_deref()),
+        ("selected_device", selected_device.as_deref()),
+        ("selected_adapter", selected_adapter.as_deref()),
+        ("backend_family", backend_family.as_deref()),
+        ("quantization_profile", quantization_profile.as_deref()),
+        ("fallback_reason", fallback_reason.as_deref()),
+    ] {
+        if value.map(has_non_empty_trace_text).unwrap_or(false) {
+            continue;
+        }
+        failures.push(format!("runtime_budget {name} missing or empty"));
+    }
+
+    match quantization_profile.as_deref() {
+        Some("q8" | "q4" | "cpu-stub") => {}
+        Some(profile) => failures.push(format!(
+            "runtime_budget quantization_profile={profile} is unsupported"
+        )),
+        None => {}
+    }
+    match fallback_reason.as_deref() {
+        Some(
+            "none"
+            | "auto-device-cpu-stub"
+            | "memory-pressure-quantized"
+            | "budget-exceeded-cpu-stub",
+        ) => {}
+        Some(reason) => failures.push(format!(
+            "runtime_budget fallback_reason={reason} is unsupported"
+        )),
+        None => {}
+    }
+    match weight_bits {
+        Some(4 | 8) => {}
+        Some(bits) => failures.push(format!(
+            "runtime_budget weight_quantization_bits={bits} must be 4 or 8"
+        )),
+        None => failures.push("runtime_budget weight_quantization_bits missing".to_owned()),
+    }
+    match kv_bits {
+        Some(4 | 8) => {}
+        Some(bits) => failures.push(format!(
+            "runtime_budget kv_cache_quantization_bits={bits} must be 4 or 8"
+        )),
+        None => failures.push("runtime_budget kv_cache_quantization_bits missing".to_owned()),
+    }
+    match gene_bits {
+        Some(4 | 8) => {}
+        Some(bits) => failures.push(format!(
+            "runtime_budget gene_cache_quantization_bits={bits} must be 4 or 8"
+        )),
+        None => failures.push("runtime_budget gene_cache_quantization_bits missing".to_owned()),
+    }
+
+    if let (Some(model), Some(kv), Some(gene), Some(overhead), Some(total)) = (
+        model_weight_bytes,
+        kv_cache_bytes,
+        gene_segment_cache_bytes,
+        routing_reflection_overhead_bytes,
+        total_required_bytes,
+    ) {
+        let expected_total = model
+            .saturating_add(kv)
+            .saturating_add(gene)
+            .saturating_add(overhead);
+        if expected_total != total {
+            failures.push(format!(
+                "runtime_budget total_required_bytes={total} does not match component sum {expected_total}"
+            ));
+        }
+        if model == 0 || kv == 0 || gene == 0 || overhead == 0 {
+            failures.push("runtime_budget component byte estimates must be nonzero".to_owned());
+        }
+    } else {
+        failures.push("runtime_budget byte estimates are incomplete".to_owned());
+    }
+
+    if let Some(available) = available_budget_bytes {
+        if available == 0 {
+            failures.push("runtime_budget available_budget_bytes must be nonzero".to_owned());
+        }
+        if let (Some(total), Some(pressure)) = (total_required_bytes, memory_pressure) {
+            let expected = if available == 0 {
+                9.999
+            } else {
+                ((total as f64 / available as f64).min(9.999)) as f32
+            };
+            if (pressure - expected).abs() > 0.01 {
+                failures.push(format!(
+                    "runtime_budget memory_pressure={pressure:.3} does not match bytes pressure {expected:.3}"
+                ));
+            }
+        }
+    } else {
+        failures.push("runtime_budget available_budget_bytes missing".to_owned());
+    }
+
+    if !read_only {
+        failures.push("runtime_budget read_only must be true".to_owned());
+    }
+    if write_allowed {
+        failures.push("runtime_budget write_allowed must be false".to_owned());
+    }
+    if applied {
+        failures.push("runtime_budget applied must be false".to_owned());
+    }
+
+    let hardware_device = extract_json_string_field(hardware, "device");
+    match (
+        fallback_reason.as_deref(),
+        selected_device.as_deref(),
+        requested_device.as_deref(),
+        hardware_device.as_deref(),
+    ) {
+        (Some("none"), Some(selected), _, Some(hardware_device)) if selected != hardware_device => {
+            failures.push(format!(
+                "runtime_budget selected_device={selected} must match hardware device {hardware_device} without fallback"
+            ));
+        }
+        (Some("none"), _, _, _) if fail_closed_cpu_stub => failures.push(
+            "runtime_budget fail_closed_cpu_stub must be false when fallback_reason=none"
+                .to_owned(),
+        ),
+        (Some("memory-pressure-quantized"), Some(selected), _, Some(hardware_device))
+            if selected != hardware_device =>
+        {
+            failures.push(format!(
+                "runtime_budget selected_device={selected} must stay on hardware device {hardware_device} for quantized fallback"
+            ));
+        }
+        (Some("memory-pressure-quantized"), _, _, _) if fail_closed_cpu_stub => failures.push(
+            "runtime_budget fail_closed_cpu_stub must be false for quantized fallback".to_owned(),
+        ),
+        (Some("auto-device-cpu-stub"), Some("cpu"), Some("auto"), _) => {
+            if !fail_closed_cpu_stub {
+                failures.push(
+                    "runtime_budget auto-device-cpu-stub must fail closed to CPU stub".to_owned(),
+                );
+            }
+        }
+        (Some("budget-exceeded-cpu-stub"), Some("cpu"), _, _) => {
+            if !fail_closed_cpu_stub {
+                failures.push(
+                    "runtime_budget budget-exceeded-cpu-stub must fail closed to CPU stub"
+                        .to_owned(),
+                );
+            }
+        }
+        (Some("auto-device-cpu-stub" | "budget-exceeded-cpu-stub"), Some(selected), _, _) => {
+            failures.push(format!(
+                "runtime_budget selected_device={selected} must be cpu for CPU stub fallback"
+            ));
+        }
+        _ => {}
+    }
+
+    if let Some("cpu-stub") = quantization_profile.as_deref() {
+        if !fail_closed_cpu_stub {
+            failures.push(
+                "runtime_budget quantization_profile=cpu-stub requires fail_closed_cpu_stub=true"
+                    .to_owned(),
+            );
+        }
+        if weight_bits != Some(4) || kv_bits != Some(4) {
+            failures
+                .push("runtime_budget cpu-stub must use 4-bit weight and KV estimates".to_owned());
+        }
+    }
+
+    if let Some("memory-pressure-quantized") = fallback_reason.as_deref()
+        && quantization_profile.as_deref() != Some("q4")
+    {
+        failures.push(
+            "runtime_budget memory-pressure-quantized fallback must use q4 profile".to_owned(),
+        );
+    }
+
+    let adapter_hints =
+        extract_json_string_array_field(execution, "adapter_hints").unwrap_or_default();
+    if let Some(adapter) = selected_adapter {
+        if !adapter_hints.iter().any(|hint| hint == &adapter) {
+            failures.push(format!(
+                "runtime_budget selected_adapter={adapter} is outside hardware adapter_hints"
+            ));
+        }
+    }
 
     failures
 }

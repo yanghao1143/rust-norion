@@ -69,6 +69,11 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"device_profile\":"));
     assert!(line.contains("\"primary_lane\":"));
     assert!(line.contains("\"runtime_device_contract\":"));
+    assert!(line.contains("\"runtime_budget\":"));
+    assert!(line.contains("\"selected_device\":"));
+    assert!(line.contains("\"quantization_profile\":"));
+    assert!(line.contains("\"fallback_reason\":"));
+    assert!(line.contains("\"fail_closed_cpu_stub\":"));
     assert!(line.contains("\"adapter_hints\":"));
     assert!(line.contains("\"local_kv_token_budget\":"));
     assert!(line.contains("\"global_kv_token_budget\":"));

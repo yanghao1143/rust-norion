@@ -5,6 +5,7 @@ use super::super::device::{
 };
 use super::super::probe::HardwareSnapshot;
 use super::allocator::HardwareAllocator;
+use super::runtime_budget::RuntimeBudgetReport;
 
 #[derive(Debug, Clone)]
 pub struct DeviceExecutionPlan {
@@ -52,6 +53,7 @@ pub struct HardwarePlan {
     pub global_kv_token_budget: usize,
     pub hierarchy: HierarchyWeights,
     pub execution: DeviceExecutionPlan,
+    pub runtime_budget: RuntimeBudgetReport,
     pub notes: Vec<String>,
 }
 
@@ -106,7 +108,7 @@ impl HardwarePlan {
 
     pub fn summary(&self) -> String {
         format!(
-            "device={} tier={} pressure={:.3} compute_headroom={:.2} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2}) execution=({})",
+            "device={} tier={} pressure={:.3} compute_headroom={:.2} latency_budget_ms={} local_kv_tokens={} global_kv_tokens={} hierarchy=({:.2},{:.2},{:.2}) execution=({}) runtime_budget=({})",
             self.device.as_str(),
             self.tier.as_str(),
             self.pressure,
@@ -119,7 +121,8 @@ impl HardwarePlan {
             self.hierarchy.global,
             self.hierarchy.local,
             self.hierarchy.convolution,
-            self.execution.summary()
+            self.execution.summary(),
+            self.runtime_budget.summary()
         )
     }
 }

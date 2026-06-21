@@ -21,6 +21,165 @@ fn trace_schema_gate_accepts_memory_governance_consistency() {
 }
 
 #[test]
+fn trace_json_line_emits_redacted_runtime_budget_report() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace runtime budget should not leak prompt payload",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace runtime budget should not leak prompt payload",
+        TaskProfile::General,
+        5,
+        &outcome,
+    );
+    let hardware = json_object_after_field(&line, "hardware").unwrap();
+    let budget = json_object_after_field(hardware, "runtime_budget").unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(
+        extract_json_string_field(budget, "requested_device"),
+        Some("auto".to_owned())
+    );
+    assert_eq!(
+        extract_json_string_field(budget, "selected_device"),
+        Some("cpu".to_owned())
+    );
+    assert_eq!(
+        extract_json_string_field(budget, "selected_adapter"),
+        Some("portable-rust".to_owned())
+    );
+    assert_eq!(
+        extract_json_string_field(budget, "quantization_profile"),
+        Some("cpu-stub".to_owned())
+    );
+    assert_eq!(
+        extract_json_string_field(budget, "fallback_reason"),
+        Some("auto-device-cpu-stub".to_owned())
+    );
+    assert_eq!(
+        extract_json_bool_field(budget, "fail_closed_cpu_stub"),
+        Some(true)
+    );
+    assert_eq!(extract_json_bool_field(budget, "read_only"), Some(true));
+    assert_eq!(
+        extract_json_bool_field(budget, "write_allowed"),
+        Some(false)
+    );
+    assert_eq!(extract_json_bool_field(budget, "applied"), Some(false));
+    assert_eq!(
+        extract_json_usize_field(budget, "model_weight_bytes")
+            .unwrap()
+            .saturating_add(extract_json_usize_field(budget, "kv_cache_bytes").unwrap())
+            .saturating_add(extract_json_usize_field(budget, "gene_segment_cache_bytes").unwrap())
+            .saturating_add(
+                extract_json_usize_field(budget, "routing_reflection_overhead_bytes").unwrap()
+            ),
+        extract_json_usize_field(budget, "total_required_bytes").unwrap()
+    );
+    assert!(!budget.contains("prompt payload"));
+    assert!(!budget.contains("answer:"));
+    assert!(!budget.contains("secret"));
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_budget_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace runtime budget write gate", TaskProfile::General),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace runtime budget write gate",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_budget",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("runtime_budget write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_budget_total_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace runtime budget total mismatch", TaskProfile::General),
+        &mut backend,
+    );
+    let line = replace_trace_object_usize(
+        &trace_json_line(
+            "trace runtime budget total mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_budget",
+        "total_required_bytes",
+        1,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("runtime_budget total_required_bytes")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_budget_cpu_stub_device_drift() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace runtime budget selected device drift",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace runtime budget selected device drift",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_budget",
+        "\"selected_device\":\"cpu\"",
+        "\"selected_device\":\"server\"",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure
+            .contains("runtime_budget selected_device=server must be cpu for CPU stub fallback")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_memory_residency_write_enabled() {
     let policy = crate::kv_cache::MemoryResidencyPolicy {
         tenant_id: "tenant-a".to_owned(),
