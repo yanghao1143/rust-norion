@@ -1,6 +1,57 @@
 use super::*;
 
 #[test]
+fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
+    let asset_dir = temp_asset_dir("self-evolution-admission-benchmark");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let trace_path = asset_dir.join("benchmark.jsonl");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+
+    let summary = run_benchmark(&mut engine, &mut backend, &trace_path).unwrap();
+    let gate_report = rust_norion::BenchmarkGateReport {
+        passed: true,
+        failures: Vec::new(),
+    };
+    let report = benchmark_self_evolution_admission_report(
+        "benchmark:test",
+        &engine,
+        &summary,
+        &gate_report,
+        TaskProfile::General,
+    );
+
+    assert!(summary.len() > 0);
+    assert_eq!(report.candidate_id, "benchmark:test");
+    assert!(report.read_only);
+    assert!(report.report_only);
+    assert!(report.preview_only);
+    assert!(report.benchmark_gate_passed);
+    assert!(report.adaptive_preview_evidence_present);
+    assert!(report.router_threshold_preview_ready);
+    assert!(report.hierarchy_adjustment_preview_ready);
+    assert_eq!(report.adaptive_preview_source_count, 2);
+    assert!(report.adaptive_preview_read_only);
+    assert!(report.adaptive_preview_report_only);
+    assert!(report.adaptive_preview_preview_only);
+    assert!(!report.adaptive_preview_write_allowed);
+    assert!(!report.adaptive_preview_applied);
+    assert!(!report.memory_store_write_allowed);
+    assert!(!report.ndkv_write_allowed);
+    assert!(!report.model_weight_write_allowed);
+    assert!(!report.git_write_allowed);
+    assert!(report.summary_line().contains("self_evolution_admission"));
+    assert!(
+        report
+            .telemetry
+            .iter()
+            .any(|line| { line == "self_evolution_admission_adaptive_preview_source_count=2" })
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn benchmark_all_devices_runs_every_explicit_profile() {
     let asset_dir = temp_asset_dir("all-device-benchmark");
     fs::create_dir_all(&asset_dir).unwrap();

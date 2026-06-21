@@ -2,11 +2,13 @@ use std::path::{Path, PathBuf};
 
 use rust_norion::{
     BenchmarkCase, BenchmarkGateReport, BenchmarkSummary, DeviceClass, ExperienceInput,
-    HardwareSnapshot, HierarchyWeights, InferenceBackend, NoironEngine, ProcessRewardComponents,
-    ProcessRewardReport, ProductionKernelConformanceDeviceReport, ProductionKernelConformanceGate,
+    GenerationMetrics, HardwareSnapshot, HierarchyAdjustmentPreviewPlanner, HierarchyWeights,
+    InferenceBackend, NoironEngine, ProcessRewardComponents, ProcessRewardReport,
+    ProductionKernelConformanceDeviceReport, ProductionKernelConformanceGate,
     ProductionKernelConformanceMatrixReport, ProductionKernelConformanceReport, ReflectionIssue,
-    ReflectionSeverity, RewardAction, RouteBudget, RuntimeBackend, RuntimeDiagnostics, TaskProfile,
-    default_benchmark_cases,
+    ReflectionSeverity, RewardAction, RouteBudget, RouterThresholdAdjustmentPreviewPlanner,
+    RuntimeBackend, RuntimeDiagnostics, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
+    SelfEvolutionAdmissionReport, TaskProfile, default_benchmark_cases,
 };
 
 use crate::Args;
@@ -340,6 +342,7 @@ pub(crate) fn print_benchmark_summary(
     benchmark_path: &Path,
     summary: &BenchmarkSummary,
     gate_report: Option<&BenchmarkGateReport>,
+    self_evolution_admission_report: Option<&SelfEvolutionAdmissionReport>,
 ) {
     println!("Noiron Rust benchmark");
     println!("benchmark_file: {}", benchmark_path.display());
@@ -430,6 +433,93 @@ pub(crate) fn print_benchmark_summary(
         for failure in &report.failures {
             println!("benchmark_gate_failure: {failure}");
         }
+    }
+
+    if let Some(report) = self_evolution_admission_report {
+        println!("{}", report.summary_line());
+        for reason in &report.blocked_reasons {
+            println!("self_evolution_admission_blocked_reason: {reason}");
+        }
+    }
+}
+
+pub(crate) fn benchmark_self_evolution_admission_report(
+    candidate_id: impl Into<String>,
+    engine: &NoironEngine,
+    summary: &BenchmarkSummary,
+    gate_report: &BenchmarkGateReport,
+    fallback_profile: TaskProfile,
+) -> SelfEvolutionAdmissionReport {
+    let profile = benchmark_admission_profile(summary, fallback_profile);
+    let metrics = benchmark_admission_generation_metrics(summary);
+    let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        engine.router.state(),
+        profile,
+        metrics,
+    );
+    let hierarchy_preview = HierarchyAdjustmentPreviewPlanner::new().preview(
+        engine.hierarchy.state(),
+        profile,
+        metrics,
+    );
+
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        candidate_id,
+        summary.evolution_ledger(),
+        gate_report,
+    )
+    .with_router_threshold_preview_report(&router_preview)
+    .with_hierarchy_adjustment_preview_report(&hierarchy_preview);
+
+    SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
+fn benchmark_admission_generation_metrics(summary: &BenchmarkSummary) -> GenerationMetrics {
+    let quality = finite_clamped(summary.average_quality(), 0.0, 1.0);
+    let reward = finite_clamped(summary.average_reward(), 0.0, 1.0);
+    let semantic_consistency = ((quality + reward) * 0.5).clamp(0.0, 1.0);
+    let perplexity = (12.0 * (1.0 - semantic_consistency)).max(0.1);
+    let reflection = summary.reflection_evidence();
+    let contradiction_count = reflection.total_critical_issues;
+    let token_count = summary.total_runtime_tokens().max(summary.len()).max(1);
+
+    GenerationMetrics {
+        perplexity,
+        semantic_consistency,
+        contradiction_count,
+        token_count,
+    }
+}
+
+fn benchmark_admission_profile(
+    summary: &BenchmarkSummary,
+    fallback_profile: TaskProfile,
+) -> TaskProfile {
+    let mut counts: Vec<(TaskProfile, usize)> = Vec::new();
+
+    for result in summary.results() {
+        if let Some((_, count)) = counts
+            .iter_mut()
+            .find(|(profile, _)| *profile == result.profile)
+        {
+            *count += 1;
+        } else {
+            counts.push((result.profile, 1));
+        }
+    }
+
+    counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .map(|(profile, _)| profile)
+        .unwrap_or(fallback_profile)
+}
+
+fn finite_clamped(value: f32, min: f32, max: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(min, max)
+    } else {
+        min
     }
 }
 
