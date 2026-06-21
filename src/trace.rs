@@ -35,9 +35,10 @@ use specialized::{
 };
 
 pub use jsonl::{
-    append_business_contract_trace_jsonl, append_rust_check_trace_jsonl, append_trace_jsonl,
-    append_trace_jsonl_with_case, business_contract_trace_json_line, rust_check_trace_json_line,
-    trace_json_line, trace_json_line_with_case,
+    append_business_contract_trace_jsonl, append_rust_check_trace_jsonl,
+    append_self_evolution_admission_trace_jsonl, append_trace_jsonl, append_trace_jsonl_with_case,
+    business_contract_trace_json_line, rust_check_trace_json_line,
+    self_evolution_admission_trace_json_line, trace_json_line, trace_json_line_with_case,
 };
 pub use schema_jsonl_gate::{TraceSchemaGateReport, evaluate_trace_schema_jsonl};
 

@@ -1,6 +1,6 @@
 use super::fields::{
     extract_json_bool_field, extract_json_string_array_field, extract_json_string_field,
-    extract_json_usize_field, json_object_after_field,
+    extract_json_usize_field, extract_last_json_string_array_field, json_object_after_field,
 };
 
 pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<String> {
@@ -78,7 +78,7 @@ pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<S
 
     let admitted_for_human_review = extract_json_bool_field(line, "admitted_for_human_review");
     let blocked_reasons =
-        extract_json_string_array_field(line, "blocked_reasons").unwrap_or_default();
+        extract_last_json_string_array_field(line, "blocked_reasons").unwrap_or_default();
     match admitted_for_human_review {
         Some(true) if !blocked_reasons.is_empty() => failures.push(
             "self_evolution_admission admitted review packet must not have blocked reasons"

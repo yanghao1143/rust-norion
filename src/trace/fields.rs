@@ -120,7 +120,16 @@ pub(super) fn extract_json_bool_field(line: &str, field: &str) -> Option<bool> {
 }
 
 pub(super) fn extract_json_string_array_field(line: &str, field: &str) -> Option<Vec<String>> {
-    let mut value = value_after_json_field(line, field)?;
+    parse_json_string_array(value_after_json_field(line, field)?)
+}
+
+pub(super) fn extract_last_json_string_array_field(line: &str, field: &str) -> Option<Vec<String>> {
+    let marker = format!("\"{field}\":");
+    let start = line.rfind(&marker)? + marker.len();
+    parse_json_string_array(line[start..].trim_start())
+}
+
+fn parse_json_string_array(mut value: &str) -> Option<Vec<String>> {
     value = value.strip_prefix('[')?.trim_start();
     let mut out = Vec::new();
 

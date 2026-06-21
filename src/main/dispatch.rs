@@ -1,7 +1,7 @@
 use rust_norion::{
     DevicePlanGateReport, HeuristicBackend, KvQuantBenchmarkSummary, LocalTransformerRuntime,
     NoironEngine, ProductionKernelConformanceGate, RuntimeBackend, RuntimeManifestDeviceGateReport,
-    evaluate_trace_schema_jsonl,
+    append_self_evolution_admission_trace_jsonl, evaluate_trace_schema_jsonl,
 };
 
 use crate::cli::args::Args;
@@ -395,6 +395,9 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
                 args.profile,
             )
         });
+        if let Some(report) = self_evolution_admission_report.as_ref() {
+            append_self_evolution_admission_trace_jsonl(&benchmark_path, report)?;
+        }
         print_benchmark_summary(
             &args,
             &benchmark_path,

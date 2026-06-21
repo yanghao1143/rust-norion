@@ -79,6 +79,52 @@ fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
 }
 
 #[test]
+fn benchmark_dispatch_appends_self_evolution_admission_trace_packet() {
+    let asset_dir = temp_asset_dir("benchmark-dispatch-admission-trace");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace_path = asset_dir.join("benchmark.jsonl");
+    let args = Args::parse(vec![
+        "--benchmark".to_owned(),
+        trace_path.display().to_string(),
+        "--benchmark-gate".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+    ]);
+
+    dispatch::run(args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(
+        trace_report.checked_lines,
+        default_benchmark_cases().len() + 1
+    );
+    assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(
+        trace_report.self_evolution_admission_admitted
+            + trace_report.self_evolution_admission_blocked,
+        1
+    );
+    assert_eq!(trace_report.self_evolution_admission_review_packets, 1);
+    assert!(trace_report.self_evolution_admission_evidence_ids >= 3);
+    assert_eq!(
+        trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn benchmark_all_devices_runs_every_explicit_profile() {
     let asset_dir = temp_asset_dir("all-device-benchmark");
     fs::create_dir_all(&asset_dir).unwrap();

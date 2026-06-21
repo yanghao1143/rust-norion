@@ -5,7 +5,8 @@ use std::path::Path;
 use super::evaluate_trace_schema_line;
 use super::fields::{
     extract_json_bool_field, extract_json_string_array_field, extract_json_string_field,
-    extract_json_usize_field, json_object_after_field, trace_note_bool,
+    extract_json_usize_field, extract_last_json_string_array_field, json_object_after_field,
+    trace_note_bool,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -330,7 +331,7 @@ fn self_evolution_admission_trace_gate_summary(
     }
 
     let admitted = extract_json_bool_field(line, "admitted_for_human_review").unwrap_or(false);
-    let blocked_reasons = extract_json_string_array_field(line, "blocked_reasons")
+    let blocked_reasons = extract_last_json_string_array_field(line, "blocked_reasons")
         .map(|reasons| reasons.len())
         .unwrap_or(0);
     let review_packet = json_object_after_field(line, "review_packet");
