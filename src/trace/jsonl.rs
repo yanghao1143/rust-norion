@@ -3,6 +3,7 @@ mod business;
 mod core;
 mod improvement_corpus;
 mod json;
+mod memory_residency;
 mod rust_check;
 mod summary;
 mod writer;
@@ -23,5 +24,6 @@ pub use core::{trace_json_line, trace_json_line_with_case};
 pub use improvement_corpus::{
     append_improvement_corpus_trace_jsonl, improvement_corpus_trace_json_line,
 };
+pub use memory_residency::{append_memory_residency_trace_jsonl, memory_residency_trace_json_line};
 pub use rust_check::{append_rust_check_trace_jsonl, rust_check_trace_json_line};
 pub use writer::{append_trace_jsonl, append_trace_jsonl_with_case};

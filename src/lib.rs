@@ -110,8 +110,9 @@ pub use infini_memory::{
 };
 pub use kv_cache::{
     KvFusionCache, MemoryCompactionMerge, MemoryCompactionPolicy, MemoryCompactionReport,
-    MemoryEntry, MemoryMatch, MemoryRetentionPolicy, MemoryUpdateAction, MemoryUpdateReport,
-    RetentionReport,
+    MemoryEntry, MemoryMatch, MemoryResidencyCandidate, MemoryResidencyDecisionRecord,
+    MemoryResidencyPlan, MemoryResidencyPolicy, MemoryResidencyState, MemoryRetentionPolicy,
+    MemoryUpdateAction, MemoryUpdateReport, RetentionReport, plan_memory_residency,
 };
 pub use kv_exchange::{RuntimeKvBlock, RuntimeKvBlockValidationError};
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};

@@ -1,4 +1,5 @@
 use super::*;
+use crate::kv_cache::{MemoryResidencyCandidate, MemoryResidencyPolicy, plan_memory_residency};
 use crate::memory_admission::MemoryAdmissionKind;
 use crate::self_evolving_memory::{
     SelfEvolvingEpisodeInput, SelfEvolvingHeuristicInput,
@@ -740,6 +741,68 @@ fn trace_schema_jsonl_gate_aggregates_self_evolving_memory_store_reports() {
             .summary_line()
             .contains("self_evolving_memory_store_events=3")
     );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_aggregates_memory_residency_plans() {
+    let path = temp_path("trace-schema-memory-residency");
+    let policy = MemoryResidencyPolicy {
+        tenant_id: "tenant-a".to_owned(),
+        max_hot: 1,
+        max_warm: 2,
+        ..MemoryResidencyPolicy::default()
+    };
+    let candidates = vec![
+        MemoryResidencyCandidate::new(101, "tenant-a", "semantic")
+            .with_scores(0.94, 8, 0, 18)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(102, "tenant-a", "runtime_kv:l0h0:0-1")
+            .with_scores(0.90, 7, 0, 18)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(103, "tenant-b", "semantic")
+            .with_scores(0.98, 9, 0, 18)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(104, "tenant-a", "gist")
+            .with_scores(0.36, 0, 0, 12)
+            .with_rollback_anchor("rollback:private-anchor-must-not-leak", true),
+    ];
+    let plan = plan_memory_residency(&candidates, &policy, 20);
+    let line = memory_residency_trace_json_line(&plan);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.memory_residency_events, 1);
+    assert_eq!(report.memory_residency_decisions, plan.decisions.len());
+    assert_eq!(report.memory_residency_hot, 1);
+    assert_eq!(report.memory_residency_warm, 1);
+    assert_eq!(report.memory_residency_cold, 1);
+    assert_eq!(report.memory_residency_quarantined, 1);
+    assert_eq!(report.memory_residency_retired, 0);
+    assert_eq!(
+        report.memory_residency_protected_rollback_anchors,
+        plan.protected_rollback_anchor_count()
+    );
+    assert_eq!(
+        report.memory_residency_blocked_reasons,
+        plan.blocked_reason_count()
+    );
+    assert_eq!(
+        report.memory_residency_token_estimate,
+        plan.total_token_estimate()
+    );
+    assert_eq!(report.memory_residency_write_allowed, 0);
+    assert_eq!(report.memory_residency_durable_write_allowed, 0);
+    assert_eq!(report.memory_residency_applied, 0);
+    assert!(line.contains("\"schema\":\"rust-norion-memory-residency-plan-v1\""));
+    assert!(line.contains("tenant=fnv64:"));
+    assert!(!line.contains("tenant-a"));
+    assert!(!line.contains("tenant-b"));
+    assert!(!line.contains("rollback:private-anchor-must-not-leak"));
+    assert!(report.summary_line().contains("memory_residency_events=1"));
     cleanup(path);
 }
 

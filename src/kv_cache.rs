@@ -6,6 +6,7 @@ mod lookup;
 mod model;
 mod ops;
 mod persistence;
+mod residency;
 mod retention;
 mod store;
 
@@ -15,6 +16,10 @@ use codec::legacy_backup_path;
 pub use model::{
     MemoryCompactionMerge, MemoryCompactionPolicy, MemoryCompactionReport, MemoryEntry,
     MemoryMatch, MemoryRetentionPolicy, MemoryUpdateAction, MemoryUpdateReport, RetentionReport,
+};
+pub use residency::{
+    MemoryResidencyCandidate, MemoryResidencyDecisionRecord, MemoryResidencyPlan,
+    MemoryResidencyPolicy, MemoryResidencyState, plan_memory_residency,
 };
 
 #[cfg(test)]

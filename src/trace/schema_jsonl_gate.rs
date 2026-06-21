@@ -117,6 +117,19 @@ pub struct TraceSchemaGateReport {
     pub self_evolving_memory_store_durable_write_allowed: usize,
     pub self_evolving_memory_store_applied: usize,
     pub self_evolving_memory_store_applied_to_disk: usize,
+    pub memory_residency_events: usize,
+    pub memory_residency_decisions: usize,
+    pub memory_residency_hot: usize,
+    pub memory_residency_warm: usize,
+    pub memory_residency_cold: usize,
+    pub memory_residency_quarantined: usize,
+    pub memory_residency_retired: usize,
+    pub memory_residency_protected_rollback_anchors: usize,
+    pub memory_residency_blocked_reasons: usize,
+    pub memory_residency_token_estimate: usize,
+    pub memory_residency_write_allowed: usize,
+    pub memory_residency_durable_write_allowed: usize,
+    pub memory_residency_applied: usize,
     pub improvement_corpus_events: usize,
     pub improvement_corpus_episodes: usize,
     pub improvement_corpus_active_adaptation: usize,
@@ -309,7 +322,7 @@ impl TraceSchemaGateReport {
             self.kv_fusion_saved_tokens
         );
         format!(
-            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={}",
+            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={}",
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
             self.self_evolution_rollback_replay_apply_held,
@@ -336,6 +349,19 @@ impl TraceSchemaGateReport {
             self.self_evolving_memory_store_durable_write_allowed,
             self.self_evolving_memory_store_applied,
             self.self_evolving_memory_store_applied_to_disk,
+            self.memory_residency_events,
+            self.memory_residency_decisions,
+            self.memory_residency_hot,
+            self.memory_residency_warm,
+            self.memory_residency_cold,
+            self.memory_residency_quarantined,
+            self.memory_residency_retired,
+            self.memory_residency_protected_rollback_anchors,
+            self.memory_residency_blocked_reasons,
+            self.memory_residency_token_estimate,
+            self.memory_residency_write_allowed,
+            self.memory_residency_durable_write_allowed,
+            self.memory_residency_applied,
         )
     }
 }
@@ -447,6 +473,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_evolving_memory_store_durable_write_allowed = 0;
     let mut self_evolving_memory_store_applied = 0;
     let mut self_evolving_memory_store_applied_to_disk = 0;
+    let mut memory_residency_events = 0;
+    let mut memory_residency_decisions = 0;
+    let mut memory_residency_hot = 0;
+    let mut memory_residency_warm = 0;
+    let mut memory_residency_cold = 0;
+    let mut memory_residency_quarantined = 0;
+    let mut memory_residency_retired = 0;
+    let mut memory_residency_protected_rollback_anchors = 0;
+    let mut memory_residency_blocked_reasons = 0;
+    let mut memory_residency_token_estimate = 0;
+    let mut memory_residency_write_allowed = 0;
+    let mut memory_residency_durable_write_allowed = 0;
+    let mut memory_residency_applied = 0;
     let mut improvement_corpus_events = 0;
     let mut improvement_corpus_episodes = 0;
     let mut improvement_corpus_active_adaptation = 0;
@@ -635,6 +674,21 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_evolving_memory_store_applied += summary.applied;
             self_evolving_memory_store_applied_to_disk += summary.applied_to_disk;
         }
+        if let Some(summary) = memory_residency_trace_gate_summary(line) {
+            memory_residency_events += summary.events;
+            memory_residency_decisions += summary.decisions;
+            memory_residency_hot += summary.hot;
+            memory_residency_warm += summary.warm;
+            memory_residency_cold += summary.cold;
+            memory_residency_quarantined += summary.quarantined;
+            memory_residency_retired += summary.retired;
+            memory_residency_protected_rollback_anchors += summary.protected_rollback_anchors;
+            memory_residency_blocked_reasons += summary.blocked_reasons;
+            memory_residency_token_estimate += summary.token_estimate;
+            memory_residency_write_allowed += summary.write_allowed;
+            memory_residency_durable_write_allowed += summary.durable_write_allowed;
+            memory_residency_applied += summary.applied;
+        }
         if let Some(summary) = improvement_corpus_trace_gate_summary(line) {
             improvement_corpus_events += summary.events;
             improvement_corpus_episodes += summary.episodes;
@@ -814,6 +868,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_evolving_memory_store_durable_write_allowed,
         self_evolving_memory_store_applied,
         self_evolving_memory_store_applied_to_disk,
+        memory_residency_events,
+        memory_residency_decisions,
+        memory_residency_hot,
+        memory_residency_warm,
+        memory_residency_cold,
+        memory_residency_quarantined,
+        memory_residency_retired,
+        memory_residency_protected_rollback_anchors,
+        memory_residency_blocked_reasons,
+        memory_residency_token_estimate,
+        memory_residency_write_allowed,
+        memory_residency_durable_write_allowed,
+        memory_residency_applied,
         improvement_corpus_events,
         improvement_corpus_episodes,
         improvement_corpus_active_adaptation,
@@ -1359,6 +1426,48 @@ fn self_evolving_memory_store_trace_gate_summary(
         applied_to_disk: usize::from(
             extract_json_bool_field(line, "applied_to_disk").unwrap_or(false),
         ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct MemoryResidencyTraceGateSummary {
+    events: usize,
+    decisions: usize,
+    hot: usize,
+    warm: usize,
+    cold: usize,
+    quarantined: usize,
+    retired: usize,
+    protected_rollback_anchors: usize,
+    blocked_reasons: usize,
+    token_estimate: usize,
+    write_allowed: usize,
+    durable_write_allowed: usize,
+    applied: usize,
+}
+
+fn memory_residency_trace_gate_summary(line: &str) -> Option<MemoryResidencyTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-memory-residency-plan-v1\"") {
+        return None;
+    }
+
+    Some(MemoryResidencyTraceGateSummary {
+        events: 1,
+        decisions: extract_json_usize_field(line, "decision_count").unwrap_or(0),
+        hot: extract_json_usize_field(line, "hot").unwrap_or(0),
+        warm: extract_json_usize_field(line, "warm").unwrap_or(0),
+        cold: extract_json_usize_field(line, "cold").unwrap_or(0),
+        quarantined: extract_json_usize_field(line, "quarantined").unwrap_or(0),
+        retired: extract_json_usize_field(line, "retired").unwrap_or(0),
+        protected_rollback_anchors: extract_json_usize_field(line, "protected_rollback_anchors")
+            .unwrap_or(0),
+        blocked_reasons: extract_json_usize_field(line, "blocked_reasons").unwrap_or(0),
+        token_estimate: extract_json_usize_field(line, "token_estimate").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        durable_write_allowed: usize::from(
+            extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
     })
 }
 

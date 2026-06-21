@@ -21,6 +21,31 @@ fn trace_schema_gate_accepts_memory_governance_consistency() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_memory_residency_write_enabled() {
+    let policy = crate::kv_cache::MemoryResidencyPolicy {
+        tenant_id: "tenant-a".to_owned(),
+        ..crate::kv_cache::MemoryResidencyPolicy::default()
+    };
+    let candidates = vec![
+        crate::kv_cache::MemoryResidencyCandidate::new(201, "tenant-a", "semantic")
+            .with_scores(0.84, 4, 0, 9)
+            .with_high_frequency_gene(true),
+    ];
+    let plan = crate::kv_cache::plan_memory_residency(&candidates, &policy, 10);
+    let line = memory_residency_trace_json_line(&plan)
+        .replace("\"write_allowed\":false", "\"write_allowed\":true");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("memory_residency write_allowed must be false")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_memory_feedback_count_mismatch() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

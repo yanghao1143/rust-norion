@@ -43,7 +43,7 @@ use fields::*;
 use memory::{
     evaluate_self_evolving_memory_store_schema_line, evaluate_trace_drift,
     evaluate_trace_kv_fusion, evaluate_trace_memory_admission, evaluate_trace_memory_feedback,
-    evaluate_trace_memory_governance,
+    evaluate_trace_memory_governance, evaluate_trace_memory_residency_schema_line,
 };
 use routing::{evaluate_trace_adaptive_routing, evaluate_trace_task_hierarchy};
 use specialized::{
@@ -52,16 +52,16 @@ use specialized::{
 
 pub use jsonl::{
     append_business_contract_trace_jsonl, append_improvement_corpus_trace_jsonl,
-    append_rust_check_trace_jsonl, append_self_evolution_admission_trace_jsonl,
-    append_self_evolution_experiment_trace_jsonl,
+    append_memory_residency_trace_jsonl, append_rust_check_trace_jsonl,
+    append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
     append_self_evolution_operator_approval_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
     append_self_evolution_rollback_replay_trace_jsonl, append_trace_jsonl,
     append_trace_jsonl_with_case, business_contract_trace_json_line,
-    improvement_corpus_trace_json_line, rust_check_trace_json_line,
-    self_evolution_admission_trace_json_line, self_evolution_experiment_trace_json_line,
-    self_evolution_operator_approval_trace_json_line,
+    improvement_corpus_trace_json_line, memory_residency_trace_json_line,
+    rust_check_trace_json_line, self_evolution_admission_trace_json_line,
+    self_evolution_experiment_trace_json_line, self_evolution_operator_approval_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
     self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
@@ -114,6 +114,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-self-evolving-memory-store-v1\"") {
         failures.extend(evaluate_self_evolving_memory_store_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-memory-residency-plan-v1\"") {
+        failures.extend(evaluate_trace_memory_residency_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-improvement-corpus-v1\"") {

@@ -389,6 +389,189 @@ fn compaction_preserves_protected_current_memory_ids() {
 }
 
 #[test]
+fn residency_plan_promotes_demotes_and_archives_deterministically() {
+    let policy = MemoryResidencyPolicy {
+        tenant_id: "tenant-a".to_owned(),
+        max_hot: 1,
+        max_warm: 2,
+        ..MemoryResidencyPolicy::default()
+    };
+    let candidates = vec![
+        MemoryResidencyCandidate::new(1, "tenant-a", "semantic")
+            .with_scores(0.92, 12, 0, 98)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(2, "tenant-a", "runtime_kv:l0h0:0-1")
+            .with_scores(0.82, 7, 0, 99)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(3, "tenant-a", "semantic")
+            .with_scores(0.64, 2, 0, 98)
+            .with_session_local(true),
+        MemoryResidencyCandidate::new(4, "tenant-a", "gist").with_scores(0.28, 1, 0, 90),
+    ];
+
+    let first = plan_memory_residency(&candidates, &policy, 100);
+    let second = plan_memory_residency(&candidates, &policy, 100);
+
+    assert_eq!(first, second);
+    assert_eq!(first.hot_count(), 1);
+    assert_eq!(first.warm_count(), 2);
+    assert_eq!(first.cold_count(), 1);
+    assert_eq!(first.quarantined_count(), 0);
+    assert_eq!(first.retired_count(), 0);
+    assert!(
+        first
+            .decisions
+            .iter()
+            .find(|decision| decision.id == 1)
+            .unwrap()
+            .is_hot()
+    );
+    assert!(
+        first
+            .decisions
+            .iter()
+            .find(|decision| decision.id == 2)
+            .unwrap()
+            .blocked_reasons
+            .contains(&"memory_residency_hot_budget_exhausted".to_owned())
+    );
+    assert!(first.summary_line().contains("read_only=true"));
+    assert!(first.summary_line().contains("write_allowed=false"));
+    assert!(first.replay_digest.starts_with("fnv64:"));
+}
+
+#[test]
+fn residency_plan_respects_zero_hot_and_warm_budgets() {
+    let policy = MemoryResidencyPolicy {
+        tenant_id: "tenant-a".to_owned(),
+        max_hot: 0,
+        max_warm: 0,
+        ..MemoryResidencyPolicy::default()
+    };
+    let candidates = vec![
+        MemoryResidencyCandidate::new(5, "tenant-a", "semantic")
+            .with_scores(0.95, 10, 0, 50)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(6, "tenant-a", "semantic").with_scores(0.70, 5, 0, 50),
+    ];
+
+    let plan = plan_memory_residency(&candidates, &policy, 64);
+
+    assert_eq!(plan.hot_count(), 0);
+    assert_eq!(plan.warm_count(), 0);
+    assert_eq!(plan.cold_count(), 2);
+    assert!(plan.decisions.iter().any(|decision| {
+        decision
+            .blocked_reasons
+            .contains(&"memory_residency_hot_budget_exhausted".to_owned())
+    }));
+    assert!(plan.decisions.iter().any(|decision| {
+        decision
+            .blocked_reasons
+            .contains(&"memory_residency_warm_budget_exhausted".to_owned())
+    }));
+}
+
+#[test]
+fn residency_plan_blocks_privacy_and_tenant_mismatch_from_shared_hot() {
+    let policy = MemoryResidencyPolicy {
+        tenant_id: "tenant-a".to_owned(),
+        max_hot: 4,
+        ..MemoryResidencyPolicy::default()
+    };
+    let candidates = vec![
+        MemoryResidencyCandidate::new(10, "tenant-b", "semantic")
+            .with_scores(0.95, 20, 0, 10)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(11, "tenant-a", "semantic")
+            .with_scores(0.95, 20, 0, 10)
+            .with_privacy(true, 0.35)
+            .with_high_frequency_gene(true),
+        MemoryResidencyCandidate::new(12, "tenant-a", "semantic")
+            .with_scores(0.95, 20, 0, 10)
+            .with_privacy(false, 0.05)
+            .with_high_frequency_gene(true),
+    ];
+
+    let report = plan_memory_residency(&candidates, &policy, 12);
+
+    let tenant_mismatch = report
+        .decisions
+        .iter()
+        .find(|decision| decision.id == 10)
+        .unwrap();
+    let privacy_risky = report
+        .decisions
+        .iter()
+        .find(|decision| decision.id == 11)
+        .unwrap();
+    let privacy_missing = report
+        .decisions
+        .iter()
+        .find(|decision| decision.id == 12)
+        .unwrap();
+
+    assert!(tenant_mismatch.is_quarantined());
+    assert!(
+        tenant_mismatch
+            .blocked_reasons
+            .contains(&"memory_residency_tenant_mismatch".to_owned())
+    );
+    assert!(privacy_risky.is_cold());
+    assert!(
+        privacy_risky
+            .blocked_reasons
+            .contains(&"memory_residency_shared_privacy_risk".to_owned())
+    );
+    assert!(privacy_missing.is_quarantined());
+    assert!(
+        privacy_missing
+            .blocked_reasons
+            .contains(&"memory_residency_privacy_check_missing".to_owned())
+    );
+    assert_eq!(report.hot_count(), 0);
+    assert!(report.write_allowed == false && report.applied == false);
+}
+
+#[test]
+fn residency_plan_feeds_compaction_protected_rollback_anchors() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let protected = cache.store_or_fuse("rollback anchored memory", vec![1.0, 0.0], 0.30);
+    let duplicate = cache.store_or_fuse("strong duplicate memory", vec![0.94, 0.34], 0.95);
+    let policy = MemoryResidencyPolicy {
+        tenant_id: "tenant-a".to_owned(),
+        ..MemoryResidencyPolicy::default()
+    };
+    let candidates = vec![
+        MemoryResidencyCandidate::new(protected, "tenant-a", "semantic")
+            .with_scores(0.40, 0, 0, 8)
+            .with_rollback_anchor("rollback:approved-experiment", true),
+        MemoryResidencyCandidate::new(duplicate, "tenant-a", "semantic").with_scores(0.91, 9, 0, 9),
+    ];
+    let residency = plan_memory_residency(&candidates, &policy, 10);
+
+    assert_eq!(residency.protected_ids_for_compaction(), vec![protected]);
+
+    let report = cache.compact_similar_with_protected(
+        MemoryCompactionPolicy {
+            similarity_threshold: 0.90,
+            max_candidates: 16,
+            max_merges: 8,
+        },
+        &residency.protected_ids_for_compaction(),
+    );
+
+    assert_eq!(report.after, 1);
+    assert_eq!(report.merged.len(), 1);
+    assert_eq!(report.merged[0].primary_id, protected);
+    assert_eq!(report.merged[0].removed_id, duplicate);
+    assert!(report.merged[0].primary_protected);
+    assert!(!report.merged[0].removed_protected);
+    assert!(cache.entries().iter().any(|entry| entry.id == protected));
+    assert!(cache.entries().iter().all(|entry| entry.id != duplicate));
+}
+
+#[test]
 fn disk_kv_roundtrip_preserves_entries() {
     let path = temp_path("cache-roundtrip");
     let mut cache = KvFusionCache::new();

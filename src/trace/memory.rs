@@ -415,6 +415,177 @@ pub(super) fn evaluate_trace_kv_fusion(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_trace_memory_residency_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-memory-residency-plan-v1\"",
+        ),
+        ("redacted", "\"redacted\":"),
+        ("report_only", "\"report_only\":"),
+        ("decision_count", "\"decision_count\":"),
+        ("hot", "\"hot\":"),
+        ("warm", "\"warm\":"),
+        ("cold", "\"cold\":"),
+        ("quarantined", "\"quarantined\":"),
+        ("retired", "\"retired\":"),
+        (
+            "protected_rollback_anchors",
+            "\"protected_rollback_anchors\":",
+        ),
+        ("blocked_reasons", "\"blocked_reasons\":"),
+        ("token_estimate", "\"token_estimate\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("durable_write_allowed", "\"durable_write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("replay_digest", "\"replay_digest\":"),
+        (
+            "protected_rollback_anchor_digests",
+            "\"protected_rollback_anchor_digests\":",
+        ),
+        ("decision_summaries", "\"decision_summaries\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing memory_residency field {name}"));
+        }
+    }
+
+    let redacted = extract_json_bool_field(line, "redacted");
+    let report_only = extract_json_bool_field(line, "report_only");
+    let read_only = extract_json_bool_field(line, "read_only");
+    let write_allowed = extract_json_bool_field(line, "write_allowed");
+    let durable_write_allowed = extract_json_bool_field(line, "durable_write_allowed");
+    let applied = extract_json_bool_field(line, "applied");
+    let decision_count = extract_json_usize_field(line, "decision_count").unwrap_or(0);
+    let hot = extract_json_usize_field(line, "hot").unwrap_or(0);
+    let warm = extract_json_usize_field(line, "warm").unwrap_or(0);
+    let cold = extract_json_usize_field(line, "cold").unwrap_or(0);
+    let quarantined = extract_json_usize_field(line, "quarantined").unwrap_or(0);
+    let retired = extract_json_usize_field(line, "retired").unwrap_or(0);
+    let protected = extract_json_usize_field(line, "protected_rollback_anchors").unwrap_or(0);
+    let blocked_reasons = extract_json_usize_field(line, "blocked_reasons").unwrap_or(0);
+    let token_estimate = extract_json_usize_field(line, "token_estimate").unwrap_or(0);
+    let replay_digest = extract_json_string_field(line, "replay_digest").unwrap_or_default();
+    let protected_digests =
+        extract_json_string_array_field(line, "protected_rollback_anchor_digests")
+            .unwrap_or_default();
+    let summaries = extract_json_string_array_field(line, "decision_summaries").unwrap_or_default();
+    let state_total = hot
+        .saturating_add(warm)
+        .saturating_add(cold)
+        .saturating_add(quarantined)
+        .saturating_add(retired);
+
+    if redacted != Some(true) {
+        failures.push("memory_residency redacted must be true".to_owned());
+    }
+    if report_only != Some(true) {
+        failures.push("memory_residency report_only must be true".to_owned());
+    }
+    if read_only != Some(true) {
+        failures.push("memory_residency read_only must be true".to_owned());
+    }
+    if write_allowed != Some(false) {
+        failures.push("memory_residency write_allowed must be false".to_owned());
+    }
+    if durable_write_allowed != Some(false) {
+        failures.push("memory_residency durable_write_allowed must be false".to_owned());
+    }
+    if applied != Some(false) {
+        failures.push("memory_residency applied must be false".to_owned());
+    }
+    if !replay_digest.starts_with("fnv64:") {
+        failures
+            .push("memory_residency replay_digest must be digest-only fnv64 evidence".to_owned());
+    }
+    if state_total != decision_count {
+        failures.push(format!(
+            "memory_residency state counts {state_total} do not match decision_count {decision_count}"
+        ));
+    }
+    if summaries.len() != decision_count {
+        failures.push(format!(
+            "memory_residency decision_summaries {} do not match decision_count {decision_count}",
+            summaries.len()
+        ));
+    }
+    if protected > decision_count {
+        failures.push(format!(
+            "memory_residency protected_rollback_anchors {protected} exceeds decision_count {decision_count}"
+        ));
+    }
+    if protected_digests.len() != protected {
+        failures.push(format!(
+            "memory_residency protected_rollback_anchor_digests {} do not match protected_rollback_anchors {protected}",
+            protected_digests.len()
+        ));
+    }
+    if decision_count > 0 && token_estimate < decision_count {
+        failures.push(format!(
+            "memory_residency token_estimate {token_estimate} is smaller than decision_count {decision_count}"
+        ));
+    }
+    if quarantined > 0 && blocked_reasons == 0 {
+        failures
+            .push("memory_residency quarantined decisions require blocked_reasons > 0".to_owned());
+    }
+    if line_contains_raw_memory_payload(line) {
+        failures
+            .push("memory_residency trace must not leak raw private memory payloads".to_owned());
+    }
+
+    for (index, digest) in protected_digests.iter().enumerate() {
+        if !digest.starts_with("fnv64:") {
+            failures.push(format!(
+                "memory_residency protected digest {index} must be fnv64 evidence"
+            ));
+        }
+    }
+    for (index, summary) in summaries.iter().enumerate() {
+        for marker in [
+            "id=",
+            "state=",
+            "score=",
+            "tenant=fnv64:",
+            "namespace=fnv64:",
+            "rollback=fnv64:",
+            "protected=",
+            "blocked=",
+            "tokens=",
+        ] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "memory_residency decision summary {index} missing {marker} evidence"
+                ));
+            }
+        }
+        if ![
+            "state=hot",
+            "state=warm",
+            "state=cold",
+            "state=quarantined",
+            "state=retired",
+        ]
+        .iter()
+        .any(|state| summary.contains(state))
+        {
+            failures.push(format!(
+                "memory_residency decision summary {index} has invalid state evidence"
+            ));
+        }
+        if line_contains_raw_memory_payload(summary) {
+            failures.push(format!(
+                "memory_residency decision summary {index} must not leak raw private memory payloads"
+            ));
+        }
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
 
