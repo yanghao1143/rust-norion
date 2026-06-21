@@ -3,6 +3,7 @@ use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
 use crate::gist_memory::GistRecord;
+use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
 use crate::kv_cache::MemoryMatch;
 use crate::memory_admission::{
     MemoryAdmissionInput, MemoryAdmissionPreview, MemoryPrivacyClassification,
@@ -74,6 +75,16 @@ impl NoironEngine {
             self.scheduler_for_backend_window(backend.runtime_native_context_window());
         let recursive_schedule = recursive_scheduler.plan(&request.prompt);
         let base_hierarchy = self.hierarchy.adapt_to_profile(request.profile);
+        let task_hierarchy_plan = TaskAwareHierarchyPlanner::new().plan(TaskAwareHierarchyInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            max_tokens: request.max_tokens,
+            prompt_tokens: recursive_schedule.prompt_tokens,
+            used_memories: used_memories.len(),
+            threshold_before: self.router.threshold_for(request.profile),
+            hierarchy_before: base_hierarchy,
+        });
+        let base_hierarchy = task_hierarchy_plan.hierarchy_after;
         let hardware_plan = self.hardware_allocator.plan(
             self.hardware_snapshot,
             request.profile,
@@ -98,9 +109,11 @@ impl NoironEngine {
             compute_headroom: hardware_plan.compute_headroom(),
             hierarchy: hardware_plan.hierarchy,
         };
-        let route_budget = self
-            .router
-            .budget_for_prompt_with_context(&request.prompt, routing_context);
+        let route_budget = self.router.budget_for_prompt_with_context_threshold(
+            &request.prompt,
+            routing_context,
+            task_hierarchy_plan.threshold_after,
+        );
         let hierarchy = hardware_plan.hierarchy;
         let transformer_plan =
             self.transformer_planner
@@ -499,6 +512,7 @@ impl NoironEngine {
             recursive_runtime_calls,
             route_budget,
             adaptive_route_plan,
+            task_hierarchy_plan,
             hierarchy,
             tier_plan,
             tier_migrations,

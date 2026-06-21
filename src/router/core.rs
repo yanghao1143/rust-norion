@@ -97,9 +97,24 @@ impl NoironRouter {
         entropy: f32,
         context: RoutingContext,
     ) -> RoutingDecision {
+        self.route_entropy_with_context_threshold(
+            token,
+            entropy,
+            context,
+            self.threshold_for(context.profile),
+        )
+    }
+
+    pub fn route_entropy_with_context_threshold(
+        &self,
+        token: &str,
+        entropy: f32,
+        context: RoutingContext,
+        threshold: f32,
+    ) -> RoutingDecision {
         let entropy = entropy.clamp(0.0, 1.0);
         let score = routing_score(entropy, context);
-        let threshold = self.threshold_for(context.profile);
+        let threshold = threshold.clamp(self.min_threshold, self.max_threshold);
         let route = if score < threshold {
             Route::FastProjection
         } else {
@@ -123,9 +138,29 @@ impl NoironRouter {
         prompt: &str,
         context: RoutingContext,
     ) -> Vec<RoutingDecision> {
+        self.route_prompt_with_context_threshold(
+            prompt,
+            context,
+            self.threshold_for(context.profile),
+        )
+    }
+
+    pub fn route_prompt_with_context_threshold(
+        &self,
+        prompt: &str,
+        context: RoutingContext,
+        threshold: f32,
+    ) -> Vec<RoutingDecision> {
         tokenize(prompt)
             .into_iter()
-            .map(|token| self.route_token_with_context(&token, context))
+            .map(|token| {
+                self.route_entropy_with_context_threshold(
+                    &token,
+                    estimate_token_entropy(&token),
+                    context,
+                    threshold,
+                )
+            })
             .collect()
     }
 
@@ -138,8 +173,22 @@ impl NoironRouter {
         prompt: &str,
         context: RoutingContext,
     ) -> RouteBudget {
-        let decisions = self.route_prompt_with_context(prompt, context);
-        RouteBudget::from_decisions(self.threshold_for(context.profile), &decisions)
+        self.budget_for_prompt_with_context_threshold(
+            prompt,
+            context,
+            self.threshold_for(context.profile),
+        )
+    }
+
+    pub fn budget_for_prompt_with_context_threshold(
+        &self,
+        prompt: &str,
+        context: RoutingContext,
+        threshold: f32,
+    ) -> RouteBudget {
+        let threshold = threshold.clamp(self.min_threshold, self.max_threshold);
+        let decisions = self.route_prompt_with_context_threshold(prompt, context, threshold);
+        RouteBudget::from_decisions(threshold, &decisions)
     }
 
     pub fn adaptive_plan_with_context(

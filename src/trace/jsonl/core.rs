@@ -87,6 +87,7 @@ pub fn trace_json_line_with_case(
     let adaptive_route_actions = outcome.adaptive_route_plan.action_summaries();
     let adaptive_route_selected_routes = outcome.adaptive_route_plan.selected_route_summaries();
     let adaptive_route_score_summaries = outcome.adaptive_route_plan.score_summaries(12);
+    let task_hierarchy_mutation_summaries = outcome.task_hierarchy_plan.mutation_summaries(8);
 
     format!(
         "{{\
@@ -102,6 +103,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"adaptive_routing\":{{\"candidates\":{},\"include\":{},\"compress\":{},\"defer\":{},\"skip\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"actions\":{},\"selected_routes\":{},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
+         \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
@@ -163,6 +165,38 @@ pub fn trace_json_line_with_case(
         outcome.adaptive_route_plan.read_only,
         outcome.adaptive_route_plan.write_allowed,
         outcome.adaptive_route_plan.applied,
+        outcome.task_hierarchy_plan.mode.as_str(),
+        outcome.task_hierarchy_plan.signals.language.as_str(),
+        outcome.task_hierarchy_plan.signals.coding_intent,
+        outcome.task_hierarchy_plan.signals.validation_mode,
+        outcome.task_hierarchy_plan.signals.memory_need,
+        outcome.task_hierarchy_plan.signals.compute_budget.as_str(),
+        outcome.task_hierarchy_plan.hierarchy_depth,
+        outcome.task_hierarchy_plan.route_fanout,
+        outcome.task_hierarchy_plan.route_pressure,
+        outcome.task_hierarchy_plan.compute_reduction,
+        outcome.task_hierarchy_plan.threshold_before,
+        outcome.task_hierarchy_plan.threshold_after,
+        outcome.task_hierarchy_plan.threshold_after - outcome.task_hierarchy_plan.threshold_before,
+        json_escape(&hierarchy_summary(
+            outcome.task_hierarchy_plan.hierarchy_before
+        )),
+        json_escape(&hierarchy_summary(
+            outcome.task_hierarchy_plan.hierarchy_after
+        )),
+        string_array_json(&outcome.task_hierarchy_plan.selected_lanes),
+        string_array_json(&outcome.task_hierarchy_plan.skipped_lanes),
+        string_array_json(&outcome.task_hierarchy_plan.memory_lanes),
+        string_array_json(&outcome.task_hierarchy_plan.skipped_memory_lanes),
+        outcome.task_hierarchy_plan.mutation_count(),
+        string_array_json(&task_hierarchy_mutation_summaries),
+        json_escape(&outcome.task_hierarchy_plan.rollback_anchor_id),
+        outcome.task_hierarchy_plan.mutation_history_replayable(),
+        false,
+        outcome.task_hierarchy_plan.runtime_applied,
+        outcome.task_hierarchy_plan.state_write_allowed,
+        outcome.task_hierarchy_plan.adaptive_state_write_allowed,
+        outcome.task_hierarchy_plan.ndkv_write_allowed,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
@@ -659,4 +693,11 @@ fn memory_compaction_pairs_json(pairs: &[crate::kv_cache::MemoryCompactionMerge]
         .collect::<Vec<_>>()
         .join(",");
     format!("[{values}]")
+}
+
+fn hierarchy_summary(weights: crate::hierarchy::HierarchyWeights) -> String {
+    format!(
+        "g:{:.3}|l:{:.3}|c:{:.3}",
+        weights.global, weights.local, weights.convolution
+    )
 }

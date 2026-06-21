@@ -48,4 +48,24 @@ impl BenchmarkSummary {
     pub fn total_adaptive_routing_failures(&self) -> usize {
         self.routing_evidence.failures.len()
     }
+
+    pub fn task_hierarchy_cases(&self) -> usize {
+        self.routing_evidence.task_hierarchy_cases
+    }
+
+    pub fn task_hierarchy_mode_count(&self) -> usize {
+        self.routing_evidence.task_hierarchy_mode_count()
+    }
+
+    pub fn total_task_hierarchy_mutation_records(&self) -> usize {
+        self.routing_evidence.task_hierarchy_mutation_records
+    }
+
+    pub fn total_task_hierarchy_route_pressure_milli(&self) -> usize {
+        self.routing_evidence.task_hierarchy_route_pressure_milli
+    }
+
+    pub fn total_task_hierarchy_compute_reduction_milli(&self) -> usize {
+        self.routing_evidence.task_hierarchy_compute_reduction_milli
+    }
 }

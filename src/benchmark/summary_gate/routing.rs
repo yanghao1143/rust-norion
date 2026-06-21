@@ -60,4 +60,46 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_task_hierarchy_cases) = gate.min_task_hierarchy_cases {
+        let observed = summary.task_hierarchy_cases();
+        if observed < min_task_hierarchy_cases {
+            failures.push(format!(
+                "task_hierarchy_cases {} below minimum {}",
+                observed, min_task_hierarchy_cases
+            ));
+        }
+    }
+
+    if let Some(min_task_hierarchy_modes) = gate.min_task_hierarchy_modes {
+        let observed = summary.task_hierarchy_mode_count();
+        if observed < min_task_hierarchy_modes {
+            failures.push(format!(
+                "task_hierarchy_modes {} below minimum {}",
+                observed, min_task_hierarchy_modes
+            ));
+        }
+    }
+
+    if let Some(min_task_hierarchy_mutation_records) = gate.min_task_hierarchy_mutation_records {
+        let observed = summary.total_task_hierarchy_mutation_records();
+        if observed < min_task_hierarchy_mutation_records {
+            failures.push(format!(
+                "task_hierarchy_mutation_records {} below minimum {}",
+                observed, min_task_hierarchy_mutation_records
+            ));
+        }
+    }
+
+    if let Some(min_task_hierarchy_compute_reduction_milli) =
+        gate.min_task_hierarchy_compute_reduction_milli
+    {
+        let observed = summary.total_task_hierarchy_compute_reduction_milli();
+        if observed < min_task_hierarchy_compute_reduction_milli {
+            failures.push(format!(
+                "task_hierarchy_compute_reduction_milli {} below minimum {}",
+                observed, min_task_hierarchy_compute_reduction_milli
+            ));
+        }
+    }
 }

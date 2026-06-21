@@ -5,7 +5,7 @@ use crate::experience::{ExperienceMatch, ExperienceRuntimeTokenMetrics};
 use crate::experience_replay::ExperienceReplayReport;
 use crate::gist_memory::GistRecord;
 use crate::hardware::HardwarePlan;
-use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::hierarchy::{HierarchyWeights, TaskAwareHierarchyPlan, TaskProfile};
 use crate::infini_memory::InfiniMemoryPlan;
 use crate::kv_cache::{
     MemoryCompactionPolicy, MemoryCompactionReport, MemoryMatch, MemoryRetentionPolicy,
@@ -231,6 +231,7 @@ pub struct InferenceOutcome {
     pub recursive_runtime_calls: usize,
     pub route_budget: RouteBudget,
     pub adaptive_route_plan: AdaptiveRoutingPlan,
+    pub task_hierarchy_plan: TaskAwareHierarchyPlan,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
     pub tier_migrations: Vec<TierMigration>,

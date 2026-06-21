@@ -13,6 +13,11 @@ fn gate_accepts_adaptive_routing_evidence() {
             input_tokens: 128,
             retained_tokens: 64,
             saved_tokens: 64,
+            task_hierarchy_cases: 2,
+            task_hierarchy_mutation_records: 6,
+            task_hierarchy_route_pressure_milli: 780,
+            task_hierarchy_compute_reduction_milli: 420,
+            task_hierarchy_modes: vec!["rust_coding".to_owned(), "benchmark_analysis".to_owned()],
             devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             saved_token_devices: vec![DeviceClass::CpuOnly],
             ..BenchmarkRoutingEvidence::default()
@@ -32,6 +37,10 @@ fn gate_accepts_adaptive_routing_evidence() {
         min_adaptive_routing_device_profiles: Some(2),
         min_adaptive_routing_saved_tokens: Some(32),
         min_adaptive_routing_saved_token_device_profiles: Some(1),
+        min_task_hierarchy_cases: Some(2),
+        min_task_hierarchy_modes: Some(2),
+        min_task_hierarchy_mutation_records: Some(6),
+        min_task_hierarchy_compute_reduction_milli: Some(100),
         ..BenchmarkGate::default()
     };
 
@@ -44,6 +53,17 @@ fn gate_accepts_adaptive_routing_evidence() {
             .summary_line()
             .contains("adaptive_routing_saved_tokens=64")
     );
+    assert_eq!(summary.task_hierarchy_mode_count(), 2);
+    assert!(
+        summary
+            .summary_line()
+            .contains("task_hierarchy_mutation_records=6")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("task_hierarchy_compute_reduction_milli=420")
+    );
 }
 
 #[test]
@@ -54,6 +74,10 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         min_adaptive_routing_device_profiles: Some(1),
         min_adaptive_routing_saved_tokens: Some(1),
         min_adaptive_routing_saved_token_device_profiles: Some(1),
+        min_task_hierarchy_cases: Some(1),
+        min_task_hierarchy_modes: Some(1),
+        min_task_hierarchy_mutation_records: Some(1),
+        min_task_hierarchy_compute_reduction_milli: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -65,6 +89,10 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         "adaptive_routing_device_profiles",
         "adaptive_routing_saved_tokens",
         "adaptive_routing_saved_token_device_profiles",
+        "task_hierarchy_cases",
+        "task_hierarchy_modes",
+        "task_hierarchy_mutation_records",
+        "task_hierarchy_compute_reduction_milli",
     ] {
         assert!(
             report

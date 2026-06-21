@@ -32,6 +32,18 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"saved_tokens\":"));
     assert!(line.contains("\"selected_routes\":"));
     assert!(line.contains("\"score_summaries\":"));
+    assert!(line.contains("\"task_hierarchy\":"));
+    assert!(line.contains("\"mode\":\"rust_coding\""));
+    assert!(line.contains("\"hierarchy_depth\":"));
+    assert!(line.contains("\"route_fanout\":"));
+    assert!(line.contains("\"route_pressure\":"));
+    assert!(line.contains("\"compute_reduction\":"));
+    assert!(line.contains("\"selected_lanes\":"));
+    assert!(line.contains("\"memory_lanes\":"));
+    assert!(line.contains("\"mutation_records\":"));
+    assert!(line.contains("\"mutation_summaries\":"));
+    assert!(line.contains("\"rollback_anchor_id\":\"task_hierarchy:"));
+    assert!(line.contains("\"runtime_applied\":true"));
     assert!(line.contains("\"runtime_tokens\":"));
     assert!(line.contains("\"embedding\":{"));
     assert!(line.contains("\"query_source\":\"fallback\""));
@@ -608,6 +620,65 @@ fn trace_schema_gate_rejects_adaptive_routing_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("adaptive_routing write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_task_hierarchy_mutation_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = increment_trace_object_usize(
+        &trace_json_line(
+            "trace task hierarchy mismatch",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "task_hierarchy",
+        "mutation_records",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy mutation_summaries")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_task_hierarchy_state_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace task hierarchy write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "task_hierarchy",
+        "\"state_write_allowed\":false",
+        "\"state_write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy state_write_allowed")),
         "{failures:?}"
     );
 }

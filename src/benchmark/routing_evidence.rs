@@ -14,6 +14,11 @@ pub struct BenchmarkRoutingEvidence {
     pub input_tokens: usize,
     pub retained_tokens: usize,
     pub saved_tokens: usize,
+    pub task_hierarchy_cases: usize,
+    pub task_hierarchy_mutation_records: usize,
+    pub task_hierarchy_route_pressure_milli: usize,
+    pub task_hierarchy_compute_reduction_milli: usize,
+    pub task_hierarchy_modes: Vec<String>,
     pub failures: Vec<String>,
     pub(super) devices: Vec<DeviceClass>,
     pub(super) saved_token_devices: Vec<DeviceClass>,
@@ -80,6 +85,48 @@ impl BenchmarkRoutingEvidence {
                 case.name
             ));
         }
+
+        let task = &outcome.task_hierarchy_plan;
+        self.task_hierarchy_cases = self.task_hierarchy_cases.saturating_add(1);
+        self.task_hierarchy_mutation_records = self
+            .task_hierarchy_mutation_records
+            .saturating_add(task.mutation_count());
+        self.task_hierarchy_route_pressure_milli = self
+            .task_hierarchy_route_pressure_milli
+            .saturating_add(milli(task.route_pressure));
+        self.task_hierarchy_compute_reduction_milli = self
+            .task_hierarchy_compute_reduction_milli
+            .saturating_add(milli(task.compute_reduction));
+        push_unique_string(&mut self.task_hierarchy_modes, task.mode.as_str());
+        if task.hierarchy_depth == 0 || task.route_fanout == 0 {
+            self.failures.push(format!(
+                "{}:{} task_hierarchy must choose positive hierarchy_depth and route_fanout",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if task.selected_lanes.is_empty() || task.memory_lanes.is_empty() {
+            self.failures.push(format!(
+                "{}:{} task_hierarchy must select hierarchy and memory lanes",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if task.mutation_count() == 0 || !task.mutation_history_replayable() {
+            self.failures.push(format!(
+                "{}:{} task_hierarchy mutation history must be replayable and revertible",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if task.state_write_allowed || task.adaptive_state_write_allowed || task.ndkv_write_allowed
+        {
+            self.failures.push(format!(
+                "{}:{} task_hierarchy mutation history must not write durable state",
+                device.as_str(),
+                case.name
+            ));
+        }
     }
 
     pub fn device_profiles(&self) -> usize {
@@ -88,5 +135,23 @@ impl BenchmarkRoutingEvidence {
 
     pub fn saved_token_device_profiles(&self) -> usize {
         explicit_device_count(&self.saved_token_devices)
+    }
+
+    pub fn task_hierarchy_mode_count(&self) -> usize {
+        self.task_hierarchy_modes.len()
+    }
+}
+
+fn milli(value: f32) -> usize {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as usize
+    } else {
+        0
+    }
+}
+
+fn push_unique_string(values: &mut Vec<String>, value: &str) {
+    if !values.iter().any(|existing| existing == value) {
+        values.push(value.to_owned());
     }
 }

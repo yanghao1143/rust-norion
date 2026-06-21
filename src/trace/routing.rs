@@ -105,6 +105,108 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(task) = json_object_after_field(line, "task_hierarchy") else {
+        failures.push("task_hierarchy object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let hierarchy_depth = extract_json_usize_field(task, "hierarchy_depth").unwrap_or(0);
+    let route_fanout = extract_json_usize_field(task, "route_fanout").unwrap_or(0);
+    let route_pressure = extract_json_f32_field(task, "route_pressure").unwrap_or(f32::NAN);
+    let compute_reduction = extract_json_f32_field(task, "compute_reduction").unwrap_or(f32::NAN);
+    let threshold_before = extract_json_f32_field(task, "threshold_before").unwrap_or(f32::NAN);
+    let threshold_after = extract_json_f32_field(task, "threshold_after").unwrap_or(f32::NAN);
+    let selected_lanes =
+        extract_json_string_array_field(task, "selected_lanes").unwrap_or_default();
+    let memory_lanes = extract_json_string_array_field(task, "memory_lanes").unwrap_or_default();
+    let mutation_records = extract_json_usize_field(task, "mutation_records").unwrap_or(0);
+    let mutation_summaries =
+        extract_json_string_array_field(task, "mutation_summaries").unwrap_or_default();
+    let replayable = extract_json_bool_field(task, "replayable");
+    let runtime_applied = extract_json_bool_field(task, "runtime_applied");
+    let state_write_allowed = extract_json_bool_field(task, "state_write_allowed");
+    let adaptive_state_write_allowed =
+        extract_json_bool_field(task, "adaptive_state_write_allowed");
+    let ndkv_write_allowed = extract_json_bool_field(task, "ndkv_write_allowed");
+
+    for marker in [
+        "\"mode\":\"",
+        "\"language\":\"",
+        "\"compute_budget\":\"",
+        "\"rollback_anchor_id\":\"task_hierarchy:",
+    ] {
+        if !task.contains(marker) {
+            failures.push(format!("task_hierarchy missing marker {marker}"));
+        }
+    }
+    if hierarchy_depth == 0 {
+        failures.push("task_hierarchy hierarchy_depth must be positive".to_owned());
+    }
+    if route_fanout == 0 {
+        failures.push("task_hierarchy route_fanout must be positive".to_owned());
+    }
+    if selected_lanes.is_empty() {
+        failures.push("task_hierarchy selected_lanes must not be empty".to_owned());
+    }
+    if memory_lanes.is_empty() {
+        failures.push("task_hierarchy memory_lanes must not be empty".to_owned());
+    }
+    for (name, value) in [
+        ("route_pressure", route_pressure),
+        ("compute_reduction", compute_reduction),
+        ("threshold_before", threshold_before),
+        ("threshold_after", threshold_after),
+    ] {
+        if !unit_score(value) {
+            failures.push(format!(
+                "task_hierarchy {name} {value:.6} must stay within 0.0..=1.0"
+            ));
+        }
+    }
+    if mutation_records == 0 {
+        failures.push("task_hierarchy mutation_records must be positive".to_owned());
+    }
+    if mutation_summaries.len() != mutation_records {
+        failures.push(format!(
+            "task_hierarchy mutation_summaries {} do not match mutation_records {mutation_records}",
+            mutation_summaries.len()
+        ));
+    }
+    for (index, summary) in mutation_summaries.iter().enumerate() {
+        for marker in ["kind=", "rollback=", "replayable=true", "preview_only=true"] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "task_hierarchy mutation summary {index} missing {marker} evidence"
+                ));
+            }
+        }
+        if summary.contains("prompt:") || summary.contains("answer:") {
+            failures.push(format!(
+                "task_hierarchy mutation summary {index} must not leak raw prompt or answer payloads"
+            ));
+        }
+    }
+    if replayable != Some(true) {
+        failures.push("task_hierarchy replayable must be true".to_owned());
+    }
+    if runtime_applied != Some(true) {
+        failures.push("task_hierarchy runtime_applied must be true".to_owned());
+    }
+    if state_write_allowed != Some(false) {
+        failures.push("task_hierarchy state_write_allowed must be false".to_owned());
+    }
+    if adaptive_state_write_allowed != Some(false) {
+        failures.push("task_hierarchy adaptive_state_write_allowed must be false".to_owned());
+    }
+    if ndkv_write_allowed != Some(false) {
+        failures.push("task_hierarchy ndkv_write_allowed must be false".to_owned());
+    }
+
+    failures
+}
+
 fn unit_score(score: f32) -> bool {
     score.is_finite() && (0.0..=1.0).contains(&score)
 }

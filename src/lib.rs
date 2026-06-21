@@ -83,7 +83,10 @@ pub use hardware::{
 pub use hierarchy::{
     HierarchyAdjustmentPreviewPlanner, HierarchyAdjustmentPreviewPolicy,
     HierarchyAdjustmentPreviewReport, HierarchyController, HierarchyState, HierarchyWeightDelta,
-    HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights, TaskProfile,
+    HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights,
+    TaskAwareHierarchyInput, TaskAwareHierarchyPlan, TaskAwareHierarchyPlanner, TaskComputeBudget,
+    TaskHierarchyMutationKind, TaskHierarchyMutationRecord, TaskHierarchyReplayReport,
+    TaskLanguageMode, TaskMode, TaskModeSignals, TaskProfile,
 };
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
