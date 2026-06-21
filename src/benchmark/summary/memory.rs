@@ -11,6 +11,35 @@ impl BenchmarkSummary {
         self.memory_governance_evidence.device_profiles()
     }
 
+    pub fn memory_admission_cases(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_cases
+    }
+
+    pub fn memory_admission_device_profiles(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_device_profiles()
+    }
+
+    pub fn total_memory_admission_candidates(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_candidates
+    }
+
+    pub fn total_memory_admission_ready(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_ready
+    }
+
+    pub fn total_memory_admission_hold(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_hold
+    }
+
+    pub fn total_memory_admission_reject(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_reject
+    }
+
+    pub fn total_memory_admission_quarantine(&self) -> usize {
+        self.memory_governance_evidence.memory_admission_quarantine
+    }
+
     pub fn total_memory_retention_decayed(&self) -> usize {
         self.memory_governance_evidence.total_retention_decayed
     }

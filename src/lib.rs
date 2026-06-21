@@ -15,6 +15,7 @@ pub mod kv_cache;
 pub mod kv_exchange;
 pub mod kv_quant;
 pub mod local_runtime;
+pub mod memory_admission;
 pub mod process_reward;
 pub mod production_runtime;
 pub mod reasoning_genome;
@@ -95,6 +96,10 @@ pub use kv_cache::{
 pub use kv_exchange::{RuntimeKvBlock, RuntimeKvBlockValidationError};
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
 pub use local_runtime::LocalTransformerRuntime;
+pub use memory_admission::{
+    MemoryAdmissionCandidate, MemoryAdmissionDecision, MemoryAdmissionInput, MemoryAdmissionKind,
+    MemoryAdmissionPreview,
+};
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,
 };

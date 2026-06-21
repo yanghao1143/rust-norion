@@ -32,7 +32,8 @@ use runtime_kv::evaluate_trace_runtime_kv;
 #[cfg(test)]
 use fields::*;
 use memory::{
-    evaluate_trace_drift, evaluate_trace_memory_feedback, evaluate_trace_memory_governance,
+    evaluate_trace_drift, evaluate_trace_memory_admission, evaluate_trace_memory_feedback,
+    evaluate_trace_memory_governance,
 };
 use specialized::{
     evaluate_business_contract_trace_schema_line, evaluate_rust_check_trace_schema_line,
@@ -79,6 +80,7 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
     failures.extend(evaluate_trace_memory_feedback(line));
+    failures.extend(evaluate_trace_memory_admission(line));
     failures.extend(evaluate_trace_memory_governance(line));
     failures.extend(evaluate_trace_drift(line));
     failures.extend(evaluate_trace_reasoning_genome(line));

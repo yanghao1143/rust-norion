@@ -6,6 +6,12 @@ use super::{BenchmarkCase, explicit_device_count, push_unique_device};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BenchmarkMemoryGovernanceEvidence {
     pub cases: usize,
+    pub memory_admission_cases: usize,
+    pub memory_admission_candidates: usize,
+    pub memory_admission_ready: usize,
+    pub memory_admission_hold: usize,
+    pub memory_admission_reject: usize,
+    pub memory_admission_quarantine: usize,
     pub retention_activity_cases: usize,
     pub compaction_activity_cases: usize,
     pub total_retention_decayed: usize,
@@ -15,6 +21,7 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub total_compaction_pair_evidence: usize,
     pub failures: Vec<String>,
     pub(super) governance_devices: Vec<DeviceClass>,
+    pub(super) memory_admission_devices: Vec<DeviceClass>,
     pub(super) retention_activity_devices: Vec<DeviceClass>,
     pub(super) compaction_activity_devices: Vec<DeviceClass>,
 }
@@ -24,6 +31,32 @@ impl BenchmarkMemoryGovernanceEvidence {
         self.cases += 1;
         let device = outcome.hardware_plan.device;
         push_unique_device(&mut self.governance_devices, device);
+
+        let admission = &outcome.memory_admission;
+        let admission_candidates = admission.candidate_count();
+        self.memory_admission_candidates += admission_candidates;
+        self.memory_admission_ready += admission.ready_count();
+        self.memory_admission_hold += admission.hold_count();
+        self.memory_admission_reject += admission.reject_count();
+        self.memory_admission_quarantine += admission.quarantine_count();
+        if admission_candidates > 0 {
+            self.memory_admission_cases += 1;
+            push_unique_device(&mut self.memory_admission_devices, device);
+        } else {
+            self.failures.push(format!(
+                "{}:{} memory_admission must include at least one candidate",
+                device.as_str(),
+                case.name
+            ));
+        }
+        validate_memory_admission_preview(
+            &mut self.failures,
+            device,
+            &case.name,
+            case.profile,
+            &case.prompt,
+            admission,
+        );
 
         let retention = &outcome.retention_report;
         let retention_removed = retention.removed.len();
@@ -202,8 +235,125 @@ impl BenchmarkMemoryGovernanceEvidence {
         explicit_device_count(&self.retention_activity_devices)
     }
 
+    pub fn memory_admission_device_profiles(&self) -> usize {
+        explicit_device_count(&self.memory_admission_devices)
+    }
+
     pub fn compaction_activity_device_profiles(&self) -> usize {
         explicit_device_count(&self.compaction_activity_devices)
+    }
+}
+
+fn validate_memory_admission_preview(
+    failures: &mut Vec<String>,
+    device: DeviceClass,
+    case_name: &str,
+    profile: crate::hierarchy::TaskProfile,
+    prompt: &str,
+    admission: &crate::memory_admission::MemoryAdmissionPreview,
+) {
+    let candidates = admission.candidate_count();
+    let decision_total = admission
+        .ready_count()
+        .saturating_add(admission.hold_count())
+        .saturating_add(admission.reject_count())
+        .saturating_add(admission.quarantine_count());
+    if decision_total != candidates {
+        failures.push(format!(
+            "{}:{} memory_admission decision counts {} do not match candidates {}",
+            device.as_str(),
+            case_name,
+            decision_total,
+            candidates
+        ));
+    }
+    let summaries = admission.candidate_summaries();
+    if summaries.len() != candidates {
+        failures.push(format!(
+            "{}:{} memory_admission summaries {} do not match candidates {}",
+            device.as_str(),
+            case_name,
+            summaries.len(),
+            candidates
+        ));
+    }
+    if !admission.is_read_only_preview() {
+        failures.push(format!(
+            "{}:{} memory_admission preview must remain read-only and unapplied",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if summaries
+        .iter()
+        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    {
+        failures.push(format!(
+            "{}:{} memory_admission summaries must not leak raw prompt or answer payloads",
+            device.as_str(),
+            case_name
+        ));
+    }
+
+    let prompt_chars = prompt.chars().count();
+    let prompt_leak_check = prompt.len() > 16;
+    for (index, candidate) in admission.candidates.iter().enumerate() {
+        if candidate.profile != profile {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} profile {:?} does not match case profile {:?}",
+                device.as_str(),
+                case_name,
+                candidate.profile,
+                profile
+            ));
+        }
+        if candidate.prompt_chars != prompt_chars {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} prompt_chars {} does not match case prompt_chars {}",
+                device.as_str(),
+                case_name,
+                candidate.prompt_chars,
+                prompt_chars
+            ));
+        }
+        if candidate.prompt_digest.is_empty() || candidate.prompt_digest.len() > 32 {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} has invalid prompt digest evidence",
+                device.as_str(),
+                case_name
+            ));
+        }
+        if !candidate.quality.is_finite() || !(0.0..=1.0).contains(&candidate.quality) {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} quality {:.6} outside 0.0..=1.0",
+                device.as_str(),
+                case_name,
+                candidate.quality
+            ));
+        }
+        if !candidate.process_reward.is_finite() || !(0.0..=1.0).contains(&candidate.process_reward)
+        {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} process_reward {:.6} outside 0.0..=1.0",
+                device.as_str(),
+                case_name,
+                candidate.process_reward
+            ));
+        }
+        if !candidate.is_read_only_preview() {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} must remain read-only and unapplied",
+                device.as_str(),
+                case_name
+            ));
+        }
+        if prompt_leak_check && candidate.id.contains(prompt) {
+            failures.push(format!(
+                "{}:{} memory_admission candidate {index} id leaks raw prompt text",
+                device.as_str(),
+                case_name
+            ));
+        }
     }
 }
 

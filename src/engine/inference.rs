@@ -4,6 +4,7 @@ use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
 use crate::gist_memory::GistRecord;
 use crate::kv_cache::MemoryMatch;
+use crate::memory_admission::{MemoryAdmissionInput, MemoryAdmissionPreview};
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
     DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneSegment, GeneSegmentSource,
@@ -319,6 +320,21 @@ impl NoironEngine {
         let runtime_kv_stored_count = stored_runtime_kv_memory_ids.len();
         let runtime_kv_hold =
             exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
+        let memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            report: &report,
+            process_reward: &process_reward,
+            drift_report: &drift_report,
+            stored_memory: stored_memory_id.is_some(),
+            gist_records: gist_records.len(),
+            stored_gist_memories: stored_gist_memory_ids.len(),
+            exported_runtime_kv_blocks,
+            stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            runtime_kv_hold,
+            used_memories: used_memories.len(),
+            memory_feedback_updates: memory_feedback.total_updates(),
+        });
         let genome_input = GenomeExpressionInput {
             profile: request.profile,
             quality: report.quality,
@@ -459,6 +475,7 @@ impl NoironEngine {
             stored_gist_memory_ids,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memory_ids,
+            memory_admission,
             drift_report,
             process_reward,
             reasoning_genome,

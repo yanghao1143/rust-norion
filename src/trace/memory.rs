@@ -108,6 +108,81 @@ pub(super) fn evaluate_trace_memory_feedback(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(admission) = json_object_after_field(line, "memory_admission") else {
+        failures.push("memory_admission object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let candidates = extract_json_usize_field(admission, "candidates").unwrap_or(0);
+    let ready = extract_json_usize_field(admission, "ready").unwrap_or(0);
+    let hold = extract_json_usize_field(admission, "hold").unwrap_or(0);
+    let reject = extract_json_usize_field(admission, "reject").unwrap_or(0);
+    let quarantine = extract_json_usize_field(admission, "quarantine").unwrap_or(0);
+    let kinds = extract_json_string_array_field(admission, "kinds").unwrap_or_default();
+    let decisions = extract_json_string_array_field(admission, "decisions").unwrap_or_default();
+    let summaries =
+        extract_json_string_array_field(admission, "candidate_summaries").unwrap_or_default();
+    let read_only = extract_json_bool_field(admission, "read_only");
+    let write_allowed = extract_json_bool_field(admission, "write_allowed");
+    let applied = extract_json_bool_field(admission, "applied");
+
+    let decision_total = ready
+        .saturating_add(hold)
+        .saturating_add(reject)
+        .saturating_add(quarantine);
+    if decision_total != candidates {
+        failures.push(format!(
+            "memory_admission decisions {decision_total} do not match candidates {candidates}"
+        ));
+    }
+    if summaries.len() != candidates {
+        failures.push(format!(
+            "memory_admission candidate_summaries {} do not match candidates {candidates}",
+            summaries.len()
+        ));
+    }
+    if candidates > 0 && kinds.is_empty() {
+        failures.push("memory_admission candidates require non-empty kinds".to_owned());
+    }
+    if candidates > 0 && decisions.is_empty() {
+        failures.push("memory_admission candidates require non-empty decisions".to_owned());
+    }
+    if kinds.len() > candidates {
+        failures.push(format!(
+            "memory_admission kinds {} exceeds candidates {candidates}",
+            kinds.len()
+        ));
+    }
+    if decisions.len() > candidates {
+        failures.push(format!(
+            "memory_admission decisions {} exceeds candidates {candidates}",
+            decisions.len()
+        ));
+    }
+    if read_only != Some(true) {
+        failures.push("memory_admission read_only must be true".to_owned());
+    }
+    if write_allowed != Some(false) {
+        failures.push("memory_admission write_allowed must be false".to_owned());
+    }
+    if applied != Some(false) {
+        failures.push("memory_admission applied must be false".to_owned());
+    }
+    if summaries
+        .iter()
+        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    {
+        failures.push(
+            "memory_admission candidate_summaries must not leak raw prompt or answer payloads"
+                .to_owned(),
+        );
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
 

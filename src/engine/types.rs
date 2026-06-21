@@ -11,6 +11,7 @@ use crate::kv_cache::{
     MemoryCompactionPolicy, MemoryCompactionReport, MemoryMatch, MemoryRetentionPolicy,
     MemoryUpdateReport, RetentionReport,
 };
+use crate::memory_admission::MemoryAdmissionPreview;
 use crate::process_reward::ProcessRewardReport;
 use crate::reasoning_genome::{DnaSplicePreview, GenomeExpression};
 use crate::recursive_scheduler::RecursiveSchedule;
@@ -247,6 +248,7 @@ pub struct InferenceOutcome {
     pub stored_gist_memory_ids: Vec<u64>,
     pub exported_runtime_kv_blocks: usize,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
+    pub memory_admission: MemoryAdmissionPreview,
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
     pub reasoning_genome: GenomeExpression,

@@ -209,6 +209,10 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"feedback_missing\":"));
     assert!(line.contains("\"feedback_strength_delta\":"));
     assert!(line.contains("\"feedback_update_summaries\":"));
+    assert!(line.contains("\"memory_admission\":"));
+    assert!(line.contains("\"candidate_summaries\":"));
+    assert!(line.contains("\"read_only\":true"));
+    assert!(line.contains("\"write_allowed\":false"));
     assert!(line.contains("\"stale_after\":"));
     assert!(line.contains("\"decay_rate\":"));
     assert!(line.contains("\"similarity_threshold\":"));

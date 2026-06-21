@@ -51,6 +51,95 @@ fn trace_schema_gate_rejects_memory_feedback_count_mismatch() {
 }
 
 #[test]
+fn trace_json_line_emits_memory_admission_preview() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace memory admission preview", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace memory admission preview",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let admission = json_object_after_field(&line, "memory_admission").unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(extract_json_usize_field(admission, "candidates").unwrap_or(0) >= 1);
+    assert_eq!(extract_json_bool_field(admission, "read_only"), Some(true));
+    assert_eq!(
+        extract_json_bool_field(admission, "write_allowed"),
+        Some(false)
+    );
+    assert_eq!(extract_json_bool_field(admission, "applied"), Some(false));
+    assert!(
+        !extract_json_string_array_field(admission, "candidate_summaries")
+            .unwrap()
+            .iter()
+            .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_memory_admission_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace memory admission count mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace memory admission count mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let line = increment_trace_object_usize(&line, "memory_admission", "candidates");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("memory_admission decisions")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_memory_admission_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace memory admission write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace memory admission write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "memory_admission",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("memory_admission write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_incomplete_runtime_device_execution() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
