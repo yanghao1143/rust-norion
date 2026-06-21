@@ -329,6 +329,64 @@ impl ReasoningGenome {
         )
     }
 
+    pub fn with_feedback_health(mut self, input: &GenomeExpressionInput) -> Self {
+        let quality = clamp_unit(input.quality);
+        let process_reward = clamp_unit(input.process_reward);
+        let low_quality = quality < 0.55;
+        let low_reward = process_reward < 0.45;
+        let revision_pressure = input.revision_action_count > 0 || input.contradiction_count > 0;
+        let safety_pressure = input.drift_rollback || input.critical_reflection_issue_count > 0;
+        let memory_pressure = input.memory_feedback_updates > 0
+            && (!input.drift_memory_write_allowed || low_quality || low_reward);
+        let runtime_kv_pressure =
+            input.runtime_kv_hold && (!input.drift_memory_write_allowed || low_quality);
+        let route_pressure = input.route_attention_fraction > 0.72
+            && (low_quality || low_reward || revision_pressure);
+
+        for gene in &mut self.genes {
+            match gene.kind {
+                ReasoningGeneKind::Safety if safety_pressure => {
+                    mark_feedback_malignant(gene, quality.min(process_reward), 0.82);
+                }
+                ReasoningGeneKind::Reflection if low_quality || low_reward || revision_pressure => {
+                    mark_feedback_aging(
+                        gene,
+                        quality.min(process_reward),
+                        feedback_drift_score(input, 0.34),
+                    );
+                }
+                ReasoningGeneKind::Retrieval if memory_pressure || runtime_kv_pressure => {
+                    mark_feedback_aging(
+                        gene,
+                        (quality + process_reward) * 0.5,
+                        feedback_drift_score(input, 0.28),
+                    );
+                }
+                ReasoningGeneKind::Routing
+                    if route_pressure || !input.agent_team_collision_free =>
+                {
+                    mark_feedback_aging(gene, process_reward, feedback_drift_score(input, 0.30));
+                }
+                ReasoningGeneKind::ToolUse if !input.toolsmith_gate_passed => {
+                    mark_feedback_aging(gene, process_reward, feedback_drift_score(input, 0.32));
+                }
+                ReasoningGeneKind::Budget
+                    if runtime_kv_pressure
+                        || !input.agent_team_collision_free
+                        || input.route_attention_fraction > 0.86 =>
+                {
+                    mark_feedback_aging(gene, process_reward, feedback_drift_score(input, 0.26));
+                }
+                ReasoningGeneKind::Language if input.contradiction_count > 1 && low_quality => {
+                    mark_feedback_aging(gene, quality, feedback_drift_score(input, 0.24));
+                }
+                _ => {}
+            }
+        }
+
+        self
+    }
+
     pub fn express(&self, input: GenomeExpressionInput) -> GenomeExpression {
         let mut active_gene_ids = Vec::new();
         let mut aged_gene_ids = Vec::new();
@@ -619,6 +677,72 @@ fn compute_youth_pressure(
         pressure += 0.04;
     }
     clamp_unit(pressure)
+}
+
+fn mark_feedback_aging(gene: &mut ReasoningGene, fitness: f32, drift_score: f32) {
+    if matches!(
+        gene.status,
+        ReasoningGeneStatus::Quarantined
+            | ReasoningGeneStatus::Regenerating
+            | ReasoningGeneStatus::Malignant
+    ) {
+        return;
+    }
+
+    gene.age = gene.age.max(AGING_AGE_THRESHOLD);
+    gene.fitness = gene.fitness.min(clamp_unit(fitness));
+    gene.drift_score = gene
+        .drift_score
+        .max(clamp_unit(drift_score).min(MALIGNANT_DRIFT_THRESHOLD - 0.01));
+    gene.status = gene.derived_status();
+}
+
+fn mark_feedback_malignant(gene: &mut ReasoningGene, fitness: f32, drift_score: f32) {
+    if matches!(
+        gene.status,
+        ReasoningGeneStatus::Quarantined | ReasoningGeneStatus::Regenerating
+    ) {
+        return;
+    }
+
+    gene.age = gene.age.max(AGING_AGE_THRESHOLD);
+    gene.fitness = gene.fitness.min(clamp_unit(fitness));
+    gene.drift_score = gene
+        .drift_score
+        .max(clamp_unit(drift_score).max(MALIGNANT_DRIFT_THRESHOLD));
+    gene.status = ReasoningGeneStatus::Malignant;
+}
+
+fn feedback_drift_score(input: &GenomeExpressionInput, base: f32) -> f32 {
+    let contradiction_pressure = input.contradiction_count.min(3) as f32 * 0.06;
+    let critical_pressure = input.critical_reflection_issue_count.min(2) as f32 * 0.08;
+    let revision_pressure = input.revision_action_count.min(4) as f32 * 0.03;
+    let gate_pressure = if input.toolsmith_gate_passed {
+        0.0
+    } else {
+        0.06
+    };
+    let coordination_pressure = if input.agent_team_collision_free {
+        0.0
+    } else {
+        0.06
+    };
+    let memory_pressure = if input.drift_memory_write_allowed {
+        0.0
+    } else {
+        0.05
+    };
+    let runtime_pressure = if input.runtime_kv_hold { 0.04 } else { 0.0 };
+
+    clamp_unit(
+        base + contradiction_pressure
+            + critical_pressure
+            + revision_pressure
+            + gate_pressure
+            + coordination_pressure
+            + memory_pressure
+            + runtime_pressure,
+    )
 }
 
 fn relabel_payload(gene: &ReasoningGene) -> (String, String, Vec<String>) {

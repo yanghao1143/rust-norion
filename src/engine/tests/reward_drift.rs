@@ -1,4 +1,5 @@
 use super::*;
+use crate::reasoning_genome::GeneScissorsIntent;
 
 #[test]
 fn drift_guard_blocks_contradictory_runtime_kv_memory() {
@@ -181,6 +182,16 @@ fn process_reward_penalty_updates_adaptive_state_in_same_inference() {
             .iter()
             .any(|note| { note.starts_with("online_reward_feedback:action=penalize") })
     );
+    assert!(outcome.reasoning_genome.repair_payload_count() >= 1);
+    assert!(
+        outcome
+            .reasoning_genome
+            .mutation_plans
+            .iter()
+            .any(|plan| plan.target_gene_id == "gene:coding:reflection"
+                && plan.intent == GeneScissorsIntent::Relabel
+                && plan.has_repair_payload())
+    );
     assert!(
         engine.experience.records()[0]
             .process_reward
@@ -250,6 +261,13 @@ fn drift_guard_rolls_back_adaptive_state_for_bad_draft() {
     assert_eq!(outcome.live_evolution.hierarchy_weight_delta, 0.0);
     assert_eq!(outcome.live_evolution.online_reward_feedbacks, 0);
     assert_eq!(outcome.evolution_ledger.live_online_reward_feedbacks, 0);
+    assert!(outcome.reasoning_genome.regeneration_payload_count() >= 1);
+    assert!(
+        !outcome
+            .reasoning_genome
+            .active_gene_ids
+            .contains(&"gene:coding:safety".to_owned())
+    );
     assert!(
         !outcome
             .process_reward

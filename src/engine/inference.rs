@@ -319,23 +319,25 @@ impl NoironEngine {
         let runtime_kv_stored_count = stored_runtime_kv_memory_ids.len();
         let runtime_kv_hold =
             exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
-        let reasoning_genome =
-            ReasoningGenome::default_for_profile(request.profile).express(GenomeExpressionInput {
-                profile: request.profile,
-                quality: report.quality,
-                process_reward: process_reward.total,
-                contradiction_count: report.contradictions.len(),
-                critical_reflection_issue_count: report.critical_issue_count(),
-                revision_action_count: report.revision_actions.len(),
-                used_memories: used_memories.len(),
-                memory_feedback_updates: memory_feedback.total_updates(),
-                route_attention_fraction: route_budget.attention_fraction,
-                agent_team_collision_free: agent_team_plan.collision_free(),
-                toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
-                drift_memory_write_allowed: drift_report.allow_memory_write,
-                drift_rollback: drift_report.rollback_adaptive,
-                runtime_kv_hold,
-            });
+        let genome_input = GenomeExpressionInput {
+            profile: request.profile,
+            quality: report.quality,
+            process_reward: process_reward.total,
+            contradiction_count: report.contradictions.len(),
+            critical_reflection_issue_count: report.critical_issue_count(),
+            revision_action_count: report.revision_actions.len(),
+            used_memories: used_memories.len(),
+            memory_feedback_updates: memory_feedback.total_updates(),
+            route_attention_fraction: route_budget.attention_fraction,
+            agent_team_collision_free: agent_team_plan.collision_free(),
+            toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
+            drift_memory_write_allowed: drift_report.allow_memory_write,
+            drift_rollback: drift_report.rollback_adaptive,
+            runtime_kv_hold,
+        };
+        let reasoning_genome = ReasoningGenome::default_for_profile(request.profile)
+            .with_feedback_health(&genome_input)
+            .express(genome_input);
         let reasoning_genome_splice = reasoning_genome_splice_preview(
             request.profile,
             &recursive_schedule,

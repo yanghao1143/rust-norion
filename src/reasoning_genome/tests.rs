@@ -242,6 +242,86 @@ fn rollback_pressure_quarantines_and_regenerates_active_safety_gene() {
 }
 
 #[test]
+fn feedback_health_relabels_low_quality_reflection_gene() {
+    let input = GenomeExpressionInput {
+        profile: TaskProfile::Coding,
+        quality: 0.32,
+        process_reward: 0.28,
+        contradiction_count: 1,
+        critical_reflection_issue_count: 0,
+        revision_action_count: 2,
+        used_memories: 1,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.62,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: true,
+        drift_rollback: false,
+        runtime_kv_hold: false,
+    };
+
+    let expression = ReasoningGenome::default_for_profile(TaskProfile::Coding)
+        .with_feedback_health(&input)
+        .express(input);
+
+    assert!(expression.aged_gene_count() >= 1);
+    assert!(expression.relabel_candidate_count() >= 1);
+    assert!(expression.repair_payload_count() >= 1);
+    assert!(
+        expression
+            .mutation_plans
+            .iter()
+            .any(|plan| plan.target_gene_id == "gene:coding:reflection"
+                && plan.intent == GeneScissorsIntent::Relabel
+                && plan.has_repair_payload())
+    );
+    assert!(
+        expression
+            .active_gene_ids
+            .contains(&"gene:coding:reflection".to_owned())
+    );
+    assert!(expression.is_read_only_preview());
+}
+
+#[test]
+fn feedback_health_cuts_and_regenerates_critical_safety_gene() {
+    let input = GenomeExpressionInput {
+        profile: TaskProfile::Coding,
+        quality: 0.18,
+        process_reward: 0.16,
+        contradiction_count: 1,
+        critical_reflection_issue_count: 1,
+        revision_action_count: 1,
+        used_memories: 0,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.78,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: false,
+        drift_rollback: false,
+        runtime_kv_hold: true,
+    };
+
+    let expression = ReasoningGenome::default_for_profile(TaskProfile::Coding)
+        .with_feedback_health(&input)
+        .express(input);
+
+    let intents = expression.mutation_intents();
+    assert_eq!(expression.malignant_gene_count(), 1);
+    assert_eq!(expression.regeneration_candidate_count(), 1);
+    assert!(
+        !expression
+            .active_gene_ids
+            .contains(&"gene:coding:safety".to_owned())
+    );
+    assert!(intents.contains(&"quarantine".to_owned()));
+    assert!(intents.contains(&"regenerate".to_owned()));
+    assert!(intents.contains(&"rollback".to_owned()));
+    assert_eq!(expression.regeneration_payload_count(), 1);
+    assert!(expression.is_read_only_preview());
+}
+
+#[test]
 fn dna_splicer_classifies_exons_introns_and_variants_without_writes() {
     let segments = vec![
         GeneSegment::new(

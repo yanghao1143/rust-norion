@@ -1,8 +1,11 @@
 use super::*;
-use crate::engine::{HeuristicBackend, InferenceRequest, NoironEngine};
+use crate::engine::{
+    GenerationContext, HeuristicBackend, InferenceBackend, InferenceRequest, NoironEngine,
+};
 use crate::reasoning_genome::{
     GenomeExpressionInput, ReasoningGene, ReasoningGeneKind, ReasoningGenome,
 };
+use crate::reflection::{InferenceDraft, ReasoningStep};
 
 #[test]
 fn summary_records_reasoning_genome_expression_evidence() {
@@ -141,6 +144,48 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_repair_payloads: Some(2),
         min_reasoning_genome_regeneration_payloads: Some(1),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(report.passed, "{:?}", report.failures);
+}
+
+#[test]
+fn summary_gates_live_reasoning_genome_payloads_from_feedback() {
+    struct CriticalBackend;
+
+    impl InferenceBackend for CriticalBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new("", vec![ReasoningStep::new("runtime", "empty", 0.0)])
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = CriticalBackend;
+    let case = BenchmarkCase::new(
+        "reasoning_genome_live_payloads",
+        TaskProfile::Coding,
+        "Trigger live Reasoning Genome feedback repair payloads.",
+    );
+    let outcome = engine.infer(
+        InferenceRequest::new(case.prompt.clone(), case.profile),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+
+    summary.record(&case, 5, &outcome);
+
+    assert!(summary.total_reasoning_genome_repair_payloads() >= 1);
+    assert!(summary.total_reasoning_genome_regeneration_payloads() >= 1);
+    let report = summary.evaluate(&BenchmarkGate {
+        min_average_quality: 0.0,
+        min_average_reward: 0.0,
+        max_evolution_drift_rollbacks: None,
+        max_evolution_rollback_router_threshold_delta: None,
+        max_evolution_rollback_hierarchy_weight_delta: None,
+        min_reasoning_genome_repair_payloads: Some(1),
+        min_reasoning_genome_regeneration_payloads: Some(1),
+        max_drift_rollbacks: None,
         ..BenchmarkGate::default()
     });
 
