@@ -7,7 +7,12 @@ use crate::split::bridge::KvFusionPolicyObservationDryRunReport;
 #[derive(Debug, Clone, Copy)]
 pub struct SelfEvolutionAdmissionPolicy {
     pub min_rust_check_items: u64,
+    pub min_compiler_validation_items: u64,
+    pub min_test_validation_items: u64,
+    pub min_benchmark_validation_items: u64,
+    pub min_experiment_validation_items: u64,
     pub require_all_rust_checks_passed: bool,
+    pub require_all_validation_lanes_passed: bool,
     pub require_benchmark_gate_passed: bool,
     pub require_adaptive_preview_evidence: bool,
     pub max_drift_rollbacks: u64,
@@ -19,12 +24,65 @@ impl Default for SelfEvolutionAdmissionPolicy {
     fn default() -> Self {
         Self {
             min_rust_check_items: 1,
+            min_compiler_validation_items: 1,
+            min_test_validation_items: 1,
+            min_benchmark_validation_items: 1,
+            min_experiment_validation_items: 1,
             require_all_rust_checks_passed: true,
+            require_all_validation_lanes_passed: true,
             require_benchmark_gate_passed: true,
             require_adaptive_preview_evidence: true,
             max_drift_rollbacks: 0,
             max_rollback_router_threshold_delta: 0.0,
             max_rollback_hierarchy_weight_delta: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SelfEvolutionValidationLane {
+    pub items: u64,
+    pub passed: u64,
+    pub failed: u64,
+}
+
+impl SelfEvolutionValidationLane {
+    pub fn new(items: u64, passed: u64, failed: u64) -> Self {
+        Self {
+            items,
+            passed,
+            failed,
+        }
+    }
+
+    pub fn passed_at_least(self, minimum: u64, require_all_passed: bool) -> bool {
+        self.items >= minimum
+            && self.passed >= minimum
+            && (!require_all_passed || self.failed == 0)
+            && self.passed.saturating_add(self.failed) <= self.items
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SelfEvolutionValidationEvidence {
+    pub compiler: SelfEvolutionValidationLane,
+    pub tests: SelfEvolutionValidationLane,
+    pub benchmarks: SelfEvolutionValidationLane,
+    pub experiments: SelfEvolutionValidationLane,
+}
+
+impl SelfEvolutionValidationEvidence {
+    pub fn from_lanes(
+        compiler: SelfEvolutionValidationLane,
+        tests: SelfEvolutionValidationLane,
+        benchmarks: SelfEvolutionValidationLane,
+        experiments: SelfEvolutionValidationLane,
+    ) -> Self {
+        Self {
+            compiler,
+            tests,
+            benchmarks,
+            experiments,
         }
     }
 }
@@ -127,6 +185,7 @@ pub struct SelfEvolutionAdmissionEvidence {
     pub adaptive_preview_write_allowed: bool,
     pub adaptive_preview_applied: bool,
     pub adaptive_preview_blocked_reasons: Vec<String>,
+    pub validation: SelfEvolutionValidationEvidence,
     pub review_packet: SelfEvolutionAdmissionReviewPacketRefs,
 }
 
@@ -157,6 +216,19 @@ impl SelfEvolutionAdmissionEvidence {
             adaptive_preview_write_allowed: false,
             adaptive_preview_applied: false,
             adaptive_preview_blocked_reasons: Vec::new(),
+            validation: SelfEvolutionValidationEvidence {
+                compiler: SelfEvolutionValidationLane::new(
+                    evolution_ledger.replay_rust_check_items,
+                    evolution_ledger.replay_rust_check_passed,
+                    evolution_ledger.replay_rust_check_failed,
+                ),
+                benchmarks: SelfEvolutionValidationLane::new(
+                    u64::from(!benchmark_gate.failures.is_empty() || benchmark_gate.passed),
+                    u64::from(benchmark_gate.passed),
+                    u64::from(!benchmark_gate.passed),
+                ),
+                ..SelfEvolutionValidationEvidence::default()
+            },
         }
     }
 
@@ -167,6 +239,38 @@ impl SelfEvolutionAdmissionEvidence {
     ) -> Self {
         let benchmark_gate = summary.evaluate(gate);
         Self::from_benchmark_gate(candidate_id, summary.evolution_ledger(), &benchmark_gate)
+    }
+
+    pub fn with_validation_evidence(mut self, validation: SelfEvolutionValidationEvidence) -> Self {
+        self.validation = validation;
+        let candidate = self_evolution_review_id_component(&self.candidate_id);
+        self.review_packet.push_evidence_id(format!(
+            "validation:{candidate}:compiler-{}/{}:{}:tests-{}/{}:{}:benchmarks-{}/{}:{}:experiments-{}/{}:{}",
+            validation.compiler.passed,
+            validation.compiler.items,
+            validation.compiler.failed,
+            validation.tests.passed,
+            validation.tests.items,
+            validation.tests.failed,
+            validation.benchmarks.passed,
+            validation.benchmarks.items,
+            validation.benchmarks.failed,
+            validation.experiments.passed,
+            validation.experiments.items,
+            validation.experiments.failed,
+        ));
+        self.review_packet
+            .push_content_digest(self_evolution_stable_digest(&format!(
+                "candidate={};compiler={:?};tests={:?};benchmarks={:?};experiments={:?}",
+                self.candidate_id,
+                validation.compiler,
+                validation.tests,
+                validation.benchmarks,
+                validation.experiments
+            )));
+        self.review_packet
+            .push_source_report_schema("rust-norion-self-evolution-validation-v1");
+        self
     }
 
     pub fn with_router_threshold_preview_report(
@@ -341,6 +445,8 @@ pub struct SelfEvolutionAdmissionReport {
     pub rust_check_passed: u64,
     pub rust_check_failed: u64,
     pub rust_validation_passed: bool,
+    pub validation: SelfEvolutionValidationEvidence,
+    pub validation_passed: bool,
     pub benchmark_gate_passed: bool,
     pub benchmark_gate_failures: Vec<String>,
     pub rollback_budget_clean: bool,
@@ -428,6 +534,20 @@ impl SelfEvolutionAdmissionGate {
         let rust_validation_passed = rust_check_items >= self.policy.min_rust_check_items
             && rust_check_passed >= self.policy.min_rust_check_items
             && (!self.policy.require_all_rust_checks_passed || rust_check_failed == 0);
+        let validation = evidence.validation;
+        let validation_passed = validation.compiler.passed_at_least(
+            self.policy.min_compiler_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        ) && validation.tests.passed_at_least(
+            self.policy.min_test_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        ) && validation.benchmarks.passed_at_least(
+            self.policy.min_benchmark_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        ) && validation.experiments.passed_at_least(
+            self.policy.min_experiment_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        );
 
         if rust_check_items < self.policy.min_rust_check_items {
             blocked_reasons.push(format!(
@@ -450,6 +570,34 @@ impl SelfEvolutionAdmissionGate {
         if self.policy.require_benchmark_gate_passed && !evidence.benchmark_gate_passed {
             blocked_reasons.push("self_evolution_admission_benchmark_gate_failed".to_owned());
         }
+        push_validation_lane_blocked_reasons(
+            &mut blocked_reasons,
+            "compiler",
+            validation.compiler,
+            self.policy.min_compiler_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        );
+        push_validation_lane_blocked_reasons(
+            &mut blocked_reasons,
+            "tests",
+            validation.tests,
+            self.policy.min_test_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        );
+        push_validation_lane_blocked_reasons(
+            &mut blocked_reasons,
+            "benchmarks",
+            validation.benchmarks,
+            self.policy.min_benchmark_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        );
+        push_validation_lane_blocked_reasons(
+            &mut blocked_reasons,
+            "experiments",
+            validation.experiments,
+            self.policy.min_experiment_validation_items,
+            self.policy.require_all_validation_lanes_passed,
+        );
 
         let rollback_budget_clean = rollback_budget_clean(
             ledger,
@@ -501,6 +649,8 @@ impl SelfEvolutionAdmissionGate {
             rust_check_passed,
             rust_check_failed,
             rust_validation_passed,
+            validation,
+            validation_passed,
             benchmark_gate_passed: evidence.benchmark_gate_passed,
             benchmark_gate_failures: evidence.benchmark_gate_failures.clone(),
             rollback_budget_clean,
@@ -581,6 +731,7 @@ impl SelfEvolutionAdmissionReport {
              \"human_approval_required\":{},\
              \"review_packet\":{{\"approval_review_packet_ids\":{approval_review_packet_ids},\"evidence_ids\":{evidence_ids},\"rollback_anchor_ids\":{rollback_anchor_ids},\"content_digests\":{content_digests},\"source_report_schemas\":{source_report_schemas},\"approval_review_packet_count\":{},\"evidence_count\":{},\"rollback_anchor_count\":{},\"content_digest_count\":{},\"source_report_schema_count\":{},\"read_only\":true,\"approval_tokens_included\":false}},\
              \"rust_check\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}},\
+             \"validation\":{{\"passed\":{},\"compiler\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}},\"tests\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}},\"benchmarks\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}},\"experiments\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}}}},\
              \"benchmark_gate\":{{\"passed\":{},\"failures\":{benchmark_gate_failures}}},\
              \"rollback\":{{\"budget_clean\":{},\"drift_rollbacks\":{},\"router_threshold_delta\":{rollback_router_threshold_delta},\"hierarchy_weight_delta\":{rollback_hierarchy_weight_delta}}},\
              \"adaptive_preview\":{{\"evidence_present\":{},\"source_count\":{},\"router_threshold_ready\":{},\"hierarchy_adjustment_ready\":{},\"kv_fusion_policy_observation_ready\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"write_allowed\":{},\"applied\":{},\"blocked_reasons\":{adaptive_preview_blocked_reasons}}},\
@@ -603,6 +754,23 @@ impl SelfEvolutionAdmissionReport {
             self.rust_check_passed,
             self.rust_check_failed,
             self.rust_validation_passed,
+            self.validation_passed,
+            self.validation.compiler.items,
+            self.validation.compiler.passed,
+            self.validation.compiler.failed,
+            self.validation.compiler.passed_at_least(1, true),
+            self.validation.tests.items,
+            self.validation.tests.passed,
+            self.validation.tests.failed,
+            self.validation.tests.passed_at_least(1, true),
+            self.validation.benchmarks.items,
+            self.validation.benchmarks.passed,
+            self.validation.benchmarks.failed,
+            self.validation.benchmarks.passed_at_least(1, true),
+            self.validation.experiments.items,
+            self.validation.experiments.passed,
+            self.validation.experiments.failed,
+            self.validation.experiments.passed_at_least(1, true),
             self.benchmark_gate_passed,
             self.rollback_budget_clean,
             self.drift_rollbacks,
@@ -714,6 +882,38 @@ fn rollback_budget_clean(
 
 fn normalized_rollback_delta(delta: f32) -> Option<f32> {
     (delta.is_finite() && delta >= 0.0).then_some(delta)
+}
+
+fn push_validation_lane_blocked_reasons(
+    blocked_reasons: &mut Vec<String>,
+    name: &str,
+    lane: SelfEvolutionValidationLane,
+    minimum: u64,
+    require_all_passed: bool,
+) {
+    if lane.items < minimum {
+        blocked_reasons.push(format!(
+            "self_evolution_admission_{name}_validation_items={}<{}",
+            lane.items, minimum
+        ));
+    }
+    if lane.passed < minimum {
+        blocked_reasons.push(format!(
+            "self_evolution_admission_{name}_validation_passed={}<{}",
+            lane.passed, minimum
+        ));
+    }
+    if require_all_passed && lane.failed > 0 {
+        blocked_reasons.push(format!(
+            "self_evolution_admission_{name}_validation_failed={}>0",
+            lane.failed
+        ));
+    }
+    if lane.passed.saturating_add(lane.failed) > lane.items {
+        blocked_reasons.push(format!(
+            "self_evolution_admission_{name}_validation_passed_failed_exceeds_items"
+        ));
+    }
 }
 
 fn router_threshold_preview_admissible(report: &RouterThresholdAdjustmentPreviewReport) -> bool {
@@ -937,6 +1137,34 @@ fn self_evolution_admission_telemetry(report: &SelfEvolutionAdmissionReport) -> 
             report.rust_check_failed
         ),
         format!(
+            "self_evolution_admission_validation_passed={}",
+            report.validation_passed
+        ),
+        format!(
+            "self_evolution_admission_compiler_validation={}/{}:{}",
+            report.validation.compiler.passed,
+            report.validation.compiler.items,
+            report.validation.compiler.failed
+        ),
+        format!(
+            "self_evolution_admission_test_validation={}/{}:{}",
+            report.validation.tests.passed,
+            report.validation.tests.items,
+            report.validation.tests.failed
+        ),
+        format!(
+            "self_evolution_admission_benchmark_validation={}/{}:{}",
+            report.validation.benchmarks.passed,
+            report.validation.benchmarks.items,
+            report.validation.benchmarks.failed
+        ),
+        format!(
+            "self_evolution_admission_experiment_validation={}/{}:{}",
+            report.validation.experiments.passed,
+            report.validation.experiments.items,
+            report.validation.experiments.failed
+        ),
+        format!(
             "self_evolution_admission_benchmark_gate_passed={}",
             report.benchmark_gate_passed
         ),
@@ -1043,6 +1271,15 @@ mod tests {
         }
     }
 
+    fn passing_validation_evidence() -> SelfEvolutionValidationEvidence {
+        SelfEvolutionValidationEvidence::from_lanes(
+            SelfEvolutionValidationLane::new(2, 2, 0),
+            SelfEvolutionValidationLane::new(3, 3, 0),
+            SelfEvolutionValidationLane::new(1, 1, 0),
+            SelfEvolutionValidationLane::new(1, 1, 0),
+        )
+    }
+
     fn safe_router_threshold_preview() -> RouterThresholdAdjustmentPreviewReport {
         RouterThresholdAdjustmentPreviewPlanner::new().preview(
             NoironRouter::new().state(),
@@ -1064,6 +1301,7 @@ mod tests {
             passing_evolution_ledger(),
             &passing_benchmark_gate(),
         )
+        .with_validation_evidence(passing_validation_evidence())
         .with_router_threshold_preview_report(&router_preview);
 
         let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
@@ -1080,6 +1318,7 @@ mod tests {
         assert!(report.human_approval_required);
         assert!(report.admitted_for_human_review);
         assert!(report.rust_validation_passed);
+        assert!(report.validation_passed);
         assert!(report.benchmark_gate_passed);
         assert!(report.rollback_budget_clean);
         assert!(report.adaptive_preview_evidence_present);
@@ -1189,6 +1428,7 @@ mod tests {
             passing_evolution_ledger(),
             &passing_benchmark_gate(),
         )
+        .with_validation_evidence(passing_validation_evidence())
         .with_router_threshold_preview_report(&router_preview)
         .with_hierarchy_adjustment_preview_report(&hierarchy_preview)
         .with_kv_fusion_policy_observation_preview_report(&kv_policy_preview);
@@ -1427,6 +1667,7 @@ mod tests {
 
         assert!(!report.admitted_for_human_review);
         assert!(!report.rust_validation_passed);
+        assert!(!report.validation_passed);
         assert!(!report.benchmark_gate_passed);
         assert!(!report.adaptive_preview_evidence_present);
         assert_eq!(report.benchmark_gate_failures, benchmark_gate.failures);
@@ -1445,6 +1686,15 @@ mod tests {
                 .blocked_reasons
                 .contains(&"self_evolution_admission_benchmark_gate_failed".to_owned())
         );
+        assert!(
+            report
+                .blocked_reasons
+                .iter()
+                .any(|reason| { reason == "self_evolution_admission_tests_validation_items=0<1" })
+        );
+        assert!(report.blocked_reasons.iter().any(|reason| {
+            reason == "self_evolution_admission_experiments_validation_items=0<1"
+        }));
         assert!(
             report
                 .blocked_reasons
@@ -1468,6 +1718,7 @@ mod tests {
             },
             &passing_benchmark_gate(),
         )
+        .with_validation_evidence(passing_validation_evidence())
         .with_router_threshold_preview_report(&router_preview);
 
         let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
@@ -1508,6 +1759,7 @@ mod tests {
             },
             &passing_benchmark_gate(),
         )
+        .with_validation_evidence(passing_validation_evidence())
         .with_router_threshold_preview_report(&router_preview);
 
         let report = SelfEvolutionAdmissionGate::new()
@@ -1554,6 +1806,7 @@ mod tests {
             ledger,
             &benchmark_gate,
         )
+        .with_validation_evidence(passing_validation_evidence())
         .with_router_threshold_preview_report(&router_preview);
         let evidence_before = evidence.clone();
 

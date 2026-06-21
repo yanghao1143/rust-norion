@@ -56,6 +56,7 @@ pub fn trace_json_line_with_case(
     let agent_team_messages = outcome.agent_team_plan.message_summaries(16);
     let agent_team_conflicts = outcome.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = outcome.agent_team_plan.evolution_summaries(8);
+    let agent_team_aggregation = &outcome.agent_team_plan.aggregation;
     let reasoning_genome_mutation_intents = outcome.reasoning_genome.mutation_intents();
     let reasoning_genome_proposal_ids = outcome.reasoning_genome.proposal_ids();
     let reasoning_genome_splice_finding_kinds = outcome.reasoning_genome_splice.finding_kinds();
@@ -92,7 +93,7 @@ pub fn trace_json_line_with_case(
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
-         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
+         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"aggregation\":{{\"lane_count\":{},\"message_summaries\":{},\"conflict_topics\":{},\"unresolved_conflict_topics\":{},\"budget_scope\":\"{}\",\"max_parallel_lanes\":{},\"attention_fraction\":{:.6},\"main_thread_writer\":\"{}\"}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
          \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
@@ -260,6 +261,14 @@ pub fn trace_json_line_with_case(
         json_escape(&outcome.agent_team_plan.isolation.namespace),
         string_array_json(&outcome.agent_team_plan.isolation.allowed_outputs),
         string_array_json(&outcome.agent_team_plan.isolation.denied_capabilities),
+        agent_team_aggregation.lane_count,
+        string_array_json(&agent_team_aggregation.message_summaries),
+        string_array_json(&agent_team_aggregation.conflict_topics),
+        string_array_json(&agent_team_aggregation.unresolved_conflict_topics),
+        json_escape(&agent_team_aggregation.budget_scope),
+        agent_team_aggregation.max_parallel_lanes,
+        agent_team_aggregation.attention_fraction,
+        json_escape(&agent_team_aggregation.main_thread_writer),
         string_array_json(&agent_team_messages),
         string_array_json(&agent_team_conflicts),
         string_array_json(&agent_team_evolution),

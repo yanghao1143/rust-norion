@@ -2,8 +2,8 @@ use super::super::super::RuntimeRequest;
 use super::super::json::{json_str_array, json_string, option_u64_json};
 use super::json_items::{
     imported_kv_blocks_json, recursive_chunks_json, recursive_execution_waves_json,
-    recursive_merge_rounds_json, runtime_adapter_observations_json, task_profile_str,
-    tool_blueprints_json, transformer_layers_json,
+    recursive_merge_rounds_json, runtime_adapter_observations_json, task_intent_summary,
+    task_profile_str, tool_blueprints_json, transformer_layers_json,
 };
 
 pub fn runtime_request_json(request: &RuntimeRequest) -> String {
@@ -22,6 +22,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
     let runtime_adapter_observations =
         runtime_adapter_observations_json(&request.runtime_adapter_observations);
     let tool_blueprints = tool_blueprints_json(&request.toolsmith_plan.blueprints);
+    let task_intent = task_intent_summary(request);
     let agent_team_messages = request.agent_team_plan.message_summaries(16);
     let agent_team_conflicts = request.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = request.agent_team_plan.evolution_summaries(8);
@@ -32,6 +33,11 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
          \"schema\":{},\
          \"prompt\":{},\
          \"profile\":{},\
+         \"task_intent\":{{\
+         \"language_mode\":{},\
+         \"coding_language\":{},\
+         \"rust_coding\":{}\
+         }},\
          \"max_tokens\":{},\
          \"runtime\":{{\
          \"model_id\":{},\
@@ -146,6 +152,9 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         json_string("rust-norion-runtime-request-v1"),
         json_string(&request.prompt),
         json_string(task_profile_str(request.profile)),
+        json_string(task_intent.language_mode),
+        json_string(task_intent.coding_language),
+        task_intent.rust_coding,
         request.max_tokens,
         json_string(&request.runtime_metadata.model_id),
         json_string(&request.runtime_metadata.tokenizer),

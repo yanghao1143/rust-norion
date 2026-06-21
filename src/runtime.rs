@@ -4,6 +4,7 @@ mod contract;
 mod device;
 mod http;
 mod kv_import;
+mod kv_safety;
 mod types;
 mod wire;
 

@@ -23,6 +23,7 @@ pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<S
         ("human_approval_required", "\"human_approval_required\":"),
         ("review_packet", "\"review_packet\":"),
         ("rust_check", "\"rust_check\":"),
+        ("validation", "\"validation\":"),
         ("benchmark_gate", "\"benchmark_gate\":"),
         ("rollback", "\"rollback\":"),
         ("adaptive_preview", "\"adaptive_preview\":"),
@@ -93,6 +94,7 @@ pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<S
     }
 
     evaluate_rust_check(&mut failures, line);
+    evaluate_validation(&mut failures, line, admitted_for_human_review);
     evaluate_benchmark_gate(&mut failures, line);
     evaluate_review_packet(&mut failures, line, admitted_for_human_review);
     evaluate_rollback(&mut failures, line);
@@ -218,6 +220,69 @@ fn evaluate_rust_check(failures: &mut Vec<String>, line: &str) {
                 "self_evolution_admission rust_validation_passed requires passed checks and no failures"
                     .to_owned(),
             );
+        }
+    }
+}
+
+fn evaluate_validation(
+    failures: &mut Vec<String>,
+    line: &str,
+    admitted_for_human_review: Option<bool>,
+) {
+    let Some(validation) = json_object_after_field(line, "validation") else {
+        failures.push("self_evolution_admission validation object is missing".to_owned());
+        return;
+    };
+    let validation_passed = extract_json_bool_field(validation, "passed");
+    if validation_passed.is_none() {
+        failures.push("self_evolution_admission validation passed is missing".to_owned());
+    }
+
+    for lane in ["compiler", "tests", "benchmarks", "experiments"] {
+        evaluate_validation_lane(failures, validation, lane, admitted_for_human_review);
+    }
+
+    if admitted_for_human_review == Some(true) && validation_passed != Some(true) {
+        failures
+            .push("self_evolution_admission admitted packet requires validation passed".to_owned());
+    }
+}
+
+fn evaluate_validation_lane(
+    failures: &mut Vec<String>,
+    validation: &str,
+    lane: &str,
+    admitted_for_human_review: Option<bool>,
+) {
+    let Some(lane_object) = json_object_after_field(validation, lane) else {
+        failures.push(format!(
+            "self_evolution_admission validation {lane} object is missing"
+        ));
+        return;
+    };
+    let items = extract_json_usize_field(lane_object, "items");
+    let passed = extract_json_usize_field(lane_object, "passed");
+    let failed = extract_json_usize_field(lane_object, "failed");
+    let validation_passed = extract_json_bool_field(lane_object, "validation_passed");
+
+    if items.is_none() || passed.is_none() || failed.is_none() || validation_passed.is_none() {
+        failures.push(format!(
+            "self_evolution_admission validation {lane} fields are incomplete"
+        ));
+    }
+    if let (Some(items), Some(passed), Some(failed)) = (items, passed, failed) {
+        if passed.saturating_add(failed) > items {
+            failures.push(format!(
+                "self_evolution_admission validation {lane} passed+failed {} exceeds items {items}",
+                passed.saturating_add(failed)
+            ));
+        }
+        if admitted_for_human_review == Some(true)
+            && (items == 0 || passed == 0 || failed > 0 || validation_passed != Some(true))
+        {
+            failures.push(format!(
+                "self_evolution_admission admitted packet requires passed {lane} validation"
+            ));
         }
     }
 }

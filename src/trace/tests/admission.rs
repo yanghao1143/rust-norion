@@ -24,6 +24,12 @@ fn admitted_self_evolution_admission_line() -> String {
             failures: Vec::new(),
         },
     )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ))
     .with_router_threshold_preview_report(&router_preview);
     let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
 
@@ -54,7 +60,7 @@ fn self_evolution_admission_trace_schema_accepts_read_only_packet() {
     assert_eq!(report.self_evolution_admission_admitted, 1);
     assert_eq!(report.self_evolution_admission_blocked, 0);
     assert_eq!(report.self_evolution_admission_review_packets, 1);
-    assert_eq!(report.self_evolution_admission_evidence_ids, 3);
+    assert_eq!(report.self_evolution_admission_evidence_ids, 4);
     assert_eq!(
         report.self_evolution_admission_missing_review_packet_refs,
         0
@@ -222,7 +228,7 @@ fn self_evolution_admission_trace_schema_rejects_missing_review_packet_refs() {
             1,
         )
         .replacen(
-            "\"evidence_ids\":[\"rust-check:trace-admission:items-1:passed-1:failed-0\",\"benchmark-gate:trace-admission:passed-true:failures-0\",\"adaptive-preview:router-threshold:trace-admission:ready-true\"]",
+            "\"evidence_ids\":[\"rust-check:trace-admission:items-1:passed-1:failed-0\",\"benchmark-gate:trace-admission:passed-true:failures-0\",\"validation:trace-admission:compiler-1/1:0:tests-1/1:0:benchmarks-1/1:0:experiments-1/1:0\",\"adaptive-preview:router-threshold:trace-admission:ready-true\"]",
             "\"evidence_ids\":[]",
             1,
         );

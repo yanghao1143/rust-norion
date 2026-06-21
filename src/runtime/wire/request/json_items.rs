@@ -6,6 +6,13 @@ use crate::transformer::AttentionKind;
 use super::super::super::{RuntimeAdapterObservation, RuntimeRequest};
 use super::super::json::{json_f32_array, json_str_array, json_string, option_f32_json};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct RuntimeTaskIntentSummary {
+    pub language_mode: &'static str,
+    pub coding_language: &'static str,
+    pub rust_coding: bool,
+}
+
 pub(super) fn transformer_layers_json(request: &RuntimeRequest) -> String {
     request
         .transformer_plan
@@ -105,6 +112,70 @@ pub(super) fn task_profile_str(profile: TaskProfile) -> &'static str {
         TaskProfile::Writing => "writing",
         TaskProfile::LongDocument => "long_document",
     }
+}
+
+pub(super) fn task_intent_summary(request: &RuntimeRequest) -> RuntimeTaskIntentSummary {
+    let language_mode = language_mode_for_prompt(&request.prompt);
+    let rust_coding =
+        request.profile == TaskProfile::Coding && prompt_mentions_rust(&request.prompt);
+    let coding_language = match (request.profile, rust_coding) {
+        (TaskProfile::Coding, true) => "rust",
+        (TaskProfile::Coding, false) => "unspecified",
+        _ => "none",
+    };
+
+    RuntimeTaskIntentSummary {
+        language_mode,
+        coding_language,
+        rust_coding,
+    }
+}
+
+fn language_mode_for_prompt(prompt: &str) -> &'static str {
+    if prompt.chars().any(is_cjk_unified_ideograph) {
+        "chinese"
+    } else if prompt
+        .chars()
+        .any(|character| character.is_ascii_alphabetic())
+    {
+        "english"
+    } else {
+        "auto"
+    }
+}
+
+fn prompt_mentions_rust(prompt: &str) -> bool {
+    let lower = prompt.to_ascii_lowercase();
+    contains_any(
+        &lower,
+        &[
+            "rust",
+            "cargo",
+            "crate",
+            "borrow",
+            "ownership",
+            "lifetime",
+            "trait",
+            "impl",
+            "tokio",
+            "axum",
+            "clippy",
+        ],
+    ) || contains_any(
+        prompt,
+        &["所有权", "借用", "生命周期", "结构体", "特征", "编译"],
+    )
+}
+
+fn contains_any(text: &str, markers: &[&str]) -> bool {
+    markers.iter().any(|marker| text.contains(marker))
+}
+
+fn is_cjk_unified_ideograph(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff
+    )
 }
 
 fn attention_kind_str(attention: AttentionKind) -> &'static str {

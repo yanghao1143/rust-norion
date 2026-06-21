@@ -1,4 +1,5 @@
 use crate::hierarchy::TaskProfile;
+use crate::kv_exchange::RuntimeKvBlock;
 
 use super::model::{GeneScissorsIntent, MutationPlan};
 
@@ -197,6 +198,36 @@ impl GeneSegment {
         self.schema_valid = schema_valid;
         self.kv_shape_valid = kv_shape_valid;
         self
+    }
+
+    pub fn from_runtime_kv_block(
+        id: impl Into<String>,
+        profile: TaskProfile,
+        source_hash: impl Into<String>,
+        block: &RuntimeKvBlock,
+    ) -> Self {
+        let kv_shape_valid = block.validate_shape(usize::MAX, usize::MAX, None).is_ok();
+        Self::new(
+            id,
+            profile,
+            GeneSegmentSource::RuntimeKv,
+            block.token_start,
+            block.token_end,
+        )
+        .with_source_hash(source_hash)
+        .with_metadata(
+            format!("runtime KV l{}h{}", block.layer, block.head),
+            "carry bounded runtime KV evidence through genome splicing preview",
+            format!(
+                "runtime KV tokens {}..{} key_dims={} value_dims={}",
+                block.token_start,
+                block.token_end,
+                block.key.len(),
+                block.value.len()
+            ),
+        )
+        .with_kv_residency(GeneKvResidency::PackedSynopsis)
+        .with_schema(true, kv_shape_valid)
     }
 
     pub fn token_count(&self) -> usize {

@@ -64,6 +64,9 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"gate_passed\":"));
     assert!(line.contains("\"agent_team\":"));
     assert!(line.contains("\"collision_free\":"));
+    assert!(line.contains("\"aggregation\":"));
+    assert!(line.contains("\"budget_scope\":"));
+    assert!(line.contains("\"main_thread_writer\":"));
     assert!(line.contains("\"reasoning_genome\":"));
     assert!(line.contains("\"genome_id\":\"genome:coding:v1\""));
     assert!(line.contains("\"stable_anchor_id\":\"genome:coding:stable\""));
@@ -293,6 +296,37 @@ fn trace_schema_gate_rejects_reasoning_genome_splice_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("reasoning_genome splice_write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_agent_team_writer_drift() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace agent team coordination", TaskProfile::Coding),
+        &mut backend,
+    );
+    assert!(outcome.agent_team_plan.enabled);
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace agent team coordination",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "agent_team",
+        "\"main_thread_writer\":\"main_thread\"",
+        "\"main_thread_writer\":\"reviewer\"",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("main_thread_writer")),
         "{failures:?}"
     );
 }

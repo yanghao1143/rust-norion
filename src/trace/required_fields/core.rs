@@ -73,4 +73,7 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("agent_team_conflicts", "\"conflicts\":"),
     required_field("agent_team_evolution", "\"evolution_signals\":"),
     required_field("agent_team_collision_free", "\"collision_free\":"),
+    required_field("agent_team_aggregation", "\"aggregation\":{"),
+    required_field("agent_team_budget_scope", "\"budget_scope\":"),
+    required_field("agent_team_main_thread_writer", "\"main_thread_writer\":"),
 ];

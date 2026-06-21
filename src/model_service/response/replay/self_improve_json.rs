@@ -213,6 +213,7 @@ fn self_evolution_admission_review_packet_json(
 mod tests {
     use super::*;
     use crate::model_service::request::ModelServiceInspectRequest;
+    use rust_norion::{SelfEvolutionValidationEvidence, SelfEvolutionValidationLane};
 
     #[test]
     fn self_improve_summary_json_renders_gate_outcome() {
@@ -397,6 +398,13 @@ mod tests {
             rust_check_passed: 1,
             rust_check_failed: 0,
             rust_validation_passed: true,
+            validation: SelfEvolutionValidationEvidence::from_lanes(
+                SelfEvolutionValidationLane::new(1, 1, 0),
+                SelfEvolutionValidationLane::new(0, 0, 0),
+                SelfEvolutionValidationLane::new(0, 0, 0),
+                SelfEvolutionValidationLane::new(0, 0, 0),
+            ),
+            validation_passed: false,
             benchmark_gate_passed: false,
             benchmark_gate_failures: vec![
                 "self_evolution_admission_model_service_benchmark_gate_evidence_missing".to_owned(),

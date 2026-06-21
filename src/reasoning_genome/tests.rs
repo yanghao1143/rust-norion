@@ -1,5 +1,6 @@
 use super::*;
 use crate::hierarchy::TaskProfile;
+use crate::kv_exchange::RuntimeKvBlock;
 
 #[test]
 fn default_genome_expresses_read_only_profile_genes() {
@@ -272,6 +273,39 @@ fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
     assert!(findings.iter().any(|finding| {
         finding.kind == GeneVariantKind::Truncation && finding.segment_id == "segment:overlap"
     }));
+}
+
+#[test]
+fn runtime_kv_block_gene_segment_carries_shape_evidence_to_splicer() {
+    let valid = RuntimeKvBlock::new(1, 0, 16, 20, vec![0.1, 0.2], vec![0.3, 0.4]);
+    let malformed = RuntimeKvBlock::new(1, 0, 20, 20, Vec::new(), vec![0.3]);
+    let segments = vec![
+        GeneSegment::from_runtime_kv_block(
+            "segment:runtime-kv-valid",
+            TaskProfile::Coding,
+            "sha256:valid-kv",
+            &valid,
+        )
+        .with_health(0.88, 0.02, 0.01),
+        GeneSegment::from_runtime_kv_block(
+            "segment:runtime-kv-malformed",
+            TaskProfile::Coding,
+            "sha256:bad-kv",
+            &malformed,
+        )
+        .with_health(0.88, 0.02, 0.01),
+    ];
+
+    let preview =
+        DnaSplicer::default().preview(TaskProfile::Coding, "genome:coding:stable", segments);
+
+    assert_eq!(preview.exon_count(), 1);
+    assert_eq!(preview.variant_count(), 1);
+    assert!(preview.findings.iter().any(|finding| {
+        finding.segment_id == "segment:runtime-kv-malformed"
+            && finding.kind == GeneVariantKind::KvShape
+    }));
+    assert!(preview.is_read_only_preview());
 }
 
 #[test]

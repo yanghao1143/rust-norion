@@ -35,6 +35,12 @@ fn plans_collision_free_team_for_subagent_prompt() {
     assert!(plan.collision_free());
     assert!(plan.agents.iter().all(|agent| !agent.writes_allowed));
     assert!(plan.summary().contains("collision_free=true"));
+    assert_eq!(plan.aggregation.main_thread_writer, "main_thread");
+    assert_eq!(plan.aggregation.lane_count, 7);
+    assert_eq!(
+        plan.aggregation.message_summaries.len(),
+        plan.message_count()
+    );
 }
 
 #[test]
@@ -66,6 +72,46 @@ fn records_resolved_conflict_for_blocked_tool_surface() {
 
     assert_eq!(plan.unresolved_conflict_count(), 0);
     assert!(plan.conflict_summaries(1)[0].contains("tool_surface"));
+    assert_eq!(plan.aggregation.conflict_topics, vec!["tool_surface"]);
+    assert!(plan.aggregation.unresolved_conflict_topics.is_empty());
+}
+
+#[test]
+fn aggregation_serializes_lanes_under_tight_parallel_budget() {
+    let planner = AgentTeamPlanner::new();
+    let toolsmith_plan = ToolsmithPlan::default();
+    let mut hardware_plan = HardwarePlan::default();
+    hardware_plan.execution.max_parallel_chunks = 1;
+    let recursive_schedule = RecursiveSchedule::default();
+
+    let plan = planner.plan(AgentTeamInput {
+        prompt: "agent team coordinate read-only lanes and aggregate conflicts",
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &hardware_plan,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 2,
+            fast_tokens: 2,
+            attention_fraction: 0.25,
+        },
+        recursive_schedule: &recursive_schedule,
+        toolsmith_plan: &toolsmith_plan,
+    });
+
+    assert!(plan.enabled);
+    assert_eq!(
+        plan.aggregation.budget_scope,
+        "serialized_read_only_lanes_under_main_thread"
+    );
+    assert_eq!(plan.aggregation.max_parallel_lanes, 1);
+    assert_eq!(plan.aggregation.attention_fraction, 0.25);
+    assert!(
+        plan.reward_notes()
+            .iter()
+            .any(|note| note.contains("agent_team:aggregation:lanes="))
+    );
 }
 
 #[test]

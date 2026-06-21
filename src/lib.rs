@@ -36,7 +36,7 @@ pub mod transformer;
 pub use adaptive_state::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
 pub use agent_team::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
-    AgentNode, AgentRole, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,
+    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,
 };
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,
@@ -92,7 +92,7 @@ pub use kv_cache::{
     MemoryEntry, MemoryMatch, MemoryRetentionPolicy, MemoryUpdateAction, MemoryUpdateReport,
     RetentionReport,
 };
-pub use kv_exchange::RuntimeKvBlock;
+pub use kv_exchange::{RuntimeKvBlock, RuntimeKvBlockValidationError};
 pub use kv_quant::{QuantizationBits, QuantizationError, QuantizedVector};
 pub use local_runtime::LocalTransformerRuntime;
 pub use process_reward::{
@@ -136,6 +136,7 @@ pub use rust_validation::{RustSnippetCheck, RustSnippetCheckReport, RustSnippetV
 pub use self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionPolicy,
     SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
+    SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,

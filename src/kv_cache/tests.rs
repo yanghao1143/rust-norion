@@ -1,6 +1,8 @@
 use super::*;
 use crate::disk_kv::DiskKvStore;
+use crate::gist_memory::{GistLevel, GistRecord};
 use std::fs;
+use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -107,6 +109,28 @@ fn gist_memories_do_not_fuse_with_semantic_memories() {
             .iter()
             .any(|entry| entry.id == gist && entry.key.starts_with("gist:"))
     );
+}
+
+#[test]
+fn hierarchical_gist_records_store_as_gist_kv_memory() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let record = GistRecord {
+        level: GistLevel::Section,
+        title: "Memory layer stores durable KV summaries".to_owned(),
+        summary: "durable KV summaries".to_owned(),
+        source_tokens: 32,
+        importance: 0.84,
+    };
+
+    let id = cache.store_gist_memory(&record, vec![0.2, 0.7, 0.1]);
+
+    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.entries()[0].id, id);
+    assert_eq!(
+        cache.entries()[0].key,
+        "gist:section:Memory layer stores durable KV summaries"
+    );
+    assert!(cache.entries()[0].strength >= 0.84);
 }
 
 #[test]
@@ -423,6 +447,36 @@ fn disk_kv_loader_accepts_legacy_plain_vectors() {
     assert_eq!(loaded.entries()[0].vector, vec![0.1, 0.2]);
     assert_eq!(loaded.entries()[0].created_at, 0);
     assert_eq!(loaded.entries()[0].last_access, 1);
+    cleanup(path);
+}
+
+#[test]
+fn disk_kv_read_only_loader_does_not_create_or_repair_state() {
+    let missing = temp_path("cache-read-only-missing");
+    let absent = KvFusionCache::load_from_disk_kv_read_only_existing(&missing).unwrap();
+    assert!(absent.is_none());
+    assert!(!missing.exists());
+
+    let path = temp_path("cache-read-only-existing");
+    let mut cache = KvFusionCache::new();
+    cache.store_or_fuse("read only durable memory", vec![0.3, 0.6], 0.9);
+    cache.save_to_disk_kv(&path).unwrap();
+    let clean_len = fs::metadata(&path).unwrap().len();
+    {
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(b"NDK1\x01").unwrap();
+    }
+    let dirty_len = fs::metadata(&path).unwrap().len();
+
+    let loaded = KvFusionCache::load_from_disk_kv_read_only_existing(&path)
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded.entries()[0].key, "read only durable memory");
+    assert_eq!(fs::metadata(&path).unwrap().len(), dirty_len);
+    assert!(dirty_len > clean_len);
+    cleanup(missing);
     cleanup(path);
 }
 

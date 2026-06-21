@@ -1470,7 +1470,11 @@ and hot/cold KV precision, so an external self-developed runtime can enforce
 the same manifest policy the control plane validated. Command runtimes receive
 that architecture in both the text payload and `runtime_architecture` JSON
 object, and `{runtime_architecture}` can be used inside `--runtime-arg`
-templates. They also receive the device execution contract through
+templates. They also receive a derived `task_intent` hint in both wire formats:
+`language_mode` is `english`, `chinese`, or `auto`, while `coding_language`
+is `rust` only when a coding request carries Rust-specific signals. This is an
+adapter hint for self-developed runtimes, not a replacement for the Noiron
+router profile. They also receive the device execution contract through
 `{runtime_device_contract}` so an external self-developed runtime can select
 CUDA, ROCm, Metal, WGPU, WebGPU, DirectML, CoreML, NNAPI, QNN, OpenVINO, CANN,
 MLU, RKNN, portable Rust, or custom adapters without a vendor-specific control
@@ -1484,7 +1488,7 @@ CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-wind
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
 `--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界；如果同时使用 `--runtime-command ... --runtime-json`，外部自研可执行文件会被 `ModelRuntimeForwardKernel` 包装到 production kernel slot 后面，并接受同一条 production conformance 门禁。`--production-reference-kernel` 会同时启用这条边界并挂载内置 reference kernel，用于本地验证生产 ABI。
 同一组显式架构参数也会配置内置 local runtime prototype。
-runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。导入 KV blocks 会同时出现在 JSON 根字段 `imported_kv_blocks`、文本 payload 的 `imported_kv_blocks` 区段以及 `{imported_kv_blocks}` 参数模板中；生产模式下，外部命令 runtime 收到的是同一批已经通过 manifest 校验的导入 KV blocks，和 Rust `ProductionForwardKernel` 走同一份 ABI。
+runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。两种 wire 格式还会携带派生的 `task_intent` hint：`language_mode` 为 `english`、`chinese` 或 `auto`，`coding_language` 只在 coding 请求带有 Rust 信号时标为 `rust`；这是给自研 runtime 的 adapter hint，不替代 Noiron router profile。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。导入 KV blocks 会同时出现在 JSON 根字段 `imported_kv_blocks`、文本 payload 的 `imported_kv_blocks` 区段以及 `{imported_kv_blocks}` 参数模板中；生产模式下，外部命令 runtime 收到的是同一批已经通过 manifest 校验的导入 KV blocks，和 Rust `ProductionForwardKernel` 走同一份 ABI。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
 vectors as runtime KV blocks before generation. After generation, exported KV

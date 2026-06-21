@@ -5,7 +5,7 @@ mod util;
 pub use planner::{AgentTeamInput, AgentTeamPlanner};
 pub use types::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
-    AgentNode, AgentRole, AgentTeamPlan,
+    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamPlan,
 };
 
 #[cfg(test)]
