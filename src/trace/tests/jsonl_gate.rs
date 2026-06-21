@@ -96,3 +96,142 @@ fn trace_schema_jsonl_gate_aggregates_memory_admission_and_kv_fusion() {
     assert!(report.summary_line().contains("kv_fusion_saved_tokens="));
     cleanup(path);
 }
+
+#[test]
+fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
+    let path = temp_path("trace-schema-adaptive-routing");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let first_outcome = engine.infer(
+        InferenceRequest::new(
+            "trace schema jsonl adaptive routing for Rust code memory",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let second_outcome = engine.infer(
+        InferenceRequest::new(
+            "trace schema jsonl adaptive routing for long document context",
+            TaskProfile::LongDocument,
+        ),
+        &mut backend,
+    );
+    let first_line = trace_json_line(
+        "trace schema jsonl adaptive routing for Rust code memory",
+        TaskProfile::Coding,
+        8,
+        &first_outcome,
+    );
+    let second_line = trace_json_line(
+        "trace schema jsonl adaptive routing for long document context",
+        TaskProfile::LongDocument,
+        13,
+        &second_outcome,
+    );
+    fs::write(&path, format!("{first_line}\n{second_line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    let first_routing = json_object_after_field(&first_line, "adaptive_routing").unwrap();
+    let second_routing = json_object_after_field(&second_line, "adaptive_routing").unwrap();
+    let first_task = json_object_after_field(&first_line, "task_hierarchy").unwrap();
+    let second_task = json_object_after_field(&second_line, "task_hierarchy").unwrap();
+
+    let expected_candidates = extract_json_usize_field(first_routing, "candidates")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "candidates").unwrap());
+    let expected_include = extract_json_usize_field(first_routing, "include")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "include").unwrap());
+    let expected_compress = extract_json_usize_field(first_routing, "compress")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "compress").unwrap());
+    let expected_defer = extract_json_usize_field(first_routing, "defer")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "defer").unwrap());
+    let expected_skip = extract_json_usize_field(first_routing, "skip")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "skip").unwrap());
+    let expected_input_tokens = extract_json_usize_field(first_routing, "input_tokens")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "input_tokens").unwrap());
+    let expected_retained_tokens = extract_json_usize_field(first_routing, "retained_tokens")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "retained_tokens").unwrap());
+    let expected_saved_tokens = extract_json_usize_field(first_routing, "saved_tokens")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_routing, "saved_tokens").unwrap());
+    let expected_mutation_records = extract_json_usize_field(first_task, "mutation_records")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_task, "mutation_records").unwrap());
+    let expected_route_pressure_milli =
+        trace_milli(extract_json_f32_field(first_task, "route_pressure").unwrap()).saturating_add(
+            trace_milli(extract_json_f32_field(second_task, "route_pressure").unwrap()),
+        );
+    let expected_compute_reduction_milli =
+        trace_milli(extract_json_f32_field(first_task, "compute_reduction").unwrap())
+            .saturating_add(trace_milli(
+                extract_json_f32_field(second_task, "compute_reduction").unwrap(),
+            ));
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 2);
+    assert_eq!(report.adaptive_routing_events, 2);
+    assert_eq!(report.adaptive_routing_candidates, expected_candidates);
+    assert!(report.adaptive_routing_candidates >= 2);
+    assert_eq!(report.adaptive_routing_include, expected_include);
+    assert_eq!(report.adaptive_routing_compress, expected_compress);
+    assert_eq!(report.adaptive_routing_defer, expected_defer);
+    assert_eq!(report.adaptive_routing_skip, expected_skip);
+    assert_eq!(
+        report.adaptive_routing_include
+            + report.adaptive_routing_compress
+            + report.adaptive_routing_defer
+            + report.adaptive_routing_skip,
+        report.adaptive_routing_candidates
+    );
+    assert_eq!(report.adaptive_routing_input_tokens, expected_input_tokens);
+    assert_eq!(
+        report.adaptive_routing_retained_tokens,
+        expected_retained_tokens
+    );
+    assert_eq!(report.adaptive_routing_saved_tokens, expected_saved_tokens);
+    assert_eq!(
+        report
+            .adaptive_routing_retained_tokens
+            .saturating_add(report.adaptive_routing_saved_tokens),
+        report.adaptive_routing_input_tokens
+    );
+    assert_eq!(report.task_hierarchy_events, 2);
+    assert_eq!(
+        report.task_hierarchy_mutation_records,
+        expected_mutation_records
+    );
+    assert!(report.task_hierarchy_mutation_records >= 2);
+    assert_eq!(
+        report.task_hierarchy_route_pressure_milli,
+        expected_route_pressure_milli
+    );
+    assert_eq!(
+        report.task_hierarchy_compute_reduction_milli,
+        expected_compute_reduction_milli
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("adaptive_routing_candidates=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("task_hierarchy_mutation_records=")
+    );
+    cleanup(path);
+}
+
+fn trace_milli(value: f32) -> usize {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as usize
+    } else {
+        0
+    }
+}

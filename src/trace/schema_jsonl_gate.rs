@@ -4,9 +4,9 @@ use std::path::Path;
 
 use super::evaluate_trace_schema_line;
 use super::fields::{
-    extract_json_bool_field, extract_json_string_array_field, extract_json_string_field,
-    extract_json_usize_field, extract_last_json_string_array_field, json_object_after_field,
-    trace_note_bool,
+    extract_json_bool_field, extract_json_f32_field, extract_json_string_array_field,
+    extract_json_string_field, extract_json_usize_field, extract_last_json_string_array_field,
+    json_object_after_field, trace_note_bool,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -46,6 +46,19 @@ pub struct TraceSchemaGateReport {
     pub improvement_corpus_benchmark_passed: usize,
     pub improvement_corpus_privacy_rejected: usize,
     pub improvement_corpus_secret_leaks: usize,
+    pub adaptive_routing_events: usize,
+    pub adaptive_routing_candidates: usize,
+    pub adaptive_routing_include: usize,
+    pub adaptive_routing_compress: usize,
+    pub adaptive_routing_defer: usize,
+    pub adaptive_routing_skip: usize,
+    pub adaptive_routing_input_tokens: usize,
+    pub adaptive_routing_retained_tokens: usize,
+    pub adaptive_routing_saved_tokens: usize,
+    pub task_hierarchy_events: usize,
+    pub task_hierarchy_mutation_records: usize,
+    pub task_hierarchy_route_pressure_milli: usize,
+    pub task_hierarchy_compute_reduction_milli: usize,
     pub memory_admission_events: usize,
     pub memory_admission_candidates: usize,
     pub memory_admission_ready: usize,
@@ -82,7 +95,7 @@ pub struct TraceSchemaGateReport {
 impl TraceSchemaGateReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -119,6 +132,19 @@ impl TraceSchemaGateReport {
             self.improvement_corpus_benchmark_passed,
             self.improvement_corpus_privacy_rejected,
             self.improvement_corpus_secret_leaks,
+            self.adaptive_routing_events,
+            self.adaptive_routing_candidates,
+            self.adaptive_routing_include,
+            self.adaptive_routing_compress,
+            self.adaptive_routing_defer,
+            self.adaptive_routing_skip,
+            self.adaptive_routing_input_tokens,
+            self.adaptive_routing_retained_tokens,
+            self.adaptive_routing_saved_tokens,
+            self.task_hierarchy_events,
+            self.task_hierarchy_mutation_records,
+            self.task_hierarchy_route_pressure_milli,
+            self.task_hierarchy_compute_reduction_milli,
             self.memory_admission_events,
             self.memory_admission_candidates,
             self.memory_admission_ready,
@@ -189,6 +215,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut improvement_corpus_benchmark_passed = 0;
     let mut improvement_corpus_privacy_rejected = 0;
     let mut improvement_corpus_secret_leaks = 0;
+    let mut adaptive_routing_events = 0;
+    let mut adaptive_routing_candidates = 0;
+    let mut adaptive_routing_include = 0;
+    let mut adaptive_routing_compress = 0;
+    let mut adaptive_routing_defer = 0;
+    let mut adaptive_routing_skip = 0;
+    let mut adaptive_routing_input_tokens = 0;
+    let mut adaptive_routing_retained_tokens = 0;
+    let mut adaptive_routing_saved_tokens = 0;
+    let mut task_hierarchy_events = 0;
+    let mut task_hierarchy_mutation_records = 0;
+    let mut task_hierarchy_route_pressure_milli = 0;
+    let mut task_hierarchy_compute_reduction_milli = 0;
     let mut memory_admission_events = 0;
     let mut memory_admission_candidates = 0;
     let mut memory_admission_ready = 0;
@@ -272,6 +311,23 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             improvement_corpus_privacy_rejected += summary.privacy_rejected;
             improvement_corpus_secret_leaks += summary.secret_leaks;
         }
+        if let Some(summary) = adaptive_routing_trace_gate_summary(line) {
+            adaptive_routing_events += summary.events;
+            adaptive_routing_candidates += summary.candidates;
+            adaptive_routing_include += summary.include;
+            adaptive_routing_compress += summary.compress;
+            adaptive_routing_defer += summary.defer;
+            adaptive_routing_skip += summary.skip;
+            adaptive_routing_input_tokens += summary.input_tokens;
+            adaptive_routing_retained_tokens += summary.retained_tokens;
+            adaptive_routing_saved_tokens += summary.saved_tokens;
+        }
+        if let Some(summary) = task_hierarchy_trace_gate_summary(line) {
+            task_hierarchy_events += summary.events;
+            task_hierarchy_mutation_records += summary.mutation_records;
+            task_hierarchy_route_pressure_milli += summary.route_pressure_milli;
+            task_hierarchy_compute_reduction_milli += summary.compute_reduction_milli;
+        }
         if let Some(summary) = memory_admission_trace_gate_summary(line) {
             memory_admission_events += summary.events;
             memory_admission_candidates += summary.candidates;
@@ -353,6 +409,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         improvement_corpus_benchmark_passed,
         improvement_corpus_privacy_rejected,
         improvement_corpus_secret_leaks,
+        adaptive_routing_events,
+        adaptive_routing_candidates,
+        adaptive_routing_include,
+        adaptive_routing_compress,
+        adaptive_routing_defer,
+        adaptive_routing_skip,
+        adaptive_routing_input_tokens,
+        adaptive_routing_retained_tokens,
+        adaptive_routing_saved_tokens,
+        task_hierarchy_events,
+        task_hierarchy_mutation_records,
+        task_hierarchy_route_pressure_milli,
+        task_hierarchy_compute_reduction_milli,
         memory_admission_events,
         memory_admission_candidates,
         memory_admission_ready,
@@ -600,6 +669,58 @@ fn improvement_corpus_trace_gate_summary(line: &str) -> Option<ImprovementCorpus
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+struct AdaptiveRoutingTraceGateSummary {
+    events: usize,
+    candidates: usize,
+    include: usize,
+    compress: usize,
+    defer: usize,
+    skip: usize,
+    input_tokens: usize,
+    retained_tokens: usize,
+    saved_tokens: usize,
+}
+
+fn adaptive_routing_trace_gate_summary(line: &str) -> Option<AdaptiveRoutingTraceGateSummary> {
+    let routing = json_object_after_field(line, "adaptive_routing")?;
+
+    Some(AdaptiveRoutingTraceGateSummary {
+        events: 1,
+        candidates: extract_json_usize_field(routing, "candidates").unwrap_or(0),
+        include: extract_json_usize_field(routing, "include").unwrap_or(0),
+        compress: extract_json_usize_field(routing, "compress").unwrap_or(0),
+        defer: extract_json_usize_field(routing, "defer").unwrap_or(0),
+        skip: extract_json_usize_field(routing, "skip").unwrap_or(0),
+        input_tokens: extract_json_usize_field(routing, "input_tokens").unwrap_or(0),
+        retained_tokens: extract_json_usize_field(routing, "retained_tokens").unwrap_or(0),
+        saved_tokens: extract_json_usize_field(routing, "saved_tokens").unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct TaskHierarchyTraceGateSummary {
+    events: usize,
+    mutation_records: usize,
+    route_pressure_milli: usize,
+    compute_reduction_milli: usize,
+}
+
+fn task_hierarchy_trace_gate_summary(line: &str) -> Option<TaskHierarchyTraceGateSummary> {
+    let task = json_object_after_field(line, "task_hierarchy")?;
+
+    Some(TaskHierarchyTraceGateSummary {
+        events: 1,
+        mutation_records: extract_json_usize_field(task, "mutation_records").unwrap_or(0),
+        route_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(task, "route_pressure").unwrap_or(0.0),
+        ),
+        compute_reduction_milli: trace_gate_milli(
+            extract_json_f32_field(task, "compute_reduction").unwrap_or(0.0),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 struct MemoryAdmissionTraceGateSummary {
     events: usize,
     candidates: usize,
@@ -680,4 +801,12 @@ fn kv_fusion_trace_gate_summary(line: &str) -> Option<KvFusionTraceGateSummary> 
         retained_tokens: extract_json_usize_field(fusion, "retained_tokens").unwrap_or(0),
         saved_tokens: extract_json_usize_field(fusion, "saved_tokens").unwrap_or(0),
     })
+}
+
+fn trace_gate_milli(value: f32) -> usize {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as usize
+    } else {
+        0
+    }
 }

@@ -19,7 +19,7 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
     report
         .map(|report| {
             format!(
-                "{{\"passed\":{},\"checked_lines\":{},\"rust_check_events\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_feedback_updates\":{},\"rust_check_feedback_applied\":{},\"business_contract_events\":{},\"business_contract_event_passed\":{},\"business_contract_event_failed\":{},\"business_contract_event_missing_signals\":{},\"business_contract_event_protocol_leaks\":{},\"business_contract_event_substitutions\":{},\"business_contract_event_evasive_denials\":{},\"business_contract_event_raw_passed\":{},\"business_contract_event_raw_failed\":{},\"business_contract_event_response_normalized\":{},\"business_contract_event_sanitized\":{},\"business_contract_event_canonical_fallbacks\":{},\"runtime_error_events\":{},\"runtime_timeout_events\":{},\"self_evolution_admission_events\":{},\"self_evolution_admission_admitted\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_review_packets\":{},\"self_evolution_admission_evidence_ids\":{},\"self_evolution_admission_missing_review_packet_refs\":{},\"improvement_corpus_events\":{},\"improvement_corpus_episodes\":{},\"improvement_corpus_active_adaptation\":{},\"improvement_corpus_compiler_passed\":{},\"improvement_corpus_test_passed\":{},\"improvement_corpus_benchmark_passed\":{},\"improvement_corpus_privacy_rejected\":{},\"improvement_corpus_secret_leaks\":{},\"memory_admission_events\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_admitted\":{},\"memory_admission_hold\":{},\"memory_admission_reject\":{},\"memory_admission_quarantine\":{},\"memory_admission_review_packets\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_held\":{},\"memory_admission_ledger_rejected\":{},\"memory_admission_ledger_duplicate\":{},\"memory_admission_ledger_decayed\":{},\"memory_admission_ledger_merged\":{},\"memory_admission_ledger_rollback\":{},\"kv_fusion_events\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"summary\":{},\"failures\":{}}}",
+                "{{\"passed\":{},\"checked_lines\":{},\"rust_check_events\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_feedback_updates\":{},\"rust_check_feedback_applied\":{},\"business_contract_events\":{},\"business_contract_event_passed\":{},\"business_contract_event_failed\":{},\"business_contract_event_missing_signals\":{},\"business_contract_event_protocol_leaks\":{},\"business_contract_event_substitutions\":{},\"business_contract_event_evasive_denials\":{},\"business_contract_event_raw_passed\":{},\"business_contract_event_raw_failed\":{},\"business_contract_event_response_normalized\":{},\"business_contract_event_sanitized\":{},\"business_contract_event_canonical_fallbacks\":{},\"runtime_error_events\":{},\"runtime_timeout_events\":{},\"self_evolution_admission_events\":{},\"self_evolution_admission_admitted\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_review_packets\":{},\"self_evolution_admission_evidence_ids\":{},\"self_evolution_admission_missing_review_packet_refs\":{},\"improvement_corpus_events\":{},\"improvement_corpus_episodes\":{},\"improvement_corpus_active_adaptation\":{},\"improvement_corpus_compiler_passed\":{},\"improvement_corpus_test_passed\":{},\"improvement_corpus_benchmark_passed\":{},\"improvement_corpus_privacy_rejected\":{},\"improvement_corpus_secret_leaks\":{},\"adaptive_routing_events\":{},\"adaptive_routing_candidates\":{},\"adaptive_routing_include\":{},\"adaptive_routing_compress\":{},\"adaptive_routing_defer\":{},\"adaptive_routing_skip\":{},\"adaptive_routing_input_tokens\":{},\"adaptive_routing_retained_tokens\":{},\"adaptive_routing_saved_tokens\":{},\"task_hierarchy_events\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_route_pressure_milli\":{},\"task_hierarchy_compute_reduction_milli\":{},\"memory_admission_events\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_admitted\":{},\"memory_admission_hold\":{},\"memory_admission_reject\":{},\"memory_admission_quarantine\":{},\"memory_admission_review_packets\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_held\":{},\"memory_admission_ledger_rejected\":{},\"memory_admission_ledger_duplicate\":{},\"memory_admission_ledger_decayed\":{},\"memory_admission_ledger_merged\":{},\"memory_admission_ledger_rollback\":{},\"kv_fusion_events\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"summary\":{},\"failures\":{}}}",
                 report.passed,
                 report.checked_lines,
                 report.rust_check_events,
@@ -55,6 +55,19 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 report.improvement_corpus_benchmark_passed,
                 report.improvement_corpus_privacy_rejected,
                 report.improvement_corpus_secret_leaks,
+                report.adaptive_routing_events,
+                report.adaptive_routing_candidates,
+                report.adaptive_routing_include,
+                report.adaptive_routing_compress,
+                report.adaptive_routing_defer,
+                report.adaptive_routing_skip,
+                report.adaptive_routing_input_tokens,
+                report.adaptive_routing_retained_tokens,
+                report.adaptive_routing_saved_tokens,
+                report.task_hierarchy_events,
+                report.task_hierarchy_mutation_records,
+                report.task_hierarchy_route_pressure_milli,
+                report.task_hierarchy_compute_reduction_milli,
                 report.memory_admission_events,
                 report.memory_admission_candidates,
                 report.memory_admission_ready,
@@ -134,6 +147,19 @@ mod tests {
             improvement_corpus_benchmark_passed: 0,
             improvement_corpus_privacy_rejected: 0,
             improvement_corpus_secret_leaks: 0,
+            adaptive_routing_events: 2,
+            adaptive_routing_candidates: 5,
+            adaptive_routing_include: 2,
+            adaptive_routing_compress: 1,
+            adaptive_routing_defer: 1,
+            adaptive_routing_skip: 1,
+            adaptive_routing_input_tokens: 512,
+            adaptive_routing_retained_tokens: 320,
+            adaptive_routing_saved_tokens: 192,
+            task_hierarchy_events: 2,
+            task_hierarchy_mutation_records: 4,
+            task_hierarchy_route_pressure_milli: 730,
+            task_hierarchy_compute_reduction_milli: 280,
             memory_admission_events: 1,
             memory_admission_candidates: 3,
             memory_admission_ready: 1,
@@ -177,6 +203,12 @@ mod tests {
         assert!(json.contains("\"self_evolution_admission_evidence_ids\":4"));
         assert!(json.contains("\"self_evolution_admission_missing_review_packet_refs\":0"));
         assert!(json.contains("\"improvement_corpus_events\":0"));
+        assert!(json.contains("\"adaptive_routing_events\":2"));
+        assert!(json.contains("\"adaptive_routing_candidates\":5"));
+        assert!(json.contains("\"adaptive_routing_saved_tokens\":192"));
+        assert!(json.contains("\"task_hierarchy_events\":2"));
+        assert!(json.contains("\"task_hierarchy_mutation_records\":4"));
+        assert!(json.contains("\"task_hierarchy_compute_reduction_milli\":280"));
         assert!(json.contains("\"memory_admission_events\":1"));
         assert!(json.contains("\"memory_admission_candidates\":3"));
         assert!(json.contains("\"memory_admission_ledger_records\":3"));
@@ -186,6 +218,8 @@ mod tests {
         assert!(json.contains("\"kv_fusion_saved_tokens\":100"));
         assert!(json.contains("self_evolution_admission_events=2"));
         assert!(json.contains("self_evolution_admission_review_packets=2"));
+        assert!(json.contains("adaptive_routing_candidates=5"));
+        assert!(json.contains("task_hierarchy_mutation_records=4"));
         assert!(json.contains("memory_admission_ledger_records=3"));
         assert!(json.contains("kv_fusion_saved_tokens=100"));
     }
