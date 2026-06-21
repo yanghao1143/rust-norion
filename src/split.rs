@@ -81,6 +81,157 @@ pub mod bridge {
         pub telemetry: Vec<String>,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct RootRouteBudgetReadinessProjection {
+        pub route_budget: super::core::RouteBudget,
+        pub readiness: super::core::RouteBudgetReadinessSummary,
+        pub commit: super::core::RouteBudgetReadinessCommitSummary,
+        pub synthetic_decision_summary: bool,
+    }
+
+    impl RootRouteBudgetReadinessProjection {
+        pub fn can_commit(self) -> bool {
+            self.commit.can_admit_committed_route_budget()
+        }
+    }
+
+    pub fn root_task_profile_to_core(
+        profile: crate::hierarchy::TaskProfile,
+    ) -> super::core::TaskProfile {
+        match profile {
+            crate::hierarchy::TaskProfile::General => super::core::TaskProfile::General,
+            crate::hierarchy::TaskProfile::Coding => super::core::TaskProfile::Coding,
+            crate::hierarchy::TaskProfile::Writing => super::core::TaskProfile::Writing,
+            crate::hierarchy::TaskProfile::LongDocument => super::core::TaskProfile::LongDocument,
+        }
+    }
+
+    pub fn root_generation_metrics_to_core(
+        metrics: crate::router::GenerationMetrics,
+    ) -> super::core::GenerationMetrics {
+        super::core::GenerationMetrics {
+            perplexity: metrics.perplexity,
+            semantic_consistency: metrics.semantic_consistency,
+            contradiction_count: metrics.contradiction_count,
+            token_count: metrics.token_count,
+        }
+    }
+
+    pub fn root_generation_metrics_to_core_routing_feedback_summary(
+        profile: crate::hierarchy::TaskProfile,
+        metrics: crate::router::GenerationMetrics,
+    ) -> super::core::RoutingFeedbackSummary {
+        super::core::RoutingFeedback {
+            profile: root_task_profile_to_core(profile),
+            quality: metrics.quality_score(),
+            perplexity: metrics.perplexity,
+            contradiction_count: metrics.contradiction_count,
+        }
+        .feedback_summary()
+    }
+
+    pub fn root_generation_metrics_to_core_hierarchy_feedback_summary(
+        profile: crate::hierarchy::TaskProfile,
+        metrics: crate::router::GenerationMetrics,
+    ) -> super::core::HierarchyAdjustmentFeedbackSummary {
+        super::core::HierarchyAdjustmentFeedback::new(
+            root_task_profile_to_core(profile),
+            metrics.quality_score(),
+            metrics.perplexity,
+            metrics.contradiction_count,
+        )
+        .feedback_summary()
+    }
+
+    pub fn root_route_budget_to_core(
+        budget: crate::router::RouteBudget,
+    ) -> super::core::RouteBudget {
+        super::core::RouteBudget {
+            threshold: budget.threshold,
+            attention_tokens: budget.attention_tokens,
+            fast_tokens: budget.fast_tokens,
+            attention_fraction: budget.attention_fraction,
+        }
+    }
+
+    pub fn root_route_budget_to_core_readiness(
+        budget: crate::router::RouteBudget,
+    ) -> RootRouteBudgetReadinessProjection {
+        let route_budget = root_route_budget_to_core(budget);
+        let decision_summary = synthetic_route_decision_summary_from_budget(route_budget);
+        root_route_budget_to_core_readiness_projection(decision_summary, budget, true)
+    }
+
+    pub fn root_route_budget_to_core_readiness_from_decision_summary(
+        decision_summary: super::core::RoutingDecisionSummary,
+        budget: crate::router::RouteBudget,
+    ) -> RootRouteBudgetReadinessProjection {
+        root_route_budget_to_core_readiness_projection(decision_summary, budget, false)
+    }
+
+    fn root_route_budget_to_core_readiness_projection(
+        decision_summary: super::core::RoutingDecisionSummary,
+        budget: crate::router::RouteBudget,
+        synthetic_decision_summary: bool,
+    ) -> RootRouteBudgetReadinessProjection {
+        let route_budget = root_route_budget_to_core(budget);
+        let readiness =
+            super::core::RouteBudgetReadinessSummary::new(decision_summary, route_budget);
+        let commit = readiness.commit_summary();
+
+        RootRouteBudgetReadinessProjection {
+            route_budget,
+            readiness,
+            commit,
+            synthetic_decision_summary,
+        }
+    }
+
+    pub fn root_profile_thresholds_to_core(
+        thresholds: crate::router::ProfileThresholds,
+    ) -> super::core::ProfileThresholds {
+        super::core::ProfileThresholds {
+            general: thresholds.general,
+            coding: thresholds.coding,
+            writing: thresholds.writing,
+            long_document: thresholds.long_document,
+        }
+    }
+
+    pub fn root_profile_observations_to_core(
+        observations: crate::router::ProfileObservations,
+    ) -> super::core::ProfileObservations {
+        super::core::ProfileObservations {
+            general: observations.general,
+            coding: observations.coding,
+            writing: observations.writing,
+            long_document: observations.long_document,
+        }
+    }
+
+    pub fn root_router_state_to_core(
+        state: crate::router::RouterState,
+    ) -> super::core::RouterState {
+        super::core::RouterState {
+            threshold: state.threshold,
+            observations: state.observations,
+            profile_thresholds: root_profile_thresholds_to_core(state.profile_thresholds),
+            profile_observations: root_profile_observations_to_core(state.profile_observations),
+        }
+    }
+
+    pub fn root_hierarchy_weights_to_core(
+        weights: crate::hierarchy::HierarchyWeights,
+    ) -> super::core::HierarchyWeights {
+        super::core::HierarchyWeights::new(weights.global, weights.local, weights.convolution)
+    }
+
+    pub fn root_hierarchy_weights_to_core_summary(
+        weights: crate::hierarchy::HierarchyWeights,
+    ) -> super::core::HierarchyWeightsSummary {
+        root_hierarchy_weights_to_core(weights).summary()
+    }
+
     pub fn memory_reuse_dry_run_to_agent_evidence(
         summary: &super::memory::MemoryReuseDryRunSummary,
     ) -> super::agent::MemoryRecallDryRunEvidence {
@@ -358,6 +509,49 @@ pub mod bridge {
         }
     }
 
+    fn synthetic_route_decision_summary_from_budget(
+        budget: super::core::RouteBudget,
+    ) -> super::core::RoutingDecisionSummary {
+        let token_count = budget.total_tokens();
+        let threshold_score = finite_unit_or_zero(budget.threshold);
+        let min_score = if budget.fast_tokens > 0 && budget.attention_tokens > 0 {
+            finite_unit_or_zero(threshold_score - 0.01)
+        } else {
+            threshold_score
+        };
+        let max_score = threshold_score.max(min_score);
+        let average_score = if token_count == 0 {
+            0.0
+        } else {
+            (min_score + max_score) * 0.5
+        };
+
+        super::core::RoutingDecisionSummary {
+            threshold: budget.threshold,
+            token_count,
+            layer_counts: super::core::RouteLayerCounts {
+                fast_projection: budget.fast_tokens,
+                local_window: budget.attention_tokens,
+                global: 0,
+                fusion: 0,
+            },
+            attention_fraction: budget.attention_fraction,
+            average_score,
+            min_score,
+            max_score,
+            above_threshold_tokens: budget.attention_tokens,
+            below_threshold_tokens: budget.fast_tokens,
+        }
+    }
+
+    fn finite_unit_or_zero(value: f32) -> f32 {
+        if value.is_finite() {
+            value.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn kv_fusion_policy_observation_dry_run_telemetry(
         policy_observation_ready: bool,
@@ -511,6 +705,227 @@ mod tests {
         let message = super::service::ChatMessage::user("hello split service");
         assert_eq!(message.role, super::service::ChatRole::User);
         assert_eq!(message.content, "hello split service");
+    }
+
+    #[test]
+    fn bridges_root_generation_metrics_to_core_feedback_readiness() {
+        let metrics = crate::router::GenerationMetrics {
+            perplexity: 18.0,
+            semantic_consistency: 0.40,
+            contradiction_count: 2,
+            token_count: 128,
+        };
+
+        let core_metrics = super::bridge::root_generation_metrics_to_core(metrics);
+        let routing_feedback =
+            super::bridge::root_generation_metrics_to_core_routing_feedback_summary(
+                crate::hierarchy::TaskProfile::Coding,
+                metrics,
+            );
+        let hierarchy_feedback =
+            super::bridge::root_generation_metrics_to_core_hierarchy_feedback_summary(
+                crate::hierarchy::TaskProfile::Coding,
+                metrics,
+            );
+
+        assert_eq!(core_metrics.perplexity, metrics.perplexity);
+        assert_eq!(
+            core_metrics.semantic_consistency,
+            metrics.semantic_consistency
+        );
+        assert_eq!(
+            core_metrics.contradiction_count,
+            metrics.contradiction_count
+        );
+        assert_eq!(core_metrics.token_count, metrics.token_count);
+        assert_eq!(routing_feedback.profile, super::core::TaskProfile::Coding);
+        assert_eq!(hierarchy_feedback.profile, super::core::TaskProfile::Coding);
+        assert!((routing_feedback.quality - metrics.quality_score()).abs() < 0.0001);
+        assert!((hierarchy_feedback.quality - metrics.quality_score()).abs() < 0.0001);
+        assert!(routing_feedback.can_use_routing_feedback());
+        assert!(hierarchy_feedback.can_use_feedback());
+
+        let non_finite = crate::router::GenerationMetrics {
+            perplexity: f32::NAN,
+            semantic_consistency: f32::NAN,
+            contradiction_count: 0,
+            token_count: 4,
+        };
+        let non_finite_feedback =
+            super::bridge::root_generation_metrics_to_core_routing_feedback_summary(
+                crate::hierarchy::TaskProfile::General,
+                non_finite,
+            );
+
+        assert!(non_finite_feedback.quality.is_finite());
+        assert!(non_finite_feedback.quality_shape_is_valid());
+        assert!(!non_finite_feedback.perplexity_shape_is_valid());
+        assert!(!non_finite_feedback.can_use_routing_feedback());
+    }
+
+    #[test]
+    fn bridges_root_route_budget_to_core_readiness_with_real_decision_summary() {
+        let decisions = [
+            super::core::RoutingDecision {
+                token: "fast".to_owned(),
+                score: 0.18,
+                layer: super::core::RouteLayer::FastProjection,
+            },
+            super::core::RoutingDecision {
+                token: "local".to_owned(),
+                score: 0.62,
+                layer: super::core::RouteLayer::LocalWindow,
+            },
+        ];
+        let decision_summary =
+            super::core::RoutingDecisionSummary::from_decisions(0.60, &decisions);
+        let root_budget = crate::router::RouteBudget {
+            threshold: 0.60,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.50,
+        };
+
+        let projection = super::bridge::root_route_budget_to_core_readiness_from_decision_summary(
+            decision_summary,
+            root_budget,
+        );
+
+        assert!(!projection.synthetic_decision_summary);
+        assert_eq!(projection.route_budget, decision_summary.route_budget());
+        assert!(projection.readiness.can_commit_route_budget_readiness());
+        assert!(projection.commit.can_admit_committed_route_budget());
+        assert!(projection.can_commit());
+        assert_eq!(
+            projection.commit.committed_route_budget,
+            Some(decision_summary.route_budget())
+        );
+    }
+
+    #[test]
+    fn root_route_budget_core_readiness_marks_synthetic_and_blocks_stale_budget() {
+        let decisions = [
+            super::core::RoutingDecision {
+                token: "fast".to_owned(),
+                score: 0.18,
+                layer: super::core::RouteLayer::FastProjection,
+            },
+            super::core::RoutingDecision {
+                token: "local".to_owned(),
+                score: 0.62,
+                layer: super::core::RouteLayer::LocalWindow,
+            },
+        ];
+        let decision_summary =
+            super::core::RoutingDecisionSummary::from_decisions(0.60, &decisions);
+        let root_budget = crate::router::RouteBudget {
+            threshold: 0.60,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.50,
+        };
+
+        let synthetic = super::bridge::root_route_budget_to_core_readiness(root_budget);
+
+        assert!(synthetic.synthetic_decision_summary);
+        assert_eq!(synthetic.readiness.decision_summary.token_count, 2);
+        assert_eq!(
+            synthetic
+                .readiness
+                .decision_summary
+                .layer_counts
+                .local_window,
+            1
+        );
+        assert_eq!(synthetic.readiness.decision_summary.layer_counts.fusion, 0);
+        assert!(synthetic.can_commit());
+
+        let stale_budget = crate::router::RouteBudget {
+            fast_tokens: 2,
+            attention_fraction: 1.0 / 3.0,
+            ..root_budget
+        };
+        let stale = super::bridge::root_route_budget_to_core_readiness_from_decision_summary(
+            decision_summary,
+            stale_budget,
+        );
+
+        assert!(!stale.synthetic_decision_summary);
+        assert!(!stale.can_commit());
+        assert_eq!(
+            stale.commit.action,
+            super::core::RouteBudgetReadinessCommitAction::RepairRouteBudget
+        );
+        assert_eq!(
+            stale.commit.first_blocking_stage,
+            Some(super::core::RouteBudgetReadinessStage::BudgetParity)
+        );
+        assert_eq!(stale.commit.committed_route_budget, None);
+    }
+
+    #[test]
+    fn bridges_root_router_state_to_core_observation_accounting() {
+        let state = crate::router::RouterState {
+            threshold: 0.52,
+            observations: 4,
+            profile_thresholds: crate::router::ProfileThresholds {
+                general: 0.52,
+                coding: 0.48,
+                writing: 0.61,
+                long_document: 0.57,
+            },
+            profile_observations: crate::router::ProfileObservations {
+                general: 1,
+                coding: 2,
+                writing: 0,
+                long_document: 1,
+            },
+        };
+
+        let core_state = super::bridge::root_router_state_to_core(state);
+
+        assert_eq!(core_state.threshold, 0.52);
+        assert_eq!(core_state.observations, 4);
+        assert_eq!(
+            core_state
+                .profile_thresholds
+                .get(super::core::TaskProfile::Coding),
+            0.48
+        );
+        assert_eq!(
+            core_state
+                .profile_observations
+                .get(super::core::TaskProfile::LongDocument),
+            1
+        );
+        assert_eq!(core_state.profile_observation_total(), 4);
+        assert!(!core_state.has_observation_drift());
+    }
+
+    #[test]
+    fn bridges_root_hierarchy_weights_convolution_to_core_fusion_summary() {
+        let weights = crate::hierarchy::HierarchyWeights::new(0.20, 0.60, 0.20);
+
+        let core_weights = super::bridge::root_hierarchy_weights_to_core(weights);
+        let summary = super::bridge::root_hierarchy_weights_to_core_summary(weights);
+
+        assert!((core_weights.global - weights.global).abs() < 0.0001);
+        assert!((core_weights.local - weights.local).abs() < 0.0001);
+        assert!((core_weights.fusion - weights.convolution).abs() < 0.0001);
+        assert_eq!(summary.dominant, super::core::HierarchyWeightFocus::Local);
+        assert!(summary.is_normalized);
+        assert!(summary.can_use_hierarchy_weights());
+
+        let repaired = super::bridge::root_hierarchy_weights_to_core_summary(
+            crate::hierarchy::HierarchyWeights {
+                global: f32::NAN,
+                local: f32::NEG_INFINITY,
+                convolution: 2.0,
+            },
+        );
+
+        assert_eq!(repaired.dominant, super::core::HierarchyWeightFocus::Fusion);
+        assert!(repaired.can_use_hierarchy_weights());
     }
 
     #[test]
