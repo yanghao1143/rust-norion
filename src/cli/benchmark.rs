@@ -437,6 +437,7 @@ pub(crate) fn print_benchmark_summary(
 
     if let Some(report) = self_evolution_admission_report {
         println!("{}", report.summary_line());
+        println!("{}", report.json_line());
         for reason in &report.blocked_reasons {
             println!("self_evolution_admission_blocked_reason: {reason}");
         }

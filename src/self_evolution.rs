@@ -392,10 +392,105 @@ impl SelfEvolutionAdmissionReport {
         )
     }
 
+    pub fn json_line(&self) -> String {
+        let candidate_id = self_evolution_json_escape(&self.candidate_id);
+        let benchmark_gate_failures =
+            self_evolution_string_array_json(&self.benchmark_gate_failures);
+        let adaptive_preview_blocked_reasons =
+            self_evolution_string_array_json(&self.adaptive_preview_blocked_reasons);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+        let telemetry = self_evolution_string_array_json(&self.telemetry);
+        let rollback_router_threshold_delta =
+            self_evolution_f32_json(self.rollback_router_threshold_delta);
+        let rollback_hierarchy_weight_delta =
+            self_evolution_f32_json(self.rollback_hierarchy_weight_delta);
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-admission-v1\",\
+             \"candidate_id\":\"{candidate_id}\",\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"policy_valid\":{},\
+             \"admitted_for_human_review\":{},\
+             \"human_approval_required\":{},\
+             \"rust_check\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}},\
+             \"benchmark_gate\":{{\"passed\":{},\"failures\":{benchmark_gate_failures}}},\
+             \"rollback\":{{\"budget_clean\":{},\"drift_rollbacks\":{},\"router_threshold_delta\":{rollback_router_threshold_delta},\"hierarchy_weight_delta\":{rollback_hierarchy_weight_delta}}},\
+             \"adaptive_preview\":{{\"evidence_present\":{},\"source_count\":{},\"router_threshold_ready\":{},\"hierarchy_adjustment_ready\":{},\"kv_fusion_policy_observation_ready\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"write_allowed\":{},\"applied\":{},\"blocked_reasons\":{adaptive_preview_blocked_reasons}}},\
+             \"writes\":{{\"mutation_allowed\":{},\"memory_store_allowed\":{},\"ndkv_allowed\":{},\"model_weight_allowed\":{},\"git_allowed\":{}}},\
+             \"blocked_reasons\":{blocked_reasons},\
+             \"telemetry\":{telemetry}\
+             }}",
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.policy_valid,
+            self.admitted_for_human_review,
+            self.human_approval_required,
+            self.rust_check_items,
+            self.rust_check_passed,
+            self.rust_check_failed,
+            self.rust_validation_passed,
+            self.benchmark_gate_passed,
+            self.rollback_budget_clean,
+            self.drift_rollbacks,
+            self.adaptive_preview_evidence_present,
+            self.adaptive_preview_source_count,
+            self.router_threshold_preview_ready,
+            self.hierarchy_adjustment_preview_ready,
+            self.kv_fusion_policy_observation_preview_ready,
+            self.adaptive_preview_read_only,
+            self.adaptive_preview_report_only,
+            self.adaptive_preview_preview_only,
+            self.adaptive_preview_write_allowed,
+            self.adaptive_preview_applied,
+            self.mutation_write_allowed,
+            self.memory_store_write_allowed,
+            self.ndkv_write_allowed,
+            self.model_weight_write_allowed,
+            self.git_write_allowed,
+        )
+    }
+
     fn with_telemetry(mut self) -> Self {
         self.telemetry = self_evolution_admission_telemetry(&self);
         self
     }
+}
+
+fn self_evolution_f32_json(value: f32) -> String {
+    if value.is_finite() {
+        format!("{value:.6}")
+    } else {
+        "null".to_owned()
+    }
+}
+
+fn self_evolution_string_array_json(items: &[String]) -> String {
+    let values = items
+        .iter()
+        .map(|item| format!("\"{}\"", self_evolution_json_escape(item)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
+}
+
+fn self_evolution_json_escape(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out
 }
 
 fn rollback_budget_clean(

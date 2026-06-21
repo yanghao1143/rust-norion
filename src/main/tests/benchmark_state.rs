@@ -42,6 +42,20 @@ fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
     assert!(!report.model_weight_write_allowed);
     assert!(!report.git_write_allowed);
     assert!(report.summary_line().contains("self_evolution_admission"));
+    let json_line = report.json_line();
+    assert!(json_line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\""));
+    assert!(json_line.contains("\"candidate_id\":\"benchmark:test\""));
+    assert!(json_line.contains("\"read_only\":true"));
+    assert!(json_line.contains("\"report_only\":true"));
+    assert!(json_line.contains("\"preview_only\":true"));
+    assert!(json_line.contains("\"benchmark_gate\":{\"passed\":true"));
+    assert!(json_line.contains("\"adaptive_preview\":{\"evidence_present\":true"));
+    assert!(json_line.contains("\"source_count\":2"));
+    assert!(json_line.contains("\"kv_fusion_policy_observation_ready\":false"));
+    assert!(json_line.contains(
+        "\"writes\":{\"mutation_allowed\":false,\"memory_store_allowed\":false,\"ndkv_allowed\":false,\"model_weight_allowed\":false,\"git_allowed\":false}"
+    ));
+    assert!(json_line.contains("\"blocked_reasons\":[]"));
     assert!(
         report
             .telemetry
