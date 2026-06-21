@@ -110,8 +110,10 @@ pub use production_runtime::{
     ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
 };
 pub use reasoning_genome::{
-    GeneScissorsIntent, GenomeExpression, GenomeExpressionInput, MutationPlan, ReasoningGene,
-    ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
+    DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
+    DnaGeneSchemaError, DnaGeneSourceEvidence, GeneScissorsIntent, GenomeExpression,
+    GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus,
+    ReasoningGenome,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,

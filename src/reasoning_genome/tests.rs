@@ -534,3 +534,158 @@ fn mut_fixer_maps_stale_label_to_relabel_and_drift_to_quarantine_regenerate() {
     );
     assert!(plans.iter().all(MutationPlan::is_read_only_preview));
 }
+
+#[test]
+fn dual_chain_schema_round_trips_expression_and_memory_records() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
+    let source = DnaGeneSourceEvidence::new(
+        DnaGeneEvidenceKind::SyntheticDefault,
+        "sha256:genome-default",
+        "default profile genome scaffold",
+    )
+    .with_prompt_digest("prompt-digest:coding")
+    .with_privacy_gate();
+    let mut chain =
+        DnaGeneChain::preview_from_genome(&genome, "tenant:local", "session:roundtrip", source);
+
+    let memory_gene = ReasoningGene::new(
+        "gene:coding:memory-tool-reliability",
+        ReasoningGeneKind::ToolUse,
+        "tool reliability memory",
+        "retain validated Toolsmith and runtime adapter reliability evidence",
+    )
+    .with_tags(["memory_chain", "tool_reliability"])
+    .with_health(2, 0.82, 0.08);
+    let memory_record = DnaGeneRecord::from_reasoning_gene(
+        DnaChainKind::Memory,
+        TaskProfile::Coding,
+        chain.stable_anchor_id.clone(),
+        DnaGeneLineage::new("tenant:local", "session:roundtrip")
+            .with_parent("gene:coding:tool-use")
+            .with_inheritance(chain.stable_anchor_id.clone(), 1),
+        DnaGeneSourceEvidence::new(
+            DnaGeneEvidenceKind::ToolReliability,
+            "sha256:tool-reliability",
+            "sanitized runtime adapter and Toolsmith evidence",
+        )
+        .with_prompt_digest("prompt-digest:tool"),
+        &memory_gene,
+    );
+    chain.push_memory_record(memory_record);
+
+    let lines = chain.to_kv_lines().expect("valid dual-chain schema");
+    let loaded = DnaGeneChain::from_kv_lines(&lines).expect("roundtrip schema");
+
+    assert_eq!(loaded.schema_version, "dna_chain_v1");
+    assert_eq!(loaded.express_chain.len(), 7);
+    assert_eq!(loaded.memory_chain.len(), 1);
+    assert_eq!(loaded.total_gene_count(), 8);
+    assert!(loaded.read_only);
+    assert!(!loaded.write_allowed);
+    assert!(
+        loaded
+            .express_chain
+            .iter()
+            .all(|record| record.chain_kind == DnaChainKind::Express)
+    );
+    assert!(
+        loaded
+            .memory_chain
+            .iter()
+            .all(|record| record.chain_kind == DnaChainKind::Memory)
+    );
+    assert!(
+        loaded
+            .memory_chain
+            .iter()
+            .all(|record| record.rollback_anchor_id == "genome:coding:stable")
+    );
+    assert!(
+        loaded
+            .memory_chain
+            .iter()
+            .all(|record| record.operator_approval_required && !record.applied)
+    );
+}
+
+#[test]
+fn dual_chain_schema_rejects_missing_gene_metadata() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::General);
+    let source = DnaGeneSourceEvidence::new(
+        DnaGeneEvidenceKind::SyntheticDefault,
+        "sha256:general-default",
+        "default profile genome scaffold",
+    );
+    let mut chain =
+        DnaGeneChain::preview_from_genome(&genome, "tenant:local", "session:metadata", source);
+
+    chain.express_chain[0].label.clear();
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::LabelMissing { .. })
+    ));
+
+    chain.express_chain[0].label = "restored label".to_owned();
+    chain.express_chain[0].source_evidence.source_hash.clear();
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::SourceEvidenceMissing { .. })
+    ));
+
+    chain.express_chain[0].source_evidence.source_hash = "sha256:restored".to_owned();
+    chain.express_chain[0].rollback_anchor_id.clear();
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::RollbackAnchorMissing { .. })
+    ));
+}
+
+#[test]
+fn dual_chain_schema_requires_privacy_gate_before_raw_prompt_marker() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::Writing);
+    let source = DnaGeneSourceEvidence::new(
+        DnaGeneEvidenceKind::Reflection,
+        "sha256:reflection",
+        "reflection evidence with prompt digest only",
+    )
+    .with_raw_prompt_marker();
+    let chain =
+        DnaGeneChain::preview_from_genome(&genome, "tenant:local", "session:privacy", source);
+
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::PrivacyGateRequired { .. })
+    ));
+}
+
+#[test]
+fn dual_chain_schema_rejects_write_enabled_preview_records() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::LongDocument);
+    let source = DnaGeneSourceEvidence::new(
+        DnaGeneEvidenceKind::SyntheticDefault,
+        "sha256:long-document-default",
+        "default long document genome scaffold",
+    );
+    let mut chain =
+        DnaGeneChain::preview_from_genome(&genome, "tenant:local", "session:writes", source);
+
+    chain.express_chain[0].admission_write_authorized = true;
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::WriteGateOpenInPreview)
+    ));
+
+    chain.express_chain[0].admission_write_authorized = false;
+    chain.express_chain[0].applied = true;
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::AppliedPreviewMutation)
+    ));
+
+    chain.express_chain[0].applied = false;
+    chain.read_only = false;
+    assert!(matches!(
+        chain.validate(),
+        Err(DnaGeneSchemaError::ReadOnlyPreviewRequired)
+    ));
+}
