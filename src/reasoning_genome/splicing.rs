@@ -214,6 +214,7 @@ pub struct DnaSplicerPolicy {
     pub max_exon_drift: f32,
     pub max_exon_privacy_risk: f32,
     pub max_segment_tokens: usize,
+    pub max_planned_overlap_tokens: usize,
     pub require_source_hash: bool,
 }
 
@@ -224,6 +225,7 @@ impl Default for DnaSplicerPolicy {
             max_exon_drift: 0.35,
             max_exon_privacy_risk: 0.20,
             max_segment_tokens: 512,
+            max_planned_overlap_tokens: 256,
             require_source_hash: true,
         }
     }
@@ -299,6 +301,24 @@ impl DnaSplicePreview {
             }
         }
         intents
+    }
+
+    pub fn finding_kinds(&self) -> Vec<String> {
+        let mut kinds = Vec::new();
+        for finding in &self.findings {
+            let kind = finding.kind.as_str().to_owned();
+            if !kinds.contains(&kind) {
+                kinds.push(kind);
+            }
+        }
+        kinds
+    }
+
+    pub fn proposal_ids(&self) -> Vec<String> {
+        self.mutation_plans
+            .iter()
+            .map(|plan| plan.id.clone())
+            .collect()
     }
 
     pub fn is_read_only_preview(&self) -> bool {
@@ -408,10 +428,20 @@ impl MutDetector {
         }
 
         let mut ordered = segments.iter().collect::<Vec<_>>();
-        ordered.sort_by_key(|segment| (segment.start_token, segment.end_token));
+        ordered.sort_by_key(|segment| {
+            (
+                segment.source.as_str(),
+                segment.source_hash.as_str(),
+                segment.start_token,
+                segment.end_token,
+            )
+        });
         for window in ordered.windows(2) {
             let left = window[0];
             let right = window[1];
+            if left.source != right.source || left.source_hash != right.source_hash {
+                continue;
+            }
             if right.start_token > left.end_token {
                 findings.push(MutationFinding::new(
                     &right.id,
@@ -424,13 +454,17 @@ impl MutDetector {
                     ),
                 ));
             } else if right.start_token < left.end_token {
+                let overlap_tokens = left.end_token.saturating_sub(right.start_token);
+                if overlap_tokens <= self.policy.max_planned_overlap_tokens {
+                    continue;
+                }
                 findings.push(MutationFinding::new(
                     &right.id,
                     GeneVariantKind::Insertion,
                     GeneVariantSeverity::Repair,
                     GeneScissorsIntent::Splice,
                     format!(
-                        "token overlap {}..{} between adjacent segments requires splice repair",
+                        "token overlap {}..{} exceeds planned overlap budget and requires splice repair",
                         right.start_token, left.end_token
                     ),
                 ));

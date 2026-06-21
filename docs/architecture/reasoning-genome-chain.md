@@ -137,14 +137,18 @@ Segments can be classified as:
 - `variant`: malformed, drifting, privacy-risk, or schema-invalid segment that
   must be isolated before reuse.
 
-The first Rust model is read-only. `DnaSplicer::preview` classifies segments,
-`MutDetector` reports insertion, deletion, truncation, stale-label, drift,
-privacy, KV-shape, schema, empty-range, and missing-source-hash variants as
-read-only findings, and `MutFixer` converts those findings into preview
-`MutationPlan` values. It can propose re-slicing with bounded overlap,
-relabeling stale metadata, quarantining malignant segments, regenerating from
-a stable anchor, or repairing invalid metadata, but it cannot apply the change
-or authorize persisted writes.
+The first Rust model is read-only and is now wired into inference evidence.
+`DnaSplicer::preview` classifies prompt chunks, retrieved memory, gist records,
+and runtime-KV exports into splice segments. `MutDetector` reports insertion,
+deletion, truncation, stale-label, drift, privacy, KV-shape, schema,
+empty-range, and missing-source-hash variants as read-only findings, and
+`MutFixer` converts those findings into preview `MutationPlan` values. It can
+propose re-slicing with bounded overlap, relabeling stale metadata,
+quarantining malignant segments, regenerating from a stable anchor, or
+repairing invalid metadata, but it cannot apply the change or authorize
+persisted writes. Trace schema and benchmark gates emit splice segment,
+exon/intron/variant, finding, proposal, and read-only status evidence so
+splicing cannot silently disappear from control-plane runs.
 
 ## Reference Mapping
 
@@ -228,6 +232,8 @@ details unless license review and attribution are explicit.
    gates for long-running genomes.
 9. Add read-only `GeneSegment`, `DnaSplicer`, `MutDetector`, and `MutFixer`
    models for exon/intron/variant classification and mutation-plan previews.
+10. Emit splice preview evidence from `InferenceOutcome`, trace schema, and
+    benchmark summaries without granting write access.
 
 ## Non-Goals
 

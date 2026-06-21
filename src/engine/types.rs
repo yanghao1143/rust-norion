@@ -12,7 +12,7 @@ use crate::kv_cache::{
     MemoryUpdateReport, RetentionReport,
 };
 use crate::process_reward::ProcessRewardReport;
-use crate::reasoning_genome::GenomeExpression;
+use crate::reasoning_genome::{DnaSplicePreview, GenomeExpression};
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReflectionReport, RuntimeDiagnostics};
 use crate::router::{GenerationMetrics, RouteBudget};
@@ -250,6 +250,7 @@ pub struct InferenceOutcome {
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
     pub reasoning_genome: GenomeExpression,
+    pub reasoning_genome_splice: DnaSplicePreview,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub retention_report: RetentionReport,

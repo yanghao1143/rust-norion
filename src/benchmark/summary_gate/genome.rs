@@ -42,6 +42,28 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_reasoning_genome_splice_cases) = gate.min_reasoning_genome_splice_cases {
+        let observed = summary.reasoning_genome_splice_cases();
+        if observed < min_reasoning_genome_splice_cases {
+            failures.push(format!(
+                "reasoning_genome_splice_cases {} below minimum {}",
+                observed, min_reasoning_genome_splice_cases
+            ));
+        }
+    }
+
+    if let Some(min_reasoning_genome_splice_device_profiles) =
+        gate.min_reasoning_genome_splice_device_profiles
+    {
+        let observed = summary.reasoning_genome_splice_device_profiles();
+        if observed < min_reasoning_genome_splice_device_profiles {
+            failures.push(format!(
+                "reasoning_genome_splice_device_profiles {} below minimum {}",
+                observed, min_reasoning_genome_splice_device_profiles
+            ));
+        }
+    }
+
     if let Some(min_gene_scissors_proposal_cases) = gate.min_gene_scissors_proposal_cases {
         let observed = summary.gene_scissors_proposal_cases();
         if observed < min_gene_scissors_proposal_cases {

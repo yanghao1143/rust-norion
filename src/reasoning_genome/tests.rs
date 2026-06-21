@@ -225,9 +225,11 @@ fn dna_splicer_classifies_exons_introns_and_variants_without_writes() {
 fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
     let policy = DnaSplicerPolicy {
         max_segment_tokens: 32,
+        max_planned_overlap_tokens: 4,
         ..DnaSplicerPolicy::default()
     };
     let detector = MutDetector::new(policy);
+    let source_hash = "sha256:prompt-chain";
     let segments = vec![
         GeneSegment::new(
             "segment:left",
@@ -236,7 +238,7 @@ fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
             0,
             16,
         )
-        .with_source_hash("sha256:left"),
+        .with_source_hash(source_hash),
         GeneSegment::new(
             "segment:gap",
             TaskProfile::LongDocument,
@@ -244,7 +246,7 @@ fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
             24,
             48,
         )
-        .with_source_hash("sha256:gap")
+        .with_source_hash(source_hash)
         .with_schema(true, false),
         GeneSegment::new(
             "segment:overlap",
@@ -253,7 +255,7 @@ fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
             40,
             90,
         )
-        .with_source_hash("sha256:overlap"),
+        .with_source_hash(source_hash),
     ];
 
     let findings = detector.detect(&segments);

@@ -27,12 +27,20 @@ fn summary_records_reasoning_genome_expression_evidence() {
 
     assert_eq!(summary.reasoning_genome_expression_cases(), 1);
     assert_eq!(summary.reasoning_genome_expression_device_profiles(), 1);
+    assert_eq!(summary.reasoning_genome_splice_cases(), 1);
+    assert_eq!(summary.reasoning_genome_splice_device_profiles(), 1);
     assert_eq!(summary.total_reasoning_genome_failures(), 0);
     assert!(summary.genome_evidence().total_genes >= 7);
+    assert!(summary.genome_evidence().total_splice_segments >= 1);
     assert!(
         summary
             .summary_line()
             .contains("reasoning_genome_expression_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_splice_cases=1")
     );
     assert!(
         summary
@@ -43,6 +51,8 @@ fn summary_records_reasoning_genome_expression_evidence() {
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_expression_cases: Some(1),
         min_reasoning_genome_expression_device_profiles: Some(1),
+        min_reasoning_genome_splice_cases: Some(1),
+        min_reasoning_genome_splice_device_profiles: Some(1),
         ..BenchmarkGate::default()
     });
 
@@ -55,6 +65,8 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
     let gate = BenchmarkGate {
         min_reasoning_genome_expression_cases: Some(1),
         min_reasoning_genome_expression_device_profiles: Some(1),
+        min_reasoning_genome_splice_cases: Some(1),
+        min_reasoning_genome_splice_device_profiles: Some(1),
         min_gene_scissors_proposal_cases: Some(1),
         min_gene_scissors_proposal_device_profiles: Some(1),
         ..BenchmarkGate::default()
@@ -66,6 +78,8 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
     for marker in [
         "reasoning_genome_expression_cases",
         "reasoning_genome_expression_device_profiles",
+        "reasoning_genome_splice_cases",
+        "reasoning_genome_splice_device_profiles",
         "gene_scissors_proposal_cases",
         "gene_scissors_proposal_device_profiles",
     ] {

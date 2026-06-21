@@ -304,7 +304,11 @@ modules, not external product dependencies:
   AlphaGenome, GeneFormer, CEPE, StreamingLLM, Candle, mistral.rs, and Rust AI
   gateways guide behavior specifications only. Code from projects with unclear
   or incompatible terms stays out of the core implementation unless
-  independently reviewed.
+  independently reviewed. Inference outcomes now emit read-only splice preview
+  evidence derived from prompt chunks, retrieved memory, gist records, and
+  runtime-KV exports; trace/schema and benchmark gates record splice segment,
+  exon/intron/variant, finding, proposal, and read-only status counts so this
+  control layer remains auditable before any future admission writer exists.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated

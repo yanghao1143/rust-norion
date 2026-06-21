@@ -26,6 +26,14 @@ impl BenchmarkSummary {
         self.genome_evidence.expression_device_profiles()
     }
 
+    pub fn reasoning_genome_splice_cases(&self) -> usize {
+        self.genome_evidence.splice_cases
+    }
+
+    pub fn reasoning_genome_splice_device_profiles(&self) -> usize {
+        self.genome_evidence.splice_device_profiles()
+    }
+
     pub fn gene_scissors_proposal_cases(&self) -> usize {
         self.genome_evidence.gene_scissors_proposal_cases
     }

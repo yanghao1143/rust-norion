@@ -2,9 +2,14 @@ use crate::adaptive_state::LiveInferenceEvolution;
 use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
+use crate::gist_memory::GistRecord;
+use crate::kv_cache::MemoryMatch;
 use crate::process_reward::{ProcessRewardInput, RewardAction};
-use crate::reasoning_genome::{GenomeExpressionInput, ReasoningGenome};
-use crate::recursive_scheduler::RecursiveScheduler;
+use crate::reasoning_genome::{
+    DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneSegment, GeneSegmentSource,
+    GenomeExpressionInput, ReasoningGenome,
+};
+use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::DraftToken;
 use crate::router::RoutingContext;
 use crate::runtime::RuntimeAdapterObservation;
@@ -331,6 +336,19 @@ impl NoironEngine {
                 drift_rollback: drift_report.rollback_adaptive,
                 runtime_kv_hold,
             });
+        let reasoning_genome_splice = reasoning_genome_splice_preview(
+            request.profile,
+            &recursive_schedule,
+            &used_memories,
+            &gist_records,
+            exported_runtime_kv_blocks,
+            report.quality,
+            drift_report.rollback_adaptive,
+            drift_report.penalize_used_memory,
+            drift_report.allow_runtime_kv_write,
+            runtime_kv_hold,
+            reasoning_genome.stable_anchor_id.clone(),
+        );
 
         let router_threshold_after = self.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
@@ -442,6 +460,7 @@ impl NoironEngine {
             drift_report,
             process_reward,
             reasoning_genome,
+            reasoning_genome_splice,
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
             retention_report,
@@ -494,5 +513,138 @@ impl NoironEngine {
             self.recursive_scheduler.overlap_tokens(),
             self.recursive_scheduler.merge_fan_in(),
         )
+    }
+}
+
+fn reasoning_genome_splice_preview(
+    profile: crate::hierarchy::TaskProfile,
+    recursive_schedule: &RecursiveSchedule,
+    used_memories: &[MemoryMatch],
+    gist_records: &[GistRecord],
+    exported_runtime_kv_blocks: usize,
+    quality: f32,
+    drift_rollback: bool,
+    penalize_used_memory: bool,
+    allow_runtime_kv_write: bool,
+    runtime_kv_hold: bool,
+    stable_anchor_id: String,
+) -> DnaSplicePreview {
+    let mut segments = Vec::new();
+    let prompt_source_hash = format!(
+        "prompt:{}:tokens={}",
+        profile_slug(profile),
+        recursive_schedule.prompt_tokens
+    );
+
+    for chunk in &recursive_schedule.chunks {
+        let drift_score = if drift_rollback { 0.72 } else { 0.04 };
+        let kv_residency = if chunk.index == 0 {
+            GeneKvResidency::Sink
+        } else {
+            GeneKvResidency::HotRecent
+        };
+        segments.push(
+            GeneSegment::new(
+                format!("segment:prompt:{}", chunk.index),
+                profile,
+                GeneSegmentSource::Prompt,
+                chunk.start_token,
+                chunk.end_token,
+            )
+            .with_source_hash(prompt_source_hash.clone())
+            .with_metadata(
+                format!("prompt chunk {}", chunk.index),
+                "bounded prompt context for splice preview",
+                format!("estimated_tokens={}", chunk.estimated_tokens),
+            )
+            .with_kv_residency(kv_residency)
+            .with_health(quality, drift_score, 0.0),
+        );
+    }
+
+    for memory in used_memories {
+        let drift_score = if penalize_used_memory { 0.42 } else { 0.05 };
+        segments.push(
+            GeneSegment::new(
+                format!("segment:memory:{}", memory.id),
+                profile,
+                GeneSegmentSource::SemanticMemory,
+                0,
+                1,
+            )
+            .with_source_hash(format!("memory:{}", memory.id))
+            .with_metadata(
+                format!("memory {}", memory.id),
+                "retrieved semantic memory evidence",
+                format!("similarity={:.3}", memory.similarity),
+            )
+            .with_kv_residency(GeneKvResidency::ColdEvidence)
+            .with_health(memory.strength, drift_score, 0.0),
+        );
+    }
+
+    for (index, gist) in gist_records.iter().enumerate() {
+        segments.push(
+            GeneSegment::new(
+                format!("segment:gist:{index}"),
+                profile,
+                GeneSegmentSource::GistMemory,
+                0,
+                gist.source_tokens.max(1),
+            )
+            .with_source_hash(format!(
+                "gist:{index}:{}:{}",
+                gist.level.as_str(),
+                gist.source_tokens
+            ))
+            .with_metadata(
+                format!("{} gist", gist.level.as_str()),
+                "candidate gist memory evidence",
+                format!("importance={:.3}", gist.importance),
+            )
+            .with_kv_residency(GeneKvResidency::PackedSynopsis)
+            .with_health(gist.importance, 0.04, 0.0),
+        );
+    }
+
+    if exported_runtime_kv_blocks > 0 {
+        let drift_score = if runtime_kv_hold || !allow_runtime_kv_write {
+            0.72
+        } else {
+            0.05
+        };
+        let privacy_risk = if !allow_runtime_kv_write { 0.24 } else { 0.0 };
+        segments.push(
+            GeneSegment::new(
+                "segment:runtime-kv",
+                profile,
+                GeneSegmentSource::RuntimeKv,
+                0,
+                exported_runtime_kv_blocks,
+            )
+            .with_source_hash(format!("runtime_kv:exported={exported_runtime_kv_blocks}"))
+            .with_metadata(
+                "runtime KV export",
+                "runtime-generated KV evidence awaiting admission gates",
+                format!("exported_blocks={exported_runtime_kv_blocks}"),
+            )
+            .with_kv_residency(if runtime_kv_hold {
+                GeneKvResidency::ColdEvidence
+            } else {
+                GeneKvResidency::HotRecent
+            })
+            .with_health((quality * 0.86).clamp(0.0, 1.0), drift_score, privacy_risk),
+        );
+    }
+
+    DnaSplicer::default().preview(profile, stable_anchor_id, segments)
+}
+
+fn profile_slug(profile: crate::hierarchy::TaskProfile) -> &'static str {
+    match profile {
+        crate::hierarchy::TaskProfile::General => "general",
+        crate::hierarchy::TaskProfile::Coding => "coding",
+        crate::hierarchy::TaskProfile::Writing => "writing",
+        crate::hierarchy::TaskProfile::LongDocument => "long_document",
     }
 }

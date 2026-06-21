@@ -26,6 +26,21 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let write_allowed = extract_json_bool_field(genome, "write_allowed");
     let mutation_applied = extract_json_bool_field(genome, "mutation_applied");
     let youth_pressure = extract_json_f32_field(genome, "youth_pressure").unwrap_or(f32::NAN);
+    let splice_segments = extract_json_usize_field(genome, "splice_segments").unwrap_or(0);
+    let splice_exons = extract_json_usize_field(genome, "splice_exons").unwrap_or(0);
+    let splice_introns = extract_json_usize_field(genome, "splice_introns").unwrap_or(0);
+    let splice_variants = extract_json_usize_field(genome, "splice_variants").unwrap_or(0);
+    let splice_findings = extract_json_usize_field(genome, "splice_findings").unwrap_or(0);
+    let splice_finding_kinds =
+        extract_json_string_array_field(genome, "splice_finding_kinds").unwrap_or_default();
+    let splice_mutation_intents =
+        extract_json_string_array_field(genome, "splice_mutation_intents").unwrap_or_default();
+    let splice_proposals = extract_json_usize_field(genome, "splice_proposals").unwrap_or(0);
+    let splice_proposal_ids =
+        extract_json_string_array_field(genome, "splice_proposal_ids").unwrap_or_default();
+    let splice_read_only = extract_json_bool_field(genome, "splice_read_only");
+    let splice_write_allowed = extract_json_bool_field(genome, "splice_write_allowed");
+    let splice_applied = extract_json_bool_field(genome, "splice_applied");
 
     if genome_id.trim().is_empty() || !genome_id.starts_with("genome:") {
         failures.push("reasoning_genome genome_id must be a non-empty genome: id".to_owned());
@@ -88,6 +103,49 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
         failures.push(format!(
             "reasoning_genome youth_pressure {youth_pressure:.6} must stay within 0.0..=1.0"
         ));
+    }
+    if splice_segments != splice_exons + splice_introns + splice_variants {
+        failures.push(format!(
+            "reasoning_genome splice_segments {splice_segments} does not match exons+introns+variants {}",
+            splice_exons + splice_introns + splice_variants
+        ));
+    }
+    if splice_variants > 0 && splice_findings == 0 {
+        failures.push("reasoning_genome splice_variants require splice_findings".to_owned());
+    }
+    if splice_findings > 0 && splice_finding_kinds.is_empty() {
+        failures.push("reasoning_genome splice_findings require splice_finding_kinds".to_owned());
+    }
+    if splice_proposal_ids.len() != splice_proposals {
+        failures.push(format!(
+            "reasoning_genome splice_proposal_ids {} do not match splice_proposals {splice_proposals}",
+            splice_proposal_ids.len()
+        ));
+    }
+    if splice_findings > 0 && splice_proposals == 0 {
+        failures.push("reasoning_genome splice_findings require splice_proposals".to_owned());
+    }
+    if splice_proposals > 0 && splice_mutation_intents.is_empty() {
+        failures
+            .push("reasoning_genome splice_proposals require splice_mutation_intents".to_owned());
+    }
+    if splice_variants > 0 {
+        if splice_finding_kinds
+            .iter()
+            .any(|kind| matches!(kind.as_str(), "drift" | "privacy"))
+        {
+            require_intent(&mut failures, &splice_mutation_intents, "quarantine");
+            require_intent(&mut failures, &splice_mutation_intents, "regenerate");
+        }
+    }
+    if splice_read_only != Some(true) {
+        failures.push("reasoning_genome splice_read_only must be true".to_owned());
+    }
+    if splice_write_allowed != Some(false) {
+        failures.push("reasoning_genome splice_write_allowed must be false".to_owned());
+    }
+    if splice_applied != Some(false) {
+        failures.push("reasoning_genome splice_applied must be false".to_owned());
     }
 
     failures

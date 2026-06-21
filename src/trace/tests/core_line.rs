@@ -77,6 +77,16 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"mutation_intents\":"));
     assert!(line.contains("\"proposal_ids\":"));
     assert!(line.contains("\"youth_pressure\":"));
+    assert!(line.contains("\"splice_segments\":"));
+    assert!(line.contains("\"splice_exons\":"));
+    assert!(line.contains("\"splice_introns\":"));
+    assert!(line.contains("\"splice_variants\":"));
+    assert!(line.contains("\"splice_findings\":"));
+    assert!(line.contains("\"splice_finding_kinds\":"));
+    assert!(line.contains("\"splice_mutation_intents\":"));
+    assert!(line.contains("\"splice_proposals\":"));
+    assert!(line.contains("\"splice_proposal_ids\":"));
+    assert!(line.contains("\"splice_read_only\":"));
     assert!(line.contains("\"drift\":"));
     assert!(line.contains("\"process_reward\":"));
     assert!(line.contains("\"auto_replay\":"));
@@ -253,6 +263,36 @@ fn trace_schema_gate_rejects_reasoning_genome_applied_preview() {
         failures
             .iter()
             .any(|failure| failure.contains("reasoning_genome mutation_applied")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_splice_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome splice write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome splice write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"splice_write_allowed\":false",
+        "\"splice_write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome splice_write_allowed")),
         "{failures:?}"
     );
 }
