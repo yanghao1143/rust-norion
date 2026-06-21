@@ -152,3 +152,164 @@ fn rollback_pressure_quarantines_and_regenerates_active_safety_gene() {
     assert!(intents.contains(&"rollback".to_owned()));
     assert!(expression.is_read_only_preview());
 }
+
+#[test]
+fn dna_splicer_classifies_exons_introns_and_variants_without_writes() {
+    let segments = vec![
+        GeneSegment::new(
+            "segment:good-retrieval",
+            TaskProfile::Coding,
+            GeneSegmentSource::SemanticMemory,
+            0,
+            64,
+        )
+        .with_source_hash("sha256:good")
+        .with_metadata(
+            "compiler evidence",
+            "carry Rust compiler feedback into retrieval posture",
+            "bounded compiler feedback",
+        )
+        .with_kv_residency(GeneKvResidency::HotRecent)
+        .with_health(0.91, 0.04, 0.0),
+        GeneSegment::new(
+            "segment:weak-context",
+            TaskProfile::Coding,
+            GeneSegmentSource::GistMemory,
+            64,
+            96,
+        )
+        .with_source_hash("sha256:weak")
+        .with_metadata(
+            "low value gist",
+            "kept as cold evidence unless retrieval quality improves",
+            "low value gist",
+        )
+        .with_kv_residency(GeneKvResidency::ColdEvidence)
+        .with_health(0.22, 0.08, 0.01),
+        GeneSegment::new(
+            "segment:private-drift",
+            TaskProfile::Coding,
+            GeneSegmentSource::RuntimeKv,
+            96,
+            128,
+        )
+        .with_source_hash("sha256:private")
+        .with_metadata(
+            "drifting runtime kv",
+            "must be isolated before KV import",
+            "runtime KV drift",
+        )
+        .with_kv_residency(GeneKvResidency::Sink)
+        .with_health(0.78, 0.72, 0.61),
+    ];
+
+    let preview =
+        DnaSplicer::default().preview(TaskProfile::Coding, "genome:coding:stable", segments);
+
+    let intents = preview.mutation_intents();
+    assert_eq!(preview.exon_count(), 1);
+    assert_eq!(preview.intron_count(), 1);
+    assert_eq!(preview.variant_count(), 1);
+    assert!(preview.findings.iter().any(|finding| {
+        finding.kind == GeneVariantKind::Drift && finding.segment_id == "segment:private-drift"
+    }));
+    assert!(preview.findings.iter().any(|finding| {
+        finding.kind == GeneVariantKind::Privacy && finding.segment_id == "segment:private-drift"
+    }));
+    assert!(intents.contains(&"quarantine".to_owned()));
+    assert!(intents.contains(&"regenerate".to_owned()));
+    assert!(preview.is_read_only_preview());
+}
+
+#[test]
+fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
+    let policy = DnaSplicerPolicy {
+        max_segment_tokens: 32,
+        ..DnaSplicerPolicy::default()
+    };
+    let detector = MutDetector::new(policy);
+    let segments = vec![
+        GeneSegment::new(
+            "segment:left",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::Prompt,
+            0,
+            16,
+        )
+        .with_source_hash("sha256:left"),
+        GeneSegment::new(
+            "segment:gap",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::Prompt,
+            24,
+            48,
+        )
+        .with_source_hash("sha256:gap")
+        .with_schema(true, false),
+        GeneSegment::new(
+            "segment:overlap",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::Prompt,
+            40,
+            90,
+        )
+        .with_source_hash("sha256:overlap"),
+    ];
+
+    let findings = detector.detect(&segments);
+
+    assert!(findings.iter().any(|finding| {
+        finding.kind == GeneVariantKind::Deletion && finding.segment_id == "segment:gap"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == GeneVariantKind::Insertion && finding.segment_id == "segment:overlap"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == GeneVariantKind::KvShape && finding.segment_id == "segment:gap"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == GeneVariantKind::Truncation && finding.segment_id == "segment:overlap"
+    }));
+}
+
+#[test]
+fn mut_fixer_maps_stale_label_to_relabel_and_drift_to_quarantine_regenerate() {
+    let detector = MutDetector::default();
+    let segments = vec![
+        GeneSegment::new(
+            "segment:stale",
+            TaskProfile::General,
+            GeneSegmentSource::GenomeLedger,
+            0,
+            16,
+        )
+        .with_source_hash("sha256:stale")
+        .with_metadata("", "", "stale segment metadata"),
+        GeneSegment::new(
+            "segment:drift",
+            TaskProfile::General,
+            GeneSegmentSource::RuntimeKv,
+            16,
+            32,
+        )
+        .with_source_hash("sha256:drift")
+        .with_health(0.82, 0.88, 0.03),
+    ];
+    let findings = detector.detect(&segments);
+
+    let plans = MutFixer.mutation_plans(&findings, "genome:general:stable");
+    let intents = plans
+        .iter()
+        .map(|plan| (plan.target_gene_id.as_str(), plan.intent))
+        .collect::<Vec<_>>();
+
+    assert!(intents.contains(&("segment:stale", GeneScissorsIntent::Relabel)));
+    assert!(intents.contains(&("segment:drift", GeneScissorsIntent::Quarantine)));
+    assert!(intents.contains(&("segment:drift", GeneScissorsIntent::Regenerate)));
+    assert!(
+        plans
+            .iter()
+            .all(|plan| plan.rollback_anchor_id == "genome:general:stable")
+    );
+    assert!(plans.iter().all(MutationPlan::is_read_only_preview));
+}

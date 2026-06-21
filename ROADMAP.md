@@ -292,18 +292,19 @@ modules, not external product dependencies:
   regenerated genes must come from stable anchors or high-fitness siblings
   rather than from raw private prompts.
 - DNA-inspired splicing and segment repair:
-  The next genome layer should add an express-chain / memory-chain split:
-  active genes stay small and trace-visible, while disk-backed memory-chain
-  evidence keeps source experience ids, KV/gist ids, stable anchors, fitness,
-  validation gates, and rollback links. A future `dna_splicer` should classify
-  `GeneSegment` records as exon, intron, or variant; `MutDetector` should
-  report stale labels, drift, privacy, schema, truncation, insertion/deletion,
-  and KV-shape variants; `MutFixer` should emit read-only mutation plans for
-  relabel, quarantine, repair, regenerate, or rollback. Public references such
-  as Evo/Evo2, SpliceBERT, SpliceTransformer, AlphaGenome, GeneFormer, CEPE,
-  StreamingLLM, Candle, mistral.rs, and Rust AI gateways guide behavior
-  specifications only. Code from projects with unclear or incompatible terms
-  stays out of the core implementation unless independently reviewed.
+  The genome layer now starts an express-chain / memory-chain split: active
+  genes stay small and trace-visible, while disk-backed memory-chain evidence
+  keeps source experience ids, KV/gist ids, stable anchors, fitness,
+  validation gates, and rollback links. The read-only `DnaSplicer` classifies
+  `GeneSegment` records as exon, intron, or variant; `MutDetector` reports
+  stale labels, drift, privacy, schema, truncation, insertion/deletion,
+  empty-range, missing-source-hash, and KV-shape variants; `MutFixer` emits
+  read-only mutation plans for relabel, quarantine, repair, regenerate, or
+  splice. Public references such as Evo/Evo2, SpliceBERT, SpliceTransformer,
+  AlphaGenome, GeneFormer, CEPE, StreamingLLM, Candle, mistral.rs, and Rust AI
+  gateways guide behavior specifications only. Code from projects with unclear
+  or incompatible terms stays out of the core implementation unless
+  independently reviewed.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated

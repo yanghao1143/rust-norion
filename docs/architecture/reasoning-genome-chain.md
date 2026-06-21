@@ -126,9 +126,9 @@ rollback.
 
 ## Splicing and Variant Repair
 
-`dna_splicer` should treat long context and memory as `GeneSegment` records:
-token range, position anchors, source hash, profile, tenant/session scope,
-semantic gist, KV residency hint, fitness score, and validation status.
+`dna_splicer` treats long context and memory as `GeneSegment` records: token
+range, source hash, profile, tenant/session scope, semantic gist, KV residency
+hint, fitness score, drift score, privacy risk, and validation status.
 Segments can be classified as:
 
 - `exon`: useful segment allowed into expression or KV prefill.
@@ -137,12 +137,14 @@ Segments can be classified as:
 - `variant`: malformed, drifting, privacy-risk, or schema-invalid segment that
   must be isolated before reuse.
 
-`MutDetector` should report insertion, deletion, truncation, stale-label,
-drift, privacy, KV-shape, and schema variants as read-only findings.
-`MutFixer` should not write directly. It should produce `MutationPlan`
-proposals such as re-slice with more overlap, relabel an aged gene, quarantine
-a malignant segment, restore an attention sink, regenerate from a stable
-anchor, or roll back to the last admitted chain.
+The first Rust model is read-only. `DnaSplicer::preview` classifies segments,
+`MutDetector` reports insertion, deletion, truncation, stale-label, drift,
+privacy, KV-shape, schema, empty-range, and missing-source-hash variants as
+read-only findings, and `MutFixer` converts those findings into preview
+`MutationPlan` values. It can propose re-slicing with bounded overlap,
+relabeling stale metadata, quarantining malignant segments, regenerating from
+a stable anchor, or repairing invalid metadata, but it cannot apply the change
+or authorize persisted writes.
 
 ## Reference Mapping
 
@@ -224,6 +226,8 @@ details unless license review and attribution are explicit.
    and local-tool workflows.
 8. Add aging relabel, malignant quarantine/cut, regeneration, and youth-pressure
    gates for long-running genomes.
+9. Add read-only `GeneSegment`, `DnaSplicer`, `MutDetector`, and `MutFixer`
+   models for exon/intron/variant classification and mutation-plan previews.
 
 ## Non-Goals
 
