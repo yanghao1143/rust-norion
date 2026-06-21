@@ -19,6 +19,12 @@ pub struct BenchmarkRoutingEvidence {
     pub task_hierarchy_route_pressure_milli: usize,
     pub task_hierarchy_compute_reduction_milli: usize,
     pub task_hierarchy_modes: Vec<String>,
+    pub compute_budget_cases: usize,
+    pub compute_budget_low_value_skipped: usize,
+    pub compute_budget_kv_lookups_skipped: usize,
+    pub compute_budget_validation_cost_tokens: usize,
+    pub compute_budget_saved_tokens: usize,
+    pub compute_budget_avoided_tokens: usize,
     pub failures: Vec<String>,
     pub(super) devices: Vec<DeviceClass>,
     pub(super) saved_token_devices: Vec<DeviceClass>,
@@ -123,6 +129,45 @@ impl BenchmarkRoutingEvidence {
         {
             self.failures.push(format!(
                 "{}:{} task_hierarchy mutation history must not write durable state",
+                device.as_str(),
+                case.name
+            ));
+        }
+
+        let budget = &outcome.compute_budget_schedule;
+        self.compute_budget_cases = self.compute_budget_cases.saturating_add(1);
+        self.compute_budget_low_value_skipped = self
+            .compute_budget_low_value_skipped
+            .saturating_add(budget.low_value_skipped);
+        self.compute_budget_kv_lookups_skipped = self
+            .compute_budget_kv_lookups_skipped
+            .saturating_add(budget.kv_lookups_skipped);
+        self.compute_budget_validation_cost_tokens = self
+            .compute_budget_validation_cost_tokens
+            .saturating_add(budget.validation_cost_tokens);
+        self.compute_budget_saved_tokens = self
+            .compute_budget_saved_tokens
+            .saturating_add(budget.saved_tokens);
+        self.compute_budget_avoided_tokens = self
+            .compute_budget_avoided_tokens
+            .saturating_add(budget.wasted_compute_avoided_tokens);
+        if !budget.anchors_preserved() {
+            self.failures.push(format!(
+                "{}:{} compute_budget must preserve correctness anchors",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !budget.budget_accounting_matches() {
+            self.failures.push(format!(
+                "{}:{} compute_budget token accounting is inconsistent",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !budget.read_only || budget.write_allowed || budget.applied {
+            self.failures.push(format!(
+                "{}:{} compute_budget must remain read-only/report-only",
                 device.as_str(),
                 case.name
             ));

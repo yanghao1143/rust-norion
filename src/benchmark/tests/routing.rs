@@ -18,6 +18,12 @@ fn gate_accepts_adaptive_routing_evidence() {
             task_hierarchy_route_pressure_milli: 780,
             task_hierarchy_compute_reduction_milli: 420,
             task_hierarchy_modes: vec!["rust_coding".to_owned(), "benchmark_analysis".to_owned()],
+            compute_budget_cases: 2,
+            compute_budget_low_value_skipped: 1,
+            compute_budget_kv_lookups_skipped: 2,
+            compute_budget_validation_cost_tokens: 96,
+            compute_budget_saved_tokens: 64,
+            compute_budget_avoided_tokens: 96,
             devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             saved_token_devices: vec![DeviceClass::CpuOnly],
             ..BenchmarkRoutingEvidence::default()
@@ -41,6 +47,7 @@ fn gate_accepts_adaptive_routing_evidence() {
         min_task_hierarchy_modes: Some(2),
         min_task_hierarchy_mutation_records: Some(6),
         min_task_hierarchy_compute_reduction_milli: Some(100),
+        min_compute_budget_avoided_tokens: Some(64),
         ..BenchmarkGate::default()
     };
 
@@ -64,6 +71,12 @@ fn gate_accepts_adaptive_routing_evidence() {
             .summary_line()
             .contains("task_hierarchy_compute_reduction_milli=420")
     );
+    assert_eq!(summary.total_compute_budget_avoided_tokens(), 96);
+    assert!(
+        summary
+            .summary_line()
+            .contains("compute_budget_avoided_tokens=96")
+    );
 }
 
 #[test]
@@ -78,6 +91,7 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         min_task_hierarchy_modes: Some(1),
         min_task_hierarchy_mutation_records: Some(1),
         min_task_hierarchy_compute_reduction_milli: Some(1),
+        min_compute_budget_avoided_tokens: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -93,6 +107,7 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         "task_hierarchy_modes",
         "task_hierarchy_mutation_records",
         "task_hierarchy_compute_reduction_milli",
+        "compute_budget_avoided_tokens",
     ] {
         assert!(
             report

@@ -68,4 +68,28 @@ impl BenchmarkSummary {
     pub fn total_task_hierarchy_compute_reduction_milli(&self) -> usize {
         self.routing_evidence.task_hierarchy_compute_reduction_milli
     }
+
+    pub fn compute_budget_cases(&self) -> usize {
+        self.routing_evidence.compute_budget_cases
+    }
+
+    pub fn total_compute_budget_low_value_skipped(&self) -> usize {
+        self.routing_evidence.compute_budget_low_value_skipped
+    }
+
+    pub fn total_compute_budget_kv_lookups_skipped(&self) -> usize {
+        self.routing_evidence.compute_budget_kv_lookups_skipped
+    }
+
+    pub fn total_compute_budget_validation_cost_tokens(&self) -> usize {
+        self.routing_evidence.compute_budget_validation_cost_tokens
+    }
+
+    pub fn total_compute_budget_saved_tokens(&self) -> usize {
+        self.routing_evidence.compute_budget_saved_tokens
+    }
+
+    pub fn total_compute_budget_avoided_tokens(&self) -> usize {
+        self.routing_evidence.compute_budget_avoided_tokens
+    }
 }

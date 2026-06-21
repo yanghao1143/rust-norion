@@ -87,6 +87,7 @@ pub fn trace_json_line_with_case(
     let adaptive_route_actions = outcome.adaptive_route_plan.action_summaries();
     let adaptive_route_selected_routes = outcome.adaptive_route_plan.selected_route_summaries();
     let adaptive_route_score_summaries = outcome.adaptive_route_plan.score_summaries(12);
+    let compute_budget_notes = outcome.compute_budget_schedule.notes.clone();
     let task_hierarchy_mutation_summaries = outcome.task_hierarchy_plan.mutation_summaries(8);
 
     format!(
@@ -103,6 +104,7 @@ pub fn trace_json_line_with_case(
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
          \"adaptive_routing\":{{\"candidates\":{},\"include\":{},\"compress\":{},\"defer\":{},\"skip\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"actions\":{},\"selected_routes\":{},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
+         \"compute_budget\":{{\"budget\":\"{}\",\"base_threshold\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"route_fanout_before\":{},\"route_fanout_after\":{},\"candidate_count\":{},\"selected_candidates\":{},\"anchor_count\":{},\"anchors_preserved\":{},\"anchors_preserved_count\":{},\"low_value_skipped\":{},\"kv_lookup_budget\":{},\"kv_lookups_planned\":{},\"kv_lookups_skipped\":{},\"reflection_pass_budget\":{},\"validation_run_budget\":{},\"validation_cost_tokens\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"estimated_budget_tokens\":{},\"estimated_spent_tokens\":{},\"wasted_compute_avoided_tokens\":{},\"fallback_triggered\":{},\"notes\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
@@ -165,6 +167,37 @@ pub fn trace_json_line_with_case(
         outcome.adaptive_route_plan.read_only,
         outcome.adaptive_route_plan.write_allowed,
         outcome.adaptive_route_plan.applied,
+        outcome.compute_budget_schedule.compute_budget.as_str(),
+        outcome.compute_budget_schedule.base_threshold,
+        outcome.compute_budget_schedule.threshold_after,
+        outcome.compute_budget_schedule.threshold_delta,
+        outcome.compute_budget_schedule.route_fanout_before,
+        outcome.compute_budget_schedule.route_fanout_after,
+        outcome.compute_budget_schedule.candidate_count,
+        outcome.compute_budget_schedule.selected_candidates,
+        outcome.compute_budget_schedule.anchor_count,
+        outcome.compute_budget_schedule.anchors_preserved(),
+        outcome.compute_budget_schedule.anchors_preserved,
+        outcome.compute_budget_schedule.low_value_skipped,
+        outcome.compute_budget_schedule.kv_lookup_budget,
+        outcome.compute_budget_schedule.kv_lookups_planned,
+        outcome.compute_budget_schedule.kv_lookups_skipped,
+        outcome.compute_budget_schedule.reflection_pass_budget,
+        outcome.compute_budget_schedule.validation_run_budget,
+        outcome.compute_budget_schedule.validation_cost_tokens,
+        outcome.compute_budget_schedule.input_tokens,
+        outcome.compute_budget_schedule.retained_tokens,
+        outcome.compute_budget_schedule.saved_tokens,
+        outcome.compute_budget_schedule.estimated_budget_tokens,
+        outcome.compute_budget_schedule.estimated_spent_tokens,
+        outcome
+            .compute_budget_schedule
+            .wasted_compute_avoided_tokens,
+        outcome.compute_budget_schedule.fallback_triggered,
+        string_array_json(&compute_budget_notes),
+        outcome.compute_budget_schedule.read_only,
+        outcome.compute_budget_schedule.write_allowed,
+        outcome.compute_budget_schedule.applied,
         outcome.task_hierarchy_plan.mode.as_str(),
         outcome.task_hierarchy_plan.signals.language.as_str(),
         outcome.task_hierarchy_plan.signals.coding_intent,

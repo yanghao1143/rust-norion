@@ -141,6 +141,8 @@ fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
     let report = evaluate_trace_schema_jsonl(&path).unwrap();
     let first_routing = json_object_after_field(&first_line, "adaptive_routing").unwrap();
     let second_routing = json_object_after_field(&second_line, "adaptive_routing").unwrap();
+    let first_budget = json_object_after_field(&first_line, "compute_budget").unwrap();
+    let second_budget = json_object_after_field(&second_line, "compute_budget").unwrap();
     let first_task = json_object_after_field(&first_line, "task_hierarchy").unwrap();
     let second_task = json_object_after_field(&second_line, "task_hierarchy").unwrap();
 
@@ -180,6 +182,18 @@ fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
             .saturating_add(trace_milli(
                 extract_json_f32_field(second_task, "compute_reduction").unwrap(),
             ));
+    let expected_budget_selected = extract_json_usize_field(first_budget, "selected_candidates")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_budget, "selected_candidates").unwrap());
+    let expected_budget_saved = extract_json_usize_field(first_budget, "saved_tokens")
+        .unwrap()
+        .saturating_add(extract_json_usize_field(second_budget, "saved_tokens").unwrap());
+    let expected_budget_avoided =
+        extract_json_usize_field(first_budget, "wasted_compute_avoided_tokens")
+            .unwrap()
+            .saturating_add(
+                extract_json_usize_field(second_budget, "wasted_compute_avoided_tokens").unwrap(),
+            );
 
     assert!(report.passed, "{:?}", report.failures);
     assert_eq!(report.checked_lines, 2);
@@ -223,6 +237,18 @@ fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
         report.task_hierarchy_compute_reduction_milli,
         expected_compute_reduction_milli
     );
+    assert_eq!(report.compute_budget_events, 2);
+    assert_eq!(
+        report.compute_budget_selected_candidates,
+        expected_budget_selected
+    );
+    assert_eq!(report.compute_budget_saved_tokens, expected_budget_saved);
+    assert_eq!(
+        report.compute_budget_avoided_tokens,
+        expected_budget_avoided
+    );
+    assert_eq!(report.compute_budget_write_allowed, 0);
+    assert_eq!(report.compute_budget_applied, 0);
     assert!(
         report
             .summary_line()
@@ -233,6 +259,7 @@ fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
             .summary_line()
             .contains("task_hierarchy_mutation_records=")
     );
+    assert!(report.summary_line().contains("compute_budget_events=2"));
     cleanup(path);
 }
 

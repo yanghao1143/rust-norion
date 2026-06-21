@@ -46,6 +46,37 @@ fn trace_schema_gate_rejects_memory_residency_write_enabled() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_compute_budget_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace compute budget write mismatch", TaskProfile::Coding)
+            .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace compute budget write mismatch",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "compute_budget",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("compute_budget write_allowed must be false")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_memory_feedback_count_mismatch() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

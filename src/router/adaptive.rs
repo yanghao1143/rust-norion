@@ -1,5 +1,6 @@
 use crate::hierarchy::TaskProfile;
 
+use super::budget::{BudgetedAdaptiveRoutingPlan, ComputeBudgetContext, ComputeBudgetScheduler};
 use super::scoring::choose_route;
 use super::types::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,
@@ -62,6 +63,20 @@ impl AdaptiveRoutingPlanner {
             .collect::<Vec<_>>();
         decisions.sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
         AdaptiveRoutingPlan::from_decisions(profile, threshold, decisions)
+    }
+
+    pub fn plan_with_compute_budget(
+        &self,
+        profile: TaskProfile,
+        threshold: f32,
+        context: RoutingContext,
+        budget: ComputeBudgetContext,
+        candidates: Vec<AdaptiveRouteCandidate>,
+    ) -> BudgetedAdaptiveRoutingPlan {
+        let scheduler = ComputeBudgetScheduler::new();
+        let threshold_after = scheduler.threshold_for(threshold, context, budget, &candidates);
+        let plan = self.plan(profile, threshold_after, context, candidates.clone());
+        scheduler.schedule(threshold, context, budget, &candidates, plan)
     }
 
     fn decide(

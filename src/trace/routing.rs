@@ -105,6 +105,174 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(budget) = json_object_after_field(line, "compute_budget") else {
+        failures.push("compute_budget object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let task = json_object_after_field(line, "task_hierarchy");
+    let routing = json_object_after_field(line, "adaptive_routing");
+    let compute_budget = extract_json_string_field(budget, "budget").unwrap_or_default();
+    let task_compute_budget = task
+        .and_then(|task| extract_json_string_field(task, "compute_budget"))
+        .unwrap_or_default();
+    let base_threshold = extract_json_f32_field(budget, "base_threshold").unwrap_or(f32::NAN);
+    let threshold_after = extract_json_f32_field(budget, "threshold_after").unwrap_or(f32::NAN);
+    let threshold_delta = extract_json_f32_field(budget, "threshold_delta").unwrap_or(f32::NAN);
+    let route_fanout_before = extract_json_usize_field(budget, "route_fanout_before").unwrap_or(0);
+    let route_fanout_after = extract_json_usize_field(budget, "route_fanout_after").unwrap_or(0);
+    let candidate_count = extract_json_usize_field(budget, "candidate_count").unwrap_or(0);
+    let selected_candidates = extract_json_usize_field(budget, "selected_candidates").unwrap_or(0);
+    let anchor_count = extract_json_usize_field(budget, "anchor_count").unwrap_or(0);
+    let anchors_preserved = extract_json_bool_field(budget, "anchors_preserved");
+    let anchors_preserved_count =
+        extract_json_usize_field(budget, "anchors_preserved_count").unwrap_or(0);
+    let low_value_skipped = extract_json_usize_field(budget, "low_value_skipped").unwrap_or(0);
+    let kv_lookup_budget = extract_json_usize_field(budget, "kv_lookup_budget").unwrap_or(0);
+    let kv_lookups_planned = extract_json_usize_field(budget, "kv_lookups_planned").unwrap_or(0);
+    let kv_lookups_skipped = extract_json_usize_field(budget, "kv_lookups_skipped").unwrap_or(0);
+    let reflection_pass_budget =
+        extract_json_usize_field(budget, "reflection_pass_budget").unwrap_or(0);
+    let validation_run_budget =
+        extract_json_usize_field(budget, "validation_run_budget").unwrap_or(0);
+    let validation_cost_tokens =
+        extract_json_usize_field(budget, "validation_cost_tokens").unwrap_or(0);
+    let input_tokens = extract_json_usize_field(budget, "input_tokens").unwrap_or(0);
+    let retained_tokens = extract_json_usize_field(budget, "retained_tokens").unwrap_or(0);
+    let saved_tokens = extract_json_usize_field(budget, "saved_tokens").unwrap_or(0);
+    let estimated_budget_tokens =
+        extract_json_usize_field(budget, "estimated_budget_tokens").unwrap_or(0);
+    let estimated_spent_tokens =
+        extract_json_usize_field(budget, "estimated_spent_tokens").unwrap_or(0);
+    let wasted_compute_avoided_tokens =
+        extract_json_usize_field(budget, "wasted_compute_avoided_tokens").unwrap_or(0);
+    let fallback_triggered = extract_json_bool_field(budget, "fallback_triggered");
+    let notes = extract_json_string_array_field(budget, "notes").unwrap_or_default();
+    let read_only = extract_json_bool_field(budget, "read_only");
+    let write_allowed = extract_json_bool_field(budget, "write_allowed");
+    let applied = extract_json_bool_field(budget, "applied");
+
+    if !matches!(compute_budget.as_str(), "low" | "normal" | "expanded") {
+        failures.push(format!(
+            "compute_budget budget {compute_budget} is not recognized"
+        ));
+    }
+    if !task_compute_budget.is_empty() && compute_budget != task_compute_budget {
+        failures.push(format!(
+            "compute_budget budget {compute_budget} does not match task_hierarchy compute_budget {task_compute_budget}"
+        ));
+    }
+    for (name, value) in [
+        ("base_threshold", base_threshold),
+        ("threshold_after", threshold_after),
+        ("threshold_delta", threshold_delta),
+    ] {
+        if !unit_score(value) {
+            failures.push(format!(
+                "compute_budget {name} {value:.6} must stay within 0.0..=1.0"
+            ));
+        }
+    }
+    if route_fanout_before == 0 || route_fanout_after == 0 {
+        failures.push("compute_budget route fanout values must be positive".to_owned());
+    }
+    if selected_candidates > candidate_count {
+        failures.push(format!(
+            "compute_budget selected_candidates {selected_candidates} exceeds candidate_count {candidate_count}"
+        ));
+    }
+    if anchors_preserved_count > anchor_count {
+        failures.push(format!(
+            "compute_budget anchors_preserved_count {anchors_preserved_count} exceeds anchor_count {anchor_count}"
+        ));
+    }
+    if anchors_preserved != Some(anchors_preserved_count == anchor_count) {
+        failures.push("compute_budget anchors_preserved boolean/count mismatch".to_owned());
+    }
+    if retained_tokens.saturating_add(saved_tokens) != input_tokens {
+        failures.push(format!(
+            "compute_budget retained+saved {} does not match input_tokens {input_tokens}",
+            retained_tokens.saturating_add(saved_tokens)
+        ));
+    }
+    if wasted_compute_avoided_tokens
+        > saved_tokens.saturating_add(kv_lookups_skipped.saturating_mul(16))
+    {
+        failures.push(format!(
+            "compute_budget wasted_compute_avoided_tokens {wasted_compute_avoided_tokens} exceeds saved token evidence"
+        ));
+    }
+    if estimated_spent_tokens > estimated_budget_tokens {
+        failures.push(format!(
+            "compute_budget estimated_spent_tokens {estimated_spent_tokens} exceeds estimated_budget_tokens {estimated_budget_tokens}"
+        ));
+    }
+    if kv_lookups_planned > kv_lookup_budget {
+        failures.push(format!(
+            "compute_budget kv_lookups_planned {kv_lookups_planned} exceeds kv_lookup_budget {kv_lookup_budget}"
+        ));
+    }
+    if reflection_pass_budget == 0 {
+        failures.push("compute_budget reflection_pass_budget must be positive".to_owned());
+    }
+    if validation_run_budget > 0 && validation_cost_tokens == 0 {
+        failures.push("compute_budget validation runs require validation_cost_tokens".to_owned());
+    }
+    if low_value_skipped > 0
+        && !notes
+            .iter()
+            .any(|note| note == "low_value_candidates_pruned_by_fanout_budget")
+    {
+        failures.push("compute_budget low_value_skipped requires pruning note".to_owned());
+    }
+    if fallback_triggered.is_none() {
+        failures.push("compute_budget fallback_triggered must be boolean".to_owned());
+    }
+    if read_only != Some(true) {
+        failures.push("compute_budget read_only must be true".to_owned());
+    }
+    if write_allowed != Some(false) {
+        failures.push("compute_budget write_allowed must be false".to_owned());
+    }
+    if applied != Some(false) {
+        failures.push("compute_budget applied must be false".to_owned());
+    }
+    if let Some(routing) = routing {
+        for (field, observed, expected) in [
+            (
+                "candidate_count",
+                candidate_count,
+                extract_json_usize_field(routing, "candidates").unwrap_or(0),
+            ),
+            (
+                "input_tokens",
+                input_tokens,
+                extract_json_usize_field(routing, "input_tokens").unwrap_or(0),
+            ),
+            (
+                "retained_tokens",
+                retained_tokens,
+                extract_json_usize_field(routing, "retained_tokens").unwrap_or(0),
+            ),
+            (
+                "saved_tokens",
+                saved_tokens,
+                extract_json_usize_field(routing, "saved_tokens").unwrap_or(0),
+            ),
+        ] {
+            if observed != expected {
+                failures.push(format!(
+                    "compute_budget {field} {observed} does not match adaptive_routing {expected}"
+                ));
+            }
+        }
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
     let Some(task) = json_object_after_field(line, "task_hierarchy") else {

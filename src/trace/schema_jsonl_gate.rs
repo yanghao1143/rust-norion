@@ -151,6 +151,18 @@ pub struct TraceSchemaGateReport {
     pub task_hierarchy_mutation_records: usize,
     pub task_hierarchy_route_pressure_milli: usize,
     pub task_hierarchy_compute_reduction_milli: usize,
+    pub compute_budget_events: usize,
+    pub compute_budget_low: usize,
+    pub compute_budget_normal: usize,
+    pub compute_budget_expanded: usize,
+    pub compute_budget_selected_candidates: usize,
+    pub compute_budget_low_value_skipped: usize,
+    pub compute_budget_kv_lookups_skipped: usize,
+    pub compute_budget_validation_cost_tokens: usize,
+    pub compute_budget_saved_tokens: usize,
+    pub compute_budget_avoided_tokens: usize,
+    pub compute_budget_write_allowed: usize,
+    pub compute_budget_applied: usize,
     pub memory_admission_events: usize,
     pub memory_admission_candidates: usize,
     pub memory_admission_ready: usize,
@@ -187,7 +199,7 @@ pub struct TraceSchemaGateReport {
 impl TraceSchemaGateReport {
     pub fn summary_line(&self) -> String {
         let base = format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -290,6 +302,18 @@ impl TraceSchemaGateReport {
             self.task_hierarchy_mutation_records,
             self.task_hierarchy_route_pressure_milli,
             self.task_hierarchy_compute_reduction_milli,
+            self.compute_budget_events,
+            self.compute_budget_low,
+            self.compute_budget_normal,
+            self.compute_budget_expanded,
+            self.compute_budget_selected_candidates,
+            self.compute_budget_low_value_skipped,
+            self.compute_budget_kv_lookups_skipped,
+            self.compute_budget_validation_cost_tokens,
+            self.compute_budget_saved_tokens,
+            self.compute_budget_avoided_tokens,
+            self.compute_budget_write_allowed,
+            self.compute_budget_applied,
             self.memory_admission_events,
             self.memory_admission_candidates,
             self.memory_admission_ready,
@@ -507,6 +531,18 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut task_hierarchy_mutation_records = 0;
     let mut task_hierarchy_route_pressure_milli = 0;
     let mut task_hierarchy_compute_reduction_milli = 0;
+    let mut compute_budget_events = 0;
+    let mut compute_budget_low = 0;
+    let mut compute_budget_normal = 0;
+    let mut compute_budget_expanded = 0;
+    let mut compute_budget_selected_candidates = 0;
+    let mut compute_budget_low_value_skipped = 0;
+    let mut compute_budget_kv_lookups_skipped = 0;
+    let mut compute_budget_validation_cost_tokens = 0;
+    let mut compute_budget_saved_tokens = 0;
+    let mut compute_budget_avoided_tokens = 0;
+    let mut compute_budget_write_allowed = 0;
+    let mut compute_budget_applied = 0;
     let mut memory_admission_events = 0;
     let mut memory_admission_candidates = 0;
     let mut memory_admission_ready = 0;
@@ -716,6 +752,20 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             task_hierarchy_route_pressure_milli += summary.route_pressure_milli;
             task_hierarchy_compute_reduction_milli += summary.compute_reduction_milli;
         }
+        if let Some(summary) = compute_budget_trace_gate_summary(line) {
+            compute_budget_events += summary.events;
+            compute_budget_low += summary.low;
+            compute_budget_normal += summary.normal;
+            compute_budget_expanded += summary.expanded;
+            compute_budget_selected_candidates += summary.selected_candidates;
+            compute_budget_low_value_skipped += summary.low_value_skipped;
+            compute_budget_kv_lookups_skipped += summary.kv_lookups_skipped;
+            compute_budget_validation_cost_tokens += summary.validation_cost_tokens;
+            compute_budget_saved_tokens += summary.saved_tokens;
+            compute_budget_avoided_tokens += summary.avoided_tokens;
+            compute_budget_write_allowed += summary.write_allowed;
+            compute_budget_applied += summary.applied;
+        }
         if let Some(summary) = memory_admission_trace_gate_summary(line) {
             memory_admission_events += summary.events;
             memory_admission_candidates += summary.candidates;
@@ -902,6 +952,18 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         task_hierarchy_mutation_records,
         task_hierarchy_route_pressure_milli,
         task_hierarchy_compute_reduction_milli,
+        compute_budget_events,
+        compute_budget_low,
+        compute_budget_normal,
+        compute_budget_expanded,
+        compute_budget_selected_candidates,
+        compute_budget_low_value_skipped,
+        compute_budget_kv_lookups_skipped,
+        compute_budget_validation_cost_tokens,
+        compute_budget_saved_tokens,
+        compute_budget_avoided_tokens,
+        compute_budget_write_allowed,
+        compute_budget_applied,
         memory_admission_events,
         memory_admission_candidates,
         memory_admission_ready,
@@ -1568,6 +1630,46 @@ fn task_hierarchy_trace_gate_summary(line: &str) -> Option<TaskHierarchyTraceGat
         compute_reduction_milli: trace_gate_milli(
             extract_json_f32_field(task, "compute_reduction").unwrap_or(0.0),
         ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ComputeBudgetTraceGateSummary {
+    events: usize,
+    low: usize,
+    normal: usize,
+    expanded: usize,
+    selected_candidates: usize,
+    low_value_skipped: usize,
+    kv_lookups_skipped: usize,
+    validation_cost_tokens: usize,
+    saved_tokens: usize,
+    avoided_tokens: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn compute_budget_trace_gate_summary(line: &str) -> Option<ComputeBudgetTraceGateSummary> {
+    let budget = json_object_after_field(line, "compute_budget")?;
+    let budget_kind = extract_json_string_field(budget, "budget").unwrap_or_default();
+
+    Some(ComputeBudgetTraceGateSummary {
+        events: 1,
+        low: usize::from(budget_kind == "low"),
+        normal: usize::from(budget_kind == "normal"),
+        expanded: usize::from(budget_kind == "expanded"),
+        selected_candidates: extract_json_usize_field(budget, "selected_candidates").unwrap_or(0),
+        low_value_skipped: extract_json_usize_field(budget, "low_value_skipped").unwrap_or(0),
+        kv_lookups_skipped: extract_json_usize_field(budget, "kv_lookups_skipped").unwrap_or(0),
+        validation_cost_tokens: extract_json_usize_field(budget, "validation_cost_tokens")
+            .unwrap_or(0),
+        saved_tokens: extract_json_usize_field(budget, "saved_tokens").unwrap_or(0),
+        avoided_tokens: extract_json_usize_field(budget, "wasted_compute_avoided_tokens")
+            .unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(budget, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(budget, "applied").unwrap_or(false)),
     })
 }
 

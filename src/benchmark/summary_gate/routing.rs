@@ -102,4 +102,14 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_compute_budget_avoided_tokens) = gate.min_compute_budget_avoided_tokens {
+        let observed = summary.total_compute_budget_avoided_tokens();
+        if observed < min_compute_budget_avoided_tokens {
+            failures.push(format!(
+                "compute_budget_avoided_tokens {} below minimum {}",
+                observed, min_compute_budget_avoided_tokens
+            ));
+        }
+    }
 }

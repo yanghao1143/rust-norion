@@ -19,7 +19,7 @@ use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::DraftToken;
 use crate::router::{
     AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
-    AdaptiveRoutingPlanner, RoutingContext,
+    AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
 };
 use crate::runtime::RuntimeAdapterObservation;
 use crate::toolsmith::ToolsmithInput;
@@ -413,14 +413,20 @@ impl NoironEngine {
             &reasoning_genome_splice,
             process_reward.total,
         );
-        let adaptive_route_plan = adaptive_route_plan_from_runtime_evidence(
-            request.profile,
-            route_budget.threshold,
-            routing_context,
-            &reasoning_genome,
-            &reasoning_genome_splice,
-            process_reward.total,
-        );
+        let (adaptive_route_plan, compute_budget_schedule) =
+            adaptive_route_plan_from_runtime_evidence(
+                request.profile,
+                route_budget.threshold,
+                routing_context,
+                ComputeBudgetContext::from_task_plan(
+                    &task_hierarchy_plan,
+                    recursive_schedule.prompt_tokens,
+                )
+                .with_max_tokens(request.max_tokens),
+                &reasoning_genome,
+                &reasoning_genome_splice,
+                process_reward.total,
+            );
 
         let router_threshold_after = self.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
@@ -512,6 +518,7 @@ impl NoironEngine {
             recursive_runtime_calls,
             route_budget,
             adaptive_route_plan,
+            compute_budget_schedule,
             task_hierarchy_plan,
             hierarchy,
             tier_plan,
@@ -705,10 +712,11 @@ fn adaptive_route_plan_from_runtime_evidence(
     profile: crate::hierarchy::TaskProfile,
     threshold: f32,
     routing_context: RoutingContext,
+    compute_budget: ComputeBudgetContext,
     reasoning_genome: &GenomeExpression,
     splice: &DnaSplicePreview,
     process_reward: f32,
-) -> AdaptiveRoutingPlan {
+) -> (AdaptiveRoutingPlan, ComputeBudgetSchedule) {
     let mut candidates = Vec::new();
 
     for (index, classified) in splice.segments.iter().enumerate() {
@@ -761,7 +769,14 @@ fn adaptive_route_plan_from_runtime_evidence(
         );
     }
 
-    AdaptiveRoutingPlanner::new().plan(profile, threshold, routing_context, candidates)
+    let budgeted = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        profile,
+        threshold,
+        routing_context,
+        compute_budget,
+        candidates,
+    );
+    (budgeted.routing_plan, budgeted.schedule)
 }
 
 fn adaptive_route_source_from_gene_source(source: GeneSegmentSource) -> AdaptiveRouteSource {

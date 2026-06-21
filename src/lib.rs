@@ -155,10 +155,11 @@ pub use reflection::{
 pub use router::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,
     AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan, AdaptiveRoutingPlanner,
-    AdaptiveRoutingPolicy, GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds,
-    Route, RouteBudget, RouterState, RouterThresholdAdjustmentPreviewPlanner,
-    RouterThresholdAdjustmentPreviewPolicy, RouterThresholdAdjustmentPreviewReport, RoutingContext,
-    RoutingDecision,
+    AdaptiveRoutingPolicy, BudgetedAdaptiveRoutingPlan, ComputeBudgetContext, ComputeBudgetPolicy,
+    ComputeBudgetSchedule, ComputeBudgetScheduler, GenerationMetrics, NoironRouter,
+    ProfileObservations, ProfileThresholds, Route, RouteBudget, RouterState,
+    RouterThresholdAdjustmentPreviewPlanner, RouterThresholdAdjustmentPreviewPolicy,
+    RouterThresholdAdjustmentPreviewReport, RoutingContext, RoutingDecision,
 };
 pub use runtime::{
     ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,

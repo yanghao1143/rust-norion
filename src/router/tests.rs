@@ -1,5 +1,5 @@
 use super::*;
-use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::hierarchy::{HierarchyWeights, TaskComputeBudget, TaskProfile};
 
 #[test]
 fn poor_quality_lowers_threshold() {
@@ -496,6 +496,100 @@ fn adaptive_routing_compute_budget_skips_expensive_non_anchor() {
     assert_eq!(plan.skip, 1);
     assert_eq!(plan.retained_tokens, 0);
     assert_eq!(plan.saved_tokens, 2048);
+}
+
+#[test]
+fn compute_budget_scheduler_prunes_low_value_non_anchor_fanout() {
+    let threshold = 0.48;
+    let context = RoutingContext {
+        profile: TaskProfile::Coding,
+        hardware_pressure: 0.92,
+        compute_headroom: 0.08,
+        latency_budget_ms: Some(120),
+        ..RoutingContext::default()
+    };
+    let budget = ComputeBudgetContext {
+        profile: TaskProfile::Coding,
+        compute_budget: TaskComputeBudget::Low,
+        validation_mode: true,
+        prompt_tokens: 320,
+        max_tokens: Some(48),
+        route_fanout: 4,
+    };
+    let plan = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        TaskProfile::Coding,
+        threshold,
+        context,
+        budget,
+        vec![
+            route_candidate("prompt-anchor", 32, 0.95, 0.90, 0.95, 0.05, 0.90)
+                .with_anchor_required(true),
+            route_candidate("semantic-memory", 96, 0.88, 0.82, 0.82, 0.30, 0.84),
+            route_candidate("runtime-kv", 128, 0.86, 0.76, 0.78, 0.48, 0.72),
+            route_candidate("low-value", 256, 0.40, 0.38, 0.36, 0.90, 0.20),
+        ],
+    );
+
+    assert!(plan.schedule.threshold_after > threshold);
+    assert_eq!(plan.schedule.route_fanout_after, 1);
+    assert_eq!(plan.schedule.anchor_count, 1);
+    assert!(plan.schedule.anchors_preserved());
+    assert!(plan.schedule.low_value_skipped >= 1);
+    assert!(plan.schedule.kv_lookups_skipped >= 1);
+    assert!(plan.schedule.wasted_compute_avoided_tokens > 0);
+    assert!(plan.routing_plan.anchors_retained());
+    assert!(plan.routing_plan.include + plan.routing_plan.compress <= 1);
+    assert!(plan.schedule.summary_line().contains("budget=low"));
+}
+
+#[test]
+fn compute_budget_scheduler_expanded_budget_retains_more_fanout() {
+    let candidates = vec![
+        route_candidate("prompt-anchor", 32, 0.95, 0.90, 0.95, 0.05, 0.90)
+            .with_anchor_required(true),
+        route_candidate("semantic-memory", 96, 0.88, 0.82, 0.82, 0.30, 0.84),
+        route_candidate("runtime-kv", 128, 0.86, 0.76, 0.78, 0.48, 0.72),
+        route_candidate("gist-memory", 80, 0.80, 0.70, 0.76, 0.35, 0.70),
+    ];
+    let context = RoutingContext {
+        profile: TaskProfile::LongDocument,
+        hardware_pressure: 0.30,
+        compute_headroom: 0.80,
+        ..RoutingContext::default()
+    };
+    let low = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        TaskProfile::LongDocument,
+        0.50,
+        context,
+        ComputeBudgetContext {
+            profile: TaskProfile::LongDocument,
+            compute_budget: TaskComputeBudget::Low,
+            validation_mode: false,
+            prompt_tokens: 640,
+            max_tokens: Some(64),
+            route_fanout: 4,
+        },
+        candidates.clone(),
+    );
+    let expanded = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        TaskProfile::LongDocument,
+        0.50,
+        context,
+        ComputeBudgetContext {
+            profile: TaskProfile::LongDocument,
+            compute_budget: TaskComputeBudget::Expanded,
+            validation_mode: false,
+            prompt_tokens: 640,
+            max_tokens: Some(512),
+            route_fanout: 4,
+        },
+        candidates,
+    );
+
+    assert!(expanded.schedule.threshold_after < low.schedule.threshold_after);
+    assert!(expanded.schedule.route_fanout_after > low.schedule.route_fanout_after);
+    assert!(expanded.schedule.selected_candidates >= low.schedule.selected_candidates);
+    assert!(expanded.schedule.kv_lookup_budget > low.schedule.kv_lookup_budget);
 }
 
 #[test]
