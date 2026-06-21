@@ -163,6 +163,7 @@ pub use rust_validation::{RustSnippetCheck, RustSnippetCheckReport, RustSnippetV
 pub use self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionPolicy,
     SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
+    SelfEvolutionExperimentDecision, SelfEvolutionExperimentLedger, SelfEvolutionExperimentRecord,
     SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
 };
 pub use state_inspect::{

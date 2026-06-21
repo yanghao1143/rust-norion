@@ -798,6 +798,257 @@ impl SelfEvolutionAdmissionReport {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionExperimentDecision {
+    AdmitForHumanReview,
+    Hold,
+    Reject,
+    Rollback,
+}
+
+impl SelfEvolutionExperimentDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AdmitForHumanReview => "admit_for_human_review",
+            Self::Hold => "hold",
+            Self::Reject => "reject",
+            Self::Rollback => "rollback",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionExperimentRecord {
+    pub sequence: u64,
+    pub experiment_id: String,
+    pub candidate_id: String,
+    pub decision: SelfEvolutionExperimentDecision,
+    pub repeated_experiment: bool,
+    pub conflicting_evidence: bool,
+    pub rollback_required: bool,
+    pub rollback_replayable: bool,
+    pub human_approval_required: bool,
+    pub active_candidate: bool,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub evidence_ids: Vec<String>,
+    pub rollback_anchor_ids: Vec<String>,
+    pub blocked_reasons: Vec<String>,
+    pub content_digest: String,
+}
+
+impl SelfEvolutionExperimentRecord {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_experiment sequence={} experiment={} candidate={} decision={} repeated={} conflict={} rollback_required={} rollback_replayable={} human_approval_required={} active_candidate={} write_allowed={} applied={} evidence_ids={} rollback_anchors={} blocked_reasons={} digest={}",
+            self.sequence,
+            self.experiment_id,
+            self.candidate_id,
+            self.decision.as_str(),
+            self.repeated_experiment,
+            self.conflicting_evidence,
+            self.rollback_required,
+            self.rollback_replayable,
+            self.human_approval_required,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+            self.evidence_ids.len(),
+            self.rollback_anchor_ids.len(),
+            self.blocked_reasons.len(),
+            self.content_digest,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let experiment_id = self_evolution_json_escape(&self.experiment_id);
+        let candidate_id = self_evolution_json_escape(&self.candidate_id);
+        let content_digest = self_evolution_json_escape(&self.content_digest);
+        let evidence_ids = self_evolution_string_array_json(&self.evidence_ids);
+        let rollback_anchor_ids = self_evolution_string_array_json(&self.rollback_anchor_ids);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-experiment-v1\",\
+             \"sequence\":{},\
+             \"experiment_id\":\"{experiment_id}\",\
+             \"candidate_id\":\"{candidate_id}\",\
+             \"decision\":\"{}\",\
+             \"repeated_experiment\":{},\
+             \"conflicting_evidence\":{},\
+             \"rollback_required\":{},\
+             \"rollback_replayable\":{},\
+             \"human_approval_required\":{},\
+             \"active_candidate\":{},\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"evidence_ids\":{evidence_ids},\
+             \"rollback_anchor_ids\":{rollback_anchor_ids},\
+             \"blocked_reasons\":{blocked_reasons},\
+             \"content_digest\":\"{content_digest}\"\
+             }}",
+            self.sequence,
+            self.decision.as_str(),
+            self.repeated_experiment,
+            self.conflicting_evidence,
+            self.rollback_required,
+            self.rollback_replayable,
+            self.human_approval_required,
+            self.active_candidate,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SelfEvolutionExperimentLedger {
+    records: Vec<SelfEvolutionExperimentRecord>,
+}
+
+impl SelfEvolutionExperimentLedger {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn records(&self) -> &[SelfEvolutionExperimentRecord] {
+        &self.records
+    }
+
+    pub fn append_admission_report(
+        &mut self,
+        experiment_id: impl Into<String>,
+        report: &SelfEvolutionAdmissionReport,
+    ) -> SelfEvolutionExperimentRecord {
+        let experiment_id = self_evolution_review_id_component(&experiment_id.into());
+        let repeated_experiment = self
+            .records
+            .iter()
+            .any(|record| record.experiment_id == experiment_id);
+        let conflicting_evidence = self_evolution_experiment_conflicting_evidence(report);
+        let decision = self_evolution_experiment_decision(report, conflicting_evidence);
+        let write_allowed = report.mutation_write_allowed
+            || report.memory_store_write_allowed
+            || report.ndkv_write_allowed
+            || report.model_weight_write_allowed
+            || report.git_write_allowed
+            || report.adaptive_preview_write_allowed;
+        let applied = report.adaptive_preview_applied;
+        let rollback_required = decision == SelfEvolutionExperimentDecision::Rollback;
+        let rollback_replayable =
+            rollback_required && !report.review_packet.rollback_anchor_ids.is_empty();
+        let sequence = self.records.len() as u64 + 1;
+        let content_digest = self_evolution_stable_digest(&format!(
+            "sequence={sequence};experiment={experiment_id};candidate={};decision={};repeated={repeated_experiment};conflict={conflicting_evidence};rollback={rollback_required};blocked={:?};evidence={:?};anchors={:?}",
+            report.candidate_id,
+            decision.as_str(),
+            report.blocked_reasons,
+            report.review_packet.evidence_ids,
+            report.review_packet.rollback_anchor_ids
+        ));
+        let record = SelfEvolutionExperimentRecord {
+            sequence,
+            experiment_id,
+            candidate_id: report.candidate_id.clone(),
+            decision,
+            repeated_experiment,
+            conflicting_evidence,
+            rollback_required,
+            rollback_replayable,
+            human_approval_required: true,
+            active_candidate: false,
+            read_only: report.read_only,
+            report_only: report.report_only,
+            preview_only: report.preview_only,
+            write_allowed,
+            applied,
+            evidence_ids: report.review_packet.evidence_ids.clone(),
+            rollback_anchor_ids: report.review_packet.rollback_anchor_ids.clone(),
+            blocked_reasons: report.blocked_reasons.clone(),
+            content_digest,
+        };
+        self.records.push(record.clone());
+        record
+    }
+
+    pub fn admitted_for_review(&self) -> usize {
+        self.count_decision(SelfEvolutionExperimentDecision::AdmitForHumanReview)
+    }
+
+    pub fn held(&self) -> usize {
+        self.count_decision(SelfEvolutionExperimentDecision::Hold)
+    }
+
+    pub fn rejected(&self) -> usize {
+        self.count_decision(SelfEvolutionExperimentDecision::Reject)
+    }
+
+    pub fn rollback_required(&self) -> usize {
+        self.count_decision(SelfEvolutionExperimentDecision::Rollback)
+    }
+
+    pub fn repeated_experiments(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.repeated_experiment)
+            .count()
+    }
+
+    pub fn conflicting_evidence(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.conflicting_evidence)
+            .count()
+    }
+
+    pub fn write_allowed_records(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.write_allowed)
+            .count()
+    }
+
+    pub fn applied_records(&self) -> usize {
+        self.records.iter().filter(|record| record.applied).count()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_experiment_ledger records={} admitted_for_review={} held={} rejected={} rollback_required={} repeated_experiments={} conflicting_evidence={} active_candidates={} write_allowed_records={} applied_records={}",
+            self.records.len(),
+            self.admitted_for_review(),
+            self.held(),
+            self.rejected(),
+            self.rollback_required(),
+            self.repeated_experiments(),
+            self.conflicting_evidence(),
+            self.records
+                .iter()
+                .filter(|record| record.active_candidate)
+                .count(),
+            self.write_allowed_records(),
+            self.applied_records(),
+        )
+    }
+
+    fn count_decision(&self, decision: SelfEvolutionExperimentDecision) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.decision == decision)
+            .count()
+    }
+}
+
 fn self_evolution_f32_json(value: f32) -> String {
     if value.is_finite() {
         format!("{value:.6}")
@@ -829,6 +1080,64 @@ fn self_evolution_json_escape(value: &str) -> String {
         }
     }
     out
+}
+
+fn self_evolution_experiment_decision(
+    report: &SelfEvolutionAdmissionReport,
+    conflicting_evidence: bool,
+) -> SelfEvolutionExperimentDecision {
+    if !report.rollback_budget_clean
+        || report.drift_rollbacks > 0
+        || report.rollback_router_threshold_delta > 0.0
+        || report.rollback_hierarchy_weight_delta > 0.0
+    {
+        return SelfEvolutionExperimentDecision::Rollback;
+    }
+
+    if conflicting_evidence {
+        return SelfEvolutionExperimentDecision::Hold;
+    }
+
+    if report.admitted_for_human_review {
+        return SelfEvolutionExperimentDecision::AdmitForHumanReview;
+    }
+
+    if self_evolution_experiment_failed_evidence(report) {
+        SelfEvolutionExperimentDecision::Reject
+    } else {
+        SelfEvolutionExperimentDecision::Hold
+    }
+}
+
+fn self_evolution_experiment_failed_evidence(report: &SelfEvolutionAdmissionReport) -> bool {
+    !report.policy_valid
+        || report.rust_check_failed > 0
+        || report.validation.compiler.failed > 0
+        || report.validation.tests.failed > 0
+        || report.validation.benchmarks.failed > 0
+        || report.validation.experiments.failed > 0
+        || (!report.benchmark_gate_passed && !report.benchmark_gate_failures.is_empty())
+        || report.adaptive_preview_write_allowed
+        || report.adaptive_preview_applied
+        || report.mutation_write_allowed
+        || report.memory_store_write_allowed
+        || report.ndkv_write_allowed
+        || report.model_weight_write_allowed
+        || report.git_write_allowed
+}
+
+fn self_evolution_experiment_conflicting_evidence(report: &SelfEvolutionAdmissionReport) -> bool {
+    (report.benchmark_gate_passed && !report.benchmark_gate_failures.is_empty())
+        || (report.rust_check_passed > 0 && report.rust_check_failed > 0)
+        || self_evolution_validation_lane_conflicting(report.validation.compiler)
+        || self_evolution_validation_lane_conflicting(report.validation.tests)
+        || self_evolution_validation_lane_conflicting(report.validation.benchmarks)
+        || self_evolution_validation_lane_conflicting(report.validation.experiments)
+        || (report.admitted_for_human_review && !report.blocked_reasons.is_empty())
+}
+
+fn self_evolution_validation_lane_conflicting(lane: SelfEvolutionValidationLane) -> bool {
+    (lane.passed > 0 && lane.failed > 0) || lane.passed.saturating_add(lane.failed) > lane.items
 }
 
 fn self_evolution_review_id_component(value: &str) -> String {
@@ -1291,6 +1600,195 @@ mod tests {
                 token_count: 64,
             },
         )
+    }
+
+    fn passing_admission_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+        let router_preview = safe_router_threshold_preview();
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            candidate_id,
+            passing_evolution_ledger(),
+            &passing_benchmark_gate(),
+        )
+        .with_validation_evidence(passing_validation_evidence())
+        .with_router_threshold_preview_report(&router_preview);
+
+        SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+    }
+
+    fn hold_admission_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            candidate_id,
+            passing_evolution_ledger(),
+            &passing_benchmark_gate(),
+        )
+        .with_validation_evidence(passing_validation_evidence());
+
+        SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+    }
+
+    fn reject_admission_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            candidate_id,
+            EvolutionLedger {
+                replay_rust_check_items: 1,
+                replay_rust_check_passed: 0,
+                replay_rust_check_failed: 1,
+                ..EvolutionLedger::default()
+            },
+            &BenchmarkGateReport {
+                passed: false,
+                failures: vec!["compiler validation failed".to_owned()],
+            },
+        )
+        .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+            SelfEvolutionValidationLane::new(1, 0, 1),
+            SelfEvolutionValidationLane::new(1, 0, 1),
+            SelfEvolutionValidationLane::new(1, 0, 1),
+            SelfEvolutionValidationLane::new(1, 0, 1),
+        ));
+
+        SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+    }
+
+    fn rollback_admission_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+        let router_preview = safe_router_threshold_preview();
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            candidate_id,
+            EvolutionLedger {
+                replay_rust_check_items: 2,
+                replay_rust_check_passed: 2,
+                replay_rust_check_failed: 0,
+                drift_rollbacks: 1,
+                rollback_router_threshold_delta: 0.02,
+                rollback_hierarchy_weight_delta: 0.03,
+                ..EvolutionLedger::default()
+            },
+            &passing_benchmark_gate(),
+        )
+        .with_validation_evidence(passing_validation_evidence())
+        .with_router_threshold_preview_report(&router_preview);
+
+        SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+    }
+
+    #[test]
+    fn self_evolution_experiment_ledger_records_pass_hold_reject_and_rollback() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+
+        let admitted = ledger.append_admission_report(
+            "experiment-pass",
+            &passing_admission_report("candidate-pass"),
+        );
+        let held =
+            ledger.append_admission_report("experiment-hold", &hold_admission_report("hold"));
+        let rejected =
+            ledger.append_admission_report("experiment-reject", &reject_admission_report("reject"));
+        let rollback = ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("rollback"),
+        );
+
+        assert_eq!(
+            admitted.decision,
+            SelfEvolutionExperimentDecision::AdmitForHumanReview
+        );
+        assert_eq!(held.decision, SelfEvolutionExperimentDecision::Hold);
+        assert_eq!(rejected.decision, SelfEvolutionExperimentDecision::Reject);
+        assert_eq!(rollback.decision, SelfEvolutionExperimentDecision::Rollback);
+        assert_eq!(admitted.sequence, 1);
+        assert_eq!(held.sequence, 2);
+        assert_eq!(rejected.sequence, 3);
+        assert_eq!(rollback.sequence, 4);
+        assert_eq!(ledger.records().len(), 4);
+        assert_eq!(ledger.admitted_for_review(), 1);
+        assert_eq!(ledger.held(), 1);
+        assert_eq!(ledger.rejected(), 1);
+        assert_eq!(ledger.rollback_required(), 1);
+        assert!(rollback.rollback_required);
+        assert!(rollback.rollback_replayable);
+        assert!(!admitted.active_candidate);
+        assert!(!admitted.write_allowed);
+        assert!(!admitted.applied);
+        assert!(admitted.human_approval_required);
+        assert!(admitted.read_only);
+        assert!(admitted.report_only);
+        assert!(admitted.preview_only);
+        assert!(!admitted.evidence_ids.is_empty());
+        assert!(!admitted.rollback_anchor_ids.is_empty());
+        assert!(
+            held.blocked_reasons
+                .contains(&"self_evolution_admission_adaptive_preview_evidence_missing".to_owned())
+        );
+        assert!(
+            rejected
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.contains("validation_failed"))
+        );
+        assert!(
+            rollback
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.contains("rollback_router_threshold_delta"))
+        );
+        assert!(
+            ledger
+                .summary_line()
+                .contains("self_evolution_experiment_ledger records=4")
+        );
+        assert!(
+            admitted
+                .summary_line()
+                .contains("decision=admit_for_human_review")
+        );
+        assert!(
+            admitted
+                .json_line()
+                .contains("\"schema\":\"rust-norion-self-evolution-experiment-v1\"")
+        );
+        assert!(admitted.json_line().contains("\"active_candidate\":false"));
+        assert!(admitted.json_line().contains("\"write_allowed\":false"));
+    }
+
+    #[test]
+    fn self_evolution_experiment_ledger_marks_repeated_experiments_append_only() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        let first =
+            ledger.append_admission_report("repeat-me", &passing_admission_report("repeat-a"));
+        let first_snapshot = first.clone();
+        let second =
+            ledger.append_admission_report("repeat-me", &passing_admission_report("repeat-b"));
+
+        assert!(!first.repeated_experiment);
+        assert!(second.repeated_experiment);
+        assert_eq!(second.sequence, 2);
+        assert_eq!(ledger.records().len(), 2);
+        assert_eq!(ledger.repeated_experiments(), 1);
+        assert_eq!(ledger.records()[0], first_snapshot);
+        assert_ne!(
+            ledger.records()[0].content_digest,
+            ledger.records()[1].content_digest
+        );
+        assert!(ledger.summary_line().contains("repeated_experiments=1"));
+    }
+
+    #[test]
+    fn self_evolution_experiment_ledger_holds_conflicting_evidence() {
+        let mut report = passing_admission_report("conflicting");
+        report
+            .benchmark_gate_failures
+            .push("benchmark regression despite passed gate".to_owned());
+        report.validation.compiler = SelfEvolutionValidationLane::new(1, 1, 1);
+
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        let record = ledger.append_admission_report("conflicting", &report);
+
+        assert!(record.conflicting_evidence);
+        assert_eq!(record.decision, SelfEvolutionExperimentDecision::Hold);
+        assert!(!record.active_candidate);
+        assert!(!record.write_allowed);
+        assert_eq!(ledger.conflicting_evidence(), 1);
+        assert!(ledger.summary_line().contains("conflicting_evidence=1"));
     }
 
     #[test]
