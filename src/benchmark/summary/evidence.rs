@@ -51,6 +51,14 @@ impl BenchmarkSummary {
         self.genome_evidence.total_regeneration_payloads
     }
 
+    pub fn total_reasoning_genome_lifecycle_records(&self) -> usize {
+        self.genome_evidence.total_lifecycle_records
+    }
+
+    pub fn total_reasoning_genome_tombstone_candidates(&self) -> usize {
+        self.genome_evidence.total_lifecycle_tombstone_candidates
+    }
+
     pub fn total_reasoning_genome_failures(&self) -> usize {
         self.genome_evidence.failures.len()
     }

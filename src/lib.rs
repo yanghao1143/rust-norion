@@ -111,9 +111,10 @@ pub use production_runtime::{
 };
 pub use reasoning_genome::{
     DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
-    DnaGeneSchemaError, DnaGeneSourceEvidence, GeneScissorsIntent, GenomeExpression,
-    GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus,
-    ReasoningGenome,
+    DnaGeneSchemaError, DnaGeneSourceEvidence, GeneLifecycleAction, GeneLifecycleRecord,
+    GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
+    GenomeExpression, GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind,
+    ReasoningGeneStatus, ReasoningGenome,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,

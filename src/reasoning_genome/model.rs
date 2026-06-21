@@ -1,6 +1,7 @@
 use crate::hierarchy::TaskProfile;
 
 const AGING_AGE_THRESHOLD: u32 = 8;
+const MAX_DECAY_AGE: u32 = 16;
 const LOW_FITNESS_THRESHOLD: f32 = 0.45;
 const MALIGNANT_DRIFT_THRESHOLD: f32 = 0.70;
 
@@ -74,6 +75,135 @@ impl GeneScissorsIntent {
             Self::Rollback => "rollback",
             Self::Regenerate => "regenerate",
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneLifecycleAction {
+    Keep,
+    Relabel,
+    Quarantine,
+    Regenerate,
+    Rollback,
+    Cut,
+}
+
+impl GeneLifecycleAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::Relabel => "relabel",
+            Self::Quarantine => "quarantine",
+            Self::Regenerate => "regenerate",
+            Self::Rollback => "rollback",
+            Self::Cut => "cut",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneValidationStatus {
+    NotRequired,
+    Pending,
+    Passed,
+    Failed,
+}
+
+impl GeneValidationStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotRequired => "not_required",
+            Self::Pending => "pending",
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneLifecycleSourceKind {
+    HealthMetadata,
+    FeedbackSignal,
+    StableAnchor,
+    HighFitnessSibling,
+    DriftRollback,
+}
+
+impl GeneLifecycleSourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::HealthMetadata => "health_metadata",
+            Self::FeedbackSignal => "feedback_signal",
+            Self::StableAnchor => "stable_anchor",
+            Self::HighFitnessSibling => "high_fitness_sibling",
+            Self::DriftRollback => "drift_rollback",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneLifecycleSourceEvidence {
+    pub kind: GeneLifecycleSourceKind,
+    pub source_id: String,
+    pub summary: String,
+}
+
+impl GeneLifecycleSourceEvidence {
+    pub fn new(
+        kind: GeneLifecycleSourceKind,
+        source_id: impl Into<String>,
+        summary: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind,
+            source_id: source_id.into(),
+            summary: summary.into(),
+        }
+    }
+
+    pub fn health_metadata(gene: &ReasoningGene) -> Self {
+        Self::new(
+            GeneLifecycleSourceKind::HealthMetadata,
+            gene.id.clone(),
+            format!(
+                "age={} fitness={:.3} drift={:.3} decay={:.3}",
+                gene.age,
+                gene.fitness,
+                gene.drift_score,
+                gene.decay_score()
+            ),
+        )
+    }
+
+    pub fn stable_anchor(anchor_id: impl Into<String>) -> Self {
+        let anchor_id = anchor_id.into();
+        Self::new(
+            GeneLifecycleSourceKind::StableAnchor,
+            anchor_id.clone(),
+            format!("stable rollback anchor {anchor_id}"),
+        )
+    }
+
+    pub fn high_fitness_sibling(sibling_id: impl Into<String>) -> Self {
+        let sibling_id = sibling_id.into();
+        Self::new(
+            GeneLifecycleSourceKind::HighFitnessSibling,
+            sibling_id.clone(),
+            format!("high-fitness sibling source {sibling_id}"),
+        )
+    }
+
+    pub fn drift_rollback(anchor_id: impl Into<String>) -> Self {
+        let anchor_id = anchor_id.into();
+        Self::new(
+            GeneLifecycleSourceKind::DriftRollback,
+            anchor_id.clone(),
+            format!("runtime drift rollback evidence anchored at {anchor_id}"),
+        )
+    }
+
+    pub fn summary(&self) -> String {
+        format!("{}:{}:{}", self.kind.as_str(), self.source_id, self.summary)
     }
 }
 
@@ -156,6 +286,13 @@ impl ReasoningGene {
     pub fn is_malignant(&self) -> bool {
         self.derived_status() == ReasoningGeneStatus::Malignant
     }
+
+    pub fn decay_score(&self) -> f32 {
+        let age_pressure = (self.age.min(MAX_DECAY_AGE) as f32 / MAX_DECAY_AGE as f32) * 0.40;
+        let fitness_pressure = (1.0 - clamp_unit(self.fitness)) * 0.35;
+        let drift_pressure = clamp_unit(self.drift_score) * 0.25;
+        clamp_unit(age_pressure + fitness_pressure + drift_pressure)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,6 +309,8 @@ pub struct MutationPlan {
     pub expected_effect: String,
     pub rollback_anchor_id: String,
     pub validation_gates: Vec<String>,
+    pub validation_status: GeneValidationStatus,
+    pub source_evidence: Vec<GeneLifecycleSourceEvidence>,
     pub admission_write_authorized: bool,
     pub applied: bool,
 }
@@ -185,10 +324,12 @@ impl MutationPlan {
         expected_effect: impl Into<String>,
         rollback_anchor_id: impl Into<String>,
     ) -> Self {
+        let target_gene_id = target_gene_id.into();
+        let rollback_anchor_id = rollback_anchor_id.into();
         Self {
             id: id.into(),
             intent,
-            target_gene_id: target_gene_id.into(),
+            target_gene_id: target_gene_id.clone(),
             source_gene_ids: Vec::new(),
             replacement_gene_id: None,
             proposed_label: None,
@@ -196,11 +337,21 @@ impl MutationPlan {
             proposed_tags: Vec::new(),
             reason: reason.into(),
             expected_effect: expected_effect.into(),
-            rollback_anchor_id: rollback_anchor_id.into(),
+            rollback_anchor_id: rollback_anchor_id.clone(),
             validation_gates: default_validation_gates(),
+            validation_status: GeneValidationStatus::Pending,
+            source_evidence: Vec::new(),
             admission_write_authorized: false,
             applied: false,
         }
+        .with_source_evidence([
+            GeneLifecycleSourceEvidence::new(
+                GeneLifecycleSourceKind::HealthMetadata,
+                target_gene_id,
+                "mutation candidate health metadata",
+            ),
+            GeneLifecycleSourceEvidence::stable_anchor(rollback_anchor_id),
+        ])
     }
 
     pub fn with_sources(mut self, sources: impl IntoIterator<Item = impl Into<String>>) -> Self {
@@ -210,6 +361,27 @@ impl MutationPlan {
 
     pub fn with_replacement(mut self, replacement_gene_id: impl Into<String>) -> Self {
         self.replacement_gene_id = Some(replacement_gene_id.into());
+        self
+    }
+
+    pub fn with_source_evidence(
+        mut self,
+        evidence: impl IntoIterator<Item = GeneLifecycleSourceEvidence>,
+    ) -> Self {
+        for item in evidence {
+            if !self
+                .source_evidence
+                .iter()
+                .any(|existing| existing.kind == item.kind && existing.source_id == item.source_id)
+            {
+                self.source_evidence.push(item);
+            }
+        }
+        self
+    }
+
+    pub fn with_validation_status(mut self, validation_status: GeneValidationStatus) -> Self {
+        self.validation_status = validation_status;
         self
     }
 
@@ -243,6 +415,139 @@ impl MutationPlan {
 
     pub fn is_read_only_preview(&self) -> bool {
         !self.admission_write_authorized && !self.applied
+    }
+
+    pub fn has_source_evidence(&self) -> bool {
+        !self.source_evidence.is_empty()
+            && self
+                .source_evidence
+                .iter()
+                .all(|evidence| !evidence.source_id.trim().is_empty())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeneLifecycleRecord {
+    pub id: String,
+    pub gene_id: String,
+    pub action: GeneLifecycleAction,
+    pub status: ReasoningGeneStatus,
+    pub age: u32,
+    pub last_confirmed_purpose: String,
+    pub decay_score: f32,
+    pub fitness_score: f32,
+    pub drift_score: f32,
+    pub validation_status: GeneValidationStatus,
+    pub source_evidence: Vec<GeneLifecycleSourceEvidence>,
+    pub rollback_anchor_id: String,
+    pub stable_anchor_sources: Vec<String>,
+    pub replacement_gene_id: Option<String>,
+    pub tombstone_id: Option<String>,
+    pub reason: String,
+    pub next_action: String,
+    pub admission_write_authorized: bool,
+    pub applied: bool,
+}
+
+impl GeneLifecycleRecord {
+    fn preview(
+        gene: &ReasoningGene,
+        action: GeneLifecycleAction,
+        stable_anchor_id: &str,
+        reason: impl Into<String>,
+        next_action: impl Into<String>,
+    ) -> Self {
+        let validation_status = match action {
+            GeneLifecycleAction::Keep => GeneValidationStatus::NotRequired,
+            GeneLifecycleAction::Relabel
+            | GeneLifecycleAction::Quarantine
+            | GeneLifecycleAction::Regenerate
+            | GeneLifecycleAction::Rollback
+            | GeneLifecycleAction::Cut => GeneValidationStatus::Pending,
+        };
+        Self {
+            id: format!("gene_lifecycle:{}:{}", gene.id, action.as_str()),
+            gene_id: gene.id.clone(),
+            action,
+            status: gene.derived_status(),
+            age: gene.age,
+            last_confirmed_purpose: gene.purpose.clone(),
+            decay_score: gene.decay_score(),
+            fitness_score: gene.fitness,
+            drift_score: gene.drift_score,
+            validation_status,
+            source_evidence: vec![
+                GeneLifecycleSourceEvidence::health_metadata(gene),
+                GeneLifecycleSourceEvidence::stable_anchor(stable_anchor_id),
+            ],
+            rollback_anchor_id: stable_anchor_id.to_owned(),
+            stable_anchor_sources: vec![stable_anchor_id.to_owned()],
+            replacement_gene_id: None,
+            tombstone_id: None,
+            reason: reason.into(),
+            next_action: next_action.into(),
+            admission_write_authorized: false,
+            applied: false,
+        }
+    }
+
+    fn with_source_evidence(
+        mut self,
+        evidence: impl IntoIterator<Item = GeneLifecycleSourceEvidence>,
+    ) -> Self {
+        for item in evidence {
+            if !self
+                .source_evidence
+                .iter()
+                .any(|existing| existing.kind == item.kind && existing.source_id == item.source_id)
+            {
+                self.source_evidence.push(item);
+            }
+        }
+        self
+    }
+
+    fn with_replacement(mut self, replacement_gene_id: impl Into<String>) -> Self {
+        self.replacement_gene_id = Some(replacement_gene_id.into());
+        self
+    }
+
+    fn with_tombstone(mut self, tombstone_id: impl Into<String>) -> Self {
+        self.tombstone_id = Some(tombstone_id.into());
+        self
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        !self.admission_write_authorized && !self.applied
+    }
+
+    pub fn is_tombstone_candidate(&self) -> bool {
+        self.action == GeneLifecycleAction::Cut && self.tombstone_id.is_some()
+    }
+
+    pub fn has_source_evidence(&self) -> bool {
+        !self.source_evidence.is_empty()
+            && self
+                .source_evidence
+                .iter()
+                .all(|evidence| !evidence.source_id.trim().is_empty())
+    }
+
+    pub fn summary(&self) -> String {
+        let replacement = self.replacement_gene_id.as_deref().unwrap_or("none");
+        let tombstone = self.tombstone_id.as_deref().unwrap_or("none");
+        format!(
+            "{}:{} status={} age={} decay={:.3} validation={} replacement={} tombstone={} next={}",
+            self.action.as_str(),
+            self.gene_id,
+            self.status.as_str(),
+            self.age,
+            self.decay_score,
+            self.validation_status.as_str(),
+            replacement,
+            tombstone,
+            self.next_action
+        )
     }
 }
 
@@ -394,15 +699,26 @@ impl ReasoningGenome {
         let mut relabel_candidate_ids = Vec::new();
         let mut regeneration_candidate_ids = Vec::new();
         let mut mutation_plans = Vec::new();
+        let mut lifecycle_records = Vec::new();
 
         for gene in &self.genes {
             match gene.derived_status() {
-                ReasoningGeneStatus::Active => active_gene_ids.push(gene.id.clone()),
+                ReasoningGeneStatus::Active => {
+                    active_gene_ids.push(gene.id.clone());
+                    lifecycle_records.push(GeneLifecycleRecord::preview(
+                        gene,
+                        GeneLifecycleAction::Keep,
+                        &self.stable_anchor_id,
+                        "gene health is within active expression thresholds",
+                        "keep_current_expression",
+                    ));
+                }
                 ReasoningGeneStatus::Aging => {
                     active_gene_ids.push(gene.id.clone());
                     aged_gene_ids.push(gene.id.clone());
                     if gene.needs_relabel() {
                         let (label, purpose, tags) = relabel_payload(gene);
+                        let relabel_evidence = relabel_source_evidence(gene);
                         relabel_candidate_ids.push(gene.id.clone());
                         mutation_plans.push(MutationPlan::preview(
                             format!("mutation:{}:relabel", gene.id),
@@ -412,13 +728,28 @@ impl ReasoningGenome {
                             "refresh label and purpose while preserving the stable gene anchor",
                             self.stable_anchor_id.clone(),
                         )
+                        .with_source_evidence(relabel_evidence.clone())
                         .with_repair_payload(label, purpose, tags));
+                        lifecycle_records.push(
+                            GeneLifecycleRecord::preview(
+                                gene,
+                                GeneLifecycleAction::Relabel,
+                                &self.stable_anchor_id,
+                                "aging metadata requires refreshed purpose labels",
+                                "validate_relabel_candidate_before_any_write",
+                            )
+                            .with_source_evidence(relabel_evidence),
+                        );
                     }
                 }
                 ReasoningGeneStatus::Malignant => {
                     malignant_gene_ids.push(gene.id.clone());
                     regeneration_candidate_ids.push(gene.id.clone());
                     let (label, purpose, tags) = regeneration_payload(gene);
+                    let regeneration_evidence =
+                        regeneration_source_evidence(&self.genes, gene, &self.stable_anchor_id);
+                    let regeneration_source_ids =
+                        regeneration_source_ids(&self.stable_anchor_id, &regeneration_evidence);
                     mutation_plans.push(
                         MutationPlan::preview(
                             format!("mutation:{}:quarantine", gene.id),
@@ -428,7 +759,8 @@ impl ReasoningGenome {
                             "stop expression of the contaminated strategy while preserving audit evidence",
                             self.stable_anchor_id.clone(),
                         )
-                        .with_sources([gene.id.clone()]),
+                        .with_sources([gene.id.clone()])
+                        .with_source_evidence(regeneration_evidence.clone()),
                     );
                     mutation_plans.push(
                         MutationPlan::preview(
@@ -439,12 +771,68 @@ impl ReasoningGenome {
                             "regenerate a young strategy candidate after validation gates pass",
                             self.stable_anchor_id.clone(),
                         )
-                        .with_sources([self.stable_anchor_id.clone()])
+                        .with_sources(regeneration_source_ids)
+                        .with_source_evidence(regeneration_evidence.clone())
                         .with_replacement(regenerated_gene_id(gene))
                         .with_repair_payload(label, purpose, tags),
                     );
+                    mutation_plans.push(
+                        MutationPlan::preview(
+                            format!("mutation:{}:cut", gene.id),
+                            GeneScissorsIntent::Cut,
+                            gene.id.clone(),
+                            "malignant gene requires a tombstone candidate before removal from active expression",
+                            "cut only after validation, rollback anchor, and operator approval are present",
+                            self.stable_anchor_id.clone(),
+                        )
+                        .with_sources([gene.id.clone()])
+                        .with_source_evidence(regeneration_evidence.clone()),
+                    );
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Quarantine,
+                            &self.stable_anchor_id,
+                            "malignant drift crossed quarantine threshold",
+                            "hold_gene_out_of_active_expression",
+                        )
+                        .with_source_evidence(regeneration_evidence.clone()),
+                    );
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Regenerate,
+                            &self.stable_anchor_id,
+                            "regenerate from stable anchor and high-fitness siblings",
+                            "validate_regeneration_candidate_before_any_write",
+                        )
+                        .with_source_evidence(regeneration_evidence.clone())
+                        .with_replacement(regenerated_gene_id(gene)),
+                    );
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Cut,
+                            &self.stable_anchor_id,
+                            "cut malignant active expression through a reversible tombstone preview",
+                            "await_operator_approval_before_tombstone_apply",
+                        )
+                        .with_source_evidence(regeneration_evidence)
+                        .with_tombstone(tombstone_id(gene)),
+                    );
                 }
-                ReasoningGeneStatus::Quarantined | ReasoningGeneStatus::Regenerating => {}
+                ReasoningGeneStatus::Quarantined | ReasoningGeneStatus::Regenerating => {
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Cut,
+                            &self.stable_anchor_id,
+                            "gene is already isolated from active expression pending validated regeneration",
+                            "keep_tombstone_preview_until_regeneration_passes",
+                        )
+                        .with_tombstone(tombstone_id(gene)),
+                    );
+                }
             }
         }
 
@@ -455,10 +843,20 @@ impl ReasoningGenome {
                 .find(|gene| gene.kind == ReasoningGeneKind::Safety)
                 .or_else(|| self.genes.first());
             if let Some(gene) = target {
+                let rollback_evidence = vec![GeneLifecycleSourceEvidence::drift_rollback(
+                    &self.stable_anchor_id,
+                )];
                 if !malignant_gene_ids.contains(&gene.id) {
                     malignant_gene_ids.push(gene.id.clone());
                     regeneration_candidate_ids.push(gene.id.clone());
                     let (label, purpose, tags) = regeneration_payload(gene);
+                    let regeneration_evidence =
+                        regeneration_source_evidence(&self.genes, gene, &self.stable_anchor_id)
+                            .into_iter()
+                            .chain(rollback_evidence.clone())
+                            .collect::<Vec<_>>();
+                    let regeneration_source_ids =
+                        regeneration_source_ids(&self.stable_anchor_id, &regeneration_evidence);
                     mutation_plans.push(
                         MutationPlan::preview(
                             format!("mutation:{}:quarantine", gene.id),
@@ -468,7 +866,8 @@ impl ReasoningGenome {
                             "isolate the unstable strategy before rollback or regeneration",
                             self.stable_anchor_id.clone(),
                         )
-                        .with_sources([gene.id.clone()]),
+                        .with_sources([gene.id.clone()])
+                        .with_source_evidence(regeneration_evidence.clone()),
                     );
                     mutation_plans.push(
                         MutationPlan::preview(
@@ -479,9 +878,54 @@ impl ReasoningGenome {
                             "produce a young replacement candidate after validation gates pass",
                             self.stable_anchor_id.clone(),
                         )
-                        .with_sources([self.stable_anchor_id.clone()])
+                        .with_sources(regeneration_source_ids)
+                        .with_source_evidence(regeneration_evidence.clone())
                         .with_replacement(regenerated_gene_id(gene))
                         .with_repair_payload(label, purpose, tags),
+                    );
+                    mutation_plans.push(
+                        MutationPlan::preview(
+                            format!("mutation:{}:cut", gene.id),
+                            GeneScissorsIntent::Cut,
+                            gene.id.clone(),
+                            "rollback pressure requires a reversible tombstone candidate",
+                            "cut only after validation, rollback anchor, and operator approval are present",
+                            self.stable_anchor_id.clone(),
+                        )
+                        .with_sources([gene.id.clone()])
+                        .with_source_evidence(regeneration_evidence.clone()),
+                    );
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Quarantine,
+                            &self.stable_anchor_id,
+                            "runtime drift rollback isolated this gene",
+                            "hold_gene_out_of_active_expression",
+                        )
+                        .with_source_evidence(regeneration_evidence.clone()),
+                    );
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Regenerate,
+                            &self.stable_anchor_id,
+                            "runtime drift rollback requires a regenerated candidate",
+                            "validate_regeneration_candidate_before_any_write",
+                        )
+                        .with_source_evidence(regeneration_evidence.clone())
+                        .with_replacement(regenerated_gene_id(gene)),
+                    );
+                    lifecycle_records.push(
+                        GeneLifecycleRecord::preview(
+                            gene,
+                            GeneLifecycleAction::Cut,
+                            &self.stable_anchor_id,
+                            "runtime drift rollback produced a reversible tombstone preview",
+                            "await_operator_approval_before_tombstone_apply",
+                        )
+                        .with_source_evidence(regeneration_evidence)
+                        .with_tombstone(tombstone_id(gene)),
                     );
                 }
                 mutation_plans.push(MutationPlan::preview(
@@ -491,7 +935,18 @@ impl ReasoningGenome {
                     "runtime drift or critical reflection issue requires stable genome rollback",
                     "restore the previous stable genome before any durable mutation is admitted",
                     self.stable_anchor_id.clone(),
-                ));
+                )
+                .with_source_evidence(rollback_evidence.clone()));
+                lifecycle_records.push(
+                    GeneLifecycleRecord::preview(
+                        gene,
+                        GeneLifecycleAction::Rollback,
+                        &self.stable_anchor_id,
+                        "runtime drift or critical reflection issue requires rollback evidence",
+                        "replay_stable_anchor_before_any_admission",
+                    )
+                    .with_source_evidence(rollback_evidence),
+                );
             }
         }
 
@@ -508,6 +963,7 @@ impl ReasoningGenome {
             relabel_candidate_ids,
             regeneration_candidate_ids,
             mutation_plans,
+            lifecycle_records,
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -546,6 +1002,7 @@ pub struct GenomeExpression {
     pub relabel_candidate_ids: Vec<String>,
     pub regeneration_candidate_ids: Vec<String>,
     pub mutation_plans: Vec<MutationPlan>,
+    pub lifecycle_records: Vec<GeneLifecycleRecord>,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -596,6 +1053,31 @@ impl GenomeExpression {
         self.mutation_plans.len()
     }
 
+    pub fn lifecycle_record_count(&self) -> usize {
+        self.lifecycle_records.len()
+    }
+
+    pub fn lifecycle_source_evidence_count(&self) -> usize {
+        self.lifecycle_records
+            .iter()
+            .map(|record| record.source_evidence.len())
+            .sum()
+    }
+
+    pub fn pending_lifecycle_validation_count(&self) -> usize {
+        self.lifecycle_records
+            .iter()
+            .filter(|record| record.validation_status == GeneValidationStatus::Pending)
+            .count()
+    }
+
+    pub fn tombstone_candidate_count(&self) -> usize {
+        self.lifecycle_records
+            .iter()
+            .filter(|record| record.is_tombstone_candidate())
+            .count()
+    }
+
     pub fn repair_payload_count(&self) -> usize {
         self.mutation_plans
             .iter()
@@ -628,6 +1110,25 @@ impl GenomeExpression {
             .collect()
     }
 
+    pub fn lifecycle_action_summaries(&self) -> Vec<String> {
+        let mut actions = Vec::new();
+        for record in &self.lifecycle_records {
+            let action = record.action.as_str().to_owned();
+            if !actions.contains(&action) {
+                actions.push(action);
+            }
+        }
+        actions
+    }
+
+    pub fn lifecycle_summaries(&self, limit: usize) -> Vec<String> {
+        self.lifecycle_records
+            .iter()
+            .take(limit)
+            .map(GeneLifecycleRecord::summary)
+            .collect()
+    }
+
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only
             && !self.write_allowed
@@ -636,6 +1137,18 @@ impl GenomeExpression {
                 .mutation_plans
                 .iter()
                 .all(MutationPlan::is_read_only_preview)
+            && self
+                .mutation_plans
+                .iter()
+                .all(MutationPlan::has_source_evidence)
+            && self
+                .lifecycle_records
+                .iter()
+                .all(GeneLifecycleRecord::is_read_only_preview)
+            && self
+                .lifecycle_records
+                .iter()
+                .all(GeneLifecycleRecord::has_source_evidence)
     }
 }
 
@@ -646,6 +1159,58 @@ pub(crate) fn profile_slug(profile: TaskProfile) -> &'static str {
         TaskProfile::Writing => "writing",
         TaskProfile::LongDocument => "long_document",
     }
+}
+
+fn relabel_source_evidence(gene: &ReasoningGene) -> Vec<GeneLifecycleSourceEvidence> {
+    vec![
+        GeneLifecycleSourceEvidence::health_metadata(gene),
+        GeneLifecycleSourceEvidence::new(
+            GeneLifecycleSourceKind::FeedbackSignal,
+            gene.id.clone(),
+            "age, decay, or stale purpose metadata triggered relabel preview",
+        ),
+    ]
+}
+
+fn regeneration_source_evidence(
+    genes: &[ReasoningGene],
+    target: &ReasoningGene,
+    stable_anchor_id: &str,
+) -> Vec<GeneLifecycleSourceEvidence> {
+    let mut evidence = vec![
+        GeneLifecycleSourceEvidence::health_metadata(target),
+        GeneLifecycleSourceEvidence::stable_anchor(stable_anchor_id),
+    ];
+    for sibling in genes
+        .iter()
+        .filter(|gene| {
+            gene.id != target.id
+                && gene.fitness >= 0.75
+                && gene.drift_score <= 0.20
+                && !gene.is_malignant()
+        })
+        .take(3)
+    {
+        evidence.push(GeneLifecycleSourceEvidence::high_fitness_sibling(
+            sibling.id.clone(),
+        ));
+    }
+    evidence
+}
+
+fn regeneration_source_ids(
+    stable_anchor_id: &str,
+    evidence: &[GeneLifecycleSourceEvidence],
+) -> Vec<String> {
+    let mut source_ids = vec![stable_anchor_id.to_owned()];
+    for item in evidence {
+        if item.kind == GeneLifecycleSourceKind::HighFitnessSibling
+            && !source_ids.contains(&item.source_id)
+        {
+            source_ids.push(item.source_id.clone());
+        }
+    }
+    source_ids
 }
 
 fn compute_youth_pressure(
@@ -782,6 +1347,10 @@ fn regeneration_payload(gene: &ReasoningGene) -> (String, String, Vec<String>) {
 
 fn regenerated_gene_id(gene: &ReasoningGene) -> String {
     format!("{}:young", gene.id)
+}
+
+fn tombstone_id(gene: &ReasoningGene) -> String {
+    format!("tombstone:{}", gene.id)
 }
 
 fn canonical_label(kind: ReasoningGeneKind) -> &'static str {

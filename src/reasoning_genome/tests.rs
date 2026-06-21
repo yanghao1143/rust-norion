@@ -26,6 +26,14 @@ fn default_genome_expresses_read_only_profile_genes() {
     assert_eq!(expression.active_gene_count(), 7);
     assert_eq!(expression.aged_gene_count(), 0);
     assert_eq!(expression.malignant_gene_count(), 0);
+    assert_eq!(expression.lifecycle_record_count(), 7);
+    assert_eq!(expression.tombstone_candidate_count(), 0);
+    assert!(
+        expression
+            .lifecycle_action_summaries()
+            .contains(&"keep".to_owned())
+    );
+    assert!(expression.lifecycle_source_evidence_count() >= 7);
     assert!(expression.is_read_only_preview());
     assert_eq!(expression.scissors_proposal_count(), 0);
 }
@@ -71,6 +79,11 @@ fn aging_gene_gets_relabel_plan_without_writes() {
         expression.mutation_plans[0].intent,
         GeneScissorsIntent::Relabel
     );
+    assert_eq!(
+        expression.mutation_plans[0].validation_status,
+        GeneValidationStatus::Pending
+    );
+    assert!(expression.mutation_plans[0].has_source_evidence());
     assert_eq!(expression.repair_payload_count(), 1);
     assert!(
         expression.mutation_plans[0]
@@ -83,6 +96,21 @@ fn aging_gene_gets_relabel_plan_without_writes() {
             .proposed_tags
             .iter()
             .any(|tag| tag == "youth_renewal")
+    );
+    assert_eq!(expression.lifecycle_record_count(), 1);
+    assert_eq!(
+        expression.lifecycle_records[0].action,
+        GeneLifecycleAction::Relabel
+    );
+    assert_eq!(
+        expression.lifecycle_records[0].validation_status,
+        GeneValidationStatus::Pending
+    );
+    assert!(expression.lifecycle_records[0].decay_score > 0.0);
+    assert!(
+        expression.lifecycle_records[0]
+            .last_confirmed_purpose
+            .contains("retrieve useful memory")
     );
     assert!(expression.is_read_only_preview());
 }
@@ -127,13 +155,30 @@ fn malignant_gene_is_quarantined_and_regenerated_from_stable_anchor() {
     assert!(intents.contains(&"quarantine".to_owned()));
     assert!(intents.contains(&"regenerate".to_owned()));
     assert!(intents.contains(&"rollback".to_owned()));
+    assert!(intents.contains(&"cut".to_owned()));
     assert!(expression.youth_pressure > 0.50);
     assert_eq!(expression.regeneration_payload_count(), 1);
+    assert_eq!(expression.tombstone_candidate_count(), 1);
+    assert!(
+        expression
+            .lifecycle_action_summaries()
+            .contains(&"cut".to_owned())
+    );
+    assert!(
+        expression
+            .lifecycle_records
+            .iter()
+            .any(|record| record.is_tombstone_candidate()
+                && record.rollback_anchor_id == "genome:test:stable"
+                && record.validation_status == GeneValidationStatus::Pending)
+    );
     let regenerate = expression
         .mutation_plans
         .iter()
         .find(|plan| plan.intent == GeneScissorsIntent::Regenerate)
         .expect("regeneration plan");
+    assert!(regenerate.has_source_evidence());
+    assert_eq!(regenerate.validation_status, GeneValidationStatus::Pending);
     assert_eq!(
         regenerate.replacement_gene_id.as_deref(),
         Some("gene:test:safety:young")
@@ -207,6 +252,16 @@ fn quarantined_gene_is_cut_from_expression_until_regeneration_is_validated() {
             .contains(&"gene:test:unsafe".to_owned())
     );
     assert_eq!(expression.scissors_proposal_count(), 0);
+    assert_eq!(expression.lifecycle_record_count(), 2);
+    assert_eq!(expression.tombstone_candidate_count(), 1);
+    assert!(
+        expression
+            .lifecycle_records
+            .iter()
+            .any(|record| record.gene_id == "gene:test:unsafe"
+                && record.action == GeneLifecycleAction::Cut
+                && record.is_tombstone_candidate())
+    );
     assert!(expression.is_read_only_preview());
 }
 
@@ -237,7 +292,9 @@ fn rollback_pressure_quarantines_and_regenerates_active_safety_gene() {
     assert!(intents.contains(&"quarantine".to_owned()));
     assert!(intents.contains(&"regenerate".to_owned()));
     assert!(intents.contains(&"rollback".to_owned()));
+    assert!(intents.contains(&"cut".to_owned()));
     assert_eq!(expression.regeneration_payload_count(), 1);
+    assert_eq!(expression.tombstone_candidate_count(), 1);
     assert!(expression.is_read_only_preview());
 }
 
@@ -317,8 +374,80 @@ fn feedback_health_cuts_and_regenerates_critical_safety_gene() {
     assert!(intents.contains(&"quarantine".to_owned()));
     assert!(intents.contains(&"regenerate".to_owned()));
     assert!(intents.contains(&"rollback".to_owned()));
+    assert!(intents.contains(&"cut".to_owned()));
     assert_eq!(expression.regeneration_payload_count(), 1);
+    assert_eq!(expression.tombstone_candidate_count(), 1);
     assert!(expression.is_read_only_preview());
+}
+
+#[test]
+fn regeneration_uses_stable_anchor_and_high_fitness_sibling_evidence() {
+    let genome = ReasoningGenome::new(
+        "genome:test:v1",
+        TaskProfile::Coding,
+        "genome:test:stable",
+        vec![
+            ReasoningGene::new(
+                "gene:test:safety",
+                ReasoningGeneKind::Safety,
+                "unsafe drift guard",
+                "this safety behavior drifted",
+            )
+            .with_health(3, 0.18, 0.93),
+            ReasoningGene::new(
+                "gene:test:retrieval",
+                ReasoningGeneKind::Retrieval,
+                "healthy retrieval",
+                "validated retrieval sibling",
+            )
+            .with_health(1, 0.92, 0.04),
+        ],
+    );
+
+    let expression = genome.express(GenomeExpressionInput {
+        profile: TaskProfile::Coding,
+        quality: 0.40,
+        process_reward: 0.35,
+        contradiction_count: 1,
+        critical_reflection_issue_count: 0,
+        revision_action_count: 1,
+        used_memories: 0,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.50,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: false,
+        drift_rollback: false,
+        runtime_kv_hold: false,
+    });
+
+    let regenerate = expression
+        .mutation_plans
+        .iter()
+        .find(|plan| plan.intent == GeneScissorsIntent::Regenerate)
+        .expect("regeneration plan");
+
+    assert!(
+        regenerate
+            .source_gene_ids
+            .contains(&"genome:test:stable".to_owned())
+    );
+    assert!(
+        regenerate
+            .source_gene_ids
+            .contains(&"gene:test:retrieval".to_owned())
+    );
+    assert!(regenerate.source_evidence.iter().any(|evidence| {
+        evidence.kind == GeneLifecycleSourceKind::HighFitnessSibling
+            && evidence.source_id == "gene:test:retrieval"
+    }));
+    assert!(expression.lifecycle_records.iter().any(|record| {
+        record.action == GeneLifecycleAction::Regenerate
+            && record.source_evidence.iter().any(|evidence| {
+                evidence.kind == GeneLifecycleSourceKind::StableAnchor
+                    && evidence.source_id == "genome:test:stable"
+            })
+    }));
 }
 
 #[test]
@@ -868,7 +997,7 @@ fn dual_chain_schema_round_trips_expression_and_memory_records() {
     let lines = chain.to_kv_lines().expect("valid dual-chain schema");
     let loaded = DnaGeneChain::from_kv_lines(&lines).expect("roundtrip schema");
 
-    assert_eq!(loaded.schema_version, "dna_chain_v1");
+    assert_eq!(loaded.schema_version, "dna_chain_v2");
     assert_eq!(loaded.express_chain.len(), 7);
     assert_eq!(loaded.memory_chain.len(), 1);
     assert_eq!(loaded.total_gene_count(), 8);
@@ -891,6 +1020,12 @@ fn dual_chain_schema_round_trips_expression_and_memory_records() {
             .memory_chain
             .iter()
             .all(|record| record.rollback_anchor_id == "genome:coding:stable")
+    );
+    assert!(
+        loaded
+            .memory_chain
+            .iter()
+            .all(|record| record.decay_score > 0.0 && record.decay_score <= 1.0)
     );
     assert!(
         loaded

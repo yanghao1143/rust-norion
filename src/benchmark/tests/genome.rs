@@ -40,6 +40,7 @@ fn summary_records_reasoning_genome_expression_evidence() {
     assert!(summary.genome_evidence().total_splice_segments >= 1);
     assert!(summary.genome_evidence().total_splice_retained >= 1);
     assert!(summary.genome_evidence().total_splice_input_tokens >= 1);
+    assert!(summary.total_reasoning_genome_lifecycle_records() >= 7);
     assert!(
         summary
             .summary_line()
@@ -79,6 +80,16 @@ fn summary_records_reasoning_genome_expression_evidence() {
         summary
             .summary_line()
             .contains("reasoning_genome_regeneration_payloads=0")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_lifecycle_records=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_lifecycle_tombstone_candidates=")
     );
 
     let report = summary.evaluate(&BenchmarkGate {
@@ -148,6 +159,7 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
 
     assert_eq!(summary.total_reasoning_genome_repair_payloads(), 2);
     assert_eq!(summary.total_reasoning_genome_regeneration_payloads(), 1);
+    assert_eq!(summary.total_reasoning_genome_tombstone_candidates(), 1);
     assert!(
         summary
             .summary_line()
@@ -157,6 +169,11 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
         summary
             .summary_line()
             .contains("reasoning_genome_regeneration_payloads=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_lifecycle_tombstone_candidates=1")
     );
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_repair_payloads: Some(2),

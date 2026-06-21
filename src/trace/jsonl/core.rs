@@ -59,6 +59,8 @@ pub fn trace_json_line_with_case(
     let agent_team_aggregation = &outcome.agent_team_plan.aggregation;
     let reasoning_genome_mutation_intents = outcome.reasoning_genome.mutation_intents();
     let reasoning_genome_proposal_ids = outcome.reasoning_genome.proposal_ids();
+    let reasoning_genome_lifecycle_actions = outcome.reasoning_genome.lifecycle_action_summaries();
+    let reasoning_genome_lifecycle_summaries = outcome.reasoning_genome.lifecycle_summaries(8);
     let reasoning_genome_splice_finding_kinds = outcome.reasoning_genome_splice.finding_kinds();
     let reasoning_genome_splice_mutation_intents =
         outcome.reasoning_genome_splice.mutation_intents();
@@ -106,7 +108,7 @@ pub fn trace_json_line_with_case(
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
          \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"aggregation\":{{\"lane_count\":{},\"message_summaries\":{},\"conflict_topics\":{},\"unresolved_conflict_topics\":{},\"budget_scope\":\"{}\",\"max_parallel_lanes\":{},\"attention_fraction\":{:.6},\"main_thread_writer\":\"{}\"}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
-         \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"repair_payloads\":{},\"regeneration_payloads\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_retained\":{},\"splice_skipped\":{},\"splice_quarantined\":{},\"splice_repair_candidates\":{},\"splice_dispositions\":{},\"splice_reason_summaries\":{},\"splice_lifecycle_records\":{},\"splice_lifecycle_states\":{},\"splice_lifecycle_summaries\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
+         \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"repair_payloads\":{},\"regeneration_payloads\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"lifecycle_records\":{},\"lifecycle_actions\":{},\"lifecycle_summaries\":{},\"lifecycle_tombstone_candidates\":{},\"lifecycle_pending_validations\":{},\"lifecycle_source_evidence\":{},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_retained\":{},\"splice_skipped\":{},\"splice_quarantined\":{},\"splice_repair_candidates\":{},\"splice_dispositions\":{},\"splice_reason_summaries\":{},\"splice_lifecycle_records\":{},\"splice_lifecycle_states\":{},\"splice_lifecycle_summaries\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
@@ -302,6 +304,14 @@ pub fn trace_json_line_with_case(
         outcome.reasoning_genome.write_allowed,
         outcome.reasoning_genome.applied,
         outcome.reasoning_genome.youth_pressure,
+        outcome.reasoning_genome.lifecycle_record_count(),
+        string_array_json(&reasoning_genome_lifecycle_actions),
+        string_array_json(&reasoning_genome_lifecycle_summaries),
+        outcome.reasoning_genome.tombstone_candidate_count(),
+        outcome
+            .reasoning_genome
+            .pending_lifecycle_validation_count(),
+        outcome.reasoning_genome.lifecycle_source_evidence_count(),
         outcome.reasoning_genome_splice.segments.len(),
         outcome.reasoning_genome_splice.exon_count(),
         outcome.reasoning_genome_splice.intron_count(),

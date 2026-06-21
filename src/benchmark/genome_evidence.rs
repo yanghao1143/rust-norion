@@ -17,6 +17,10 @@ pub struct BenchmarkGenomeEvidence {
     pub total_gene_scissors_proposals: usize,
     pub total_repair_payloads: usize,
     pub total_regeneration_payloads: usize,
+    pub total_lifecycle_records: usize,
+    pub total_lifecycle_tombstone_candidates: usize,
+    pub total_lifecycle_pending_validations: usize,
+    pub total_lifecycle_source_evidence: usize,
     pub total_splice_segments: usize,
     pub total_splice_exons: usize,
     pub total_splice_introns: usize,
@@ -67,6 +71,10 @@ impl BenchmarkGenomeEvidence {
         self.total_gene_scissors_proposals += expression.scissors_proposal_count();
         self.total_repair_payloads += expression.repair_payload_count();
         self.total_regeneration_payloads += expression.regeneration_payload_count();
+        self.total_lifecycle_records += expression.lifecycle_record_count();
+        self.total_lifecycle_tombstone_candidates += expression.tombstone_candidate_count();
+        self.total_lifecycle_pending_validations += expression.pending_lifecycle_validation_count();
+        self.total_lifecycle_source_evidence += expression.lifecycle_source_evidence_count();
         self.total_splice_segments += splice.segments.len();
         self.total_splice_exons += splice.exon_count();
         self.total_splice_introns += splice.intron_count();
@@ -148,6 +156,38 @@ impl BenchmarkGenomeEvidence {
         if !expression.is_read_only_preview() {
             self.failures.push(format!(
                 "{}:{} reasoning_genome expression must remain read-only preview",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if expression.lifecycle_record_count() < expression.expression_gene_count {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome lifecycle records must cover every gene",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if expression.lifecycle_source_evidence_count() < expression.lifecycle_record_count() {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome lifecycle records require source evidence",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if expression.tombstone_candidate_count() < expression.malignant_gene_count() {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome malignant genes require tombstone candidates",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if expression
+            .mutation_plans
+            .iter()
+            .any(|plan| !plan.has_source_evidence())
+        {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome mutation plans require source evidence",
                 device.as_str(),
                 case.name
             ));

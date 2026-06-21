@@ -82,6 +82,12 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"mutation_intents\":"));
     assert!(line.contains("\"proposal_ids\":"));
     assert!(line.contains("\"youth_pressure\":"));
+    assert!(line.contains("\"lifecycle_records\":"));
+    assert!(line.contains("\"lifecycle_actions\":"));
+    assert!(line.contains("\"lifecycle_summaries\":"));
+    assert!(line.contains("\"lifecycle_tombstone_candidates\":"));
+    assert!(line.contains("\"lifecycle_pending_validations\":"));
+    assert!(line.contains("\"lifecycle_source_evidence\":"));
     assert!(line.contains("\"splice_segments\":"));
     assert!(line.contains("\"splice_exons\":"));
     assert!(line.contains("\"splice_introns\":"));

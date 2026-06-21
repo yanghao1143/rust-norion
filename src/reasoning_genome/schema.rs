@@ -2,8 +2,8 @@ use crate::hierarchy::TaskProfile;
 
 use super::model::{ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome};
 
-const DNA_CHAIN_RECORD_VERSION: &str = "dna_chain_v1";
-const DNA_CHAIN_RECORD_FIELD_COUNT: usize = 33;
+const DNA_CHAIN_RECORD_VERSION: &str = "dna_chain_v2";
+const DNA_CHAIN_RECORD_FIELD_COUNT: usize = 34;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DnaChainKind {
@@ -130,6 +130,7 @@ pub struct DnaGeneRecord {
     pub tags: Vec<String>,
     pub lineage: DnaGeneLineage,
     pub age: u32,
+    pub decay_score: f32,
     pub fitness_score: f32,
     pub trust_score: f32,
     pub drift_score: f32,
@@ -162,6 +163,7 @@ impl DnaGeneRecord {
             tags: gene.tags.clone(),
             lineage,
             age: gene.age,
+            decay_score: gene.decay_score(),
             fitness_score: gene.fitness,
             trust_score,
             drift_score: gene.drift_score,
@@ -369,7 +371,8 @@ impl DnaGeneChain {
                 gene_id: record.gene_id.clone(),
             });
         }
-        if !is_unit(record.fitness_score)
+        if !is_unit(record.decay_score)
+            || !is_unit(record.fitness_score)
             || !is_unit(record.trust_score)
             || !is_unit(record.drift_score)
         {
@@ -502,6 +505,7 @@ fn serialize_record(chain: &DnaGeneChain, record: &DnaGeneRecord) -> String {
         record.lineage.inherited_from.clone().unwrap_or_default(),
         record.lineage.generation.to_string(),
         record.age.to_string(),
+        finite_f32_to_field(record.decay_score),
         finite_f32_to_field(record.fitness_score),
         finite_f32_to_field(record.trust_score),
         finite_f32_to_field(record.drift_score),
@@ -545,17 +549,18 @@ fn deserialize_record(line: &str) -> Result<ParsedDnaRecord, DnaGeneSchemaError>
     let age = fields[17]
         .parse::<u32>()
         .map_err(|_| DnaGeneSchemaError::MalformedRecord)?;
-    let fitness_score = field_to_finite_f32(&fields[18])?;
-    let trust_score = field_to_finite_f32(&fields[19])?;
-    let drift_score = field_to_finite_f32(&fields[20])?;
-    let evidence_kind = str_to_evidence_kind(&fields[21])?;
-    let privacy_checked = field_to_bool(&fields[25])?;
-    let raw_prompt_included = field_to_bool(&fields[26])?;
-    let operator_approval_required = field_to_bool(&fields[28])?;
-    let admission_write_authorized = field_to_bool(&fields[29])?;
-    let applied = field_to_bool(&fields[30])?;
-    let read_only = field_to_bool(&fields[31])?;
-    let write_allowed = field_to_bool(&fields[32])?;
+    let decay_score = field_to_finite_f32(&fields[18])?;
+    let fitness_score = field_to_finite_f32(&fields[19])?;
+    let trust_score = field_to_finite_f32(&fields[20])?;
+    let drift_score = field_to_finite_f32(&fields[21])?;
+    let evidence_kind = str_to_evidence_kind(&fields[22])?;
+    let privacy_checked = field_to_bool(&fields[26])?;
+    let raw_prompt_included = field_to_bool(&fields[27])?;
+    let operator_approval_required = field_to_bool(&fields[29])?;
+    let admission_write_authorized = field_to_bool(&fields[30])?;
+    let applied = field_to_bool(&fields[31])?;
+    let read_only = field_to_bool(&fields[32])?;
+    let write_allowed = field_to_bool(&fields[33])?;
 
     Ok(ParsedDnaRecord {
         schema_version: DNA_CHAIN_RECORD_VERSION,
@@ -580,18 +585,19 @@ fn deserialize_record(line: &str) -> Result<ParsedDnaRecord, DnaGeneSchemaError>
                 generation,
             },
             age,
+            decay_score,
             fitness_score,
             trust_score,
             drift_score,
             source_evidence: DnaGeneSourceEvidence {
                 kind: evidence_kind,
-                source_hash: fields[22].clone(),
-                source_summary: fields[23].clone(),
-                prompt_digest: non_empty_string(&fields[24]),
+                source_hash: fields[23].clone(),
+                source_summary: fields[24].clone(),
+                prompt_digest: non_empty_string(&fields[25]),
                 privacy_checked,
                 raw_prompt_included,
             },
-            rollback_anchor_id: fields[27].clone(),
+            rollback_anchor_id: fields[28].clone(),
             operator_approval_required,
             admission_write_authorized,
             applied,

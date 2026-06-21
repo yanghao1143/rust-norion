@@ -29,6 +29,17 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let write_allowed = extract_json_bool_field(genome, "write_allowed");
     let mutation_applied = extract_json_bool_field(genome, "mutation_applied");
     let youth_pressure = extract_json_f32_field(genome, "youth_pressure").unwrap_or(f32::NAN);
+    let lifecycle_records = extract_json_usize_field(genome, "lifecycle_records").unwrap_or(0);
+    let lifecycle_actions =
+        extract_json_string_array_field(genome, "lifecycle_actions").unwrap_or_default();
+    let lifecycle_summaries =
+        extract_json_string_array_field(genome, "lifecycle_summaries").unwrap_or_default();
+    let lifecycle_tombstone_candidates =
+        extract_json_usize_field(genome, "lifecycle_tombstone_candidates").unwrap_or(0);
+    let lifecycle_pending_validations =
+        extract_json_usize_field(genome, "lifecycle_pending_validations").unwrap_or(0);
+    let lifecycle_source_evidence =
+        extract_json_usize_field(genome, "lifecycle_source_evidence").unwrap_or(0);
     let splice_segments = extract_json_usize_field(genome, "splice_segments").unwrap_or(0);
     let splice_exons = extract_json_usize_field(genome, "splice_exons").unwrap_or(0);
     let splice_introns = extract_json_usize_field(genome, "splice_introns").unwrap_or(0);
@@ -136,6 +147,42 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
         failures.push(format!(
             "reasoning_genome youth_pressure {youth_pressure:.6} must stay within 0.0..=1.0"
         ));
+    }
+    if lifecycle_records < gene_count {
+        failures.push(format!(
+            "reasoning_genome lifecycle_records {lifecycle_records} below gene_count {gene_count}"
+        ));
+    }
+    if lifecycle_records > 0 && lifecycle_actions.is_empty() {
+        failures.push("reasoning_genome lifecycle_records require lifecycle_actions".to_owned());
+    }
+    if lifecycle_records > 0 && lifecycle_summaries.is_empty() {
+        failures.push("reasoning_genome lifecycle_records require lifecycle_summaries".to_owned());
+    }
+    if lifecycle_source_evidence < lifecycle_records {
+        failures.push(format!(
+            "reasoning_genome lifecycle_source_evidence {lifecycle_source_evidence} below lifecycle_records {lifecycle_records}"
+        ));
+    }
+    if lifecycle_pending_validations > gene_scissors_proposals + lifecycle_records {
+        failures.push(format!(
+            "reasoning_genome lifecycle_pending_validations {lifecycle_pending_validations} exceed proposal/lifecycle evidence"
+        ));
+    }
+    if lifecycle_tombstone_candidates < malignant_genes && malignant_genes > 0 {
+        failures.push(format!(
+            "reasoning_genome malignant_genes {malignant_genes} require lifecycle_tombstone_candidates >= malignant_genes"
+        ));
+    }
+    if active_genes > 0 {
+        require_lifecycle_action(&mut failures, &lifecycle_actions, "keep");
+    }
+    if aged_genes > 0 {
+        require_lifecycle_action(&mut failures, &lifecycle_actions, "relabel");
+    }
+    if malignant_genes > 0 {
+        require_lifecycle_action(&mut failures, &lifecycle_actions, "regenerate");
+        require_lifecycle_action(&mut failures, &lifecycle_actions, "cut");
     }
     if splice_segments != splice_exons + splice_introns + splice_variants {
         failures.push(format!(
@@ -269,6 +316,14 @@ fn require_intent(failures: &mut Vec<String>, mutation_intents: &[String], expec
     if !mutation_intents.iter().any(|intent| intent == expected) {
         failures.push(format!(
             "reasoning_genome mutation_intents must include {expected}"
+        ));
+    }
+}
+
+fn require_lifecycle_action(failures: &mut Vec<String>, actions: &[String], expected: &str) {
+    if !actions.iter().any(|action| action == expected) {
+        failures.push(format!(
+            "reasoning_genome lifecycle_actions must include {expected}"
         ));
     }
 }
