@@ -53,6 +53,18 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "reasoning_genome_splice_reason_summaries",
         "\"splice_reason_summaries\":",
     ),
+    required_field(
+        "reasoning_genome_splice_lifecycle_records",
+        "\"splice_lifecycle_records\":",
+    ),
+    required_field(
+        "reasoning_genome_splice_lifecycle_states",
+        "\"splice_lifecycle_states\":",
+    ),
+    required_field(
+        "reasoning_genome_splice_lifecycle_summaries",
+        "\"splice_lifecycle_summaries\":",
+    ),
     required_field("reasoning_genome_splice_findings", "\"splice_findings\":"),
     required_field(
         "reasoning_genome_splice_finding_kinds",

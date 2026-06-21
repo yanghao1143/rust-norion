@@ -63,6 +63,11 @@ fn summary_records_reasoning_genome_expression_evidence() {
     assert!(
         summary
             .summary_line()
+            .contains("reasoning_genome_splice_lifecycle_records=")
+    );
+    assert!(
+        summary
+            .summary_line()
             .contains("reasoning_genome_failures=0")
     );
     assert!(

@@ -42,6 +42,12 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
         extract_json_string_array_field(genome, "splice_dispositions").unwrap_or_default();
     let splice_reason_summaries =
         extract_json_string_array_field(genome, "splice_reason_summaries").unwrap_or_default();
+    let splice_lifecycle_records =
+        extract_json_usize_field(genome, "splice_lifecycle_records").unwrap_or(0);
+    let splice_lifecycle_states =
+        extract_json_string_array_field(genome, "splice_lifecycle_states").unwrap_or_default();
+    let splice_lifecycle_summaries =
+        extract_json_string_array_field(genome, "splice_lifecycle_summaries").unwrap_or_default();
     let splice_findings = extract_json_usize_field(genome, "splice_findings").unwrap_or(0);
     let splice_finding_kinds =
         extract_json_string_array_field(genome, "splice_finding_kinds").unwrap_or_default();
@@ -181,6 +187,43 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
             break;
         }
     }
+    if splice_findings > 0 && splice_lifecycle_records == 0 {
+        failures.push("reasoning_genome splice_findings require lifecycle records".to_owned());
+    }
+    if splice_lifecycle_records > splice_findings {
+        failures.push(format!(
+            "reasoning_genome splice_lifecycle_records {splice_lifecycle_records} exceed splice_findings {splice_findings}"
+        ));
+    }
+    if splice_lifecycle_records > 0 && splice_lifecycle_states.is_empty() {
+        failures.push(
+            "reasoning_genome splice_lifecycle_records require splice_lifecycle_states".to_owned(),
+        );
+    }
+    if splice_lifecycle_records > 0 && splice_lifecycle_summaries.is_empty() {
+        failures.push(
+            "reasoning_genome splice_lifecycle_records require splice_lifecycle_summaries"
+                .to_owned(),
+        );
+    }
+    if splice_quarantined > 0 {
+        require_splice_lifecycle_state(&mut failures, &splice_lifecycle_states, "quarantined");
+    }
+    if splice_repair_candidates > 0 {
+        require_splice_lifecycle_state(&mut failures, &splice_lifecycle_states, "repair_candidate");
+    }
+    for summary in &splice_lifecycle_summaries {
+        if contains_raw_payload_marker(summary) {
+            failures
+                .push("reasoning_genome splice_lifecycle_summaries must stay sanitized".to_owned());
+            break;
+        }
+        if summary.contains("write_allowed=true") || summary.contains("applied=true") {
+            failures
+                .push("reasoning_genome splice_lifecycle_summaries must stay read-only".to_owned());
+            break;
+        }
+    }
     if splice_variants > 0 && splice_findings == 0 {
         failures.push("reasoning_genome splice_variants require splice_findings".to_owned());
     }
@@ -237,6 +280,14 @@ fn require_splice_disposition(failures: &mut Vec<String>, dispositions: &[String
     {
         failures.push(format!(
             "reasoning_genome splice_dispositions must include {expected}"
+        ));
+    }
+}
+
+fn require_splice_lifecycle_state(failures: &mut Vec<String>, states: &[String], expected: &str) {
+    if !states.iter().any(|state| state == expected) {
+        failures.push(format!(
+            "reasoning_genome splice_lifecycle_states must include {expected}"
         ));
     }
 }

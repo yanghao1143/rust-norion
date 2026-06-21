@@ -27,6 +27,10 @@ pub struct BenchmarkGenomeEvidence {
     pub total_splice_repair_candidates: usize,
     pub total_splice_input_tokens: usize,
     pub total_splice_retained_tokens: usize,
+    pub total_splice_lifecycle_records: usize,
+    pub total_splice_lifecycle_quarantined: usize,
+    pub total_splice_lifecycle_held: usize,
+    pub total_splice_lifecycle_rejected: usize,
     pub total_splice_findings: usize,
     pub total_splice_proposals: usize,
     pub failures: Vec<String>,
@@ -73,6 +77,10 @@ impl BenchmarkGenomeEvidence {
         self.total_splice_repair_candidates += splice.repair_candidate_count();
         self.total_splice_input_tokens += splice.total_token_count();
         self.total_splice_retained_tokens += splice.retained_token_count();
+        self.total_splice_lifecycle_records += splice.lifecycle_record_count();
+        self.total_splice_lifecycle_quarantined += splice.quarantined_lifecycle_count();
+        self.total_splice_lifecycle_held += splice.held_lifecycle_count();
+        self.total_splice_lifecycle_rejected += splice.rejected_lifecycle_count();
         self.total_splice_findings += splice.findings.len();
         self.total_splice_proposals += splice.mutation_plans.len();
         self.total_gene_scissors_proposals += splice.mutation_plans.len();
@@ -194,6 +202,31 @@ impl BenchmarkGenomeEvidence {
         if !splice.segments.is_empty() && splice.segment_reason_summaries(usize::MAX).is_empty() {
             self.failures.push(format!(
                 "{}:{} reasoning_genome splice segments require sanitized reason summaries",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !splice.findings.is_empty() && splice.lifecycle_records.is_empty() {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome splice findings require lifecycle records",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if splice.lifecycle_records.len() > splice.findings.len() {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome splice lifecycle records exceed findings",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !splice
+            .lifecycle_records
+            .iter()
+            .all(|record| record.is_read_only_preview())
+        {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome splice lifecycle must remain read-only preview",
                 device.as_str(),
                 case.name
             ));

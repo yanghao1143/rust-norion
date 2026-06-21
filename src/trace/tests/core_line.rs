@@ -92,6 +92,9 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"splice_repair_candidates\":"));
     assert!(line.contains("\"splice_dispositions\":"));
     assert!(line.contains("\"splice_reason_summaries\":"));
+    assert!(line.contains("\"splice_lifecycle_records\":"));
+    assert!(line.contains("\"splice_lifecycle_states\":"));
+    assert!(line.contains("\"splice_lifecycle_summaries\":"));
     assert!(line.contains("\"splice_findings\":"));
     assert!(line.contains("\"splice_finding_kinds\":"));
     assert!(line.contains("\"splice_mutation_intents\":"));
@@ -401,6 +404,49 @@ fn trace_schema_gate_rejects_raw_payload_markers_in_splice_reasons() {
         failures
             .iter()
             .any(|failure| failure.contains("splice_reason_summaries")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_missing_splice_lifecycle_for_findings() {
+    let line = replace_trace_object_usize(
+        &replace_trace_object_usize(
+            &rollback_trace_line(),
+            "reasoning_genome",
+            "splice_findings",
+            1,
+        ),
+        "reasoning_genome",
+        "splice_lifecycle_records",
+        0,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("lifecycle records")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_write_enabled_splice_lifecycle_summary() {
+    let line = replace_in_trace_object(
+        &rollback_trace_line(),
+        "reasoning_genome",
+        "write_allowed=false applied=false",
+        "write_allowed=true applied=false",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("splice_lifecycle_summaries")),
         "{failures:?}"
     );
 }

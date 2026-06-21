@@ -12,6 +12,7 @@ pub use schema::{
 };
 pub use splicing::{
     ClassifiedGeneSegment, DnaSplicePreview, DnaSplicer, DnaSplicerPolicy, GeneKvResidency,
+    GeneScissorsLifecycleRecord, GeneScissorsLifecycleState, GeneScissorsValidationStatus,
     GeneSegment, GeneSegmentClass, GeneSegmentDisposition, GeneSegmentSource, GeneVariantKind,
     GeneVariantSeverity, MutDetector, MutFixer, MutationFinding,
 };

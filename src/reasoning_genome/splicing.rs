@@ -89,6 +89,8 @@ pub enum GeneVariantKind {
     Deletion,
     Truncation,
     StaleLabel,
+    Contradiction,
+    LowFitnessRepetition,
     Drift,
     Privacy,
     KvShape,
@@ -104,6 +106,8 @@ impl GeneVariantKind {
             Self::Deletion => "deletion",
             Self::Truncation => "truncation",
             Self::StaleLabel => "stale_label",
+            Self::Contradiction => "contradiction",
+            Self::LowFitnessRepetition => "low_fitness_repetition",
             Self::Drift => "drift",
             Self::Privacy => "privacy",
             Self::KvShape => "kv_shape",
@@ -310,6 +314,170 @@ impl MutationFinding {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneScissorsLifecycleState {
+    Detected,
+    Quarantined,
+    RepairCandidate,
+    Validated,
+    Cut,
+    Held,
+    Rejected,
+}
+
+impl GeneScissorsLifecycleState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Detected => "detected",
+            Self::Quarantined => "quarantined",
+            Self::RepairCandidate => "repair_candidate",
+            Self::Validated => "validated",
+            Self::Cut => "cut",
+            Self::Held => "held",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneScissorsValidationStatus {
+    Pending,
+    Passed,
+    Failed,
+}
+
+impl GeneScissorsValidationStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeneScissorsLifecycleRecord {
+    pub id: String,
+    pub target_segment_id: String,
+    pub finding_ids: Vec<String>,
+    pub finding_kinds: Vec<GeneVariantKind>,
+    pub mutation_plan_ids: Vec<String>,
+    pub state: GeneScissorsLifecycleState,
+    pub validation_status: GeneScissorsValidationStatus,
+    pub confidence: f32,
+    pub rollback_anchor_id: String,
+    pub stable_anchor_sources: Vec<String>,
+    pub next_action: String,
+    pub admission_write_authorized: bool,
+    pub applied: bool,
+}
+
+impl GeneScissorsLifecycleRecord {
+    fn preview(
+        target_segment_id: impl Into<String>,
+        findings: &[&MutationFinding],
+        mutation_plans: &[MutationPlan],
+        stable_anchor_id: &str,
+    ) -> Self {
+        let target_segment_id = target_segment_id.into();
+        let state = initial_lifecycle_state(findings);
+        let mutation_plan_ids = mutation_plans
+            .iter()
+            .filter(|plan| plan.target_gene_id == target_segment_id)
+            .map(|plan| plan.id.clone())
+            .collect::<Vec<_>>();
+        let finding_ids = findings
+            .iter()
+            .map(|finding| finding.id.clone())
+            .collect::<Vec<_>>();
+        let mut finding_kinds = Vec::new();
+        for finding in findings {
+            if !finding_kinds.contains(&finding.kind) {
+                finding_kinds.push(finding.kind);
+            }
+        }
+        let confidence = lifecycle_confidence(findings);
+
+        Self {
+            id: format!("gene_scissors:{target_segment_id}:{}", state.as_str()),
+            target_segment_id,
+            finding_ids,
+            finding_kinds,
+            mutation_plan_ids,
+            state,
+            validation_status: GeneScissorsValidationStatus::Pending,
+            confidence,
+            rollback_anchor_id: stable_anchor_id.to_owned(),
+            stable_anchor_sources: vec![stable_anchor_id.to_owned()],
+            next_action: next_action_for_state(state).to_owned(),
+            admission_write_authorized: false,
+            applied: false,
+        }
+    }
+
+    pub fn with_validation_status(
+        mut self,
+        validation_status: GeneScissorsValidationStatus,
+    ) -> Self {
+        self.validation_status = validation_status;
+        match validation_status {
+            GeneScissorsValidationStatus::Pending => {}
+            GeneScissorsValidationStatus::Passed => {
+                self.state = GeneScissorsLifecycleState::Validated;
+                self.next_action = "await_operator_approval_before_apply".to_owned();
+            }
+            GeneScissorsValidationStatus::Failed => {
+                if self.state == GeneScissorsLifecycleState::Quarantined {
+                    self.state = GeneScissorsLifecycleState::Rejected;
+                    self.next_action =
+                        "reject_candidate_keep_quarantine_and_rollback_anchor".to_owned();
+                } else {
+                    self.state = GeneScissorsLifecycleState::Held;
+                    self.next_action = "hold_candidate_for_more_evidence".to_owned();
+                }
+                self.admission_write_authorized = false;
+                self.applied = false;
+            }
+        }
+        self
+    }
+
+    pub fn with_cut_preview(mut self) -> Self {
+        self.state = GeneScissorsLifecycleState::Cut;
+        self.next_action = "cut_from_active_expression_after_operator_approval".to_owned();
+        self.admission_write_authorized = false;
+        self.applied = false;
+        self
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        !self.admission_write_authorized && !self.applied
+    }
+
+    pub fn summary(&self) -> String {
+        let kinds = self
+            .finding_kinds
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        format!(
+            "target_present={} state={} validation={} confidence={:.3} findings={} plans={} rollback={} next={} write_allowed={} applied={}",
+            !self.target_segment_id.trim().is_empty(),
+            self.state.as_str(),
+            self.validation_status.as_str(),
+            self.confidence,
+            kinds,
+            self.mutation_plan_ids.len(),
+            self.rollback_anchor_id,
+            self.next_action,
+            self.admission_write_authorized,
+            self.applied
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassifiedGeneSegment {
     pub segment: GeneSegment,
@@ -325,6 +493,7 @@ pub struct DnaSplicePreview {
     pub segments: Vec<ClassifiedGeneSegment>,
     pub findings: Vec<MutationFinding>,
     pub mutation_plans: Vec<MutationPlan>,
+    pub lifecycle_records: Vec<GeneScissorsLifecycleRecord>,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -359,6 +528,22 @@ impl DnaSplicePreview {
         self.count_disposition(GeneSegmentDisposition::RepairCandidate)
     }
 
+    pub fn lifecycle_record_count(&self) -> usize {
+        self.lifecycle_records.len()
+    }
+
+    pub fn quarantined_lifecycle_count(&self) -> usize {
+        self.count_lifecycle_state(GeneScissorsLifecycleState::Quarantined)
+    }
+
+    pub fn held_lifecycle_count(&self) -> usize {
+        self.count_lifecycle_state(GeneScissorsLifecycleState::Held)
+    }
+
+    pub fn rejected_lifecycle_count(&self) -> usize {
+        self.count_lifecycle_state(GeneScissorsLifecycleState::Rejected)
+    }
+
     pub fn total_token_count(&self) -> usize {
         self.segments
             .iter()
@@ -388,6 +573,25 @@ impl DnaSplicePreview {
             }
         }
         dispositions
+    }
+
+    pub fn lifecycle_state_summaries(&self) -> Vec<String> {
+        let mut states = Vec::new();
+        for record in &self.lifecycle_records {
+            let state = record.state.as_str().to_owned();
+            if !states.contains(&state) {
+                states.push(state);
+            }
+        }
+        states
+    }
+
+    pub fn lifecycle_summaries(&self, limit: usize) -> Vec<String> {
+        self.lifecycle_records
+            .iter()
+            .take(limit)
+            .map(GeneScissorsLifecycleRecord::summary)
+            .collect()
     }
 
     pub fn segment_reason_summaries(&self, limit: usize) -> Vec<String> {
@@ -435,6 +639,10 @@ impl DnaSplicePreview {
                 .mutation_plans
                 .iter()
                 .all(MutationPlan::is_read_only_preview)
+            && self
+                .lifecycle_records
+                .iter()
+                .all(GeneScissorsLifecycleRecord::is_read_only_preview)
     }
 
     fn count_class(&self, class: GeneSegmentClass) -> usize {
@@ -448,6 +656,13 @@ impl DnaSplicePreview {
         self.segments
             .iter()
             .filter(|segment| segment.disposition == disposition)
+            .count()
+    }
+
+    fn count_lifecycle_state(&self, state: GeneScissorsLifecycleState) -> usize {
+        self.lifecycle_records
+            .iter()
+            .filter(|record| record.state == state)
             .count()
     }
 }
@@ -502,6 +717,15 @@ impl MutDetector {
                     "segment label or purpose is stale and cannot explain its function",
                 ));
             }
+            if has_contradictory_metadata(segment) {
+                findings.push(MutationFinding::new(
+                    &segment.id,
+                    GeneVariantKind::Contradiction,
+                    GeneVariantSeverity::Repair,
+                    GeneScissorsIntent::Repair,
+                    "segment metadata contains contradictory or conflicting rule evidence",
+                ));
+            }
             if segment.drift_score > self.policy.max_exon_drift {
                 findings.push(MutationFinding::new(
                     &segment.id,
@@ -538,6 +762,27 @@ impl MutDetector {
                     "segment KV shape is not valid for runtime import",
                 ));
             }
+        }
+
+        let mut low_fitness_signatures: Vec<(String, &GeneSegment)> = Vec::new();
+        for segment in segments {
+            if segment.fitness >= self.policy.min_exon_fitness {
+                continue;
+            }
+            let signature = low_fitness_signature(segment);
+            if low_fitness_signatures
+                .iter()
+                .any(|(existing, _)| existing == &signature)
+            {
+                findings.push(MutationFinding::new(
+                    &segment.id,
+                    GeneVariantKind::LowFitnessRepetition,
+                    GeneVariantSeverity::Repair,
+                    GeneScissorsIntent::Repair,
+                    "repeated low-fitness segment pattern should be merged, decayed, or repaired",
+                ));
+            }
+            low_fitness_signatures.push((signature, segment));
         }
 
         let mut ordered = segments.iter().collect::<Vec<_>>();
@@ -711,6 +956,8 @@ impl DnaSplicer {
         let findings = detector.detect(&segments);
         let fixer = MutFixer;
         let mutation_plans = fixer.mutation_plans(&findings, stable_anchor_id.clone());
+        let lifecycle_records =
+            lifecycle_records_for_findings(&findings, &mutation_plans, &stable_anchor_id);
         let classified_segments = segments
             .into_iter()
             .map(|segment| {
@@ -739,6 +986,7 @@ impl DnaSplicer {
             segments: classified_segments,
             findings,
             mutation_plans,
+            lifecycle_records,
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -767,6 +1015,72 @@ fn disposition_for_class(
             GeneSegmentDisposition::Quarantined
         }
         GeneSegmentClass::Variant => GeneSegmentDisposition::RepairCandidate,
+    }
+}
+
+fn lifecycle_records_for_findings(
+    findings: &[MutationFinding],
+    mutation_plans: &[MutationPlan],
+    stable_anchor_id: &str,
+) -> Vec<GeneScissorsLifecycleRecord> {
+    let mut records = Vec::new();
+    for finding in findings {
+        if records.iter().any(|record: &GeneScissorsLifecycleRecord| {
+            record.target_segment_id == finding.segment_id
+        }) {
+            continue;
+        }
+        let segment_findings = findings
+            .iter()
+            .filter(|candidate| candidate.segment_id == finding.segment_id)
+            .collect::<Vec<_>>();
+        records.push(GeneScissorsLifecycleRecord::preview(
+            finding.segment_id.clone(),
+            &segment_findings,
+            mutation_plans,
+            stable_anchor_id,
+        ));
+    }
+    records
+}
+
+fn initial_lifecycle_state(findings: &[&MutationFinding]) -> GeneScissorsLifecycleState {
+    if findings.is_empty() {
+        return GeneScissorsLifecycleState::Detected;
+    }
+    if findings
+        .iter()
+        .any(|finding| finding.severity == GeneVariantSeverity::Quarantine)
+    {
+        GeneScissorsLifecycleState::Quarantined
+    } else {
+        GeneScissorsLifecycleState::RepairCandidate
+    }
+}
+
+fn lifecycle_confidence(findings: &[&MutationFinding]) -> f32 {
+    let mut confidence = 0.45_f32;
+    for finding in findings {
+        confidence = confidence.max(match finding.severity {
+            GeneVariantSeverity::Watch => 0.55,
+            GeneVariantSeverity::Repair => 0.74,
+            GeneVariantSeverity::Quarantine => 0.92,
+        });
+    }
+    confidence.min(0.99)
+}
+
+fn next_action_for_state(state: GeneScissorsLifecycleState) -> &'static str {
+    match state {
+        GeneScissorsLifecycleState::Detected => "collect_more_evidence",
+        GeneScissorsLifecycleState::Quarantined => {
+            "keep_isolated_generate_stable_anchor_replacement"
+        }
+        GeneScissorsLifecycleState::RepairCandidate => "validate_repair_candidate",
+        GeneScissorsLifecycleState::Validated => "await_operator_approval_before_apply",
+        GeneScissorsLifecycleState::Cut => "cut_from_active_expression_after_operator_approval",
+        GeneScissorsLifecycleState::Held => "hold_candidate_for_more_evidence",
+        GeneScissorsLifecycleState::Rejected => "reject_candidate_keep_rollback_anchor",
     }
 }
 
@@ -800,6 +1114,8 @@ fn reason_kind_hint(reason: &str) -> String {
         ("source hash", "missing_source_hash"),
         ("token budget", "truncation"),
         ("label or purpose", "stale_label"),
+        ("contradictory", "contradiction"),
+        ("low-fitness", "low_fitness_repetition"),
         ("drift", "drift"),
         ("privacy", "privacy"),
         ("schema", "schema"),
@@ -812,6 +1128,24 @@ fn reason_kind_hint(reason: &str) -> String {
         }
     }
     "repair".to_owned()
+}
+
+fn has_contradictory_metadata(segment: &GeneSegment) -> bool {
+    let label = segment.label.to_ascii_lowercase();
+    let purpose = segment.purpose.to_ascii_lowercase();
+    label.contains("contradict")
+        || label.contains("conflict")
+        || purpose.contains("contradict")
+        || purpose.contains("conflict")
+}
+
+fn low_fitness_signature(segment: &GeneSegment) -> String {
+    format!(
+        "{}:{}:{}",
+        segment.source.as_str(),
+        segment.label.trim().to_ascii_lowercase(),
+        segment.purpose.trim().to_ascii_lowercase()
+    )
 }
 
 fn classify_segment(

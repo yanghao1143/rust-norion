@@ -547,6 +547,66 @@ fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
 }
 
 #[test]
+fn mut_detector_reports_contradiction_and_low_fitness_repetition() {
+    let detector = MutDetector::default();
+    let segments = vec![
+        GeneSegment::new(
+            "segment:conflict-rule",
+            TaskProfile::Coding,
+            GeneSegmentSource::ToolOutput,
+            0,
+            12,
+        )
+        .with_source_hash("sha256:conflict")
+        .with_metadata(
+            "conflicting tool rule",
+            "contradict previous Rust validation evidence",
+            "tool rule conflict",
+        )
+        .with_health(0.72, 0.04, 0.01),
+        GeneSegment::new(
+            "segment:weak-repeat-a",
+            TaskProfile::Coding,
+            GeneSegmentSource::SemanticMemory,
+            12,
+            24,
+        )
+        .with_source_hash("sha256:weak-a")
+        .with_metadata(
+            "weak repeated heuristic",
+            "same stale heuristic appeared with low reward",
+            "weak repeated heuristic",
+        )
+        .with_health(0.20, 0.03, 0.01),
+        GeneSegment::new(
+            "segment:weak-repeat-b",
+            TaskProfile::Coding,
+            GeneSegmentSource::SemanticMemory,
+            24,
+            36,
+        )
+        .with_source_hash("sha256:weak-b")
+        .with_metadata(
+            "weak repeated heuristic",
+            "same stale heuristic appeared with low reward",
+            "weak repeated heuristic duplicate",
+        )
+        .with_health(0.18, 0.03, 0.01),
+    ];
+
+    let findings = detector.detect(&segments);
+
+    assert!(findings.iter().any(|finding| {
+        finding.segment_id == "segment:conflict-rule"
+            && finding.kind == GeneVariantKind::Contradiction
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.segment_id == "segment:weak-repeat-b"
+            && finding.kind == GeneVariantKind::LowFitnessRepetition
+    }));
+}
+
+#[test]
 fn runtime_kv_block_gene_segment_carries_shape_evidence_to_splicer() {
     let valid = RuntimeKvBlock::new(1, 0, 16, 20, vec![0.1, 0.2], vec![0.3, 0.4]);
     let malformed = RuntimeKvBlock::new(1, 0, 20, 20, Vec::new(), vec![0.3]);
@@ -637,6 +697,134 @@ fn mut_fixer_maps_stale_label_to_relabel_and_drift_to_quarantine_regenerate() {
             .all(|plan| plan.rollback_anchor_id == "genome:general:stable")
     );
     assert!(plans.iter().all(MutationPlan::is_read_only_preview));
+}
+
+#[test]
+fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_writes() {
+    let segments = vec![
+        GeneSegment::new(
+            "segment:private-drift",
+            TaskProfile::Coding,
+            GeneSegmentSource::RuntimeKv,
+            0,
+            24,
+        )
+        .with_source_hash("sha256:private-drift")
+        .with_metadata(
+            "private runtime drift",
+            "must be quarantined before reuse",
+            "runtime drift",
+        )
+        .with_health(0.80, 0.80, 0.50),
+        GeneSegment::new(
+            "segment:stale-repair",
+            TaskProfile::Coding,
+            GeneSegmentSource::GenomeLedger,
+            24,
+            48,
+        )
+        .with_source_hash("sha256:stale-repair")
+        .with_metadata("", "", "stale repair candidate")
+        .with_health(0.64, 0.05, 0.01),
+    ];
+
+    let preview =
+        DnaSplicer::default().preview(TaskProfile::Coding, "genome:coding:stable", segments);
+
+    assert_eq!(preview.lifecycle_record_count(), 2);
+    assert_eq!(preview.quarantined_lifecycle_count(), 1);
+    assert!(
+        preview
+            .lifecycle_state_summaries()
+            .contains(&"quarantined".to_owned())
+    );
+    assert!(
+        preview
+            .lifecycle_state_summaries()
+            .contains(&"repair_candidate".to_owned())
+    );
+    let quarantine = preview
+        .lifecycle_records
+        .iter()
+        .find(|record| record.target_segment_id == "segment:private-drift")
+        .expect("quarantine lifecycle");
+    assert_eq!(quarantine.state, GeneScissorsLifecycleState::Quarantined);
+    assert_eq!(
+        quarantine.validation_status,
+        GeneScissorsValidationStatus::Pending
+    );
+    assert!(quarantine.confidence >= 0.90);
+    assert_eq!(quarantine.rollback_anchor_id, "genome:coding:stable");
+    assert_eq!(
+        quarantine.stable_anchor_sources,
+        vec!["genome:coding:stable".to_owned()]
+    );
+    assert!(!quarantine.admission_write_authorized);
+    assert!(!quarantine.applied);
+    assert!(quarantine.summary().contains("write_allowed=false"));
+    assert!(preview.is_read_only_preview());
+}
+
+#[test]
+fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
+    let repair = GeneScissorsLifecycleRecord {
+        id: "gene_scissors:repair".to_owned(),
+        target_segment_id: "segment:repair".to_owned(),
+        finding_ids: vec!["finding:segment:repair:schema".to_owned()],
+        finding_kinds: vec![GeneVariantKind::Schema],
+        mutation_plan_ids: vec!["mutation:segment:repair:repair".to_owned()],
+        state: GeneScissorsLifecycleState::RepairCandidate,
+        validation_status: GeneScissorsValidationStatus::Pending,
+        confidence: 0.74,
+        rollback_anchor_id: "genome:coding:stable".to_owned(),
+        stable_anchor_sources: vec!["genome:coding:stable".to_owned()],
+        next_action: "validate_repair_candidate".to_owned(),
+        admission_write_authorized: false,
+        applied: false,
+    }
+    .with_validation_status(GeneScissorsValidationStatus::Failed);
+    let quarantine = GeneScissorsLifecycleRecord {
+        id: "gene_scissors:quarantine".to_owned(),
+        target_segment_id: "segment:quarantine".to_owned(),
+        finding_ids: vec!["finding:segment:quarantine:privacy".to_owned()],
+        finding_kinds: vec![GeneVariantKind::Privacy],
+        mutation_plan_ids: vec!["mutation:segment:quarantine:quarantine".to_owned()],
+        state: GeneScissorsLifecycleState::Quarantined,
+        validation_status: GeneScissorsValidationStatus::Pending,
+        confidence: 0.92,
+        rollback_anchor_id: "genome:coding:stable".to_owned(),
+        stable_anchor_sources: vec!["genome:coding:stable".to_owned()],
+        next_action: "keep_isolated_generate_stable_anchor_replacement".to_owned(),
+        admission_write_authorized: false,
+        applied: false,
+    }
+    .with_validation_status(GeneScissorsValidationStatus::Failed);
+    let cut_preview = GeneScissorsLifecycleRecord {
+        id: "gene_scissors:cut".to_owned(),
+        target_segment_id: "segment:cut".to_owned(),
+        finding_ids: vec!["finding:segment:cut:privacy".to_owned()],
+        finding_kinds: vec![GeneVariantKind::Privacy],
+        mutation_plan_ids: vec!["mutation:segment:cut:quarantine".to_owned()],
+        state: GeneScissorsLifecycleState::Quarantined,
+        validation_status: GeneScissorsValidationStatus::Passed,
+        confidence: 0.92,
+        rollback_anchor_id: "genome:coding:stable".to_owned(),
+        stable_anchor_sources: vec!["genome:coding:stable".to_owned()],
+        next_action: "await_operator_approval_before_apply".to_owned(),
+        admission_write_authorized: false,
+        applied: false,
+    }
+    .with_cut_preview();
+
+    assert_eq!(repair.state, GeneScissorsLifecycleState::Held);
+    assert_eq!(quarantine.state, GeneScissorsLifecycleState::Rejected);
+    assert_eq!(cut_preview.state, GeneScissorsLifecycleState::Cut);
+    assert!(repair.next_action.contains("hold"));
+    assert!(quarantine.next_action.contains("reject"));
+    assert!(cut_preview.next_action.contains("operator_approval"));
+    assert!(repair.is_read_only_preview());
+    assert!(quarantine.is_read_only_preview());
+    assert!(cut_preview.is_read_only_preview());
 }
 
 #[test]
