@@ -1,5 +1,8 @@
 use crate::adaptive_state::EvolutionLedger;
-use crate::benchmark::BenchmarkGateReport;
+use crate::benchmark::{BenchmarkGate, BenchmarkGateReport, BenchmarkSummary};
+use crate::hierarchy::HierarchyAdjustmentPreviewReport;
+use crate::router::RouterThresholdAdjustmentPreviewReport;
+use crate::split::bridge::KvFusionPolicyObservationDryRunReport;
 
 #[derive(Debug, Clone, Copy)]
 pub struct SelfEvolutionAdmissionPolicy {
@@ -35,6 +38,13 @@ pub struct SelfEvolutionAdmissionEvidence {
     pub router_threshold_preview_ready: bool,
     pub hierarchy_adjustment_preview_ready: bool,
     pub kv_fusion_policy_observation_preview_ready: bool,
+    pub adaptive_preview_source_count: usize,
+    pub adaptive_preview_read_only: bool,
+    pub adaptive_preview_report_only: bool,
+    pub adaptive_preview_preview_only: bool,
+    pub adaptive_preview_write_allowed: bool,
+    pub adaptive_preview_applied: bool,
+    pub adaptive_preview_blocked_reasons: Vec<String>,
 }
 
 impl SelfEvolutionAdmissionEvidence {
@@ -51,21 +61,86 @@ impl SelfEvolutionAdmissionEvidence {
             router_threshold_preview_ready: false,
             hierarchy_adjustment_preview_ready: false,
             kv_fusion_policy_observation_preview_ready: false,
+            adaptive_preview_source_count: 0,
+            adaptive_preview_read_only: true,
+            adaptive_preview_report_only: true,
+            adaptive_preview_preview_only: true,
+            adaptive_preview_write_allowed: false,
+            adaptive_preview_applied: false,
+            adaptive_preview_blocked_reasons: Vec::new(),
         }
     }
 
-    pub fn with_router_threshold_preview_ready(mut self, ready: bool) -> Self {
+    pub fn from_benchmark_summary(
+        candidate_id: impl Into<String>,
+        summary: &BenchmarkSummary,
+        gate: &BenchmarkGate,
+    ) -> Self {
+        let benchmark_gate = summary.evaluate(gate);
+        Self::from_benchmark_gate(candidate_id, summary.evolution_ledger(), &benchmark_gate)
+    }
+
+    pub fn with_router_threshold_preview_report(
+        mut self,
+        report: &RouterThresholdAdjustmentPreviewReport,
+    ) -> Self {
+        self.record_adaptive_preview_safety(AdaptivePreviewSafety {
+            read_only: report.read_only,
+            report_only: report.report_only,
+            preview_only: report.preview_only,
+            write_allowed: report.router_state_write_allowed
+                || report.adaptive_state_write_allowed
+                || report.ndkv_write_allowed,
+            applied: report.router_observation_applied,
+        });
+        let ready = router_threshold_preview_admissible(report);
         self.router_threshold_preview_ready = ready;
+        if !ready {
+            self.adaptive_preview_blocked_reasons
+                .extend(router_threshold_preview_blocked_reasons(report));
+        }
         self
     }
 
-    pub fn with_hierarchy_adjustment_preview_ready(mut self, ready: bool) -> Self {
+    pub fn with_hierarchy_adjustment_preview_report(
+        mut self,
+        report: &HierarchyAdjustmentPreviewReport,
+    ) -> Self {
+        self.record_adaptive_preview_safety(AdaptivePreviewSafety {
+            read_only: report.read_only,
+            report_only: report.report_only,
+            preview_only: report.preview_only,
+            write_allowed: report.state_write_allowed
+                || report.adaptive_state_write_allowed
+                || report.ndkv_write_allowed,
+            applied: report.controller_observation_applied,
+        });
+        let ready = hierarchy_adjustment_preview_admissible(report);
         self.hierarchy_adjustment_preview_ready = ready;
+        if !ready {
+            self.adaptive_preview_blocked_reasons
+                .extend(hierarchy_adjustment_preview_blocked_reasons(report));
+        }
         self
     }
 
-    pub fn with_kv_fusion_policy_observation_preview_ready(mut self, ready: bool) -> Self {
+    pub fn with_kv_fusion_policy_observation_preview_report(
+        mut self,
+        report: &KvFusionPolicyObservationDryRunReport,
+    ) -> Self {
+        self.record_adaptive_preview_safety(AdaptivePreviewSafety {
+            read_only: true,
+            report_only: true,
+            preview_only: report.preview_only,
+            write_allowed: report.policy_write_allowed,
+            applied: report.policy_observation_applied,
+        });
+        let ready = report.can_use_policy_observation_preview();
         self.kv_fusion_policy_observation_preview_ready = ready;
+        if !ready {
+            self.adaptive_preview_blocked_reasons
+                .extend(kv_fusion_policy_observation_preview_blocked_reasons(report));
+        }
         self
     }
 
@@ -74,6 +149,24 @@ impl SelfEvolutionAdmissionEvidence {
             || self.hierarchy_adjustment_preview_ready
             || self.kv_fusion_policy_observation_preview_ready
     }
+
+    fn record_adaptive_preview_safety(&mut self, safety: AdaptivePreviewSafety) {
+        self.adaptive_preview_source_count = self.adaptive_preview_source_count.saturating_add(1);
+        self.adaptive_preview_read_only &= safety.read_only;
+        self.adaptive_preview_report_only &= safety.report_only;
+        self.adaptive_preview_preview_only &= safety.preview_only;
+        self.adaptive_preview_write_allowed |= safety.write_allowed;
+        self.adaptive_preview_applied |= safety.applied;
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AdaptivePreviewSafety {
+    read_only: bool,
+    report_only: bool,
+    preview_only: bool,
+    write_allowed: bool,
+    applied: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +197,13 @@ pub struct SelfEvolutionAdmissionReport {
     pub router_threshold_preview_ready: bool,
     pub hierarchy_adjustment_preview_ready: bool,
     pub kv_fusion_policy_observation_preview_ready: bool,
+    pub adaptive_preview_source_count: usize,
+    pub adaptive_preview_read_only: bool,
+    pub adaptive_preview_report_only: bool,
+    pub adaptive_preview_preview_only: bool,
+    pub adaptive_preview_write_allowed: bool,
+    pub adaptive_preview_applied: bool,
+    pub adaptive_preview_blocked_reasons: Vec<String>,
     pub blocked_reasons: Vec<String>,
     pub telemetry: Vec<String>,
 }
@@ -226,6 +326,7 @@ impl SelfEvolutionAdmissionGate {
             blocked_reasons
                 .push("self_evolution_admission_adaptive_preview_evidence_missing".to_owned());
         }
+        blocked_reasons.extend(evidence.adaptive_preview_blocked_reasons.iter().cloned());
 
         let admitted_for_human_review = blocked_reasons.is_empty();
         let report = SelfEvolutionAdmissionReport {
@@ -256,6 +357,13 @@ impl SelfEvolutionAdmissionGate {
             hierarchy_adjustment_preview_ready: evidence.hierarchy_adjustment_preview_ready,
             kv_fusion_policy_observation_preview_ready: evidence
                 .kv_fusion_policy_observation_preview_ready,
+            adaptive_preview_source_count: evidence.adaptive_preview_source_count,
+            adaptive_preview_read_only: evidence.adaptive_preview_read_only,
+            adaptive_preview_report_only: evidence.adaptive_preview_report_only,
+            adaptive_preview_preview_only: evidence.adaptive_preview_preview_only,
+            adaptive_preview_write_allowed: evidence.adaptive_preview_write_allowed,
+            adaptive_preview_applied: evidence.adaptive_preview_applied,
+            adaptive_preview_blocked_reasons: evidence.adaptive_preview_blocked_reasons.clone(),
             blocked_reasons,
             telemetry: Vec::new(),
         };
@@ -303,6 +411,127 @@ fn rollback_budget_clean(
 
 fn normalized_rollback_delta(delta: f32) -> Option<f32> {
     (delta.is_finite() && delta >= 0.0).then_some(delta)
+}
+
+fn router_threshold_preview_admissible(report: &RouterThresholdAdjustmentPreviewReport) -> bool {
+    report.read_only
+        && report.report_only
+        && report.preview_only
+        && report.adjustment_ready
+        && !report.router_state_write_allowed
+        && !report.adaptive_state_write_allowed
+        && !report.ndkv_write_allowed
+        && !report.router_observation_applied
+        && report.blocked_reasons.is_empty()
+}
+
+fn hierarchy_adjustment_preview_admissible(report: &HierarchyAdjustmentPreviewReport) -> bool {
+    report.read_only
+        && report.report_only
+        && report.preview_only
+        && report.adjustment_ready
+        && !report.state_write_allowed
+        && !report.adaptive_state_write_allowed
+        && !report.ndkv_write_allowed
+        && !report.controller_observation_applied
+        && report.blocked_reasons.is_empty()
+}
+
+fn router_threshold_preview_blocked_reasons(
+    report: &RouterThresholdAdjustmentPreviewReport,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if !report.read_only {
+        reasons.push("self_evolution_admission_router_preview_not_read_only".to_owned());
+    }
+    if !report.report_only {
+        reasons.push("self_evolution_admission_router_preview_not_report_only".to_owned());
+    }
+    if !report.preview_only {
+        reasons.push("self_evolution_admission_router_preview_not_preview_only".to_owned());
+    }
+    if report.router_state_write_allowed
+        || report.adaptive_state_write_allowed
+        || report.ndkv_write_allowed
+    {
+        reasons.push("self_evolution_admission_router_preview_write_allowed".to_owned());
+    }
+    if report.router_observation_applied {
+        reasons.push("self_evolution_admission_router_preview_already_applied".to_owned());
+    }
+    if !report.adjustment_ready {
+        reasons.push("self_evolution_admission_router_preview_not_ready".to_owned());
+    }
+    reasons.extend(
+        report
+            .blocked_reasons
+            .iter()
+            .map(|reason| format!("self_evolution_admission_router_preview_blocked={reason}")),
+    );
+    reasons
+}
+
+fn hierarchy_adjustment_preview_blocked_reasons(
+    report: &HierarchyAdjustmentPreviewReport,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if !report.read_only {
+        reasons.push("self_evolution_admission_hierarchy_preview_not_read_only".to_owned());
+    }
+    if !report.report_only {
+        reasons.push("self_evolution_admission_hierarchy_preview_not_report_only".to_owned());
+    }
+    if !report.preview_only {
+        reasons.push("self_evolution_admission_hierarchy_preview_not_preview_only".to_owned());
+    }
+    if report.state_write_allowed
+        || report.adaptive_state_write_allowed
+        || report.ndkv_write_allowed
+    {
+        reasons.push("self_evolution_admission_hierarchy_preview_write_allowed".to_owned());
+    }
+    if report.controller_observation_applied {
+        reasons.push("self_evolution_admission_hierarchy_preview_already_applied".to_owned());
+    }
+    if !report.adjustment_ready {
+        reasons.push("self_evolution_admission_hierarchy_preview_not_ready".to_owned());
+    }
+    reasons.extend(
+        report
+            .blocked_reasons
+            .iter()
+            .map(|reason| format!("self_evolution_admission_hierarchy_preview_blocked={reason}")),
+    );
+    reasons
+}
+
+fn kv_fusion_policy_observation_preview_blocked_reasons(
+    report: &KvFusionPolicyObservationDryRunReport,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if !report.preview_only {
+        reasons.push("self_evolution_admission_kv_fusion_preview_not_preview_only".to_owned());
+    }
+    if report.policy_write_allowed {
+        reasons.push("self_evolution_admission_kv_fusion_preview_write_allowed".to_owned());
+    }
+    if report.policy_observation_applied {
+        reasons.push("self_evolution_admission_kv_fusion_preview_already_applied".to_owned());
+    }
+    if !report.policy_observation_ready {
+        reasons.push("self_evolution_admission_kv_fusion_preview_not_ready".to_owned());
+    }
+    if !report.threshold_within_bounds {
+        reasons
+            .push("self_evolution_admission_kv_fusion_preview_threshold_out_of_bounds".to_owned());
+    }
+    reasons.extend(
+        report
+            .blocked_reasons
+            .iter()
+            .map(|reason| format!("self_evolution_admission_kv_fusion_preview_blocked={reason}")),
+    );
+    reasons
 }
 
 fn self_evolution_admission_telemetry(report: &SelfEvolutionAdmissionReport) -> Vec<String> {
@@ -395,6 +624,30 @@ fn self_evolution_admission_telemetry(report: &SelfEvolutionAdmissionReport) -> 
             report.adaptive_preview_evidence_present
         ),
         format!(
+            "self_evolution_admission_adaptive_preview_source_count={}",
+            report.adaptive_preview_source_count
+        ),
+        format!(
+            "self_evolution_admission_adaptive_preview_read_only={}",
+            report.adaptive_preview_read_only
+        ),
+        format!(
+            "self_evolution_admission_adaptive_preview_report_only={}",
+            report.adaptive_preview_report_only
+        ),
+        format!(
+            "self_evolution_admission_adaptive_preview_preview_only={}",
+            report.adaptive_preview_preview_only
+        ),
+        format!(
+            "self_evolution_admission_adaptive_preview_write_allowed={}",
+            report.adaptive_preview_write_allowed
+        ),
+        format!(
+            "self_evolution_admission_adaptive_preview_applied={}",
+            report.adaptive_preview_applied
+        ),
+        format!(
             "self_evolution_admission_router_threshold_preview_ready={}",
             report.router_threshold_preview_ready
         ),
@@ -405,6 +658,10 @@ fn self_evolution_admission_telemetry(report: &SelfEvolutionAdmissionReport) -> 
         format!(
             "self_evolution_admission_kv_fusion_policy_observation_preview_ready={}",
             report.kv_fusion_policy_observation_preview_ready
+        ),
+        format!(
+            "self_evolution_admission_adaptive_preview_blocked_reasons={}",
+            report.adaptive_preview_blocked_reasons.len()
         ),
         format!(
             "self_evolution_admission_blocked_reasons={}",
@@ -423,6 +680,11 @@ fn self_evolution_admission_telemetry(report: &SelfEvolutionAdmissionReport) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hierarchy::{HierarchyAdjustmentPreviewPlanner, HierarchyController, TaskProfile};
+    use crate::router::{
+        GenerationMetrics, NoironRouter, RouterThresholdAdjustmentPreviewPlanner,
+        RouterThresholdAdjustmentPreviewReport,
+    };
 
     fn passing_benchmark_gate() -> BenchmarkGateReport {
         BenchmarkGateReport {
@@ -431,21 +693,37 @@ mod tests {
         }
     }
 
+    fn passing_evolution_ledger() -> EvolutionLedger {
+        EvolutionLedger {
+            replay_rust_check_items: 2,
+            replay_rust_check_passed: 2,
+            replay_rust_check_failed: 0,
+            ..EvolutionLedger::default()
+        }
+    }
+
+    fn safe_router_threshold_preview() -> RouterThresholdAdjustmentPreviewReport {
+        RouterThresholdAdjustmentPreviewPlanner::new().preview(
+            NoironRouter::new().state(),
+            TaskProfile::Coding,
+            GenerationMetrics {
+                perplexity: 36.0,
+                semantic_consistency: 0.20,
+                contradiction_count: 2,
+                token_count: 64,
+            },
+        )
+    }
+
     #[test]
     fn self_evolution_admission_allows_read_only_human_review_packet() {
+        let router_preview = safe_router_threshold_preview();
         let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
             "router-preview-round",
-            EvolutionLedger {
-                replay_rust_check_items: 2,
-                replay_rust_check_passed: 2,
-                replay_rust_check_failed: 0,
-                ..EvolutionLedger::default()
-            },
+            passing_evolution_ledger(),
             &passing_benchmark_gate(),
         )
-        .with_router_threshold_preview_ready(true)
-        .with_hierarchy_adjustment_preview_ready(true)
-        .with_kv_fusion_policy_observation_preview_ready(true);
+        .with_router_threshold_preview_report(&router_preview);
 
         let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
 
@@ -464,6 +742,12 @@ mod tests {
         assert!(report.benchmark_gate_passed);
         assert!(report.rollback_budget_clean);
         assert!(report.adaptive_preview_evidence_present);
+        assert_eq!(report.adaptive_preview_source_count, 1);
+        assert!(report.adaptive_preview_read_only);
+        assert!(report.adaptive_preview_report_only);
+        assert!(report.adaptive_preview_preview_only);
+        assert!(!report.adaptive_preview_write_allowed);
+        assert!(!report.adaptive_preview_applied);
         assert!(report.blocked_reasons.is_empty());
         assert_eq!(report.rust_check_items, 2);
         assert_eq!(report.rust_check_passed, 2);
@@ -480,6 +764,277 @@ mod tests {
                 .telemetry
                 .iter()
                 .any(|line| { line == "self_evolution_admission_human_approval_required=true" })
+        );
+    }
+
+    #[test]
+    fn self_evolution_admission_derives_benchmark_gate_from_summary() {
+        let summary = BenchmarkSummary::new();
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_summary(
+            "empty-summary",
+            &summary,
+            &BenchmarkGate::default(),
+        );
+
+        assert_eq!(evidence.evolution_ledger, EvolutionLedger::default());
+        assert!(!evidence.benchmark_gate_passed);
+        assert!(
+            evidence
+                .benchmark_gate_failures
+                .iter()
+                .any(|failure| failure == "no benchmark cases were recorded")
+        );
+    }
+
+    #[test]
+    fn self_evolution_admission_derives_preview_readiness_from_reports() {
+        let metrics = GenerationMetrics {
+            perplexity: 36.0,
+            semantic_consistency: 0.20,
+            contradiction_count: 2,
+            token_count: 64,
+        };
+        let router_preview = safe_router_threshold_preview();
+        let hierarchy_preview = HierarchyAdjustmentPreviewPlanner::new().preview(
+            HierarchyController::new().state(),
+            TaskProfile::Coding,
+            metrics,
+        );
+        let recall_report = crate::split::agent::AgentRecallOutcomeAttributionReport {
+            attributions: vec![crate::split::agent::AgentRecallOutcomeAttribution {
+                task_id: "runtime-recall".to_owned(),
+                record_id: "runtime_kv:l0h0:0-8".to_owned(),
+                source: "runtime_kv".to_owned(),
+                action: crate::split::agent::AgentRecallOutcomeAttributionAction::Reinforce,
+                amount: 0.24,
+                reason_codes: vec!["result_accepted".to_owned()],
+            }],
+            reinforced_count: 1,
+            penalized_count: 0,
+            skipped_rejected_recall_count: 0,
+            skipped_missing_outcome_task_ids: Vec::new(),
+            read_only: true,
+            memory_store_write_allowed: false,
+            telemetry: Vec::new(),
+        };
+        let kv_reward_preview =
+            crate::split::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(
+                &recall_report,
+            );
+        let kv_policy_preview = crate::split::bridge::kv_fusion_reward_policy_observation_dry_run(
+            &kv_reward_preview,
+            crate::split::core::ReinforcedKvFusionPolicy::new(0.92, 64),
+        );
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            "report-derived-preview",
+            passing_evolution_ledger(),
+            &passing_benchmark_gate(),
+        )
+        .with_router_threshold_preview_report(&router_preview)
+        .with_hierarchy_adjustment_preview_report(&hierarchy_preview)
+        .with_kv_fusion_policy_observation_preview_report(&kv_policy_preview);
+
+        assert!(evidence.router_threshold_preview_ready);
+        assert!(evidence.hierarchy_adjustment_preview_ready);
+        assert!(evidence.kv_fusion_policy_observation_preview_ready);
+        assert_eq!(evidence.adaptive_preview_source_count, 3);
+        assert!(evidence.adaptive_preview_read_only);
+        assert!(evidence.adaptive_preview_report_only);
+        assert!(evidence.adaptive_preview_preview_only);
+        assert!(!evidence.adaptive_preview_write_allowed);
+        assert!(!evidence.adaptive_preview_applied);
+        assert!(evidence.adaptive_preview_blocked_reasons.is_empty());
+
+        let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+        assert!(report.admitted_for_human_review);
+        assert!(report.adaptive_preview_evidence_present);
+        assert_eq!(report.adaptive_preview_source_count, 3);
+        assert!(report.adaptive_preview_read_only);
+        assert!(report.adaptive_preview_report_only);
+        assert!(report.adaptive_preview_preview_only);
+        assert!(!report.adaptive_preview_write_allowed);
+        assert!(!report.adaptive_preview_applied);
+        assert!(report.adaptive_preview_blocked_reasons.is_empty());
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "self_evolution_admission_adaptive_preview_blocked_reasons=0")
+        );
+    }
+
+    #[test]
+    fn self_evolution_admission_blocks_preview_reports_with_write_or_blocked_flags() {
+        let mut router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+            NoironRouter::new().state(),
+            TaskProfile::Coding,
+            GenerationMetrics {
+                perplexity: 36.0,
+                semantic_consistency: 0.20,
+                contradiction_count: 2,
+                token_count: 64,
+            },
+        );
+        router_preview.router_state_write_allowed = true;
+        router_preview.report_only = false;
+        router_preview.router_observation_applied = true;
+
+        let blocked_router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+            NoironRouter::new().state(),
+            TaskProfile::Coding,
+            GenerationMetrics {
+                perplexity: f32::NAN,
+                semantic_consistency: 0.20,
+                contradiction_count: 0,
+                token_count: 64,
+            },
+        );
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            "unsafe-preview",
+            passing_evolution_ledger(),
+            &passing_benchmark_gate(),
+        )
+        .with_router_threshold_preview_report(&router_preview)
+        .with_router_threshold_preview_report(&blocked_router_preview);
+
+        assert!(!evidence.router_threshold_preview_ready);
+        assert_eq!(evidence.adaptive_preview_source_count, 2);
+        assert!(evidence.adaptive_preview_read_only);
+        assert!(!evidence.adaptive_preview_report_only);
+        assert!(evidence.adaptive_preview_preview_only);
+        assert!(evidence.adaptive_preview_write_allowed);
+        assert!(evidence.adaptive_preview_applied);
+        assert!(
+            evidence
+                .adaptive_preview_blocked_reasons
+                .contains(&"self_evolution_admission_router_preview_not_report_only".to_owned())
+        );
+        assert!(
+            evidence
+                .adaptive_preview_blocked_reasons
+                .contains(&"self_evolution_admission_router_preview_write_allowed".to_owned())
+        );
+        assert!(
+            evidence
+                .adaptive_preview_blocked_reasons
+                .contains(&"self_evolution_admission_router_preview_already_applied".to_owned())
+        );
+        assert!(evidence.adaptive_preview_blocked_reasons.iter().any(|reason| {
+            reason
+                == "self_evolution_admission_router_preview_blocked=router_threshold_adjustment_generation_metrics_not_finite"
+        }));
+
+        let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+        assert!(!report.admitted_for_human_review);
+        assert!(!report.adaptive_preview_evidence_present);
+        assert_eq!(report.adaptive_preview_source_count, 2);
+        assert!(!report.adaptive_preview_report_only);
+        assert!(report.adaptive_preview_write_allowed);
+        assert!(report.adaptive_preview_applied);
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_adaptive_preview_evidence_missing".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_router_preview_write_allowed".to_owned())
+        );
+    }
+
+    #[test]
+    fn self_evolution_admission_blocks_hierarchy_and_kv_preview_report_failures() {
+        let hierarchy_preview = HierarchyAdjustmentPreviewPlanner::new().preview(
+            HierarchyController::new().state(),
+            TaskProfile::Coding,
+            GenerationMetrics {
+                perplexity: 12.0,
+                semantic_consistency: 0.90,
+                contradiction_count: 0,
+                token_count: 0,
+            },
+        );
+        let recall_report = crate::split::agent::AgentRecallOutcomeAttributionReport {
+            attributions: vec![crate::split::agent::AgentRecallOutcomeAttribution {
+                task_id: "runtime-recall".to_owned(),
+                record_id: "runtime_kv:l0h0:0-8".to_owned(),
+                source: "runtime_kv".to_owned(),
+                action: crate::split::agent::AgentRecallOutcomeAttributionAction::Penalize,
+                amount: 0.32,
+                reason_codes: vec!["execution_failed".to_owned()],
+            }],
+            reinforced_count: 0,
+            penalized_count: 1,
+            skipped_rejected_recall_count: 0,
+            skipped_missing_outcome_task_ids: Vec::new(),
+            read_only: false,
+            memory_store_write_allowed: true,
+            telemetry: Vec::new(),
+        };
+        let kv_reward_preview =
+            crate::split::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(
+                &recall_report,
+            );
+        let kv_policy_preview = crate::split::bridge::kv_fusion_reward_policy_observation_dry_run(
+            &kv_reward_preview,
+            crate::split::core::ReinforcedKvFusionPolicy::new(0.92, 64),
+        );
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            "blocked-hierarchy-kv-preview",
+            passing_evolution_ledger(),
+            &passing_benchmark_gate(),
+        )
+        .with_hierarchy_adjustment_preview_report(&hierarchy_preview)
+        .with_kv_fusion_policy_observation_preview_report(&kv_policy_preview);
+
+        assert!(!evidence.hierarchy_adjustment_preview_ready);
+        assert!(!evidence.kv_fusion_policy_observation_preview_ready);
+        assert_eq!(evidence.adaptive_preview_source_count, 2);
+        assert!(evidence.adaptive_preview_read_only);
+        assert!(evidence.adaptive_preview_report_only);
+        assert!(evidence.adaptive_preview_preview_only);
+        assert!(!evidence.adaptive_preview_write_allowed);
+        assert!(!evidence.adaptive_preview_applied);
+        assert!(
+            evidence
+                .adaptive_preview_blocked_reasons
+                .contains(&"self_evolution_admission_hierarchy_preview_not_ready".to_owned())
+        );
+        assert!(evidence.adaptive_preview_blocked_reasons.iter().any(|reason| {
+            reason
+                == "self_evolution_admission_hierarchy_preview_blocked=hierarchy_adjustment_token_count=0<1"
+        }));
+        assert!(
+            evidence
+                .adaptive_preview_blocked_reasons
+                .contains(&"self_evolution_admission_kv_fusion_preview_not_ready".to_owned())
+        );
+        assert!(evidence.adaptive_preview_blocked_reasons.iter().any(|reason| {
+            reason
+                == "self_evolution_admission_kv_fusion_preview_blocked=recall_attribution_not_read_only"
+        }));
+
+        let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+        assert!(!report.admitted_for_human_review);
+        assert!(!report.adaptive_preview_evidence_present);
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_adaptive_preview_evidence_missing".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_hierarchy_preview_not_ready".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_kv_fusion_preview_not_ready".to_owned())
         );
     }
 
@@ -526,6 +1081,7 @@ mod tests {
 
     #[test]
     fn self_evolution_admission_blocks_rollback_budget_regression() {
+        let router_preview = safe_router_threshold_preview();
         let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
             "rollback-candidate",
             EvolutionLedger {
@@ -539,7 +1095,7 @@ mod tests {
             },
             &passing_benchmark_gate(),
         )
-        .with_router_threshold_preview_ready(true);
+        .with_router_threshold_preview_report(&router_preview);
 
         let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
 
@@ -568,6 +1124,7 @@ mod tests {
 
     #[test]
     fn self_evolution_admission_blocks_invalid_policy_and_empty_candidate() {
+        let router_preview = safe_router_threshold_preview();
         let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
             " ",
             EvolutionLedger {
@@ -578,7 +1135,7 @@ mod tests {
             },
             &passing_benchmark_gate(),
         )
-        .with_router_threshold_preview_ready(true);
+        .with_router_threshold_preview_report(&router_preview);
 
         let report = SelfEvolutionAdmissionGate::new()
             .with_policy(SelfEvolutionAdmissionPolicy {
@@ -611,6 +1168,7 @@ mod tests {
 
     #[test]
     fn self_evolution_admission_keeps_inputs_unchanged() {
+        let router_preview = safe_router_threshold_preview();
         let ledger = EvolutionLedger {
             replay_rust_check_items: 1,
             replay_rust_check_passed: 1,
@@ -623,7 +1181,7 @@ mod tests {
             ledger,
             &benchmark_gate,
         )
-        .with_kv_fusion_policy_observation_preview_ready(true);
+        .with_router_threshold_preview_report(&router_preview);
         let evidence_before = evidence.clone();
 
         let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
