@@ -1,6 +1,7 @@
 use super::fields::{
     extract_json_bool_field, extract_json_string_array_field, extract_json_string_field,
-    extract_json_usize_field, extract_last_json_string_array_field, json_object_after_field,
+    extract_json_usize_field, extract_last_json_string_array_field, json_array_after_field,
+    json_object_after_field, json_object_array_items,
 };
 
 pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<String> {
@@ -287,6 +288,359 @@ pub(super) fn evaluate_self_evolution_experiment_schema_line(line: &str) -> Vec<
     }
 
     failures
+}
+
+pub(super) fn evaluate_self_evolution_rollback_replay_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolution-rollback-replay-plan-v1\"",
+        ),
+        ("item_count", "\"item_count\":"),
+        ("replayable", "\"replayable\":"),
+        ("blocked", "\"blocked\":"),
+        ("all_replayable", "\"all_replayable\":"),
+        ("active_candidates", "\"active_candidates\":"),
+        ("item_write_allowed", "\"item_write_allowed\":"),
+        ("item_applied", "\"item_applied\":"),
+        ("read_only", "\"read_only\":"),
+        ("report_only", "\"report_only\":"),
+        ("preview_only", "\"preview_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("rollback_anchor_ids", "\"rollback_anchor_ids\":"),
+        ("evidence_ids", "\"evidence_ids\":"),
+        ("items", "\"items\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_evolution_rollback_replay field {name}"
+            ));
+        }
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_evolution_rollback_replay",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "report_only",
+        true,
+        "self_evolution_rollback_replay",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "preview_only",
+        true,
+        "self_evolution_rollback_replay",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_evolution_rollback_replay",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_evolution_rollback_replay",
+    );
+
+    let item_count = extract_json_usize_field(line, "item_count");
+    let replayable = extract_json_usize_field(line, "replayable");
+    let blocked = extract_json_usize_field(line, "blocked");
+    let all_replayable = extract_json_bool_field(line, "all_replayable");
+    let active_candidates = extract_json_usize_field(line, "active_candidates");
+    let item_write_allowed = extract_json_usize_field(line, "item_write_allowed");
+    let item_applied = extract_json_usize_field(line, "item_applied");
+    let rollback_anchor_ids =
+        extract_json_string_array_field(line, "rollback_anchor_ids").unwrap_or_default();
+    let evidence_ids = extract_json_string_array_field(line, "evidence_ids").unwrap_or_default();
+
+    for (field, values) in [
+        ("rollback_anchor_ids", &rollback_anchor_ids),
+        ("evidence_ids", &evidence_ids),
+    ] {
+        if values.iter().any(|value| value.trim().is_empty()) {
+            failures.push(format!(
+                "self_evolution_rollback_replay {field} contains empty item"
+            ));
+        }
+    }
+
+    match (item_count, replayable, blocked) {
+        (Some(items), Some(replayable), Some(blocked))
+            if replayable.saturating_add(blocked) != items =>
+        {
+            failures.push(format!(
+                "self_evolution_rollback_replay replayable+blocked {} does not match item_count {items}",
+                replayable.saturating_add(blocked)
+            ));
+        }
+        (Some(_), Some(_), Some(_)) => {}
+        _ => failures.push("self_evolution_rollback_replay count fields are incomplete".to_owned()),
+    }
+
+    match (all_replayable, blocked) {
+        (Some(true), Some(0)) | (Some(false), Some(_)) => {}
+        (Some(true), Some(blocked)) => failures.push(format!(
+            "self_evolution_rollback_replay all_replayable=true but blocked={blocked}"
+        )),
+        (Some(_), None) => {
+            failures.push("self_evolution_rollback_replay blocked count is missing".to_owned())
+        }
+        (None, _) => {
+            failures.push("self_evolution_rollback_replay all_replayable is missing".to_owned())
+        }
+    }
+
+    if replayable.unwrap_or(0) > 0 {
+        if rollback_anchor_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay replayable plan requires rollback_anchor_ids"
+                    .to_owned(),
+            );
+        }
+        if evidence_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay replayable plan requires evidence_ids".to_owned(),
+            );
+        }
+    }
+
+    let item_objects = match json_array_after_field(line, "items") {
+        Some(items) => match json_object_array_items(items) {
+            Some(items) => items,
+            None => {
+                failures
+                    .push("self_evolution_rollback_replay items must be object array".to_owned());
+                Vec::new()
+            }
+        },
+        None => {
+            failures.push("self_evolution_rollback_replay items array is missing".to_owned());
+            Vec::new()
+        }
+    };
+
+    if let Some(item_count) = item_count {
+        if item_objects.len() != item_count {
+            failures.push(format!(
+                "self_evolution_rollback_replay items length {} does not match item_count {item_count}",
+                item_objects.len()
+            ));
+        }
+    }
+
+    let mut actual_replayable = 0usize;
+    let mut actual_blocked = 0usize;
+    let mut actual_active_candidates = 0usize;
+    let mut actual_item_write_allowed = 0usize;
+    let mut actual_item_applied = 0usize;
+
+    for item in item_objects {
+        evaluate_self_evolution_rollback_replay_item(item, &mut failures);
+        let item_replayable = extract_json_bool_field(item, "replayable").unwrap_or(false);
+        actual_replayable = actual_replayable.saturating_add(usize::from(item_replayable));
+        actual_blocked = actual_blocked.saturating_add(usize::from(!item_replayable));
+        actual_active_candidates = actual_active_candidates.saturating_add(usize::from(
+            extract_json_bool_field(item, "active_candidate").unwrap_or(false),
+        ));
+        actual_item_write_allowed = actual_item_write_allowed.saturating_add(usize::from(
+            extract_json_bool_field(item, "write_allowed").unwrap_or(false),
+        ));
+        actual_item_applied = actual_item_applied.saturating_add(usize::from(
+            extract_json_bool_field(item, "applied").unwrap_or(false),
+        ));
+    }
+
+    for (field, expected, actual) in [
+        ("replayable", replayable, actual_replayable),
+        ("blocked", blocked, actual_blocked),
+        (
+            "active_candidates",
+            active_candidates,
+            actual_active_candidates,
+        ),
+        (
+            "item_write_allowed",
+            item_write_allowed,
+            actual_item_write_allowed,
+        ),
+        ("item_applied", item_applied, actual_item_applied),
+    ] {
+        if let Some(expected) = expected {
+            if expected != actual {
+                failures.push(format!(
+                    "self_evolution_rollback_replay {field}={expected} does not match item total {actual}"
+                ));
+            }
+        }
+    }
+
+    failures
+}
+
+fn evaluate_self_evolution_rollback_replay_item(item: &str, failures: &mut Vec<String>) {
+    for (name, marker) in [
+        ("sequence", "\"sequence\":"),
+        ("experiment_id", "\"experiment_id\":"),
+        ("candidate_id", "\"candidate_id\":"),
+        ("decision", "\"decision\":"),
+        ("rollback_required", "\"rollback_required\":"),
+        ("rollback_replayable", "\"rollback_replayable\":"),
+        ("replayable", "\"replayable\":"),
+        ("active_candidate", "\"active_candidate\":"),
+        ("read_only", "\"read_only\":"),
+        ("report_only", "\"report_only\":"),
+        ("preview_only", "\"preview_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("evidence_ids", "\"evidence_ids\":"),
+        ("rollback_anchor_ids", "\"rollback_anchor_ids\":"),
+        ("blocked_reasons", "\"blocked_reasons\":"),
+        ("content_digest", "\"content_digest\":"),
+    ] {
+        if !item.contains(marker) {
+            failures.push(format!(
+                "missing self_evolution_rollback_replay item field {name}"
+            ));
+        }
+    }
+
+    if extract_json_usize_field(item, "sequence").unwrap_or(0) == 0 {
+        failures.push("self_evolution_rollback_replay item sequence must be positive".to_owned());
+    }
+    for field in ["experiment_id", "candidate_id", "content_digest"] {
+        let value = extract_json_string_field(item, field).unwrap_or_default();
+        if value.trim().is_empty() {
+            failures.push(format!(
+                "self_evolution_rollback_replay item {field} is empty"
+            ));
+        }
+    }
+    let content_digest = extract_json_string_field(item, "content_digest").unwrap_or_default();
+    if !content_digest.starts_with("fnv64:") {
+        failures.push(
+            "self_evolution_rollback_replay item content_digest must be stable fnv64".to_owned(),
+        );
+    }
+
+    let replayable = extract_json_bool_field(item, "replayable");
+    let blocked_reasons =
+        extract_json_string_array_field(item, "blocked_reasons").unwrap_or_default();
+    let evidence_ids = extract_json_string_array_field(item, "evidence_ids").unwrap_or_default();
+    let rollback_anchor_ids =
+        extract_json_string_array_field(item, "rollback_anchor_ids").unwrap_or_default();
+
+    for (field, values) in [
+        ("evidence_ids", &evidence_ids),
+        ("rollback_anchor_ids", &rollback_anchor_ids),
+        ("blocked_reasons", &blocked_reasons),
+    ] {
+        if values.iter().any(|value| value.trim().is_empty()) {
+            failures.push(format!(
+                "self_evolution_rollback_replay item {field} contains empty item"
+            ));
+        }
+    }
+
+    if replayable == Some(true) {
+        if extract_json_string_field(item, "decision").as_deref() != Some("rollback") {
+            failures.push(
+                "self_evolution_rollback_replay replayable item decision must be rollback"
+                    .to_owned(),
+            );
+        }
+        require_bool(
+            failures,
+            item,
+            "rollback_required",
+            true,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "rollback_replayable",
+            true,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "active_candidate",
+            false,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "read_only",
+            true,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "report_only",
+            true,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "preview_only",
+            true,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "write_allowed",
+            false,
+            "self_evolution_rollback_replay replayable item",
+        );
+        require_bool(
+            failures,
+            item,
+            "applied",
+            false,
+            "self_evolution_rollback_replay replayable item",
+        );
+        if evidence_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay replayable item requires evidence_ids".to_owned(),
+            );
+        }
+        if rollback_anchor_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay replayable item requires rollback_anchor_ids"
+                    .to_owned(),
+            );
+        }
+        if !blocked_reasons.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay replayable item must not have blocked reasons"
+                    .to_owned(),
+            );
+        }
+    } else if blocked_reasons.is_empty() {
+        failures.push(
+            "self_evolution_rollback_replay blocked item requires blocked reasons".to_owned(),
+        );
+    }
 }
 
 fn evaluate_review_packet(

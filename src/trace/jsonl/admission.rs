@@ -1,7 +1,9 @@
 use std::io;
 use std::path::Path;
 
-use crate::self_evolution::{SelfEvolutionAdmissionReport, SelfEvolutionExperimentRecord};
+use crate::self_evolution::{
+    SelfEvolutionAdmissionReport, SelfEvolutionExperimentRecord, SelfEvolutionRollbackReplayPlan,
+};
 
 use super::writer::append_line;
 
@@ -26,5 +28,19 @@ pub fn append_self_evolution_experiment_trace_jsonl(
     record: &SelfEvolutionExperimentRecord,
 ) -> io::Result<()> {
     let line = self_evolution_experiment_trace_json_line(record);
+    append_line(path, &line)
+}
+
+pub fn self_evolution_rollback_replay_trace_json_line(
+    plan: &SelfEvolutionRollbackReplayPlan,
+) -> String {
+    plan.json_line()
+}
+
+pub fn append_self_evolution_rollback_replay_trace_jsonl(
+    path: impl AsRef<Path>,
+    plan: &SelfEvolutionRollbackReplayPlan,
+) -> io::Result<()> {
+    let line = self_evolution_rollback_replay_trace_json_line(plan);
     append_line(path, &line)
 }

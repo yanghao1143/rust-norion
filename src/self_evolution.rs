@@ -1248,6 +1248,21 @@ impl SelfEvolutionRollbackReplayPlan {
         self.blocked() == 0
     }
 
+    pub fn active_candidates(&self) -> usize {
+        self.items
+            .iter()
+            .filter(|item| item.active_candidate)
+            .count()
+    }
+
+    pub fn write_allowed_items(&self) -> usize {
+        self.items.iter().filter(|item| item.write_allowed).count()
+    }
+
+    pub fn applied_items(&self) -> usize {
+        self.items.iter().filter(|item| item.applied).count()
+    }
+
     pub fn rollback_anchor_ids(&self) -> Vec<String> {
         let mut ids = Vec::new();
         for item in &self.items {
@@ -1270,10 +1285,13 @@ impl SelfEvolutionRollbackReplayPlan {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "self_evolution_rollback_replay_plan items={} replayable={} blocked={} rollback_anchors={} evidence_ids={} read_only={} report_only={} preview_only={} write_allowed={} applied={}",
+            "self_evolution_rollback_replay_plan items={} replayable={} blocked={} active_candidates={} item_write_allowed={} item_applied={} rollback_anchors={} evidence_ids={} read_only={} report_only={} preview_only={} write_allowed={} applied={}",
             self.item_count(),
             self.replayable(),
             self.blocked(),
+            self.active_candidates(),
+            self.write_allowed_items(),
+            self.applied_items(),
             self.rollback_anchor_ids().len(),
             self.evidence_ids().len(),
             self.read_only,
@@ -1301,6 +1319,9 @@ impl SelfEvolutionRollbackReplayPlan {
              \"replayable\":{},\
              \"blocked\":{},\
              \"all_replayable\":{},\
+             \"active_candidates\":{},\
+             \"item_write_allowed\":{},\
+             \"item_applied\":{},\
              \"read_only\":{},\
              \"report_only\":{},\
              \"preview_only\":{},\
@@ -1314,6 +1335,9 @@ impl SelfEvolutionRollbackReplayPlan {
             self.replayable(),
             self.blocked(),
             self.all_replayable(),
+            self.active_candidates(),
+            self.write_allowed_items(),
+            self.applied_items(),
             self.read_only,
             self.report_only,
             self.preview_only,

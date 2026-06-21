@@ -282,6 +282,57 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_experiments() {
     cleanup(path);
 }
 
+#[test]
+fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_plans() {
+    let path = temp_path("trace-schema-self-evolution-rollback-replay");
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    ledger.append_admission_report(
+        "experiment-pass",
+        &self_evolution_experiment_passing_report("candidate-pass"),
+    );
+    ledger.append_admission_report(
+        "experiment-rollback",
+        &self_evolution_experiment_rollback_report("candidate-rollback"),
+    );
+    let plan = ledger.rollback_replay_plan();
+
+    append_self_evolution_rollback_replay_trace_jsonl(&path, &plan).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.self_evolution_rollback_replay_events, 1);
+    assert_eq!(report.self_evolution_rollback_replay_items, 1);
+    assert_eq!(report.self_evolution_rollback_replay_replayable, 1);
+    assert_eq!(report.self_evolution_rollback_replay_blocked, 0);
+    assert_eq!(report.self_evolution_rollback_replay_all_replayable, 1);
+    assert_eq!(
+        report.self_evolution_rollback_replay_rollback_anchor_ids,
+        plan.rollback_anchor_ids().len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_evidence_ids,
+        plan.evidence_ids().len()
+    );
+    assert_eq!(report.self_evolution_rollback_replay_active_candidates, 0);
+    assert_eq!(report.self_evolution_rollback_replay_item_write_allowed, 0);
+    assert_eq!(report.self_evolution_rollback_replay_item_applied, 0);
+    assert_eq!(report.self_evolution_rollback_replay_write_allowed, 0);
+    assert_eq!(report.self_evolution_rollback_replay_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_events=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_replayable=1")
+    );
+    cleanup(path);
+}
+
 fn self_evolution_experiment_passing_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
     let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
         NoironRouter::new().state(),
