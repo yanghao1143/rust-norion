@@ -506,6 +506,7 @@ pub(super) fn evaluate_self_evolution_rollback_replay_gate_schema_line(line: &st
             "\"admitted_for_human_review\":",
         ),
         ("human_approval_required", "\"human_approval_required\":"),
+        ("review_packet", "\"review_packet\":"),
         ("item_count", "\"item_count\":"),
         ("replayable", "\"replayable\":"),
         ("blocked", "\"blocked\":"),
@@ -599,6 +600,7 @@ pub(super) fn evaluate_self_evolution_rollback_replay_gate_schema_line(line: &st
     let blocked_reasons =
         extract_json_string_array_field(line, "blocked_reasons").unwrap_or_default();
     let content_digest = extract_json_string_field(line, "content_digest").unwrap_or_default();
+    evaluate_rollback_replay_gate_review_packet(&mut failures, line, admitted_for_human_review);
 
     if !content_digest.starts_with("fnv64:") {
         failures.push(
@@ -976,6 +978,116 @@ fn evaluate_review_packet(
         if source_report_schemas.is_empty() {
             failures.push(
                 "self_evolution_admission admitted packet requires review source schemas"
+                    .to_owned(),
+            );
+        }
+    }
+}
+
+fn evaluate_rollback_replay_gate_review_packet(
+    failures: &mut Vec<String>,
+    line: &str,
+    admitted_for_human_review: bool,
+) {
+    let Some(review_packet) = json_object_after_field(line, "review_packet") else {
+        failures
+            .push("self_evolution_rollback_replay_gate review_packet object is missing".to_owned());
+        return;
+    };
+
+    require_bool(
+        failures,
+        review_packet,
+        "read_only",
+        true,
+        "self_evolution_rollback_replay_gate review_packet",
+    );
+    require_bool(
+        failures,
+        review_packet,
+        "approval_tokens_included",
+        false,
+        "self_evolution_rollback_replay_gate review_packet",
+    );
+
+    let approval_review_packet_ids =
+        require_string_array(failures, review_packet, "approval_review_packet_ids");
+    let evidence_ids = require_string_array(failures, review_packet, "evidence_ids");
+    let rollback_anchor_ids = require_string_array(failures, review_packet, "rollback_anchor_ids");
+    let content_digests = require_string_array(failures, review_packet, "content_digests");
+    let source_report_schemas =
+        require_string_array(failures, review_packet, "source_report_schemas");
+
+    require_count(
+        failures,
+        review_packet,
+        "approval_review_packet_count",
+        approval_review_packet_ids.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "evidence_count",
+        evidence_ids.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "rollback_anchor_count",
+        rollback_anchor_ids.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "content_digest_count",
+        content_digests.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "source_report_schema_count",
+        source_report_schemas.len(),
+    );
+
+    for (field, values) in [
+        ("approval_review_packet_ids", &approval_review_packet_ids),
+        ("evidence_ids", &evidence_ids),
+        ("rollback_anchor_ids", &rollback_anchor_ids),
+        ("content_digests", &content_digests),
+        ("source_report_schemas", &source_report_schemas),
+    ] {
+        if values.iter().any(|value| value.trim().is_empty()) {
+            failures.push(format!(
+                "self_evolution_rollback_replay_gate review_packet {field} contains empty item"
+            ));
+        }
+    }
+
+    if approval_review_packet_ids.is_empty() {
+        failures.push(
+            "self_evolution_rollback_replay_gate review_packet requires packet ids".to_owned(),
+        );
+    }
+    if content_digests.is_empty() {
+        failures.push(
+            "self_evolution_rollback_replay_gate review_packet requires content digests".to_owned(),
+        );
+    }
+    if source_report_schemas.is_empty() {
+        failures.push(
+            "self_evolution_rollback_replay_gate review_packet requires source schemas".to_owned(),
+        );
+    }
+    if admitted_for_human_review {
+        if evidence_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay_gate admitted review packet requires evidence ids"
+                    .to_owned(),
+            );
+        }
+        if rollback_anchor_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay_gate admitted review packet requires rollback anchors"
                     .to_owned(),
             );
         }

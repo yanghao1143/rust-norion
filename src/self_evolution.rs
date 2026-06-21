@@ -148,6 +148,36 @@ impl SelfEvolutionAdmissionReviewPacketRefs {
         refs
     }
 
+    fn rollback_replay_gate(plan: &SelfEvolutionRollbackReplayPlan, content_digest: &str) -> Self {
+        let review = self_evolution_review_id_component(content_digest);
+        let mut refs = Self::default();
+        refs.push_approval_review_packet_id(format!("rollback-replay-review:{review}"));
+        refs.push_evidence_id(format!(
+            "rollback-replay-plan:items-{}:replayable-{}:blocked-{}",
+            plan.item_count(),
+            plan.replayable(),
+            plan.blocked()
+        ));
+        for evidence_id in plan.evidence_ids() {
+            refs.push_evidence_id(evidence_id);
+        }
+        for anchor_id in plan.rollback_anchor_ids() {
+            refs.push_rollback_anchor_id(anchor_id);
+        }
+        refs.push_content_digest(content_digest.to_owned());
+        refs.push_content_digest(self_evolution_stable_digest(&format!(
+            "rollback_replay_plan_summary={}",
+            plan.summary_line()
+        )));
+        for item in &plan.items {
+            refs.push_content_digest(item.content_digest.clone());
+        }
+        refs.push_source_report_schema("rust-norion-self-evolution-rollback-replay-gate-v1");
+        refs.push_source_report_schema("rust-norion-self-evolution-rollback-replay-plan-v1");
+        refs.push_source_report_schema("rust-norion-self-evolution-experiment-v1");
+        refs
+    }
+
     pub fn push_approval_review_packet_id(&mut self, value: impl Into<String>) {
         push_unique_string(&mut self.approval_review_packet_ids, value);
     }
@@ -1486,6 +1516,8 @@ impl SelfEvolutionRollbackReplayGate {
         let content_digest = self_evolution_stable_digest(&format!(
             "rollback_replay_gate;items={item_count};replayable={replayable};blocked={blocked};all_replayable={all_replayable};anchors={rollback_anchor_ids:?};evidence={evidence_ids:?};digests={item_digests}"
         ));
+        let review_packet =
+            SelfEvolutionAdmissionReviewPacketRefs::rollback_replay_gate(plan, &content_digest);
 
         SelfEvolutionRollbackReplayGateReport {
             decision,
@@ -1510,6 +1542,7 @@ impl SelfEvolutionRollbackReplayGate {
             plan_applied: plan.applied,
             human_approval_required: true,
             admitted_for_human_review,
+            review_packet,
             blocked_reasons,
             content_digest,
         }
@@ -1540,6 +1573,7 @@ pub struct SelfEvolutionRollbackReplayGateReport {
     pub plan_applied: bool,
     pub human_approval_required: bool,
     pub admitted_for_human_review: bool,
+    pub review_packet: SelfEvolutionAdmissionReviewPacketRefs,
     pub blocked_reasons: Vec<String>,
     pub content_digest: String,
 }
@@ -1547,10 +1581,12 @@ pub struct SelfEvolutionRollbackReplayGateReport {
 impl SelfEvolutionRollbackReplayGateReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "self_evolution_rollback_replay_gate decision={} admitted_for_human_review={} human_approval_required={} items={} replayable={} blocked={} all_replayable={} active_candidates={} item_write_allowed={} item_applied={} rollback_anchors={} evidence_ids={} read_only={} report_only={} preview_only={} write_allowed={} applied={} plan_read_only={} plan_report_only={} plan_preview_only={} plan_write_allowed={} plan_applied={} blocked_reasons={} digest={}",
+            "self_evolution_rollback_replay_gate decision={} admitted_for_human_review={} human_approval_required={} review_packets={} review_evidence_ids={} items={} replayable={} blocked={} all_replayable={} active_candidates={} item_write_allowed={} item_applied={} rollback_anchors={} evidence_ids={} read_only={} report_only={} preview_only={} write_allowed={} applied={} plan_read_only={} plan_report_only={} plan_preview_only={} plan_write_allowed={} plan_applied={} blocked_reasons={} digest={}",
             self.decision.as_str(),
             self.admitted_for_human_review,
             self.human_approval_required,
+            self.review_packet.approval_review_packet_ids.len(),
+            self.review_packet.evidence_ids.len(),
             self.item_count,
             self.replayable,
             self.blocked,
@@ -1580,6 +1616,16 @@ impl SelfEvolutionRollbackReplayGateReport {
         let evidence_ids = self_evolution_string_array_json(&self.evidence_ids);
         let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
         let content_digest = self_evolution_json_escape(&self.content_digest);
+        let approval_review_packet_ids =
+            self_evolution_string_array_json(&self.review_packet.approval_review_packet_ids);
+        let review_evidence_ids =
+            self_evolution_string_array_json(&self.review_packet.evidence_ids);
+        let review_rollback_anchor_ids =
+            self_evolution_string_array_json(&self.review_packet.rollback_anchor_ids);
+        let review_content_digests =
+            self_evolution_string_array_json(&self.review_packet.content_digests);
+        let review_source_report_schemas =
+            self_evolution_string_array_json(&self.review_packet.source_report_schemas);
 
         format!(
             "{{\
@@ -1607,6 +1653,7 @@ impl SelfEvolutionRollbackReplayGateReport {
              \"rollback_anchor_ids\":{rollback_anchor_ids},\
              \"evidence_ids\":{evidence_ids},\
              \"blocked_reasons\":{blocked_reasons},\
+             \"review_packet\":{{\"approval_review_packet_ids\":{approval_review_packet_ids},\"evidence_ids\":{review_evidence_ids},\"rollback_anchor_ids\":{review_rollback_anchor_ids},\"content_digests\":{review_content_digests},\"source_report_schemas\":{review_source_report_schemas},\"approval_review_packet_count\":{},\"evidence_count\":{},\"rollback_anchor_count\":{},\"content_digest_count\":{},\"source_report_schema_count\":{},\"read_only\":true,\"approval_tokens_included\":false}},\
              \"content_digest\":\"{content_digest}\"\
              }}",
             self.decision.as_str(),
@@ -1629,6 +1676,11 @@ impl SelfEvolutionRollbackReplayGateReport {
             self.plan_preview_only,
             self.plan_write_allowed,
             self.plan_applied,
+            self.review_packet.approval_review_packet_ids.len(),
+            self.review_packet.evidence_ids.len(),
+            self.review_packet.rollback_anchor_ids.len(),
+            self.review_packet.content_digests.len(),
+            self.review_packet.source_report_schemas.len(),
         )
     }
 }
@@ -2560,6 +2612,27 @@ mod tests {
         assert!(report.all_replayable);
         assert_eq!(report.rollback_anchor_ids, rollback.rollback_anchor_ids);
         assert_eq!(report.evidence_ids, rollback.evidence_ids);
+        assert!(!report.review_packet.approval_review_packet_ids.is_empty());
+        assert!(!report.review_packet.evidence_ids.is_empty());
+        assert_eq!(
+            report.review_packet.rollback_anchor_ids,
+            report.rollback_anchor_ids
+        );
+        assert!(
+            report
+                .review_packet
+                .content_digests
+                .iter()
+                .any(|digest| digest == &report.content_digest)
+        );
+        assert!(
+            report
+                .review_packet
+                .source_report_schemas
+                .iter()
+                .any(|schema| schema == "rust-norion-self-evolution-rollback-replay-gate-v1")
+        );
+        assert!(report.summary_line().contains("review_packets=1"));
         assert!(report.blocked_reasons.is_empty());
         assert!(report.content_digest.starts_with("fnv64:"));
         assert!(
@@ -2576,6 +2649,12 @@ mod tests {
             report
                 .json_line()
                 .contains("\"admitted_for_human_review\":true")
+        );
+        assert!(report.json_line().contains("\"review_packet\":"));
+        assert!(
+            report
+                .json_line()
+                .contains("\"approval_tokens_included\":false")
         );
         assert!(plan.read_only);
         assert!(plan.report_only);
@@ -2599,6 +2678,20 @@ mod tests {
         assert!(report.all_replayable);
         assert!(report.rollback_anchor_ids.is_empty());
         assert!(report.evidence_ids.is_empty());
+        assert!(!report.review_packet.approval_review_packet_ids.is_empty());
+        assert!(report.review_packet.rollback_anchor_ids.is_empty());
+        assert!(
+            report
+                .review_packet
+                .content_digests
+                .iter()
+                .any(|digest| digest == &report.content_digest)
+        );
+        assert!(
+            report
+                .json_line()
+                .contains("\"approval_tokens_included\":false")
+        );
         assert!(
             report
                 .blocked_reasons

@@ -325,6 +325,18 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_plans() {
     assert_eq!(report.self_evolution_rollback_replay_gate_events, 1);
     assert_eq!(report.self_evolution_rollback_replay_gate_admitted, 1);
     assert_eq!(report.self_evolution_rollback_replay_gate_held, 0);
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_review_packets,
+        gate_report.review_packet.approval_review_packet_ids.len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_review_evidence_ids,
+        gate_report.review_packet.evidence_ids.len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_missing_review_packet_refs,
+        0
+    );
     assert_eq!(report.self_evolution_rollback_replay_gate_items, 1);
     assert_eq!(report.self_evolution_rollback_replay_gate_replayable, 1);
     assert_eq!(report.self_evolution_rollback_replay_gate_blocked, 0);
@@ -368,6 +380,11 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_plans() {
             .summary_line()
             .contains("self_evolution_rollback_replay_gate_admitted=1")
     );
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_gate_review_packets=1")
+    );
     cleanup(path);
 }
 
@@ -386,6 +403,18 @@ fn trace_schema_jsonl_gate_accepts_held_self_evolution_rollback_replay_gate() {
     assert_eq!(report.self_evolution_rollback_replay_gate_events, 1);
     assert_eq!(report.self_evolution_rollback_replay_gate_admitted, 0);
     assert_eq!(report.self_evolution_rollback_replay_gate_held, 1);
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_review_packets,
+        gate_report.review_packet.approval_review_packet_ids.len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_review_evidence_ids,
+        gate_report.review_packet.evidence_ids.len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_missing_review_packet_refs,
+        0
+    );
     assert_eq!(report.self_evolution_rollback_replay_gate_items, 0);
     assert_eq!(report.self_evolution_rollback_replay_gate_replayable, 0);
     assert_eq!(report.self_evolution_rollback_replay_gate_blocked, 0);
