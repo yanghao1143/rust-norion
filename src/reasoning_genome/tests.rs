@@ -378,6 +378,10 @@ fn dna_splicer_classifies_exons_introns_and_variants_without_writes() {
     assert_eq!(preview.exon_count(), 1);
     assert_eq!(preview.intron_count(), 1);
     assert_eq!(preview.variant_count(), 1);
+    assert_eq!(preview.retained_count(), 1);
+    assert_eq!(preview.skipped_count(), 1);
+    assert_eq!(preview.quarantined_count(), 1);
+    assert_eq!(preview.repair_candidate_count(), 0);
     assert!(preview.findings.iter().any(|finding| {
         finding.kind == GeneVariantKind::Drift && finding.segment_id == "segment:private-drift"
     }));
@@ -386,6 +390,106 @@ fn dna_splicer_classifies_exons_introns_and_variants_without_writes() {
     }));
     assert!(intents.contains(&"quarantine".to_owned()));
     assert!(intents.contains(&"regenerate".to_owned()));
+    assert!(
+        preview
+            .disposition_summaries()
+            .contains(&"retained".to_owned())
+    );
+    assert!(
+        preview
+            .disposition_summaries()
+            .contains(&"quarantined".to_owned())
+    );
+    assert!(
+        preview
+            .segment_reason_summaries(8)
+            .iter()
+            .any(|summary| summary.contains("disposition=quarantined")
+                && summary.contains("findings=drift|privacy"))
+    );
+    assert!(preview.is_read_only_preview());
+}
+
+#[test]
+fn dna_splicer_isolates_malformed_chunk_without_poisoning_neighbor_segments() {
+    let segments = vec![
+        GeneSegment::new(
+            "segment:healthy-left",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::SemanticMemory,
+            0,
+            64,
+        )
+        .with_source_hash("sha256:left")
+        .with_metadata(
+            "healthy left",
+            "safe semantic memory chunk",
+            "left bounded chunk",
+        )
+        .with_health(0.90, 0.02, 0.01),
+        GeneSegment::new(
+            "segment:malformed-middle",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::RuntimeKv,
+            64,
+            64,
+        )
+        .with_source_hash("sha256:middle")
+        .with_metadata(
+            "malformed middle",
+            "bad range should be repaired locally",
+            "middle bad chunk",
+        )
+        .with_schema(false, false)
+        .with_health(0.84, 0.03, 0.01),
+        GeneSegment::new(
+            "segment:healthy-right",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::GistMemory,
+            64,
+            128,
+        )
+        .with_source_hash("sha256:right")
+        .with_metadata(
+            "healthy right",
+            "safe gist memory chunk",
+            "right bounded chunk",
+        )
+        .with_health(0.88, 0.04, 0.01),
+    ];
+
+    let preview = DnaSplicer::default().preview(
+        TaskProfile::LongDocument,
+        "genome:long_document:stable",
+        segments,
+    );
+
+    assert_eq!(preview.retained_count(), 2);
+    assert_eq!(preview.repair_candidate_count(), 1);
+    assert_eq!(preview.quarantined_count(), 0);
+    assert_eq!(preview.variant_count(), 1);
+    assert!(preview.findings.iter().any(|finding| {
+        finding.segment_id == "segment:malformed-middle"
+            && finding.kind == GeneVariantKind::EmptyRange
+    }));
+    assert!(preview.findings.iter().any(|finding| {
+        finding.segment_id == "segment:malformed-middle" && finding.kind == GeneVariantKind::Schema
+    }));
+    assert!(preview.segments.iter().any(|segment| {
+        segment.segment.id == "segment:healthy-left"
+            && segment.disposition == GeneSegmentDisposition::Retained
+    }));
+    assert!(preview.segments.iter().any(|segment| {
+        segment.segment.id == "segment:healthy-right"
+            && segment.disposition == GeneSegmentDisposition::Retained
+    }));
+    assert!(
+        preview
+            .segment_reason_summaries(8)
+            .iter()
+            .any(|summary| summary.contains("disposition=repair_candidate")
+                && summary.contains("findings=empty_range|schema|kv_shape"))
+    );
     assert!(preview.is_read_only_preview());
 }
 

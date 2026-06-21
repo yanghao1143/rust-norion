@@ -33,6 +33,15 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let splice_exons = extract_json_usize_field(genome, "splice_exons").unwrap_or(0);
     let splice_introns = extract_json_usize_field(genome, "splice_introns").unwrap_or(0);
     let splice_variants = extract_json_usize_field(genome, "splice_variants").unwrap_or(0);
+    let splice_retained = extract_json_usize_field(genome, "splice_retained").unwrap_or(0);
+    let splice_skipped = extract_json_usize_field(genome, "splice_skipped").unwrap_or(0);
+    let splice_quarantined = extract_json_usize_field(genome, "splice_quarantined").unwrap_or(0);
+    let splice_repair_candidates =
+        extract_json_usize_field(genome, "splice_repair_candidates").unwrap_or(0);
+    let splice_dispositions =
+        extract_json_string_array_field(genome, "splice_dispositions").unwrap_or_default();
+    let splice_reason_summaries =
+        extract_json_string_array_field(genome, "splice_reason_summaries").unwrap_or_default();
     let splice_findings = extract_json_usize_field(genome, "splice_findings").unwrap_or(0);
     let splice_finding_kinds =
         extract_json_string_array_field(genome, "splice_finding_kinds").unwrap_or_default();
@@ -128,6 +137,50 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
             splice_exons + splice_introns + splice_variants
         ));
     }
+    if splice_segments
+        != splice_retained + splice_skipped + splice_quarantined + splice_repair_candidates
+    {
+        failures.push(format!(
+            "reasoning_genome splice_segments {splice_segments} does not match disposition counts {}",
+            splice_retained + splice_skipped + splice_quarantined + splice_repair_candidates
+        ));
+    }
+    if splice_retained != splice_exons {
+        failures.push(format!(
+            "reasoning_genome splice_retained {splice_retained} must match splice_exons {splice_exons}"
+        ));
+    }
+    if splice_skipped != splice_introns {
+        failures.push(format!(
+            "reasoning_genome splice_skipped {splice_skipped} must match splice_introns {splice_introns}"
+        ));
+    }
+    if splice_variants != splice_quarantined + splice_repair_candidates {
+        failures.push(format!(
+            "reasoning_genome splice_variants {splice_variants} must match quarantined+repair_candidates {}",
+            splice_quarantined + splice_repair_candidates
+        ));
+    }
+    if splice_segments > 0 && splice_dispositions.is_empty() {
+        failures.push("reasoning_genome splice_segments require splice_dispositions".to_owned());
+    }
+    if splice_segments > 0 && splice_reason_summaries.is_empty() {
+        failures
+            .push("reasoning_genome splice_segments require splice_reason_summaries".to_owned());
+    }
+    if splice_quarantined > 0 {
+        require_splice_disposition(&mut failures, &splice_dispositions, "quarantined");
+    }
+    if splice_repair_candidates > 0 {
+        require_splice_disposition(&mut failures, &splice_dispositions, "repair_candidate");
+    }
+    for summary in &splice_reason_summaries {
+        if contains_raw_payload_marker(summary) {
+            failures
+                .push("reasoning_genome splice_reason_summaries must stay sanitized".to_owned());
+            break;
+        }
+    }
     if splice_variants > 0 && splice_findings == 0 {
         failures.push("reasoning_genome splice_variants require splice_findings".to_owned());
     }
@@ -175,4 +228,24 @@ fn require_intent(failures: &mut Vec<String>, mutation_intents: &[String], expec
             "reasoning_genome mutation_intents must include {expected}"
         ));
     }
+}
+
+fn require_splice_disposition(failures: &mut Vec<String>, dispositions: &[String], expected: &str) {
+    if !dispositions
+        .iter()
+        .any(|disposition| disposition == expected)
+    {
+        failures.push(format!(
+            "reasoning_genome splice_dispositions must include {expected}"
+        ));
+    }
+}
+
+fn contains_raw_payload_marker(summary: &str) -> bool {
+    let lower = summary.to_ascii_lowercase();
+    lower.contains("prompt:")
+        || lower.contains("answer:")
+        || lower.contains("label=")
+        || lower.contains("purpose=")
+        || lower.contains("gist=")
 }

@@ -86,6 +86,12 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"splice_exons\":"));
     assert!(line.contains("\"splice_introns\":"));
     assert!(line.contains("\"splice_variants\":"));
+    assert!(line.contains("\"splice_retained\":"));
+    assert!(line.contains("\"splice_skipped\":"));
+    assert!(line.contains("\"splice_quarantined\":"));
+    assert!(line.contains("\"splice_repair_candidates\":"));
+    assert!(line.contains("\"splice_dispositions\":"));
+    assert!(line.contains("\"splice_reason_summaries\":"));
     assert!(line.contains("\"splice_findings\":"));
     assert!(line.contains("\"splice_finding_kinds\":"));
     assert!(line.contains("\"splice_mutation_intents\":"));
@@ -336,6 +342,65 @@ fn trace_schema_gate_rejects_reasoning_genome_splice_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("reasoning_genome splice_write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_splice_disposition_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome splice disposition gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = increment_trace_object_usize(
+        &trace_json_line(
+            "trace genome splice disposition gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "splice_retained",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("disposition counts")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_raw_payload_markers_in_splice_reasons() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome splice sanitized reasons", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome splice sanitized reasons",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"splice_reason_summaries\":[",
+        "\"splice_reason_summaries\":[\"label=private prompt\",",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("splice_reason_summaries")),
         "{failures:?}"
     );
 }

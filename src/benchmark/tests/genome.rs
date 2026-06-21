@@ -38,6 +38,8 @@ fn summary_records_reasoning_genome_expression_evidence() {
     assert_eq!(summary.total_reasoning_genome_failures(), 0);
     assert!(summary.genome_evidence().total_genes >= 7);
     assert!(summary.genome_evidence().total_splice_segments >= 1);
+    assert!(summary.genome_evidence().total_splice_retained >= 1);
+    assert!(summary.genome_evidence().total_splice_input_tokens >= 1);
     assert!(
         summary
             .summary_line()
@@ -47,6 +49,16 @@ fn summary_records_reasoning_genome_expression_evidence() {
         summary
             .summary_line()
             .contains("reasoning_genome_splice_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_splice_retained=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_splice_saved_tokens=")
     );
     assert!(
         summary

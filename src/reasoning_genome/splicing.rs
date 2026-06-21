@@ -65,6 +65,25 @@ impl GeneSegmentClass {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneSegmentDisposition {
+    Retained,
+    Skipped,
+    Quarantined,
+    RepairCandidate,
+}
+
+impl GeneSegmentDisposition {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Retained => "retained",
+            Self::Skipped => "skipped",
+            Self::Quarantined => "quarantined",
+            Self::RepairCandidate => "repair_candidate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneVariantKind {
     Insertion,
     Deletion,
@@ -295,6 +314,7 @@ impl MutationFinding {
 pub struct ClassifiedGeneSegment {
     pub segment: GeneSegment,
     pub class: GeneSegmentClass,
+    pub disposition: GeneSegmentDisposition,
     pub reasons: Vec<String>,
 }
 
@@ -321,6 +341,61 @@ impl DnaSplicePreview {
 
     pub fn variant_count(&self) -> usize {
         self.count_class(GeneSegmentClass::Variant)
+    }
+
+    pub fn retained_count(&self) -> usize {
+        self.count_disposition(GeneSegmentDisposition::Retained)
+    }
+
+    pub fn skipped_count(&self) -> usize {
+        self.count_disposition(GeneSegmentDisposition::Skipped)
+    }
+
+    pub fn quarantined_count(&self) -> usize {
+        self.count_disposition(GeneSegmentDisposition::Quarantined)
+    }
+
+    pub fn repair_candidate_count(&self) -> usize {
+        self.count_disposition(GeneSegmentDisposition::RepairCandidate)
+    }
+
+    pub fn total_token_count(&self) -> usize {
+        self.segments
+            .iter()
+            .map(|segment| segment.segment.token_count())
+            .sum()
+    }
+
+    pub fn retained_token_count(&self) -> usize {
+        self.segments
+            .iter()
+            .filter(|segment| segment.disposition == GeneSegmentDisposition::Retained)
+            .map(|segment| segment.segment.token_count())
+            .sum()
+    }
+
+    pub fn estimated_saved_token_count(&self) -> usize {
+        self.total_token_count()
+            .saturating_sub(self.retained_token_count())
+    }
+
+    pub fn disposition_summaries(&self) -> Vec<String> {
+        let mut dispositions = Vec::new();
+        for segment in &self.segments {
+            let disposition = segment.disposition.as_str().to_owned();
+            if !dispositions.contains(&disposition) {
+                dispositions.push(disposition);
+            }
+        }
+        dispositions
+    }
+
+    pub fn segment_reason_summaries(&self, limit: usize) -> Vec<String> {
+        self.segments
+            .iter()
+            .take(limit)
+            .map(segment_reason_summary)
+            .collect()
     }
 
     pub fn mutation_intents(&self) -> Vec<String> {
@@ -366,6 +441,13 @@ impl DnaSplicePreview {
         self.segments
             .iter()
             .filter(|segment| segment.class == class)
+            .count()
+    }
+
+    fn count_disposition(&self, disposition: GeneSegmentDisposition) -> usize {
+        self.segments
+            .iter()
+            .filter(|segment| segment.disposition == disposition)
             .count()
     }
 }
@@ -637,6 +719,7 @@ impl DnaSplicer {
                     .filter(|finding| finding.segment_id == segment.id)
                     .collect::<Vec<_>>();
                 let class = classify_segment(&self.policy, &segment, &segment_findings);
+                let disposition = disposition_for_class(&class, &segment_findings);
                 let reasons = segment_findings
                     .iter()
                     .map(|finding| finding.reason.clone())
@@ -644,6 +727,7 @@ impl DnaSplicer {
                 ClassifiedGeneSegment {
                     segment,
                     class,
+                    disposition,
                     reasons,
                 }
             })
@@ -666,6 +750,68 @@ impl Default for DnaSplicer {
     fn default() -> Self {
         Self::new(DnaSplicerPolicy::default())
     }
+}
+
+fn disposition_for_class(
+    class: &GeneSegmentClass,
+    findings: &[&MutationFinding],
+) -> GeneSegmentDisposition {
+    match class {
+        GeneSegmentClass::Exon => GeneSegmentDisposition::Retained,
+        GeneSegmentClass::Intron => GeneSegmentDisposition::Skipped,
+        GeneSegmentClass::Variant
+            if findings
+                .iter()
+                .any(|finding| finding.severity == GeneVariantSeverity::Quarantine) =>
+        {
+            GeneSegmentDisposition::Quarantined
+        }
+        GeneSegmentClass::Variant => GeneSegmentDisposition::RepairCandidate,
+    }
+}
+
+fn segment_reason_summary(segment: &ClassifiedGeneSegment) -> String {
+    let mut finding_kinds = Vec::new();
+    for reason in &segment.reasons {
+        let normalized = reason_kind_hint(reason);
+        if !finding_kinds.contains(&normalized) {
+            finding_kinds.push(normalized);
+        }
+    }
+    if finding_kinds.is_empty() {
+        finding_kinds.push("none".to_owned());
+    }
+
+    format!(
+        "source={} class={} disposition={} tokens={} kv={} hash_present={} findings={}",
+        segment.segment.source.as_str(),
+        segment.class.as_str(),
+        segment.disposition.as_str(),
+        segment.segment.token_count(),
+        segment.segment.kv_residency.as_str(),
+        !segment.segment.source_hash.trim().is_empty(),
+        finding_kinds.join("|")
+    )
+}
+
+fn reason_kind_hint(reason: &str) -> String {
+    for (needle, kind) in [
+        ("token range", "empty_range"),
+        ("source hash", "missing_source_hash"),
+        ("token budget", "truncation"),
+        ("label or purpose", "stale_label"),
+        ("drift", "drift"),
+        ("privacy", "privacy"),
+        ("schema", "schema"),
+        ("KV shape", "kv_shape"),
+        ("token gap", "deletion"),
+        ("token overlap", "insertion"),
+    ] {
+        if reason.contains(needle) {
+            return kind.to_owned();
+        }
+    }
+    "repair".to_owned()
 }
 
 fn classify_segment(

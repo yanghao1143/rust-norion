@@ -21,6 +21,12 @@ pub struct BenchmarkGenomeEvidence {
     pub total_splice_exons: usize,
     pub total_splice_introns: usize,
     pub total_splice_variants: usize,
+    pub total_splice_retained: usize,
+    pub total_splice_skipped: usize,
+    pub total_splice_quarantined: usize,
+    pub total_splice_repair_candidates: usize,
+    pub total_splice_input_tokens: usize,
+    pub total_splice_retained_tokens: usize,
     pub total_splice_findings: usize,
     pub total_splice_proposals: usize,
     pub failures: Vec<String>,
@@ -61,6 +67,12 @@ impl BenchmarkGenomeEvidence {
         self.total_splice_exons += splice.exon_count();
         self.total_splice_introns += splice.intron_count();
         self.total_splice_variants += splice.variant_count();
+        self.total_splice_retained += splice.retained_count();
+        self.total_splice_skipped += splice.skipped_count();
+        self.total_splice_quarantined += splice.quarantined_count();
+        self.total_splice_repair_candidates += splice.repair_candidate_count();
+        self.total_splice_input_tokens += splice.total_token_count();
+        self.total_splice_retained_tokens += splice.retained_token_count();
         self.total_splice_findings += splice.findings.len();
         self.total_splice_proposals += splice.mutation_plans.len();
         self.total_gene_scissors_proposals += splice.mutation_plans.len();
@@ -156,6 +168,36 @@ impl BenchmarkGenomeEvidence {
                 case.name
             ));
         }
+        if splice.segments.len()
+            != splice.retained_count()
+                + splice.skipped_count()
+                + splice.quarantined_count()
+                + splice.repair_candidate_count()
+        {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome splice disposition counts are inconsistent",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if splice.exon_count() != splice.retained_count()
+            || splice.intron_count() != splice.skipped_count()
+            || splice.variant_count()
+                != splice.quarantined_count() + splice.repair_candidate_count()
+        {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome splice class/disposition counts do not align",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !splice.segments.is_empty() && splice.segment_reason_summaries(usize::MAX).is_empty() {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome splice segments require sanitized reason summaries",
+                device.as_str(),
+                case.name
+            ));
+        }
         if splice.variant_count() > 0 && splice.findings.is_empty() {
             self.failures.push(format!(
                 "{}:{} reasoning_genome splice variants require findings",
@@ -189,5 +231,10 @@ impl BenchmarkGenomeEvidence {
 
     pub fn gene_scissors_proposal_device_profiles(&self) -> usize {
         explicit_device_count(&self.proposal_devices)
+    }
+
+    pub fn estimated_splice_saved_tokens(&self) -> usize {
+        self.total_splice_input_tokens
+            .saturating_sub(self.total_splice_retained_tokens)
     }
 }

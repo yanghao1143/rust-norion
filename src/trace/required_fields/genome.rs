@@ -35,6 +35,24 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("reasoning_genome_splice_exons", "\"splice_exons\":"),
     required_field("reasoning_genome_splice_introns", "\"splice_introns\":"),
     required_field("reasoning_genome_splice_variants", "\"splice_variants\":"),
+    required_field("reasoning_genome_splice_retained", "\"splice_retained\":"),
+    required_field("reasoning_genome_splice_skipped", "\"splice_skipped\":"),
+    required_field(
+        "reasoning_genome_splice_quarantined",
+        "\"splice_quarantined\":",
+    ),
+    required_field(
+        "reasoning_genome_splice_repair_candidates",
+        "\"splice_repair_candidates\":",
+    ),
+    required_field(
+        "reasoning_genome_splice_dispositions",
+        "\"splice_dispositions\":",
+    ),
+    required_field(
+        "reasoning_genome_splice_reason_summaries",
+        "\"splice_reason_summaries\":",
+    ),
     required_field("reasoning_genome_splice_findings", "\"splice_findings\":"),
     required_field(
         "reasoning_genome_splice_finding_kinds",
