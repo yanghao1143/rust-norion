@@ -1,8 +1,10 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     ExperienceEnvelope, IndexRebuildPlan, MemoryAdapter, MemoryAdapterCapability,
     MemoryAdapterDescriptor, MemoryAdapterHealth, MemoryResult, MemoryScope, Metadata, clamp01,
+    stable_hash,
 };
 
 const CLEAN_GIST_INDEX_MAX_CHARS: usize = 420;
@@ -13,6 +15,7 @@ const RAW_FALLBACK_LESSON_MAX_CHARS: usize = 780;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemoryIndexSource {
     Experience,
+    GeneSegment,
     LongTerm,
     Skill,
     RuntimeKv,
@@ -22,6 +25,7 @@ impl MemoryIndexSource {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Experience => "experience",
+            Self::GeneSegment => "gene_segment",
             Self::LongTerm => "long_term",
             Self::Skill => "skill",
             Self::RuntimeKv => "runtime_kv",
@@ -497,6 +501,521 @@ impl MemoryIndexPlanner for DefaultMemoryIndexPlanner {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MemorySemanticQuery {
+    pub text: String,
+    pub embedding: Vec<f32>,
+    pub scope: Option<MemoryScope>,
+    pub limit: usize,
+    pub token_budget: usize,
+    pub min_score: f32,
+    pub allow_cross_task: bool,
+    pub include_quarantined: bool,
+    pub source_filters: BTreeSet<MemoryIndexSource>,
+    pub metadata_filters: Metadata,
+}
+
+impl MemorySemanticQuery {
+    pub fn new(text: impl Into<String>, limit: usize) -> Self {
+        Self {
+            text: text.into(),
+            embedding: Vec::new(),
+            scope: None,
+            limit: limit.max(1),
+            token_budget: 1_024,
+            min_score: 0.05,
+            allow_cross_task: false,
+            include_quarantined: false,
+            source_filters: BTreeSet::new(),
+            metadata_filters: Metadata::new(),
+        }
+    }
+
+    pub fn with_embedding(mut self, embedding: Vec<f32>) -> Self {
+        self.embedding = embedding;
+        self
+    }
+
+    pub fn with_scope(mut self, scope: MemoryScope) -> Self {
+        self.scope = Some(scope);
+        self
+    }
+
+    pub fn with_token_budget(mut self, token_budget: usize) -> Self {
+        self.token_budget = token_budget.max(1);
+        self
+    }
+
+    pub fn with_min_score(mut self, min_score: f32) -> Self {
+        self.min_score = clamp01(min_score);
+        self
+    }
+
+    pub fn allow_cross_task(mut self, allow_cross_task: bool) -> Self {
+        self.allow_cross_task = allow_cross_task;
+        self
+    }
+
+    pub fn include_quarantined(mut self, include_quarantined: bool) -> Self {
+        self.include_quarantined = include_quarantined;
+        self
+    }
+
+    pub fn with_source(mut self, source: MemoryIndexSource) -> Self {
+        self.source_filters.insert(source);
+        self
+    }
+
+    pub fn with_metadata_filter(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        self.metadata_filters.insert(key.into(), value.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MemorySemanticMatch {
+    pub id: String,
+    pub source: MemoryIndexSource,
+    pub content: String,
+    pub score: f32,
+    pub strength: f32,
+    pub estimated_tokens: usize,
+    pub metadata: Metadata,
+    pub scope: MemoryScope,
+}
+
+impl MemorySemanticMatch {
+    pub fn detail_code(&self) -> String {
+        format!(
+            "match:{}:{:.3}:{}",
+            self.source.as_str(),
+            self.score,
+            hex_id(&self.id)
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemorySemanticSkip {
+    pub id: String,
+    pub source: MemoryIndexSource,
+    pub reason: String,
+}
+
+impl MemorySemanticSkip {
+    pub fn detail_code(&self) -> String {
+        format!(
+            "skip:{}:{}:{}",
+            self.source.as_str(),
+            detail_reason(&self.reason),
+            hex_id(&self.id)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MemorySemanticRetrievalPlan {
+    pub matches: Vec<MemorySemanticMatch>,
+    pub skipped: Vec<MemorySemanticSkip>,
+    pub used_tokens: usize,
+    pub source_digest: u64,
+}
+
+impl MemorySemanticRetrievalPlan {
+    pub fn matched_ids(&self) -> Vec<String> {
+        self.matches.iter().map(|item| item.id.clone()).collect()
+    }
+
+    pub fn skipped_ids_for_reason(&self, reason: &str) -> Vec<String> {
+        self.skipped
+            .iter()
+            .filter(|item| item.reason == reason)
+            .map(|item| item.id.clone())
+            .collect()
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        self.skipped
+            .iter()
+            .map(|item| item.reason.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn match_detail_codes(&self) -> Vec<String> {
+        self.matches
+            .iter()
+            .map(MemorySemanticMatch::detail_code)
+            .collect()
+    }
+
+    pub fn skip_detail_codes(&self) -> Vec<String> {
+        self.skipped
+            .iter()
+            .map(MemorySemanticSkip::detail_code)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn detail_codes(&self) -> Vec<String> {
+        self.match_detail_codes()
+            .into_iter()
+            .chain(self.skip_detail_codes())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "memory_semantic_retrieval matches={} skipped={} used_tokens={} source_digest={:016x} reason_codes={} detail_codes={}",
+            self.matches.len(),
+            self.skipped.len(),
+            self.used_tokens,
+            self.source_digest,
+            join_codes(self.reason_codes()),
+            join_codes(self.detail_codes()),
+        )
+    }
+}
+
+pub trait MemorySemanticRetriever {
+    fn retrieve(
+        &self,
+        documents: &[MemoryIndexDocument],
+        query: &MemorySemanticQuery,
+    ) -> MemorySemanticRetrievalPlan;
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DefaultMemorySemanticRetriever;
+
+impl MemoryAdapter for DefaultMemorySemanticRetriever {
+    fn descriptor(&self) -> MemoryAdapterDescriptor {
+        MemoryAdapterDescriptor::new(
+            "default_memory_semantic_retriever",
+            vec![
+                MemoryAdapterCapability::MemoryIndex,
+                MemoryAdapterCapability::SemanticRetrieval,
+            ],
+        )
+        .read_only()
+    }
+
+    fn health(&self) -> MemoryResult<MemoryAdapterHealth> {
+        Ok(MemoryAdapterHealth::ready(None))
+    }
+}
+
+impl MemorySemanticRetriever for DefaultMemorySemanticRetriever {
+    fn retrieve(
+        &self,
+        documents: &[MemoryIndexDocument],
+        query: &MemorySemanticQuery,
+    ) -> MemorySemanticRetrievalPlan {
+        let mut skipped = Vec::new();
+        let query_tokens = normalized_tokens(&query.text);
+        let mut scored = Vec::new();
+
+        for document in documents {
+            if !query.source_filters.is_empty() && !query.source_filters.contains(&document.source)
+            {
+                skipped.push(skip(document, "source_filter"));
+                continue;
+            }
+            if !metadata_matches(&query.metadata_filters, &document.metadata) {
+                skipped.push(skip(document, "metadata_filter"));
+                continue;
+            }
+            if let Some(scope_reason) = scope_skip_reason(query, &document.scope) {
+                skipped.push(skip(document, scope_reason));
+                continue;
+            }
+            if let Some(risk_reason) = retrieval_risk_reason(document, query.include_quarantined) {
+                skipped.push(skip(document, risk_reason));
+                continue;
+            }
+
+            let vector_score = cosine_similarity(&query.embedding, &document.embedding);
+            let text_score = lexical_score(&query_tokens, document);
+            let confidence = metadata_float(&document.metadata, "confidence").unwrap_or(0.5);
+            let freshness = metadata_float(&document.metadata, "freshness").unwrap_or(0.5);
+            let quality = retrieval_quality_multiplier(&document.metadata);
+            let score = ((vector_score.max(text_score) * 0.64)
+                + (document.strength * 0.16)
+                + (confidence * 0.12)
+                + (freshness * 0.08))
+                .clamp(0.0, 1.0)
+                * quality;
+
+            if score < query.min_score {
+                skipped.push(skip(document, "below_min_score"));
+                continue;
+            }
+
+            scored.push((
+                MemorySemanticMatch {
+                    id: document.id.clone(),
+                    source: document.source,
+                    content: document.content.clone(),
+                    score: score.clamp(0.0, 1.0),
+                    strength: document.strength,
+                    estimated_tokens: estimate_tokens(&document.content),
+                    metadata: document.metadata.clone(),
+                    scope: document.scope.clone(),
+                },
+                normalized_content_key(&document.content),
+            ));
+        }
+
+        scored.sort_by(|left, right| {
+            right
+                .0
+                .score
+                .partial_cmp(&left.0.score)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| left.0.source.cmp(&right.0.source))
+                .then_with(|| left.0.id.cmp(&right.0.id))
+        });
+
+        let mut matches = Vec::new();
+        let mut used_tokens = 0usize;
+        let mut seen_ids = BTreeSet::new();
+        let mut seen_content = BTreeSet::new();
+        for (item, content_key) in scored {
+            let source_id_key = format!("{}:{}", item.source.as_str(), item.id);
+            if !seen_ids.insert(source_id_key) || !seen_content.insert(content_key) {
+                skipped.push(MemorySemanticSkip {
+                    id: item.id,
+                    source: item.source,
+                    reason: "duplicate".to_owned(),
+                });
+                continue;
+            }
+            if matches.len() >= query.limit {
+                skipped.push(MemorySemanticSkip {
+                    id: item.id,
+                    source: item.source,
+                    reason: "result_limit".to_owned(),
+                });
+                continue;
+            }
+            if used_tokens.saturating_add(item.estimated_tokens) > query.token_budget {
+                skipped.push(MemorySemanticSkip {
+                    id: item.id,
+                    source: item.source,
+                    reason: "token_budget".to_owned(),
+                });
+                continue;
+            }
+            used_tokens = used_tokens.saturating_add(item.estimated_tokens);
+            matches.push(item);
+        }
+
+        MemorySemanticRetrievalPlan {
+            matches,
+            skipped,
+            used_tokens,
+            source_digest: memory_index_digest(documents),
+        }
+    }
+}
+
+pub fn memory_index_digest(documents: &[MemoryIndexDocument]) -> u64 {
+    let mut lines = documents
+        .iter()
+        .map(|document| {
+            let metadata = document
+                .metadata
+                .iter()
+                .map(|(key, value)| format!("{key}={value}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                "{}\t{}\t{}\t{}\t{:.6}\t{}",
+                document.source.as_str(),
+                document.id,
+                stable_hash(document.content.as_bytes()),
+                document.embedding.len(),
+                document.strength,
+                metadata
+            )
+        })
+        .collect::<Vec<_>>();
+    lines.sort();
+    stable_hash(lines.join("\n").as_bytes())
+}
+
+fn skip(document: &MemoryIndexDocument, reason: impl Into<String>) -> MemorySemanticSkip {
+    MemorySemanticSkip {
+        id: document.id.clone(),
+        source: document.source,
+        reason: reason.into(),
+    }
+}
+
+fn metadata_matches(filters: &Metadata, metadata: &Metadata) -> bool {
+    filters
+        .iter()
+        .all(|(key, expected)| metadata.get(key) == Some(expected))
+}
+
+fn scope_skip_reason(
+    query: &MemorySemanticQuery,
+    document_scope: &MemoryScope,
+) -> Option<&'static str> {
+    let scope = query.scope.as_ref()?;
+    if let (Some(left), Some(right)) = (&scope.agent_id, &document_scope.agent_id) {
+        if left != right {
+            return Some("cross_agent_scope");
+        }
+    }
+    if let (Some(left), Some(right)) = (&scope.session_id, &document_scope.session_id) {
+        if left != right {
+            return Some("cross_session_scope");
+        }
+    }
+    if !query.allow_cross_task {
+        if let (Some(left), Some(right)) = (&scope.task_id, &document_scope.task_id) {
+            if left != right {
+                return Some("cross_task_scope");
+            }
+        }
+    }
+    None
+}
+
+fn retrieval_risk_reason(
+    document: &MemoryIndexDocument,
+    include_quarantined: bool,
+) -> Option<&'static str> {
+    let tags = metadata_tags(&document.metadata);
+    if metadata_bool(&document.metadata, "privacy_blocked")
+        || document
+            .metadata
+            .get("privacy")
+            .is_some_and(|value| value == "blocked")
+        || tags.contains("risk:privacy_blocked")
+    {
+        return Some("privacy_blocked");
+    }
+
+    if !include_quarantined {
+        if metadata_bool(&document.metadata, "quarantined")
+            || tags.contains("risk:quarantined")
+            || tags.contains("risk:quarantine_high_noise_records")
+        {
+            return Some("quarantined");
+        }
+        if document.source == MemoryIndexSource::GeneSegment {
+            match document.metadata.get("gene_status").map(String::as_str) {
+                Some("corrupt") => return Some("gene_segment_corrupt"),
+                Some("malignant") => return Some("gene_segment_malignant"),
+                Some("quarantined") => return Some("gene_segment_quarantined"),
+                _ => {}
+            }
+        }
+    }
+
+    None
+}
+
+fn metadata_tags(metadata: &Metadata) -> BTreeSet<&str> {
+    metadata
+        .get("tags")
+        .map(|tags| {
+            tags.split(',')
+                .map(str::trim)
+                .filter(|tag| !tag.is_empty())
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn metadata_bool(metadata: &Metadata, key: &str) -> bool {
+    metadata
+        .get(key)
+        .is_some_and(|value| matches!(value.as_str(), "true" | "1" | "yes"))
+}
+
+fn metadata_float(metadata: &Metadata, key: &str) -> Option<f32> {
+    metadata.get(key)?.parse::<f32>().ok().map(clamp01)
+}
+
+fn retrieval_quality_multiplier(metadata: &Metadata) -> f32 {
+    let mut multiplier = 1.0_f32;
+    if metadata
+        .get("content_basis")
+        .is_some_and(|value| value == "raw_fallback")
+    {
+        multiplier *= 0.86;
+    }
+    if metadata
+        .get("content_truncated")
+        .is_some_and(|value| value == "true")
+    {
+        multiplier *= 0.78;
+    }
+    multiplier
+}
+
+fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
+    if left.is_empty() || left.len() != right.len() {
+        return 0.0;
+    }
+    let dot = left.iter().zip(right).map(|(l, r)| l * r).sum::<f32>();
+    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if left_norm == 0.0 || right_norm == 0.0 {
+        return 0.0;
+    }
+    (dot / (left_norm * right_norm)).clamp(0.0, 1.0)
+}
+
+fn lexical_score(query_tokens: &BTreeSet<String>, document: &MemoryIndexDocument) -> f32 {
+    if query_tokens.is_empty() {
+        return 0.0;
+    }
+    let mut content = document.content.clone();
+    if let Some(tags) = document.metadata.get("tags") {
+        content.push(' ');
+        content.push_str(tags);
+    }
+    let document_tokens = normalized_tokens(&content);
+    if document_tokens.is_empty() {
+        return 0.0;
+    }
+    let shared = query_tokens.intersection(&document_tokens).count() as f32;
+    (shared / query_tokens.len().min(document_tokens.len()) as f32).clamp(0.0, 1.0)
+}
+
+fn normalized_tokens(value: &str) -> BTreeSet<String> {
+    value
+        .split(|ch: char| ch.is_whitespace() || ch.is_ascii_punctuation())
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_ascii_lowercase())
+        .collect()
+}
+
+fn normalized_content_key(value: &str) -> u64 {
+    let normalized = normalized_tokens(value)
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join(" ");
+    stable_hash(normalized.as_bytes())
+}
+
+fn estimate_tokens(value: &str) -> usize {
+    (value.chars().count() / 4).max(1)
+}
+
 fn project_experience_index_content(envelope: &ExperienceEnvelope) -> ExperienceIndexContent {
     if let Some(gist) = envelope
         .clean_gist
@@ -726,6 +1245,178 @@ mod tests {
         DefaultExperienceGovernance, ExperienceGovernance, MemoryAccessPurpose,
         MemoryRequestContext,
     };
+
+    #[test]
+    fn semantic_retrieval_ranks_bounds_and_isolates_scope() {
+        let mut runtime_metadata = Metadata::new();
+        runtime_metadata.insert("tags".to_owned(), "rust,runtime".to_owned());
+        runtime_metadata.insert("confidence".to_owned(), "0.9".to_owned());
+        runtime_metadata.insert("freshness".to_owned(), "0.8".to_owned());
+        let runtime_scope = MemoryScope::for_task("runtime").with_agent("tenant-a");
+        let documents = vec![
+            MemoryIndexDocument::new(
+                "runtime-rust",
+                MemoryIndexSource::LongTerm,
+                "Rust borrow checker lesson for runtime adapter repair",
+            )
+            .with_embedding(vec![1.0, 0.0])
+            .with_scope(runtime_scope.clone())
+            .with_metadata(runtime_metadata)
+            .with_strength(0.8),
+            MemoryIndexDocument::new(
+                "runtime-large",
+                MemoryIndexSource::LongTerm,
+                format!("runtime adapter {}", "budget ".repeat(260)),
+            )
+            .with_scope(runtime_scope.clone())
+            .with_strength(0.3),
+            MemoryIndexDocument::new(
+                "other-task",
+                MemoryIndexSource::LongTerm,
+                "Rust borrow checker lesson for a different task",
+            )
+            .with_scope(MemoryScope::for_task("gitlab").with_agent("tenant-a"))
+            .with_strength(0.9),
+            MemoryIndexDocument::new(
+                "other-agent",
+                MemoryIndexSource::LongTerm,
+                "Rust borrow checker lesson for another tenant",
+            )
+            .with_scope(MemoryScope::for_task("runtime").with_agent("tenant-b"))
+            .with_strength(0.9),
+        ];
+
+        let plan = DefaultMemorySemanticRetriever.retrieve(
+            &documents,
+            &MemorySemanticQuery::new("rust borrow checker runtime adapter", 3)
+                .with_embedding(vec![0.9, 0.1])
+                .with_scope(runtime_scope)
+                .with_token_budget(32),
+        );
+
+        assert_eq!(plan.matched_ids(), vec!["runtime-rust".to_owned()]);
+        assert!(plan.used_tokens <= 32);
+        assert_eq!(
+            plan.skipped_ids_for_reason("cross_task_scope"),
+            vec!["other-task".to_owned()]
+        );
+        assert_eq!(
+            plan.skipped_ids_for_reason("cross_agent_scope"),
+            vec!["other-agent".to_owned()]
+        );
+        assert_eq!(
+            plan.skipped_ids_for_reason("token_budget"),
+            vec!["runtime-large".to_owned()]
+        );
+        assert_eq!(plan.source_digest, memory_index_digest(&documents));
+        assert!(
+            plan.summary_line()
+                .contains("reason_codes=cross_agent_scope|cross_task_scope|token_budget")
+        );
+    }
+
+    #[test]
+    fn semantic_retrieval_skips_privacy_and_quarantined_gene_segments() {
+        let mut corrupt_metadata = Metadata::new();
+        corrupt_metadata.insert("gene_status".to_owned(), "corrupt".to_owned());
+        let mut malignant_metadata = Metadata::new();
+        malignant_metadata.insert("gene_status".to_owned(), "malignant".to_owned());
+        let mut privacy_metadata = Metadata::new();
+        privacy_metadata.insert("privacy".to_owned(), "blocked".to_owned());
+
+        let documents = vec![
+            MemoryIndexDocument::new(
+                "active-gene",
+                MemoryIndexSource::GeneSegment,
+                "splice repair anchor for safe memory recall",
+            )
+            .with_strength(0.8),
+            MemoryIndexDocument::new(
+                "corrupt-gene",
+                MemoryIndexSource::GeneSegment,
+                "splice repair anchor with corrupt payload",
+            )
+            .with_metadata(corrupt_metadata)
+            .with_strength(0.9),
+            MemoryIndexDocument::new(
+                "malignant-gene",
+                MemoryIndexSource::GeneSegment,
+                "splice repair anchor with malignant payload",
+            )
+            .with_metadata(malignant_metadata)
+            .with_strength(0.9),
+            MemoryIndexDocument::new(
+                "private-episode",
+                MemoryIndexSource::Experience,
+                "splice repair anchor blocked by privacy",
+            )
+            .with_metadata(privacy_metadata)
+            .with_strength(0.9),
+        ];
+
+        let guarded = DefaultMemorySemanticRetriever.retrieve(
+            &documents,
+            &MemorySemanticQuery::new("splice repair anchor", 5),
+        );
+
+        assert_eq!(guarded.matched_ids(), vec!["active-gene".to_owned()]);
+        assert_eq!(
+            guarded.skipped_ids_for_reason("gene_segment_corrupt"),
+            vec!["corrupt-gene".to_owned()]
+        );
+        assert_eq!(
+            guarded.skipped_ids_for_reason("gene_segment_malignant"),
+            vec!["malignant-gene".to_owned()]
+        );
+        assert_eq!(
+            guarded.skipped_ids_for_reason("privacy_blocked"),
+            vec!["private-episode".to_owned()]
+        );
+
+        let repair = DefaultMemorySemanticRetriever.retrieve(
+            &documents,
+            &MemorySemanticQuery::new("splice repair anchor", 5).include_quarantined(true),
+        );
+        assert!(repair.matched_ids().contains(&"corrupt-gene".to_owned()));
+        assert!(repair.matched_ids().contains(&"malignant-gene".to_owned()));
+        assert_eq!(
+            repair.skipped_ids_for_reason("privacy_blocked"),
+            vec!["private-episode".to_owned()]
+        );
+    }
+
+    #[test]
+    fn semantic_retrieval_suppresses_duplicates_and_redacts_evidence() {
+        let secret = "SEMANTIC_SECRET_DO_NOT_LOG";
+        let documents = vec![
+            MemoryIndexDocument::new(
+                "clean-a",
+                MemoryIndexSource::Experience,
+                format!("rust adapter repair {secret}"),
+            )
+            .with_strength(0.9),
+            MemoryIndexDocument::new(
+                "clean-b",
+                MemoryIndexSource::Experience,
+                format!("rust adapter repair {secret}"),
+            )
+            .with_strength(0.8),
+        ];
+
+        let plan = DefaultMemorySemanticRetriever.retrieve(
+            &documents,
+            &MemorySemanticQuery::new("rust adapter repair", 5),
+        );
+
+        assert_eq!(plan.matched_ids(), vec!["clean-a".to_owned()]);
+        assert_eq!(
+            plan.skipped_ids_for_reason("duplicate"),
+            vec!["clean-b".to_owned()]
+        );
+        assert_eq!(plan.source_digest, memory_index_digest(&documents));
+        assert!(!plan.summary_line().contains(secret));
+        assert!(!plan.detail_codes().iter().any(|code| code.contains(secret)));
+    }
 
     #[test]
     fn experience_envelope_projects_to_index_document() {

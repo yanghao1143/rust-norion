@@ -65,9 +65,10 @@ pub use governance::{
     SelfImproveProposalSource, SelfImproveRoundIdEvidence, admit_self_improve_learning_candidate,
 };
 pub use index::{
-    DefaultMemoryIndexPlanner, ExperienceIndexFindingProjection, MemoryIndexDocument,
-    MemoryIndexOperation, MemoryIndexOperationKind, MemoryIndexPlan, MemoryIndexPlanner,
-    MemoryIndexSource,
+    DefaultMemoryIndexPlanner, DefaultMemorySemanticRetriever, ExperienceIndexFindingProjection,
+    MemoryIndexDocument, MemoryIndexOperation, MemoryIndexOperationKind, MemoryIndexPlan,
+    MemoryIndexPlanner, MemoryIndexSource, MemorySemanticMatch, MemorySemanticQuery,
+    MemorySemanticRetrievalPlan, MemorySemanticRetriever, MemorySemanticSkip, memory_index_digest,
 };
 pub use infini::{
     DefaultInfiniMemoryPlanner, InfiniMemoryActiveMatch, InfiniMemoryCounts, InfiniMemoryItem,
@@ -224,6 +225,7 @@ pub enum MemoryAdapterCapability {
     MemoryEvolution,
     StateInspection,
     InfiniMemoryPlanning,
+    SemanticRetrieval,
 }
 
 impl MemoryAdapterCapability {
@@ -246,6 +248,7 @@ impl MemoryAdapterCapability {
             Self::MemoryEvolution => "memory_evolution",
             Self::StateInspection => "state_inspection",
             Self::InfiniMemoryPlanning => "infini_memory_planning",
+            Self::SemanticRetrieval => "semantic_retrieval",
         }
     }
 }
