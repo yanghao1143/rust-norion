@@ -14,6 +14,7 @@ mod reflection_evidence;
 mod roundtrip;
 mod routing_evidence;
 mod runtime_evidence;
+mod self_evolving_memory_evidence;
 mod summary;
 mod summary_gate;
 
@@ -38,6 +39,13 @@ pub use roundtrip::{
 pub use routing_evidence::BenchmarkRoutingEvidence;
 pub use runtime_evidence::{
     BenchmarkRuntimeArchitectureEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
+};
+pub use self_evolving_memory_evidence::{
+    SelfEvolvingMemoryAbCase, SelfEvolvingMemoryAbGate, SelfEvolvingMemoryAbGateReport,
+    SelfEvolvingMemoryAbHarness, SelfEvolvingMemoryAbRecommendation, SelfEvolvingMemoryAbReport,
+    SelfEvolvingMemoryAbResult, SelfEvolvingMemoryEvalLanguage, SelfEvolvingMemoryEvalMode,
+    SelfEvolvingMemoryValidationEvidence, default_self_evolving_memory_ab_cases,
+    run_default_self_evolving_memory_ab_suite, seeded_self_evolving_memory_ab_store,
 };
 pub use summary::{BenchmarkCaseResult, BenchmarkSummary};
 

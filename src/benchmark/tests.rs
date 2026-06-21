@@ -35,6 +35,8 @@ mod runtime_device;
 mod runtime_forward;
 #[path = "tests/runtime_kv.rs"]
 mod runtime_kv;
+#[path = "tests/self_evolving_memory.rs"]
+mod self_evolving_memory;
 
 fn baseline_benchmark_result(
     name: impl Into<String>,

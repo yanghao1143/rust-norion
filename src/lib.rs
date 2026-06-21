@@ -49,7 +49,13 @@ pub use benchmark::{
     BenchmarkMemoryGovernanceEvidence, BenchmarkRoutingEvidence, BenchmarkSummary,
     KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
     KvQuantBenchmarkSummary, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
-    PersistentRoundtripMatrixReport, PersistentRoundtripReport, default_benchmark_cases,
+    PersistentRoundtripMatrixReport, PersistentRoundtripReport, SelfEvolvingMemoryAbCase,
+    SelfEvolvingMemoryAbGate, SelfEvolvingMemoryAbGateReport, SelfEvolvingMemoryAbHarness,
+    SelfEvolvingMemoryAbRecommendation, SelfEvolvingMemoryAbReport, SelfEvolvingMemoryAbResult,
+    SelfEvolvingMemoryEvalLanguage, SelfEvolvingMemoryEvalMode,
+    SelfEvolvingMemoryValidationEvidence, default_benchmark_cases,
+    default_self_evolving_memory_ab_cases, run_default_self_evolving_memory_ab_suite,
+    seeded_self_evolving_memory_ab_store,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
