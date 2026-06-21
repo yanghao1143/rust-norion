@@ -48,6 +48,12 @@ fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
     assert!(json_line.contains("\"read_only\":true"));
     assert!(json_line.contains("\"report_only\":true"));
     assert!(json_line.contains("\"preview_only\":true"));
+    assert!(json_line.contains("\"review_packet\":{"));
+    assert!(
+        json_line.contains("\"approval_review_packet_ids\":[\"approval-review:benchmark:test\"]")
+    );
+    assert!(json_line.contains("\"approval_tokens_included\":false"));
+    assert!(json_line.contains("\"evidence_count\":4"));
     assert!(json_line.contains("\"benchmark_gate\":{\"passed\":true"));
     assert!(json_line.contains("\"adaptive_preview\":{\"evidence_present\":true"));
     assert!(json_line.contains("\"source_count\":2"));
@@ -61,6 +67,12 @@ fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
             .telemetry
             .iter()
             .any(|line| { line == "self_evolution_admission_adaptive_preview_source_count=2" })
+    );
+    assert!(
+        report
+            .telemetry
+            .iter()
+            .any(|line| line == "self_evolution_admission_review_packet_evidence_ids=4")
     );
 
     fs::remove_dir_all(asset_dir).unwrap();

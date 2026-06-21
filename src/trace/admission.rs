@@ -21,6 +21,7 @@ pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<S
             "\"admitted_for_human_review\":",
         ),
         ("human_approval_required", "\"human_approval_required\":"),
+        ("review_packet", "\"review_packet\":"),
         ("rust_check", "\"rust_check\":"),
         ("benchmark_gate", "\"benchmark_gate\":"),
         ("rollback", "\"rollback\":"),
@@ -93,12 +94,103 @@ pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<S
 
     evaluate_rust_check(&mut failures, line);
     evaluate_benchmark_gate(&mut failures, line);
+    evaluate_review_packet(&mut failures, line, admitted_for_human_review);
     evaluate_rollback(&mut failures, line);
     evaluate_adaptive_preview(&mut failures, line, admitted_for_human_review);
     evaluate_writes(&mut failures, line);
     evaluate_telemetry(&mut failures, line);
 
     failures
+}
+
+fn evaluate_review_packet(
+    failures: &mut Vec<String>,
+    line: &str,
+    admitted_for_human_review: Option<bool>,
+) {
+    let Some(review_packet) = json_object_after_field(line, "review_packet") else {
+        failures.push("self_evolution_admission review_packet object is missing".to_owned());
+        return;
+    };
+
+    require_bool(
+        failures,
+        review_packet,
+        "read_only",
+        true,
+        "self_evolution_admission review_packet",
+    );
+    require_bool(
+        failures,
+        review_packet,
+        "approval_tokens_included",
+        false,
+        "self_evolution_admission review_packet",
+    );
+
+    let approval_review_packet_ids =
+        require_string_array(failures, review_packet, "approval_review_packet_ids");
+    let evidence_ids = require_string_array(failures, review_packet, "evidence_ids");
+    let rollback_anchor_ids = require_string_array(failures, review_packet, "rollback_anchor_ids");
+    let content_digests = require_string_array(failures, review_packet, "content_digests");
+    let source_report_schemas =
+        require_string_array(failures, review_packet, "source_report_schemas");
+
+    require_count(
+        failures,
+        review_packet,
+        "approval_review_packet_count",
+        approval_review_packet_ids.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "evidence_count",
+        evidence_ids.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "rollback_anchor_count",
+        rollback_anchor_ids.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "content_digest_count",
+        content_digests.len(),
+    );
+    require_count(
+        failures,
+        review_packet,
+        "source_report_schema_count",
+        source_report_schemas.len(),
+    );
+
+    if admitted_for_human_review == Some(true) {
+        if approval_review_packet_ids.is_empty() {
+            failures.push(
+                "self_evolution_admission admitted packet requires review packet ids".to_owned(),
+            );
+        }
+        if evidence_ids.is_empty() {
+            failures.push(
+                "self_evolution_admission admitted packet requires review evidence ids".to_owned(),
+            );
+        }
+        if content_digests.is_empty() {
+            failures.push(
+                "self_evolution_admission admitted packet requires review content digests"
+                    .to_owned(),
+            );
+        }
+        if source_report_schemas.is_empty() {
+            failures.push(
+                "self_evolution_admission admitted packet requires review source schemas"
+                    .to_owned(),
+            );
+        }
+    }
 }
 
 fn evaluate_rust_check(failures: &mut Vec<String>, line: &str) {
@@ -274,5 +366,36 @@ fn require_bool(
             "{context} {field}={actual} does not match required {expected}"
         )),
         None => failures.push(format!("{context} {field} is missing")),
+    }
+}
+
+fn require_string_array(failures: &mut Vec<String>, object: &str, field: &str) -> Vec<String> {
+    match extract_json_string_array_field(object, field) {
+        Some(items) => {
+            if items.iter().any(|item| item.trim().is_empty()) {
+                failures.push(format!(
+                    "self_evolution_admission review_packet {field} contains empty item"
+                ));
+            }
+            items
+        }
+        None => {
+            failures.push(format!(
+                "self_evolution_admission review_packet {field} is missing"
+            ));
+            Vec::new()
+        }
+    }
+}
+
+fn require_count(failures: &mut Vec<String>, object: &str, field: &str, expected: usize) {
+    match extract_json_usize_field(object, field) {
+        Some(actual) if actual == expected => {}
+        Some(actual) => failures.push(format!(
+            "self_evolution_admission review_packet {field}={actual} does not match array length {expected}"
+        )),
+        None => failures.push(format!(
+            "self_evolution_admission review_packet {field} is missing"
+        )),
     }
 }

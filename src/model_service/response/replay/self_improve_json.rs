@@ -1,6 +1,6 @@
 use rust_norion::{
-    ExperienceReplayReport, SelfEvolutionAdmissionReport, StateInspectionGateReport,
-    StateInspectionReport, TraceSchemaGateReport,
+    ExperienceReplayReport, SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
+    StateInspectionGateReport, StateInspectionReport, TraceSchemaGateReport,
 };
 
 use super::super::super::json::{service_json_string, service_json_string_array};
@@ -148,8 +148,9 @@ fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
 }
 
 fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> String {
+    let review_packet = self_evolution_admission_review_packet_json(&report.review_packet);
     format!(
-        "{{\"candidate_id\":{},\"summary\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"policy_valid\":{},\"mutation_write_allowed\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"model_weight_write_allowed\":{},\"git_write_allowed\":{},\"human_approval_required\":{},\"admitted_for_human_review\":{},\"rust_validation_passed\":{},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"benchmark_gate_passed\":{},\"benchmark_gate_failures\":{},\"rollback_budget_clean\":{},\"drift_rollbacks\":{},\"rollback_router_threshold_delta\":{:.6},\"rollback_hierarchy_weight_delta\":{:.6},\"adaptive_preview_evidence_present\":{},\"adaptive_preview_source_count\":{},\"adaptive_preview_readiness\":{{\"router_threshold_preview_ready\":{},\"hierarchy_adjustment_preview_ready\":{},\"kv_fusion_policy_observation_preview_ready\":{},\"blocked_reasons\":{}}},\"adaptive_preview_read_only\":{},\"adaptive_preview_report_only\":{},\"adaptive_preview_preview_only\":{},\"adaptive_preview_write_allowed\":{},\"adaptive_preview_applied\":{},\"blocked_reasons\":{},\"telemetry\":{}}}",
+        "{{\"candidate_id\":{},\"summary\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"policy_valid\":{},\"mutation_write_allowed\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"model_weight_write_allowed\":{},\"git_write_allowed\":{},\"human_approval_required\":{},\"admitted_for_human_review\":{},\"review_packet\":{},\"rust_validation_passed\":{},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"benchmark_gate_passed\":{},\"benchmark_gate_failures\":{},\"rollback_budget_clean\":{},\"drift_rollbacks\":{},\"rollback_router_threshold_delta\":{:.6},\"rollback_hierarchy_weight_delta\":{:.6},\"adaptive_preview_evidence_present\":{},\"adaptive_preview_source_count\":{},\"adaptive_preview_readiness\":{{\"router_threshold_preview_ready\":{},\"hierarchy_adjustment_preview_ready\":{},\"kv_fusion_policy_observation_preview_ready\":{},\"blocked_reasons\":{}}},\"adaptive_preview_read_only\":{},\"adaptive_preview_report_only\":{},\"adaptive_preview_preview_only\":{},\"adaptive_preview_write_allowed\":{},\"adaptive_preview_applied\":{},\"blocked_reasons\":{},\"telemetry\":{}}}",
         service_json_string(&report.candidate_id),
         service_json_string(&report.summary_line()),
         report.read_only,
@@ -163,6 +164,7 @@ fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> Strin
         report.git_write_allowed,
         report.human_approval_required,
         report.admitted_for_human_review,
+        review_packet,
         report.rust_validation_passed,
         report.rust_check_items,
         report.rust_check_passed,
@@ -186,6 +188,24 @@ fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> Strin
         report.adaptive_preview_applied,
         service_json_string_array(&report.blocked_reasons),
         service_json_string_array(&report.telemetry)
+    )
+}
+
+fn self_evolution_admission_review_packet_json(
+    review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
+) -> String {
+    format!(
+        "{{\"approval_review_packet_ids\":{},\"evidence_ids\":{},\"rollback_anchor_ids\":{},\"content_digests\":{},\"source_report_schemas\":{},\"approval_review_packet_count\":{},\"evidence_count\":{},\"rollback_anchor_count\":{},\"content_digest_count\":{},\"source_report_schema_count\":{},\"read_only\":true,\"approval_tokens_included\":false}}",
+        service_json_string_array(&review_packet.approval_review_packet_ids),
+        service_json_string_array(&review_packet.evidence_ids),
+        service_json_string_array(&review_packet.rollback_anchor_ids),
+        service_json_string_array(&review_packet.content_digests),
+        service_json_string_array(&review_packet.source_report_schemas),
+        review_packet.approval_review_packet_ids.len(),
+        review_packet.evidence_ids.len(),
+        review_packet.rollback_anchor_ids.len(),
+        review_packet.content_digests.len(),
+        review_packet.source_report_schemas.len()
     )
 }
 
@@ -303,6 +323,9 @@ mod tests {
             self_evolution_admission_events: 3,
             self_evolution_admission_admitted: 2,
             self_evolution_admission_blocked: 1,
+            self_evolution_admission_review_packets: 3,
+            self_evolution_admission_evidence_ids: 6,
+            self_evolution_admission_missing_review_packet_refs: 0,
             failures: Vec::new(),
         };
         let admission = blocked_admission_report();
@@ -335,6 +358,11 @@ mod tests {
         assert!(json.contains("\"ndkv_write_allowed\":false"));
         assert!(json.contains("\"model_weight_write_allowed\":false"));
         assert!(json.contains("\"admitted_for_human_review\":false"));
+        assert!(json.contains("\"review_packet\":{"));
+        assert!(json.contains("\"approval_review_packet_count\":1"));
+        assert!(json.contains("\"evidence_count\":2"));
+        assert!(json.contains("\"approval_tokens_included\":false"));
+        assert!(json.contains("approval-review:service-candidate"));
         assert!(json.contains("\"benchmark_gate_passed\":false"));
         assert!(json.contains("\"drift_rollbacks\":1"));
         assert!(json.contains("\"rollback_router_threshold_delta\":0.125000"));
@@ -390,6 +418,19 @@ mod tests {
             adaptive_preview_blocked_reasons: vec![
                 "hierarchy_preview_ready_but_kv_policy_missing".to_owned(),
             ],
+            review_packet: SelfEvolutionAdmissionReviewPacketRefs {
+                approval_review_packet_ids: vec!["approval-review:service-candidate".to_owned()],
+                evidence_ids: vec![
+                    "rust-check:service-candidate:items-1:passed-1:failed-0".to_owned(),
+                    "benchmark-gate:service-candidate:passed-false:failures-1".to_owned(),
+                ],
+                rollback_anchor_ids: vec!["rollback-budget:service-candidate:drift-1".to_owned()],
+                content_digests: vec!["fnv64:service-candidate".to_owned()],
+                source_report_schemas: vec![
+                    "rust-norion-self-evolution-admission-v1".to_owned(),
+                    "rust-norion-benchmark-gate-v1".to_owned(),
+                ],
+            },
             blocked_reasons: vec![
                 "self_evolution_admission_benchmark_gate_failed".to_owned(),
                 "self_evolution_admission_adaptive_preview_evidence_missing".to_owned(),

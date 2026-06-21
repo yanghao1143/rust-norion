@@ -19,7 +19,7 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
     report
         .map(|report| {
             format!(
-                "{{\"passed\":{},\"checked_lines\":{},\"rust_check_events\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_feedback_updates\":{},\"rust_check_feedback_applied\":{},\"business_contract_events\":{},\"business_contract_event_passed\":{},\"business_contract_event_failed\":{},\"business_contract_event_missing_signals\":{},\"business_contract_event_protocol_leaks\":{},\"business_contract_event_substitutions\":{},\"business_contract_event_evasive_denials\":{},\"business_contract_event_raw_passed\":{},\"business_contract_event_raw_failed\":{},\"business_contract_event_response_normalized\":{},\"business_contract_event_sanitized\":{},\"business_contract_event_canonical_fallbacks\":{},\"runtime_error_events\":{},\"runtime_timeout_events\":{},\"self_evolution_admission_events\":{},\"self_evolution_admission_admitted\":{},\"self_evolution_admission_blocked\":{},\"summary\":{},\"failures\":{}}}",
+                "{{\"passed\":{},\"checked_lines\":{},\"rust_check_events\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_feedback_updates\":{},\"rust_check_feedback_applied\":{},\"business_contract_events\":{},\"business_contract_event_passed\":{},\"business_contract_event_failed\":{},\"business_contract_event_missing_signals\":{},\"business_contract_event_protocol_leaks\":{},\"business_contract_event_substitutions\":{},\"business_contract_event_evasive_denials\":{},\"business_contract_event_raw_passed\":{},\"business_contract_event_raw_failed\":{},\"business_contract_event_response_normalized\":{},\"business_contract_event_sanitized\":{},\"business_contract_event_canonical_fallbacks\":{},\"runtime_error_events\":{},\"runtime_timeout_events\":{},\"self_evolution_admission_events\":{},\"self_evolution_admission_admitted\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_review_packets\":{},\"self_evolution_admission_evidence_ids\":{},\"self_evolution_admission_missing_review_packet_refs\":{},\"summary\":{},\"failures\":{}}}",
                 report.passed,
                 report.checked_lines,
                 report.rust_check_events,
@@ -44,6 +44,9 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 report.self_evolution_admission_events,
                 report.self_evolution_admission_admitted,
                 report.self_evolution_admission_blocked,
+                report.self_evolution_admission_review_packets,
+                report.self_evolution_admission_evidence_ids,
+                report.self_evolution_admission_missing_review_packet_refs,
                 service_json_string(&report.summary_line()),
                 service_json_string_array(&report.failures)
             )
@@ -82,6 +85,9 @@ mod tests {
             self_evolution_admission_events: 2,
             self_evolution_admission_admitted: 1,
             self_evolution_admission_blocked: 1,
+            self_evolution_admission_review_packets: 2,
+            self_evolution_admission_evidence_ids: 4,
+            self_evolution_admission_missing_review_packet_refs: 0,
             failures: Vec::new(),
         };
 
@@ -90,6 +96,10 @@ mod tests {
         assert!(json.contains("\"self_evolution_admission_events\":2"));
         assert!(json.contains("\"self_evolution_admission_admitted\":1"));
         assert!(json.contains("\"self_evolution_admission_blocked\":1"));
+        assert!(json.contains("\"self_evolution_admission_review_packets\":2"));
+        assert!(json.contains("\"self_evolution_admission_evidence_ids\":4"));
+        assert!(json.contains("\"self_evolution_admission_missing_review_packet_refs\":0"));
         assert!(json.contains("self_evolution_admission_events=2"));
+        assert!(json.contains("self_evolution_admission_review_packets=2"));
     }
 }

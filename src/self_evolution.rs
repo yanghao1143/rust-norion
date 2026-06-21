@@ -29,6 +29,88 @@ impl Default for SelfEvolutionAdmissionPolicy {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionAdmissionReviewPacketRefs {
+    pub approval_review_packet_ids: Vec<String>,
+    pub evidence_ids: Vec<String>,
+    pub rollback_anchor_ids: Vec<String>,
+    pub content_digests: Vec<String>,
+    pub source_report_schemas: Vec<String>,
+}
+
+impl Default for SelfEvolutionAdmissionReviewPacketRefs {
+    fn default() -> Self {
+        Self {
+            approval_review_packet_ids: Vec::new(),
+            evidence_ids: Vec::new(),
+            rollback_anchor_ids: Vec::new(),
+            content_digests: Vec::new(),
+            source_report_schemas: Vec::new(),
+        }
+    }
+}
+
+impl SelfEvolutionAdmissionReviewPacketRefs {
+    fn derived(
+        candidate_id: &str,
+        evolution_ledger: EvolutionLedger,
+        benchmark_gate: &BenchmarkGateReport,
+    ) -> Self {
+        let candidate = self_evolution_review_id_component(candidate_id);
+        let mut refs = Self::default();
+        refs.push_approval_review_packet_id(format!("approval-review:{candidate}"));
+        refs.push_evidence_id(format!(
+            "rust-check:{candidate}:items-{}:passed-{}:failed-{}",
+            evolution_ledger.replay_rust_check_items,
+            evolution_ledger.replay_rust_check_passed,
+            evolution_ledger.replay_rust_check_failed
+        ));
+        refs.push_evidence_id(format!(
+            "benchmark-gate:{candidate}:passed-{}:failures-{}",
+            benchmark_gate.passed,
+            benchmark_gate.failures.len()
+        ));
+        refs.push_rollback_anchor_id(format!(
+            "rollback-budget:{candidate}:drift-{}",
+            evolution_ledger.drift_rollbacks
+        ));
+        refs.push_content_digest(self_evolution_stable_digest(&format!(
+            "candidate={candidate_id};rust_check_items={};rust_check_passed={};rust_check_failed={};benchmark_gate_passed={};benchmark_gate_failures={};drift_rollbacks={};router_delta={:.6};hierarchy_delta={:.6}",
+            evolution_ledger.replay_rust_check_items,
+            evolution_ledger.replay_rust_check_passed,
+            evolution_ledger.replay_rust_check_failed,
+            benchmark_gate.passed,
+            benchmark_gate.failures.len(),
+            evolution_ledger.drift_rollbacks,
+            evolution_ledger.rollback_router_threshold_delta,
+            evolution_ledger.rollback_hierarchy_weight_delta
+        )));
+        refs.push_source_report_schema("rust-norion-self-evolution-admission-v1");
+        refs.push_source_report_schema("rust-norion-benchmark-gate-v1");
+        refs
+    }
+
+    pub fn push_approval_review_packet_id(&mut self, value: impl Into<String>) {
+        push_unique_string(&mut self.approval_review_packet_ids, value);
+    }
+
+    pub fn push_evidence_id(&mut self, value: impl Into<String>) {
+        push_unique_string(&mut self.evidence_ids, value);
+    }
+
+    pub fn push_rollback_anchor_id(&mut self, value: impl Into<String>) {
+        push_unique_string(&mut self.rollback_anchor_ids, value);
+    }
+
+    pub fn push_content_digest(&mut self, value: impl Into<String>) {
+        push_unique_string(&mut self.content_digests, value);
+    }
+
+    pub fn push_source_report_schema(&mut self, value: impl Into<String>) {
+        push_unique_string(&mut self.source_report_schemas, value);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SelfEvolutionAdmissionEvidence {
     pub candidate_id: String,
@@ -45,6 +127,7 @@ pub struct SelfEvolutionAdmissionEvidence {
     pub adaptive_preview_write_allowed: bool,
     pub adaptive_preview_applied: bool,
     pub adaptive_preview_blocked_reasons: Vec<String>,
+    pub review_packet: SelfEvolutionAdmissionReviewPacketRefs,
 }
 
 impl SelfEvolutionAdmissionEvidence {
@@ -53,8 +136,14 @@ impl SelfEvolutionAdmissionEvidence {
         evolution_ledger: EvolutionLedger,
         benchmark_gate: &BenchmarkGateReport,
     ) -> Self {
+        let candidate_id = candidate_id.into();
         Self {
-            candidate_id: candidate_id.into(),
+            review_packet: SelfEvolutionAdmissionReviewPacketRefs::derived(
+                &candidate_id,
+                evolution_ledger,
+                benchmark_gate,
+            ),
+            candidate_id,
             evolution_ledger,
             benchmark_gate_passed: benchmark_gate.passed,
             benchmark_gate_failures: benchmark_gate.failures.clone(),
@@ -99,6 +188,24 @@ impl SelfEvolutionAdmissionEvidence {
             self.adaptive_preview_blocked_reasons
                 .extend(router_threshold_preview_blocked_reasons(report));
         }
+        let candidate = self_evolution_review_id_component(&self.candidate_id);
+        self.review_packet.push_evidence_id(format!(
+            "adaptive-preview:router-threshold:{candidate}:ready-{ready}"
+        ));
+        self.review_packet.push_content_digest(self_evolution_stable_digest(&format!(
+            "candidate={};router_threshold_ready={ready};source_count={};read_only={};report_only={};preview_only={};write_allowed={};applied={}",
+            self.candidate_id,
+            self.adaptive_preview_source_count,
+            report.read_only,
+            report.report_only,
+            report.preview_only,
+            report.router_state_write_allowed
+                || report.adaptive_state_write_allowed
+                || report.ndkv_write_allowed,
+            report.router_observation_applied
+        )));
+        self.review_packet
+            .push_source_report_schema("rust-norion-router-threshold-preview-v1");
         self
     }
 
@@ -121,6 +228,24 @@ impl SelfEvolutionAdmissionEvidence {
             self.adaptive_preview_blocked_reasons
                 .extend(hierarchy_adjustment_preview_blocked_reasons(report));
         }
+        let candidate = self_evolution_review_id_component(&self.candidate_id);
+        self.review_packet.push_evidence_id(format!(
+            "adaptive-preview:hierarchy-adjustment:{candidate}:ready-{ready}"
+        ));
+        self.review_packet.push_content_digest(self_evolution_stable_digest(&format!(
+            "candidate={};hierarchy_adjustment_ready={ready};source_count={};read_only={};report_only={};preview_only={};write_allowed={};applied={}",
+            self.candidate_id,
+            self.adaptive_preview_source_count,
+            report.read_only,
+            report.report_only,
+            report.preview_only,
+            report.state_write_allowed
+                || report.adaptive_state_write_allowed
+                || report.ndkv_write_allowed,
+            report.controller_observation_applied
+        )));
+        self.review_packet
+            .push_source_report_schema("rust-norion-hierarchy-adjustment-preview-v1");
         self
     }
 
@@ -141,6 +266,28 @@ impl SelfEvolutionAdmissionEvidence {
             self.adaptive_preview_blocked_reasons
                 .extend(kv_fusion_policy_observation_preview_blocked_reasons(report));
         }
+        let candidate = self_evolution_review_id_component(&self.candidate_id);
+        self.review_packet.push_evidence_id(format!(
+            "adaptive-preview:kv-fusion-policy-observation:{candidate}:ready-{ready}"
+        ));
+        self.review_packet.push_content_digest(self_evolution_stable_digest(&format!(
+            "candidate={};kv_fusion_policy_observation_ready={ready};source_count={};preview_only={};write_allowed={};applied={}",
+            self.candidate_id,
+            self.adaptive_preview_source_count,
+            report.preview_only,
+            report.policy_write_allowed,
+            report.policy_observation_applied
+        )));
+        self.review_packet
+            .push_source_report_schema("rust-norion-kv-fusion-policy-observation-preview-v1");
+        self
+    }
+
+    pub fn with_review_packet_refs(
+        mut self,
+        review_packet: SelfEvolutionAdmissionReviewPacketRefs,
+    ) -> Self {
+        self.review_packet = review_packet;
         self
     }
 
@@ -204,6 +351,7 @@ pub struct SelfEvolutionAdmissionReport {
     pub adaptive_preview_write_allowed: bool,
     pub adaptive_preview_applied: bool,
     pub adaptive_preview_blocked_reasons: Vec<String>,
+    pub review_packet: SelfEvolutionAdmissionReviewPacketRefs,
     pub blocked_reasons: Vec<String>,
     pub telemetry: Vec<String>,
 }
@@ -364,6 +512,7 @@ impl SelfEvolutionAdmissionGate {
             adaptive_preview_write_allowed: evidence.adaptive_preview_write_allowed,
             adaptive_preview_applied: evidence.adaptive_preview_applied,
             adaptive_preview_blocked_reasons: evidence.adaptive_preview_blocked_reasons.clone(),
+            review_packet: evidence.review_packet.clone(),
             blocked_reasons,
             telemetry: Vec::new(),
         };
@@ -400,6 +549,14 @@ impl SelfEvolutionAdmissionReport {
             self_evolution_string_array_json(&self.adaptive_preview_blocked_reasons);
         let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
         let telemetry = self_evolution_string_array_json(&self.telemetry);
+        let approval_review_packet_ids =
+            self_evolution_string_array_json(&self.review_packet.approval_review_packet_ids);
+        let evidence_ids = self_evolution_string_array_json(&self.review_packet.evidence_ids);
+        let rollback_anchor_ids =
+            self_evolution_string_array_json(&self.review_packet.rollback_anchor_ids);
+        let content_digests = self_evolution_string_array_json(&self.review_packet.content_digests);
+        let source_report_schemas =
+            self_evolution_string_array_json(&self.review_packet.source_report_schemas);
         let rollback_router_threshold_delta =
             self_evolution_f32_json(self.rollback_router_threshold_delta);
         let rollback_hierarchy_weight_delta =
@@ -415,6 +572,7 @@ impl SelfEvolutionAdmissionReport {
              \"policy_valid\":{},\
              \"admitted_for_human_review\":{},\
              \"human_approval_required\":{},\
+             \"review_packet\":{{\"approval_review_packet_ids\":{approval_review_packet_ids},\"evidence_ids\":{evidence_ids},\"rollback_anchor_ids\":{rollback_anchor_ids},\"content_digests\":{content_digests},\"source_report_schemas\":{source_report_schemas},\"approval_review_packet_count\":{},\"evidence_count\":{},\"rollback_anchor_count\":{},\"content_digest_count\":{},\"source_report_schema_count\":{},\"read_only\":true,\"approval_tokens_included\":false}},\
              \"rust_check\":{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}},\
              \"benchmark_gate\":{{\"passed\":{},\"failures\":{benchmark_gate_failures}}},\
              \"rollback\":{{\"budget_clean\":{},\"drift_rollbacks\":{},\"router_threshold_delta\":{rollback_router_threshold_delta},\"hierarchy_weight_delta\":{rollback_hierarchy_weight_delta}}},\
@@ -429,6 +587,11 @@ impl SelfEvolutionAdmissionReport {
             self.policy_valid,
             self.admitted_for_human_review,
             self.human_approval_required,
+            self.review_packet.approval_review_packet_ids.len(),
+            self.review_packet.evidence_ids.len(),
+            self.review_packet.rollback_anchor_ids.len(),
+            self.review_packet.content_digests.len(),
+            self.review_packet.source_report_schemas.len(),
             self.rust_check_items,
             self.rust_check_passed,
             self.rust_check_failed,
@@ -491,6 +654,44 @@ fn self_evolution_json_escape(value: &str) -> String {
         }
     }
     out
+}
+
+fn self_evolution_review_id_component(value: &str) -> String {
+    let component = value
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | ':' | '.') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_owned();
+    if component.is_empty() {
+        "candidate-missing".to_owned()
+    } else {
+        component
+    }
+}
+
+fn self_evolution_stable_digest(value: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv64:{hash:016x}")
+}
+
+fn push_unique_string(items: &mut Vec<String>, value: impl Into<String>) {
+    let value = value.into();
+    if value.trim().is_empty() || items.iter().any(|item| item == &value) {
+        return;
+    }
+    items.push(value);
 }
 
 fn rollback_budget_clean(
@@ -675,6 +876,26 @@ fn self_evolution_admission_telemetry(report: &SelfEvolutionAdmissionReport) -> 
             report.admitted_for_human_review
         ),
         format!(
+            "self_evolution_admission_review_packet_ids={}",
+            report.review_packet.approval_review_packet_ids.len()
+        ),
+        format!(
+            "self_evolution_admission_review_packet_evidence_ids={}",
+            report.review_packet.evidence_ids.len()
+        ),
+        format!(
+            "self_evolution_admission_review_packet_rollback_anchor_ids={}",
+            report.review_packet.rollback_anchor_ids.len()
+        ),
+        format!(
+            "self_evolution_admission_review_packet_content_digests={}",
+            report.review_packet.content_digests.len()
+        ),
+        format!(
+            "self_evolution_admission_review_packet_source_report_schemas={}",
+            report.review_packet.source_report_schemas.len()
+        ),
+        format!(
             "self_evolution_admission_rust_validation_passed={}",
             report.rust_validation_passed
         ),
@@ -844,6 +1065,18 @@ mod tests {
         assert!(!report.adaptive_preview_write_allowed);
         assert!(!report.adaptive_preview_applied);
         assert!(report.blocked_reasons.is_empty());
+        assert!(!report.review_packet.approval_review_packet_ids.is_empty());
+        assert!(report.review_packet.evidence_ids.iter().any(|id| {
+            id.starts_with("adaptive-preview:router-threshold:router-preview-round")
+        }));
+        assert!(!report.review_packet.content_digests.is_empty());
+        assert!(
+            report
+                .review_packet
+                .source_report_schemas
+                .iter()
+                .any(|schema| schema == "rust-norion-self-evolution-admission-v1")
+        );
         assert_eq!(report.rust_check_items, 2);
         assert_eq!(report.rust_check_passed, 2);
         assert_eq!(report.rust_check_failed, 0);
@@ -859,6 +1092,12 @@ mod tests {
                 .telemetry
                 .iter()
                 .any(|line| { line == "self_evolution_admission_human_approval_required=true" })
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| line == "self_evolution_admission_review_packet_ids=1")
         );
     }
 
