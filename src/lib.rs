@@ -100,7 +100,9 @@ pub use memory_admission::{
     MemoryAdmissionApprovalState, MemoryAdmissionCandidate, MemoryAdmissionDecision,
     MemoryAdmissionInput, MemoryAdmissionKind, MemoryAdmissionPreview, MemoryAdmissionReviewPacket,
     MemoryKvLedgerRecord, MemoryKvLedgerWriteDecision, MemoryKvLedgerWritePlan,
-    MemoryKvLedgerWritePolicy, MemoryPrivacyClassification,
+    MemoryKvLedgerWritePolicy, MemoryPrivacyClassification, ReinforcedKvFusionCandidate,
+    ReinforcedKvFusionDecision, ReinforcedKvFusionDecisionRecord, ReinforcedKvFusionPlan,
+    ReinforcedKvFusionPolicy, ReinforcedKvFusionScoreComponents, ReinforcedKvFusionSource,
 };
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,

@@ -4,11 +4,15 @@ use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
 use crate::gist_memory::GistRecord;
 use crate::kv_cache::MemoryMatch;
-use crate::memory_admission::{MemoryAdmissionInput, MemoryAdmissionPreview};
+use crate::memory_admission::{
+    MemoryAdmissionInput, MemoryAdmissionPreview, MemoryPrivacyClassification,
+    ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan, ReinforcedKvFusionPolicy,
+    ReinforcedKvFusionSource, fusion_candidate_from_admission,
+};
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
-    DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneSegment, GeneSegmentSource,
-    GenomeExpression, GenomeExpressionInput, ReasoningGenome,
+    DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneSegment, GeneSegmentDisposition,
+    GeneSegmentSource, GenomeExpression, GenomeExpressionInput, ReasoningGenome,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::DraftToken;
@@ -331,7 +335,7 @@ impl NoironEngine {
             (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
             _ => false,
         };
-        let memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
+        let mut memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt: &request.prompt,
             profile: request.profile,
             report: &report,
@@ -390,6 +394,11 @@ impl NoironEngine {
             drift_report.allow_runtime_kv_write,
             runtime_kv_hold,
             reasoning_genome.stable_anchor_id.clone(),
+        );
+        memory_admission.fusion_plan = reinforced_kv_fusion_plan_from_runtime_evidence(
+            &memory_admission,
+            &reasoning_genome_splice,
+            process_reward.total,
         );
         let adaptive_route_plan = adaptive_route_plan_from_runtime_evidence(
             request.profile,
@@ -565,6 +574,116 @@ impl NoironEngine {
             self.recursive_scheduler.overlap_tokens(),
             self.recursive_scheduler.merge_fan_in(),
         )
+    }
+}
+
+fn reinforced_kv_fusion_plan_from_runtime_evidence(
+    admission: &MemoryAdmissionPreview,
+    splice: &DnaSplicePreview,
+    process_reward: f32,
+) -> ReinforcedKvFusionPlan {
+    let mut candidates = admission
+        .candidates
+        .iter()
+        .map(fusion_candidate_from_admission)
+        .collect::<Vec<_>>();
+
+    for (index, classified) in splice.segments.iter().enumerate() {
+        let segment = &classified.segment;
+        let source = fusion_source_from_gene_source(segment.source);
+        let reinforcement = fusion_reinforcement_from_disposition(
+            classified.disposition,
+            process_reward,
+            segment.fitness,
+        );
+        let contradictory = classified.disposition == GeneSegmentDisposition::Quarantined
+            || classified
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("contradiction"));
+        let required_anchor =
+            segment.source == GeneSegmentSource::Prompt && segment.start_token == 0;
+        candidates.push(
+            ReinforcedKvFusionCandidate::new(
+                format!("splice:{}:{index}", source.as_str()),
+                source,
+                segment.token_count().max(1),
+            )
+            .with_scores(
+                segment_trust_score(segment),
+                segment_recency(segment.kv_residency, segment.age),
+                segment.fitness,
+                fusion_task_relevance_from_disposition(classified.disposition, segment.source),
+                reinforcement,
+            )
+            .with_privacy(fusion_privacy_from_segment(segment))
+            .with_rollback_anchor(splice.stable_anchor_id.clone())
+            .with_source_hash(if segment.source_hash.is_empty() {
+                format!("segment:{}:{index}", source.as_str())
+            } else {
+                segment.source_hash.clone()
+            })
+            .with_contradictory(contradictory)
+            .with_required_anchor(required_anchor),
+        );
+    }
+
+    ReinforcedKvFusionPlan::from_candidates(ReinforcedKvFusionPolicy::default(), candidates)
+}
+
+fn fusion_source_from_gene_source(source: GeneSegmentSource) -> ReinforcedKvFusionSource {
+    match source {
+        GeneSegmentSource::Prompt | GeneSegmentSource::GenomeLedger => {
+            ReinforcedKvFusionSource::GenomeSegment
+        }
+        GeneSegmentSource::SemanticMemory => ReinforcedKvFusionSource::SemanticMemory,
+        GeneSegmentSource::GistMemory => ReinforcedKvFusionSource::GistMemory,
+        GeneSegmentSource::RuntimeKv => ReinforcedKvFusionSource::RuntimeKv,
+        GeneSegmentSource::ToolOutput => ReinforcedKvFusionSource::ColdEvidence,
+    }
+}
+
+fn fusion_reinforcement_from_disposition(
+    disposition: GeneSegmentDisposition,
+    process_reward: f32,
+    fitness: f32,
+) -> f32 {
+    let reward = process_reward.clamp(0.0, 1.0);
+    match disposition {
+        GeneSegmentDisposition::Retained => (reward * 0.60 + fitness * 0.40).clamp(0.0, 1.0),
+        GeneSegmentDisposition::RepairCandidate => 0.05,
+        GeneSegmentDisposition::Skipped => -0.25,
+        GeneSegmentDisposition::Quarantined => -0.85,
+    }
+}
+
+fn fusion_task_relevance_from_disposition(
+    disposition: GeneSegmentDisposition,
+    source: GeneSegmentSource,
+) -> f32 {
+    let source_relevance: f32 = match source {
+        GeneSegmentSource::Prompt => 0.96,
+        GeneSegmentSource::SemanticMemory => 0.82,
+        GeneSegmentSource::GistMemory => 0.78,
+        GeneSegmentSource::RuntimeKv => 0.84,
+        GeneSegmentSource::GenomeLedger => 0.86,
+        GeneSegmentSource::ToolOutput => 0.62,
+    };
+    let disposition_bonus: f32 = match disposition {
+        GeneSegmentDisposition::Retained => 0.08,
+        GeneSegmentDisposition::RepairCandidate => 0.02,
+        GeneSegmentDisposition::Skipped | GeneSegmentDisposition::Quarantined => 0.0,
+    };
+    (source_relevance + disposition_bonus).clamp(0.0, 1.0)
+}
+
+fn fusion_privacy_from_segment(segment: &GeneSegment) -> MemoryPrivacyClassification {
+    if segment.privacy_risk >= 0.50 {
+        MemoryPrivacyClassification::SensitiveBlocked
+    } else if segment.source == GeneSegmentSource::ToolOutput {
+        MemoryPrivacyClassification::PublicSafe
+    } else {
+        MemoryPrivacyClassification::DigestOnly
     }
 }
 

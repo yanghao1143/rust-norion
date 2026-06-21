@@ -102,6 +102,50 @@ impl BenchmarkSummary {
             .memory_admission_ledger_rollback
     }
 
+    pub fn kv_fusion_cases(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_cases
+    }
+
+    pub fn total_kv_fusion_candidates(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_candidates
+    }
+
+    pub fn total_kv_fusion_fused(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_fused
+    }
+
+    pub fn total_kv_fusion_compressed(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_compressed
+    }
+
+    pub fn total_kv_fusion_skipped(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_skipped
+    }
+
+    pub fn total_kv_fusion_held(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_held
+    }
+
+    pub fn total_kv_fusion_rejected(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_rejected
+    }
+
+    pub fn total_kv_fusion_approval_blocked(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_approval_blocked
+    }
+
+    pub fn total_kv_fusion_input_tokens(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_input_tokens
+    }
+
+    pub fn total_kv_fusion_retained_tokens(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_retained_tokens
+    }
+
+    pub fn total_kv_fusion_saved_tokens(&self) -> usize {
+        self.memory_governance_evidence.kv_fusion_saved_tokens
+    }
+
     pub fn total_memory_retention_decayed(&self) -> usize {
         self.memory_governance_evidence.total_retention_decayed
     }

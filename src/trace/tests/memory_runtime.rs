@@ -68,6 +68,7 @@ fn trace_json_line_emits_memory_admission_preview() {
         &outcome,
     );
     let admission = json_object_after_field(&line, "memory_admission").unwrap();
+    let fusion = json_object_after_field(&line, "kv_fusion").unwrap();
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
@@ -131,6 +132,37 @@ fn trace_json_line_emits_memory_admission_preview() {
                     && summary.contains("applied=false")
             })
     );
+    assert!(extract_json_usize_field(fusion, "candidates").unwrap_or(0) >= 1);
+    assert_eq!(extract_json_bool_field(fusion, "read_only"), Some(true));
+    assert_eq!(
+        extract_json_bool_field(fusion, "write_allowed"),
+        Some(false)
+    );
+    assert_eq!(extract_json_bool_field(fusion, "applied"), Some(false));
+    assert_eq!(
+        extract_json_usize_field(fusion, "retained_tokens")
+            .unwrap()
+            .saturating_add(extract_json_usize_field(fusion, "saved_tokens").unwrap()),
+        extract_json_usize_field(fusion, "input_tokens").unwrap()
+    );
+    assert!(
+        extract_json_string_array_field(fusion, "score_summaries")
+            .unwrap()
+            .iter()
+            .all(|summary| {
+                summary.contains("source=")
+                    && summary.contains("decision=")
+                    && summary.contains("score=")
+                    && summary.contains("components=")
+                    && summary.contains("rollback=")
+            })
+    );
+    assert!(
+        !extract_json_string_array_field(fusion, "score_summaries")
+            .unwrap()
+            .iter()
+            .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    );
 }
 
 #[test]
@@ -155,6 +187,62 @@ fn trace_schema_gate_rejects_memory_admission_count_mismatch() {
         failures
             .iter()
             .any(|failure| failure.contains("memory_admission decisions")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_kv_fusion_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace kv fusion count mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace kv fusion count mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let line = increment_trace_object_usize(&line, "kv_fusion", "candidates");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("kv_fusion decisions")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_kv_fusion_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace kv fusion write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace kv fusion write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "kv_fusion",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("kv_fusion write_allowed")),
         "{failures:?}"
     );
 }

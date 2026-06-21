@@ -251,6 +251,10 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"ledger_merged\":"));
     assert!(line.contains("\"ledger_rollback\":"));
     assert!(line.contains("\"ledger_summaries\":"));
+    assert!(line.contains("\"kv_fusion\":"));
+    assert!(line.contains("\"approval_blocked\":"));
+    assert!(line.contains("\"average_score\":"));
+    assert!(line.contains("\"score_summaries\":"));
     assert!(line.contains("\"read_only\":true"));
     assert!(line.contains("\"write_allowed\":false"));
     assert!(line.contains("\"stale_after\":"));

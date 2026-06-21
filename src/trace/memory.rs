@@ -307,6 +307,114 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_trace_kv_fusion(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(fusion) = json_object_after_field(line, "kv_fusion") else {
+        failures.push("kv_fusion object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let candidates = extract_json_usize_field(fusion, "candidates").unwrap_or(0);
+    let fused = extract_json_usize_field(fusion, "fused").unwrap_or(0);
+    let compressed = extract_json_usize_field(fusion, "compressed").unwrap_or(0);
+    let skipped = extract_json_usize_field(fusion, "skipped").unwrap_or(0);
+    let held = extract_json_usize_field(fusion, "held").unwrap_or(0);
+    let rejected = extract_json_usize_field(fusion, "rejected").unwrap_or(0);
+    let approval_blocked = extract_json_usize_field(fusion, "approval_blocked").unwrap_or(0);
+    let input_tokens = extract_json_usize_field(fusion, "input_tokens").unwrap_or(0);
+    let retained_tokens = extract_json_usize_field(fusion, "retained_tokens").unwrap_or(0);
+    let saved_tokens = extract_json_usize_field(fusion, "saved_tokens").unwrap_or(0);
+    let min_score = extract_json_f32_field(fusion, "min_score").unwrap_or(f32::NAN);
+    let max_score = extract_json_f32_field(fusion, "max_score").unwrap_or(f32::NAN);
+    let average_score = extract_json_f32_field(fusion, "average_score").unwrap_or(f32::NAN);
+    let score_summaries =
+        extract_json_string_array_field(fusion, "score_summaries").unwrap_or_default();
+    let read_only = extract_json_bool_field(fusion, "read_only");
+    let write_allowed = extract_json_bool_field(fusion, "write_allowed");
+    let applied = extract_json_bool_field(fusion, "applied");
+
+    let decision_total = fused
+        .saturating_add(compressed)
+        .saturating_add(skipped)
+        .saturating_add(held)
+        .saturating_add(rejected)
+        .saturating_add(approval_blocked);
+    if decision_total != candidates {
+        failures.push(format!(
+            "kv_fusion decisions {decision_total} do not match candidates {candidates}"
+        ));
+    }
+    if retained_tokens.saturating_add(saved_tokens) != input_tokens {
+        failures.push(format!(
+            "kv_fusion retained+saved {} does not match input_tokens {input_tokens}",
+            retained_tokens.saturating_add(saved_tokens)
+        ));
+    }
+    if retained_tokens > input_tokens {
+        failures.push(format!(
+            "kv_fusion retained_tokens {retained_tokens} exceeds input_tokens {input_tokens}"
+        ));
+    }
+    if candidates > 0 && score_summaries.is_empty() {
+        failures.push("kv_fusion candidates require score_summaries".to_owned());
+    }
+    if score_summaries.len() > candidates {
+        failures.push(format!(
+            "kv_fusion score_summaries {} exceeds candidates {candidates}",
+            score_summaries.len()
+        ));
+    }
+    for (name, score) in [
+        ("min_score", min_score),
+        ("max_score", max_score),
+        ("average_score", average_score),
+    ] {
+        if !score.is_finite() || !(0.0..=1.0).contains(&score) {
+            failures.push(format!(
+                "kv_fusion {name} {score:.6} must stay within 0.0..=1.0"
+            ));
+        }
+    }
+    if candidates > 0 && min_score > average_score {
+        failures.push("kv_fusion min_score exceeds average_score".to_owned());
+    }
+    if candidates > 0 && average_score > max_score {
+        failures.push("kv_fusion average_score exceeds max_score".to_owned());
+    }
+    if read_only != Some(true) {
+        failures.push("kv_fusion read_only must be true".to_owned());
+    }
+    if write_allowed != Some(false) {
+        failures.push("kv_fusion write_allowed must be false".to_owned());
+    }
+    if applied != Some(false) {
+        failures.push("kv_fusion applied must be false".to_owned());
+    }
+    for (index, summary) in score_summaries.iter().enumerate() {
+        for marker in [
+            "source=",
+            "decision=",
+            "score=",
+            "components=",
+            "privacy=",
+            "rollback=",
+        ] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "kv_fusion score summary {index} missing {marker} evidence"
+                ));
+            }
+        }
+        if summary.contains("prompt:") || summary.contains("answer:") {
+            failures.push(format!(
+                "kv_fusion score summary {index} must not leak raw prompt or answer payloads"
+            ));
+        }
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
 

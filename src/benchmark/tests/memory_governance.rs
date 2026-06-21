@@ -75,6 +75,21 @@ fn summary_records_memory_governance_evidence() {
     );
     assert_eq!(summary.total_memory_admission_ledger_authorized(), 0);
     assert_eq!(summary.total_memory_admission_ledger_applied(), 0);
+    assert_eq!(summary.kv_fusion_cases(), 1);
+    assert!(summary.total_kv_fusion_candidates() >= 1);
+    assert_eq!(
+        summary
+            .memory_governance_evidence()
+            .kv_fusion_decision_total(),
+        summary.total_kv_fusion_candidates()
+    );
+    assert_eq!(
+        summary
+            .total_kv_fusion_retained_tokens()
+            .saturating_add(summary.total_kv_fusion_saved_tokens()),
+        summary.total_kv_fusion_input_tokens()
+    );
+    assert!(summary.total_kv_fusion_saved_tokens() > 0);
     assert!(summary.total_memory_retention_decayed() >= 1);
     assert!(summary.total_memory_retention_removed() >= 1);
     assert_eq!(summary.total_memory_compaction_pair_evidence(), 1);
@@ -107,6 +122,9 @@ fn summary_records_memory_governance_evidence() {
             .summary_line()
             .contains("memory_admission_ledger_authorized=0")
     );
+    assert!(summary.summary_line().contains("kv_fusion_cases=1"));
+    assert!(summary.summary_line().contains("kv_fusion_candidates="));
+    assert!(summary.summary_line().contains("kv_fusion_saved_tokens="));
     assert!(
         summary
             .summary_line()
@@ -121,6 +139,9 @@ fn summary_records_memory_governance_evidence() {
     let gate = BenchmarkGate {
         min_memory_governance_cases: Some(1),
         min_memory_governance_device_profiles: Some(1),
+        min_kv_fusion_cases: Some(1),
+        min_kv_fusion_candidates: Some(1),
+        min_kv_fusion_saved_tokens: Some(1),
         min_memory_retention_activity_cases: Some(1),
         ..BenchmarkGate::default()
     };
@@ -202,6 +223,9 @@ fn gate_reports_missing_memory_governance_coverage() {
     let gate = BenchmarkGate {
         min_memory_governance_cases: Some(1),
         min_memory_governance_device_profiles: Some(1),
+        min_kv_fusion_cases: Some(1),
+        min_kv_fusion_candidates: Some(1),
+        min_kv_fusion_saved_tokens: Some(1),
         min_memory_retention_activity_cases: Some(1),
         min_memory_compaction_activity_cases: Some(1),
         ..BenchmarkGate::default()
@@ -213,6 +237,9 @@ fn gate_reports_missing_memory_governance_coverage() {
     for marker in [
         "memory_governance_cases",
         "memory_governance_device_profiles",
+        "kv_fusion_cases",
+        "kv_fusion_candidates",
+        "kv_fusion_saved_tokens",
         "memory_retention_activity_cases",
         "memory_compaction_activity_cases",
     ] {

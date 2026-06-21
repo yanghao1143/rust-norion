@@ -25,6 +25,17 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub memory_admission_ledger_decayed: usize,
     pub memory_admission_ledger_merged: usize,
     pub memory_admission_ledger_rollback: usize,
+    pub kv_fusion_cases: usize,
+    pub kv_fusion_candidates: usize,
+    pub kv_fusion_fused: usize,
+    pub kv_fusion_compressed: usize,
+    pub kv_fusion_skipped: usize,
+    pub kv_fusion_held: usize,
+    pub kv_fusion_rejected: usize,
+    pub kv_fusion_approval_blocked: usize,
+    pub kv_fusion_input_tokens: usize,
+    pub kv_fusion_retained_tokens: usize,
+    pub kv_fusion_saved_tokens: usize,
     pub retention_activity_cases: usize,
     pub compaction_activity_cases: usize,
     pub total_retention_decayed: usize,
@@ -65,6 +76,19 @@ impl BenchmarkMemoryGovernanceEvidence {
         self.memory_admission_ledger_decayed += admission.ledger_decayed_count();
         self.memory_admission_ledger_merged += admission.ledger_merged_count();
         self.memory_admission_ledger_rollback += admission.ledger_rollback_count();
+        self.kv_fusion_candidates += admission.fusion_plan.candidates;
+        self.kv_fusion_fused += admission.fusion_plan.fused;
+        self.kv_fusion_compressed += admission.fusion_plan.compressed;
+        self.kv_fusion_skipped += admission.fusion_plan.skipped;
+        self.kv_fusion_held += admission.fusion_plan.held;
+        self.kv_fusion_rejected += admission.fusion_plan.rejected;
+        self.kv_fusion_approval_blocked += admission.fusion_plan.approval_blocked;
+        self.kv_fusion_input_tokens += admission.fusion_plan.input_tokens;
+        self.kv_fusion_retained_tokens += admission.fusion_plan.retained_tokens;
+        self.kv_fusion_saved_tokens += admission.fusion_plan.saved_tokens;
+        if admission.fusion_plan.candidates > 0 {
+            self.kv_fusion_cases += 1;
+        }
         if admission_candidates > 0 {
             self.memory_admission_cases += 1;
             push_unique_device(&mut self.memory_admission_devices, device);
@@ -268,6 +292,15 @@ impl BenchmarkMemoryGovernanceEvidence {
     pub fn compaction_activity_device_profiles(&self) -> usize {
         explicit_device_count(&self.compaction_activity_devices)
     }
+
+    pub fn kv_fusion_decision_total(&self) -> usize {
+        self.kv_fusion_fused
+            .saturating_add(self.kv_fusion_compressed)
+            .saturating_add(self.kv_fusion_skipped)
+            .saturating_add(self.kv_fusion_held)
+            .saturating_add(self.kv_fusion_rejected)
+            .saturating_add(self.kv_fusion_approval_blocked)
+    }
 }
 
 fn validate_memory_admission_preview(
@@ -279,6 +312,8 @@ fn validate_memory_admission_preview(
     admission: &crate::memory_admission::MemoryAdmissionPreview,
 ) {
     let candidates = admission.candidate_count();
+    let prompt_chars = prompt.chars().count();
+    let prompt_leak_check = prompt.len() > 16;
     let decision_total = admission
         .ready_count()
         .saturating_add(admission.hold_count())
@@ -380,6 +415,59 @@ fn validate_memory_admission_preview(
             case_name
         ));
     }
+    let fusion = &admission.fusion_plan;
+    if !fusion.decision_count_matches() {
+        failures.push(format!(
+            "{}:{} kv_fusion decision counts do not match candidates {}",
+            device.as_str(),
+            case_name,
+            fusion.candidates
+        ));
+    }
+    if !fusion.token_accounting_matches() {
+        failures.push(format!(
+            "{}:{} kv_fusion retained+saved {} does not match input_tokens {}",
+            device.as_str(),
+            case_name,
+            fusion.retained_tokens.saturating_add(fusion.saved_tokens),
+            fusion.input_tokens
+        ));
+    }
+    if !fusion.is_read_only_preview() {
+        failures.push(format!(
+            "{}:{} kv_fusion preview must remain read-only and unapplied",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if fusion.candidates > 0 && fusion.score_summaries(12).is_empty() {
+        failures.push(format!(
+            "{}:{} kv_fusion candidates require score summaries",
+            device.as_str(),
+            case_name
+        ));
+    }
+    for (index, summary) in fusion.score_summaries(12).iter().enumerate() {
+        if !summary.contains("components=") {
+            failures.push(format!(
+                "{}:{} kv_fusion score summary {} must explain score components",
+                device.as_str(),
+                case_name,
+                index
+            ));
+        }
+    }
+    if fusion.score_summaries(12).iter().any(|summary| {
+        summary.contains("prompt:")
+            || summary.contains("answer:")
+            || (prompt_leak_check && summary.contains(prompt))
+    }) {
+        failures.push(format!(
+            "{}:{} kv_fusion summaries must not leak raw prompt or answer payloads",
+            device.as_str(),
+            case_name
+        ));
+    }
     if summaries
         .iter()
         .chain(review_summaries.iter())
@@ -411,9 +499,6 @@ fn validate_memory_admission_preview(
             ));
         }
     }
-
-    let prompt_chars = prompt.chars().count();
-    let prompt_leak_check = prompt.len() > 16;
     for (index, candidate) in admission.candidates.iter().enumerate() {
         if candidate.profile != profile {
             failures.push(format!(

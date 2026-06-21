@@ -382,6 +382,502 @@ impl MemoryKvLedgerWritePlan {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReinforcedKvFusionSource {
+    SemanticMemory,
+    GistMemory,
+    RuntimeKv,
+    ColdEvidence,
+    GenomeSegment,
+}
+
+impl ReinforcedKvFusionSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SemanticMemory => "semantic_memory",
+            Self::GistMemory => "gist_memory",
+            Self::RuntimeKv => "runtime_kv",
+            Self::ColdEvidence => "cold_evidence",
+            Self::GenomeSegment => "genome_segment",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReinforcedKvFusionDecision {
+    Fuse,
+    Compress,
+    Skip,
+    Hold,
+    Reject,
+    ApprovalBlocked,
+}
+
+impl ReinforcedKvFusionDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fuse => "fuse",
+            Self::Compress => "compress",
+            Self::Skip => "skip",
+            Self::Hold => "hold",
+            Self::Reject => "reject",
+            Self::ApprovalBlocked => "approval_blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReinforcedKvFusionPolicy {
+    pub fuse_threshold: f32,
+    pub compress_threshold: f32,
+    pub hold_threshold: f32,
+    pub compression_fraction: f32,
+    pub max_full_fusion_tokens: usize,
+}
+
+impl Default for ReinforcedKvFusionPolicy {
+    fn default() -> Self {
+        Self {
+            fuse_threshold: 0.72,
+            compress_threshold: 0.50,
+            hold_threshold: 0.34,
+            compression_fraction: 0.42,
+            max_full_fusion_tokens: 192,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReinforcedKvFusionCandidate {
+    pub id: String,
+    pub source: ReinforcedKvFusionSource,
+    pub estimated_tokens: usize,
+    pub trust: f32,
+    pub freshness: f32,
+    pub fitness: f32,
+    pub task_relevance: f32,
+    pub reinforcement: f32,
+    pub privacy_classification: MemoryPrivacyClassification,
+    pub rollback_anchor_id: String,
+    pub source_hash: String,
+    pub duplicate_of: Option<String>,
+    pub contradictory: bool,
+    pub required_anchor: bool,
+    pub requires_approval: bool,
+}
+
+impl ReinforcedKvFusionCandidate {
+    pub fn new(
+        id: impl Into<String>,
+        source: ReinforcedKvFusionSource,
+        estimated_tokens: usize,
+    ) -> Self {
+        Self {
+            id: sanitize_review_text(&id.into()),
+            source,
+            estimated_tokens: estimated_tokens.max(1),
+            trust: 0.50,
+            freshness: 0.50,
+            fitness: 0.50,
+            task_relevance: 0.50,
+            reinforcement: 0.0,
+            privacy_classification: MemoryPrivacyClassification::DigestOnly,
+            rollback_anchor_id: "kv_fusion:stable".to_owned(),
+            source_hash: "sha256:kv_fusion".to_owned(),
+            duplicate_of: None,
+            contradictory: false,
+            required_anchor: false,
+            requires_approval: false,
+        }
+    }
+
+    pub fn with_scores(
+        mut self,
+        trust: f32,
+        freshness: f32,
+        fitness: f32,
+        task_relevance: f32,
+        reinforcement: f32,
+    ) -> Self {
+        self.trust = clamp_unit(trust);
+        self.freshness = clamp_unit(freshness);
+        self.fitness = clamp_unit(fitness);
+        self.task_relevance = clamp_unit(task_relevance);
+        self.reinforcement = clamp_reward(reinforcement);
+        self
+    }
+
+    pub fn with_privacy(mut self, privacy_classification: MemoryPrivacyClassification) -> Self {
+        self.privacy_classification = privacy_classification;
+        self
+    }
+
+    pub fn with_rollback_anchor(mut self, rollback_anchor_id: impl Into<String>) -> Self {
+        self.rollback_anchor_id = sanitize_review_text(&rollback_anchor_id.into());
+        self
+    }
+
+    pub fn with_source_hash(mut self, source_hash: impl Into<String>) -> Self {
+        self.source_hash = sanitize_review_text(&source_hash.into());
+        self
+    }
+
+    pub fn with_duplicate_of(mut self, duplicate_of: impl Into<String>) -> Self {
+        self.duplicate_of = Some(sanitize_review_text(&duplicate_of.into()));
+        self
+    }
+
+    pub fn with_contradictory(mut self, contradictory: bool) -> Self {
+        self.contradictory = contradictory;
+        self
+    }
+
+    pub fn with_required_anchor(mut self, required_anchor: bool) -> Self {
+        self.required_anchor = required_anchor;
+        self
+    }
+
+    pub fn with_requires_approval(mut self, requires_approval: bool) -> Self {
+        self.requires_approval = requires_approval;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReinforcedKvFusionScoreComponents {
+    pub trust: f32,
+    pub freshness: f32,
+    pub fitness: f32,
+    pub task_relevance: f32,
+    pub reinforcement: f32,
+    pub privacy: f32,
+    pub token_cost: f32,
+}
+
+impl ReinforcedKvFusionScoreComponents {
+    fn from_candidate(candidate: &ReinforcedKvFusionCandidate) -> Self {
+        Self {
+            trust: clamp_unit(candidate.trust),
+            freshness: clamp_unit(candidate.freshness),
+            fitness: clamp_unit(candidate.fitness),
+            task_relevance: clamp_unit(candidate.task_relevance),
+            reinforcement: clamp_reward(candidate.reinforcement),
+            privacy: match candidate.privacy_classification {
+                MemoryPrivacyClassification::SensitiveBlocked => 0.0,
+                MemoryPrivacyClassification::DigestOnly => 0.82,
+                MemoryPrivacyClassification::PublicSafe => 1.0,
+            },
+            token_cost: (candidate.estimated_tokens as f32 / 512.0).clamp(0.0, 1.0),
+        }
+    }
+
+    fn score(self) -> f32 {
+        let positive_reinforcement = self.reinforcement.max(0.0);
+        let negative_reinforcement = (-self.reinforcement).max(0.0);
+        (self.task_relevance * 0.24
+            + self.fitness * 0.20
+            + self.trust * 0.20
+            + self.freshness * 0.12
+            + positive_reinforcement * 0.16
+            + self.privacy * 0.08
+            - negative_reinforcement * 0.22
+            - self.token_cost * 0.10)
+            .clamp(0.0, 1.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReinforcedKvFusionDecisionRecord {
+    pub candidate_id: String,
+    pub source: ReinforcedKvFusionSource,
+    pub decision: ReinforcedKvFusionDecision,
+    pub estimated_tokens: usize,
+    pub retained_tokens: usize,
+    pub score: f32,
+    pub components: ReinforcedKvFusionScoreComponents,
+    pub privacy_classification: MemoryPrivacyClassification,
+    pub rollback_anchor_id: String,
+    pub duplicate_of: Option<String>,
+    pub reason: String,
+}
+
+impl ReinforcedKvFusionDecisionRecord {
+    pub fn saved_tokens(&self) -> usize {
+        self.estimated_tokens.saturating_sub(self.retained_tokens)
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "id={} source={} decision={} score={:.3} components=trust:{:.3}|freshness:{:.3}|fitness:{:.3}|task:{:.3}|reinforcement:{:.3}|privacy_score:{:.3}|token_cost:{:.3} retained={} saved={} privacy={} rollback={} duplicate={} reason={}",
+            self.candidate_id,
+            self.source.as_str(),
+            self.decision.as_str(),
+            self.score,
+            self.components.trust,
+            self.components.freshness,
+            self.components.fitness,
+            self.components.task_relevance,
+            self.components.reinforcement,
+            self.components.privacy,
+            self.components.token_cost,
+            self.retained_tokens,
+            self.saved_tokens(),
+            self.privacy_classification.as_str(),
+            self.rollback_anchor_id,
+            self.duplicate_of.as_deref().unwrap_or("none"),
+            self.reason
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReinforcedKvFusionPlan {
+    pub candidates: usize,
+    pub fused: usize,
+    pub compressed: usize,
+    pub skipped: usize,
+    pub held: usize,
+    pub rejected: usize,
+    pub approval_blocked: usize,
+    pub input_tokens: usize,
+    pub retained_tokens: usize,
+    pub saved_tokens: usize,
+    pub min_score: f32,
+    pub max_score: f32,
+    pub average_score: f32,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub decisions: Vec<ReinforcedKvFusionDecisionRecord>,
+}
+
+impl Default for ReinforcedKvFusionPlan {
+    fn default() -> Self {
+        Self::from_candidates(ReinforcedKvFusionPolicy::default(), Vec::new())
+    }
+}
+
+impl ReinforcedKvFusionPlan {
+    pub fn from_admission_candidates(candidates: &[MemoryAdmissionCandidate]) -> Self {
+        let candidates = candidates
+            .iter()
+            .map(fusion_candidate_from_admission)
+            .collect::<Vec<_>>();
+        Self::from_candidates(ReinforcedKvFusionPolicy::default(), candidates)
+    }
+
+    pub fn from_candidates(
+        policy: ReinforcedKvFusionPolicy,
+        candidates: Vec<ReinforcedKvFusionCandidate>,
+    ) -> Self {
+        let mut decisions = candidates
+            .iter()
+            .map(|candidate| decide_reinforced_kv_fusion(policy, candidate))
+            .collect::<Vec<_>>();
+        decisions.sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
+
+        let mut fused = 0usize;
+        let mut compressed = 0usize;
+        let mut skipped = 0usize;
+        let mut held = 0usize;
+        let mut rejected = 0usize;
+        let mut approval_blocked = 0usize;
+        let mut input_tokens = 0usize;
+        let mut retained_tokens = 0usize;
+        let mut score_sum = 0.0f32;
+        let mut min_score = f32::INFINITY;
+        let mut max_score = f32::NEG_INFINITY;
+
+        for decision in &decisions {
+            match decision.decision {
+                ReinforcedKvFusionDecision::Fuse => fused = fused.saturating_add(1),
+                ReinforcedKvFusionDecision::Compress => compressed = compressed.saturating_add(1),
+                ReinforcedKvFusionDecision::Skip => skipped = skipped.saturating_add(1),
+                ReinforcedKvFusionDecision::Hold => held = held.saturating_add(1),
+                ReinforcedKvFusionDecision::Reject => rejected = rejected.saturating_add(1),
+                ReinforcedKvFusionDecision::ApprovalBlocked => {
+                    approval_blocked = approval_blocked.saturating_add(1)
+                }
+            }
+            input_tokens = input_tokens.saturating_add(decision.estimated_tokens);
+            retained_tokens = retained_tokens.saturating_add(decision.retained_tokens);
+            score_sum += decision.score;
+            min_score = min_score.min(decision.score);
+            max_score = max_score.max(decision.score);
+        }
+
+        let candidates = decisions.len();
+        Self {
+            candidates,
+            fused,
+            compressed,
+            skipped,
+            held,
+            rejected,
+            approval_blocked,
+            input_tokens,
+            retained_tokens,
+            saved_tokens: input_tokens.saturating_sub(retained_tokens),
+            min_score: if candidates == 0 { 0.0 } else { min_score },
+            max_score: if candidates == 0 { 0.0 } else { max_score },
+            average_score: if candidates == 0 {
+                0.0
+            } else {
+                score_sum / candidates as f32
+            },
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+            decisions,
+        }
+    }
+
+    pub fn decision_count_matches(&self) -> bool {
+        self.fused
+            .saturating_add(self.compressed)
+            .saturating_add(self.skipped)
+            .saturating_add(self.held)
+            .saturating_add(self.rejected)
+            .saturating_add(self.approval_blocked)
+            == self.candidates
+    }
+
+    pub fn token_accounting_matches(&self) -> bool {
+        self.retained_tokens.saturating_add(self.saved_tokens) == self.input_tokens
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn score_summaries(&self, limit: usize) -> Vec<String> {
+        self.decisions
+            .iter()
+            .take(limit)
+            .map(ReinforcedKvFusionDecisionRecord::summary)
+            .collect()
+    }
+}
+
+fn decide_reinforced_kv_fusion(
+    policy: ReinforcedKvFusionPolicy,
+    candidate: &ReinforcedKvFusionCandidate,
+) -> ReinforcedKvFusionDecisionRecord {
+    let components = ReinforcedKvFusionScoreComponents::from_candidate(candidate);
+    let score = components.score();
+    let (decision, reason) = if candidate.rollback_anchor_id.trim().is_empty() {
+        (
+            ReinforcedKvFusionDecision::ApprovalBlocked,
+            "rollback_anchor_missing",
+        )
+    } else if candidate.privacy_classification == MemoryPrivacyClassification::SensitiveBlocked {
+        (ReinforcedKvFusionDecision::Reject, "privacy_rejected")
+    } else if candidate.contradictory {
+        (ReinforcedKvFusionDecision::Hold, "contradiction_hold")
+    } else if candidate.duplicate_of.is_some() {
+        (ReinforcedKvFusionDecision::Skip, "duplicate_merge_skip")
+    } else if candidate.requires_approval && score >= policy.compress_threshold {
+        (
+            ReinforcedKvFusionDecision::ApprovalBlocked,
+            "operator_approval_required",
+        )
+    } else if candidate.required_anchor {
+        if score >= policy.compress_threshold {
+            (ReinforcedKvFusionDecision::Fuse, "required_anchor_fused")
+        } else {
+            (
+                ReinforcedKvFusionDecision::Compress,
+                "required_anchor_compressed",
+            )
+        }
+    } else if score >= policy.fuse_threshold
+        && candidate.estimated_tokens <= policy.max_full_fusion_tokens
+    {
+        (ReinforcedKvFusionDecision::Fuse, "score_fuse")
+    } else if score >= policy.compress_threshold {
+        (ReinforcedKvFusionDecision::Compress, "score_compress")
+    } else if score >= policy.hold_threshold {
+        (ReinforcedKvFusionDecision::Hold, "score_hold")
+    } else {
+        (ReinforcedKvFusionDecision::Skip, "low_score_skip")
+    };
+    let retained_tokens = match decision {
+        ReinforcedKvFusionDecision::Fuse => candidate.estimated_tokens,
+        ReinforcedKvFusionDecision::Compress => (candidate.estimated_tokens as f32
+            * policy.compression_fraction.clamp(0.10, 0.90))
+        .ceil() as usize,
+        ReinforcedKvFusionDecision::Skip
+        | ReinforcedKvFusionDecision::Hold
+        | ReinforcedKvFusionDecision::Reject
+        | ReinforcedKvFusionDecision::ApprovalBlocked => 0,
+    }
+    .min(candidate.estimated_tokens);
+
+    ReinforcedKvFusionDecisionRecord {
+        candidate_id: sanitize_review_text(&candidate.id),
+        source: candidate.source,
+        decision,
+        estimated_tokens: candidate.estimated_tokens,
+        retained_tokens,
+        score,
+        components,
+        privacy_classification: candidate.privacy_classification,
+        rollback_anchor_id: sanitize_review_text(&candidate.rollback_anchor_id),
+        duplicate_of: candidate.duplicate_of.clone(),
+        reason: reason.to_owned(),
+    }
+}
+
+pub(crate) fn fusion_candidate_from_admission(
+    candidate: &MemoryAdmissionCandidate,
+) -> ReinforcedKvFusionCandidate {
+    let source = match candidate.kind {
+        MemoryAdmissionKind::RetrospectiveEpisode | MemoryAdmissionKind::ProceduralHeuristic => {
+            ReinforcedKvFusionSource::SemanticMemory
+        }
+        MemoryAdmissionKind::ToolReliabilityObservation => ReinforcedKvFusionSource::ColdEvidence,
+        MemoryAdmissionKind::GistEvidence => ReinforcedKvFusionSource::GistMemory,
+        MemoryAdmissionKind::RuntimeKvEvidence => ReinforcedKvFusionSource::RuntimeKv,
+    };
+    let reinforcement = match candidate.decision {
+        MemoryAdmissionDecision::Ready => 0.45,
+        MemoryAdmissionDecision::Hold => -0.05,
+        MemoryAdmissionDecision::Reject => -0.65,
+        MemoryAdmissionDecision::Quarantine => -0.90,
+    };
+    let estimated_tokens = match candidate.kind {
+        MemoryAdmissionKind::RetrospectiveEpisode => 96,
+        MemoryAdmissionKind::ProceduralHeuristic => 48,
+        MemoryAdmissionKind::ToolReliabilityObservation => 32,
+        MemoryAdmissionKind::GistEvidence => 64,
+        MemoryAdmissionKind::RuntimeKvEvidence => 128,
+    };
+
+    ReinforcedKvFusionCandidate::new(candidate.id.clone(), source, estimated_tokens)
+        .with_scores(
+            candidate.quality,
+            candidate.process_reward,
+            (candidate.quality + candidate.process_reward) * 0.5,
+            task_relevance_for_admission_kind(candidate.kind),
+            reinforcement,
+        )
+        .with_privacy(candidate.privacy_classification)
+        .with_rollback_anchor(candidate.rollback_anchor_id.clone())
+        .with_source_hash(candidate.source_hash.clone())
+        .with_requires_approval(candidate.decision == MemoryAdmissionDecision::Ready)
+        .with_contradictory(candidate.critical_reflection_issues > 0)
+}
+
+fn task_relevance_for_admission_kind(kind: MemoryAdmissionKind) -> f32 {
+    match kind {
+        MemoryAdmissionKind::RetrospectiveEpisode => 0.86,
+        MemoryAdmissionKind::ProceduralHeuristic => 0.78,
+        MemoryAdmissionKind::ToolReliabilityObservation => 0.58,
+        MemoryAdmissionKind::GistEvidence => 0.74,
+        MemoryAdmissionKind::RuntimeKvEvidence => 0.82,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAdmissionCandidate {
     pub id: String,
@@ -479,6 +975,7 @@ pub struct MemoryAdmissionPreview {
     pub candidates: Vec<MemoryAdmissionCandidate>,
     pub review_packets: Vec<MemoryAdmissionReviewPacket>,
     pub ledger_plan: MemoryKvLedgerWritePlan,
+    pub fusion_plan: ReinforcedKvFusionPlan,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -493,6 +990,7 @@ impl Default for MemoryAdmissionPreview {
                 read_only: true,
                 ..MemoryKvLedgerWritePlan::default()
             },
+            fusion_plan: ReinforcedKvFusionPlan::default(),
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -608,12 +1106,15 @@ impl MemoryAdmissionPreview {
                 read_only: true,
                 ..MemoryKvLedgerWritePlan::default()
             },
+            fusion_plan: ReinforcedKvFusionPlan::default(),
             read_only: true,
             write_allowed: false,
             applied: false,
         };
         preview.ledger_plan =
             MemoryKvLedgerWritePlan::from_preview(&preview, MemoryKvLedgerWritePolicy::default());
+        preview.fusion_plan =
+            ReinforcedKvFusionPlan::from_admission_candidates(&preview.candidates);
         preview
     }
 
@@ -733,6 +1234,10 @@ impl MemoryAdmissionPreview {
         self.ledger_plan.summary_lines()
     }
 
+    pub fn fusion_score_summaries(&self, limit: usize) -> Vec<String> {
+        self.fusion_plan.score_summaries(limit)
+    }
+
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only
             && !self.write_allowed
@@ -746,6 +1251,7 @@ impl MemoryAdmissionPreview {
                 .iter()
                 .all(MemoryAdmissionReviewPacket::is_read_only_preview)
             && self.ledger_plan.is_read_only_preview()
+            && self.fusion_plan.is_read_only_preview()
     }
 
     fn count_decision(&self, decision: MemoryAdmissionDecision) -> usize {
@@ -1166,6 +1672,14 @@ fn clamp_unit(value: f32) -> f32 {
     }
 }
 
+fn clamp_reward(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(-1.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1235,6 +1749,10 @@ mod tests {
         assert_eq!(preview.ledger_record_count(), 1);
         assert_eq!(preview.ledger_preview_only_count(), 1);
         assert_eq!(preview.ledger_authorized_count(), 0);
+        assert_eq!(preview.fusion_plan.candidates, 1);
+        assert_eq!(preview.fusion_plan.approval_blocked, 1);
+        assert!(preview.fusion_plan.decision_count_matches());
+        assert!(preview.fusion_plan.token_accounting_matches());
         assert!(preview.is_read_only_preview());
         assert_eq!(
             preview.review_packets[0].approval_state,
@@ -1255,6 +1773,122 @@ mod tests {
                 .review_packet_summaries()
                 .iter()
                 .any(|summary| summary.contains("secret prompt text"))
+        );
+    }
+
+    #[test]
+    fn reinforced_kv_fusion_scores_positive_and_penalty_signals() {
+        let plan = ReinforcedKvFusionPlan::from_candidates(
+            ReinforcedKvFusionPolicy::default(),
+            vec![
+                ReinforcedKvFusionCandidate::new(
+                    "runtime-positive",
+                    ReinforcedKvFusionSource::RuntimeKv,
+                    64,
+                )
+                .with_scores(0.95, 0.90, 0.92, 0.95, 0.80)
+                .with_rollback_anchor("anchor:runtime:positive"),
+                ReinforcedKvFusionCandidate::new(
+                    "runtime-harmful",
+                    ReinforcedKvFusionSource::RuntimeKv,
+                    256,
+                )
+                .with_scores(0.20, 0.20, 0.15, 0.20, -0.90)
+                .with_rollback_anchor("anchor:runtime:harmful"),
+            ],
+        );
+
+        let positive = plan
+            .decisions
+            .iter()
+            .find(|decision| decision.candidate_id == "runtime-positive")
+            .unwrap();
+        let harmful = plan
+            .decisions
+            .iter()
+            .find(|decision| decision.candidate_id == "runtime-harmful")
+            .unwrap();
+
+        assert_eq!(plan.fused, 1);
+        assert_eq!(plan.skipped, 1);
+        assert!(plan.saved_tokens > 0);
+        assert!(plan.decision_count_matches());
+        assert!(plan.token_accounting_matches());
+        assert_eq!(positive.decision, ReinforcedKvFusionDecision::Fuse);
+        assert_eq!(positive.retained_tokens, 64);
+        assert_eq!(harmful.decision, ReinforcedKvFusionDecision::Skip);
+        assert_eq!(harmful.retained_tokens, 0);
+        assert!(positive.score > harmful.score);
+        assert!(plan.is_read_only_preview());
+    }
+
+    #[test]
+    fn reinforced_kv_fusion_merges_duplicates_and_blocks_bad_candidates() {
+        let plan = ReinforcedKvFusionPlan::from_candidates(
+            ReinforcedKvFusionPolicy::default(),
+            vec![
+                ReinforcedKvFusionCandidate::new(
+                    "semantic-duplicate",
+                    ReinforcedKvFusionSource::SemanticMemory,
+                    80,
+                )
+                .with_scores(0.90, 0.88, 0.86, 0.90, 0.40)
+                .with_duplicate_of("semantic-primary")
+                .with_rollback_anchor("anchor:semantic"),
+                ReinforcedKvFusionCandidate::new(
+                    "gist-contradiction",
+                    ReinforcedKvFusionSource::GistMemory,
+                    72,
+                )
+                .with_scores(0.88, 0.80, 0.84, 0.90, 0.20)
+                .with_contradictory(true)
+                .with_rollback_anchor("anchor:gist"),
+                ReinforcedKvFusionCandidate::new(
+                    "runtime-private",
+                    ReinforcedKvFusionSource::RuntimeKv,
+                    96,
+                )
+                .with_scores(0.95, 0.92, 0.90, 0.90, 0.55)
+                .with_privacy(MemoryPrivacyClassification::SensitiveBlocked)
+                .with_rollback_anchor("anchor:runtime"),
+                ReinforcedKvFusionCandidate::new(
+                    "genome-missing-anchor",
+                    ReinforcedKvFusionSource::GenomeSegment,
+                    32,
+                )
+                .with_scores(0.95, 0.95, 0.95, 0.95, 0.60)
+                .with_rollback_anchor(""),
+            ],
+        );
+
+        assert_eq!(plan.candidates, 4);
+        assert_eq!(plan.skipped, 1);
+        assert_eq!(plan.held, 1);
+        assert_eq!(plan.rejected, 1);
+        assert_eq!(plan.approval_blocked, 1);
+        assert_eq!(plan.retained_tokens, 0);
+        assert_eq!(plan.saved_tokens, plan.input_tokens);
+        assert!(plan.decision_count_matches());
+        assert!(plan.token_accounting_matches());
+        assert!(
+            plan.score_summaries(4)
+                .iter()
+                .any(|summary| summary.contains("duplicate=semantic-primary"))
+        );
+        assert!(
+            plan.score_summaries(4)
+                .iter()
+                .any(|summary| summary.contains("reason=contradiction_hold"))
+        );
+        assert!(
+            plan.score_summaries(4)
+                .iter()
+                .any(|summary| summary.contains("reason=privacy_rejected"))
+        );
+        assert!(
+            plan.score_summaries(4)
+                .iter()
+                .any(|summary| summary.contains("reason=rollback_anchor_missing"))
         );
     }
 

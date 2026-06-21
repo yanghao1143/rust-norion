@@ -56,6 +56,36 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_kv_fusion_cases) = gate.min_kv_fusion_cases {
+        let observed = summary.kv_fusion_cases();
+        if observed < min_kv_fusion_cases {
+            failures.push(format!(
+                "kv_fusion_cases {} below minimum {}",
+                observed, min_kv_fusion_cases
+            ));
+        }
+    }
+
+    if let Some(min_kv_fusion_candidates) = gate.min_kv_fusion_candidates {
+        let observed = summary.total_kv_fusion_candidates();
+        if observed < min_kv_fusion_candidates {
+            failures.push(format!(
+                "kv_fusion_candidates {} below minimum {}",
+                observed, min_kv_fusion_candidates
+            ));
+        }
+    }
+
+    if let Some(min_kv_fusion_saved_tokens) = gate.min_kv_fusion_saved_tokens {
+        let observed = summary.total_kv_fusion_saved_tokens();
+        if observed < min_kv_fusion_saved_tokens {
+            failures.push(format!(
+                "kv_fusion_saved_tokens {} below minimum {}",
+                observed, min_kv_fusion_saved_tokens
+            ));
+        }
+    }
+
     if let Some(min_memory_retention_activity_cases) = gate.min_memory_retention_activity_cases {
         let observed = summary.memory_governance_evidence.retention_activity_cases;
         if observed < min_memory_retention_activity_cases {
