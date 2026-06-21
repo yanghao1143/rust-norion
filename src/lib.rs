@@ -41,8 +41,8 @@ pub use agent_team::{
 };
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,
-    BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence, BenchmarkSummary,
-    KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
+    BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence, BenchmarkRoutingEvidence,
+    BenchmarkSummary, KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
     KvQuantBenchmarkSummary, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
     PersistentRoundtripMatrixReport, PersistentRoundtripReport, default_benchmark_cases,
 };
@@ -127,9 +127,12 @@ pub use reflection::{
     ReflectionSeverity, Reflector, RuntimeDiagnostics,
 };
 pub use router::{
-    GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds, Route, RouteBudget,
-    RouterState, RouterThresholdAdjustmentPreviewPlanner, RouterThresholdAdjustmentPreviewPolicy,
-    RouterThresholdAdjustmentPreviewReport, RoutingContext, RoutingDecision,
+    AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,
+    AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan, AdaptiveRoutingPlanner,
+    AdaptiveRoutingPolicy, GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds,
+    Route, RouteBudget, RouterState, RouterThresholdAdjustmentPreviewPlanner,
+    RouterThresholdAdjustmentPreviewPolicy, RouterThresholdAdjustmentPreviewReport, RoutingContext,
+    RoutingDecision,
 };
 pub use runtime::{
     CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat,

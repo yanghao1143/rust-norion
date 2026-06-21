@@ -22,6 +22,16 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"issue_codes\":"));
     assert!(line.contains("\"revision_passes\":"));
     assert!(line.contains("\"route\":"));
+    assert!(line.contains("\"adaptive_routing\":"));
+    assert!(line.contains("\"include\":"));
+    assert!(line.contains("\"compress\":"));
+    assert!(line.contains("\"defer\":"));
+    assert!(line.contains("\"skip\":"));
+    assert!(line.contains("\"input_tokens\":"));
+    assert!(line.contains("\"retained_tokens\":"));
+    assert!(line.contains("\"saved_tokens\":"));
+    assert!(line.contains("\"selected_routes\":"));
+    assert!(line.contains("\"score_summaries\":"));
     assert!(line.contains("\"runtime_tokens\":"));
     assert!(line.contains("\"embedding\":{"));
     assert!(line.contains("\"query_source\":\"fallback\""));
@@ -537,6 +547,65 @@ fn trace_schema_gate_accepts_generated_trace_line() {
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = increment_trace_object_usize(
+        &trace_json_line(
+            "trace adaptive routing mismatch",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "include",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("adaptive_routing decisions")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace adaptive routing write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("adaptive_routing write_allowed")),
+        "{failures:?}"
+    );
 }
 
 #[test]

@@ -83,6 +83,9 @@ pub fn trace_json_line_with_case(
     let memory_admission_candidates = outcome.memory_admission.candidate_summaries();
     let memory_admission_review_packets = outcome.memory_admission.review_packet_summaries();
     let memory_admission_ledger_summaries = outcome.memory_admission.ledger_summaries();
+    let adaptive_route_actions = outcome.adaptive_route_plan.action_summaries();
+    let adaptive_route_selected_routes = outcome.adaptive_route_plan.selected_route_summaries();
+    let adaptive_route_score_summaries = outcome.adaptive_route_plan.score_summaries(12);
 
     format!(
         "{{\
@@ -97,6 +100,7 @@ pub fn trace_json_line_with_case(
          \"reflection\":{{\"issues\":{},\"critical_issues\":{},\"max_severity\":\"{}\",\"issue_codes\":{},\"revision_actions\":{},\"revision_passes\":{}}},\
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
+         \"adaptive_routing\":{{\"candidates\":{},\"include\":{},\"compress\":{},\"defer\":{},\"skip\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"actions\":{},\"selected_routes\":{},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
@@ -140,6 +144,23 @@ pub fn trace_json_line_with_case(
         outcome.route_budget.attention_fraction,
         outcome.route_budget.attention_tokens,
         outcome.route_budget.fast_tokens,
+        outcome.adaptive_route_plan.candidates,
+        outcome.adaptive_route_plan.include,
+        outcome.adaptive_route_plan.compress,
+        outcome.adaptive_route_plan.defer,
+        outcome.adaptive_route_plan.skip,
+        outcome.adaptive_route_plan.input_tokens,
+        outcome.adaptive_route_plan.retained_tokens,
+        outcome.adaptive_route_plan.saved_tokens,
+        outcome.adaptive_route_plan.min_score,
+        outcome.adaptive_route_plan.max_score,
+        outcome.adaptive_route_plan.average_score,
+        string_array_json(&adaptive_route_actions),
+        string_array_json(&adaptive_route_selected_routes),
+        string_array_json(&adaptive_route_score_summaries),
+        outcome.adaptive_route_plan.read_only,
+        outcome.adaptive_route_plan.write_allowed,
+        outcome.adaptive_route_plan.applied,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,

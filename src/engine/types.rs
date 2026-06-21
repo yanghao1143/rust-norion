@@ -16,7 +16,7 @@ use crate::process_reward::ProcessRewardReport;
 use crate::reasoning_genome::{DnaSplicePreview, GenomeExpression};
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReflectionReport, RuntimeDiagnostics};
-use crate::router::{GenerationMetrics, RouteBudget};
+use crate::router::{AdaptiveRoutingPlan, GenerationMetrics, RouteBudget};
 use crate::runtime::RuntimeAdapterObservation;
 use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
@@ -230,6 +230,7 @@ pub struct InferenceOutcome {
     pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
     pub recursive_runtime_calls: usize,
     pub route_budget: RouteBudget,
+    pub adaptive_route_plan: AdaptiveRoutingPlan,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
     pub tier_migrations: Vec<TierMigration>,

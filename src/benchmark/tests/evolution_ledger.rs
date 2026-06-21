@@ -6,6 +6,7 @@ fn gate_reports_missing_evolution_ledger_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -204,6 +205,7 @@ fn gate_reports_missing_evolution_ledger_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -459,6 +461,7 @@ fn gate_reports_evolution_ledger_drift_rollback_failures() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 

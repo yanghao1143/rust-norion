@@ -7,6 +7,7 @@ mod memory;
 mod overview;
 mod record;
 mod recursive;
+mod routing;
 mod runtime;
 
 use crate::adaptive_state::EvolutionLedger;
@@ -16,7 +17,7 @@ use crate::hierarchy::TaskProfile;
 
 use super::{
     BenchmarkEmbeddingEvidence, BenchmarkGenomeEvidence, BenchmarkLiveEvolutionEvidence,
-    BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence,
+    BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence, BenchmarkRoutingEvidence,
     BenchmarkRuntimeArchitectureEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
 };
 
@@ -97,6 +98,7 @@ pub struct BenchmarkSummary {
     pub(super) evolution_ledger: EvolutionLedger,
     pub(super) reflection_evidence: BenchmarkReflectionEvidence,
     pub(super) live_evolution_evidence: BenchmarkLiveEvolutionEvidence,
+    pub(super) routing_evidence: BenchmarkRoutingEvidence,
     pub(super) genome_evidence: BenchmarkGenomeEvidence,
     pub(super) memory_governance_evidence: BenchmarkMemoryGovernanceEvidence,
     pub(super) embedding_evidence: BenchmarkEmbeddingEvidence,

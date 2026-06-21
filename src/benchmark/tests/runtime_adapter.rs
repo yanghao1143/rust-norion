@@ -6,6 +6,7 @@ fn gate_reports_runtime_adapter_contract_failures() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -202,6 +203,7 @@ fn gate_reports_runtime_adapter_kind_collapse() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -372,6 +374,7 @@ fn gate_reports_runtime_adapter_kind_collapse() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -398,6 +401,7 @@ fn gate_reports_missing_runtime_adapter_observations() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -501,6 +505,7 @@ fn gate_reports_missing_runtime_adapter_observations() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -537,6 +542,7 @@ fn gate_reports_runtime_adapter_selection_mismatches() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 

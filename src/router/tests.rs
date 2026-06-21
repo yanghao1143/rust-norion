@@ -427,6 +427,161 @@ fn hierarchy_bias_spends_attention_on_borderline_tokens() {
     assert!(global_heavy.score > local_heavy.score);
 }
 
+#[test]
+fn adaptive_routing_plan_explains_include_compress_defer_and_skip() {
+    let planner = AdaptiveRoutingPlanner::new();
+    let threshold = 0.58;
+    let context = RoutingContext {
+        profile: TaskProfile::Coding,
+        compute_headroom: 0.8,
+        hierarchy: HierarchyWeights::new(0.25, 0.55, 0.20),
+        ..RoutingContext::default()
+    };
+
+    let plan = planner.plan(
+        TaskProfile::Coding,
+        threshold,
+        context,
+        vec![
+            route_candidate("include", 48, 0.95, 0.90, 0.95, 0.10, 0.90),
+            route_candidate("compress", 96, 0.70, 0.62, 0.68, 0.30, 0.60),
+            route_candidate("defer", 32, 0.52, 0.40, 0.48, 0.20, 0.38),
+            route_candidate("skip", 320, 0.20, 0.16, 0.18, 0.80, 0.10),
+        ],
+    );
+
+    assert_eq!(plan.candidates, 4);
+    assert_eq!(plan.include, 1);
+    assert_eq!(plan.compress, 1);
+    assert_eq!(plan.defer, 1);
+    assert_eq!(plan.skip, 1);
+    assert!(plan.saved_tokens > 0);
+    assert!(plan.decision_count_matches());
+    assert!(plan.token_accounting_matches());
+    assert!(plan.anchors_retained());
+    assert!(plan.read_only);
+    assert!(!plan.write_allowed);
+    assert!(!plan.applied);
+    assert!(
+        plan.score_summaries(4)
+            .iter()
+            .all(|summary| summary.contains("score=") && summary.contains("threshold="))
+    );
+}
+
+#[test]
+fn adaptive_routing_compute_budget_skips_expensive_non_anchor() {
+    let plan = AdaptiveRoutingPlanner::new().plan(
+        TaskProfile::LongDocument,
+        0.52,
+        RoutingContext {
+            profile: TaskProfile::LongDocument,
+            hardware_pressure: 0.98,
+            compute_headroom: 0.02,
+            latency_budget_ms: Some(100),
+            context_tokens: 24_000,
+            ..RoutingContext::default()
+        },
+        vec![route_candidate(
+            "expensive-runtime-kv",
+            2048,
+            0.72,
+            0.58,
+            0.50,
+            0.95,
+            0.42,
+        )],
+    );
+
+    assert_eq!(plan.skip, 1);
+    assert_eq!(plan.retained_tokens, 0);
+    assert_eq!(plan.saved_tokens, 2048);
+}
+
+#[test]
+fn adaptive_routing_task_profile_changes_hierarchy_action() {
+    let candidate = route_candidate("rust-anchor", 32, 0.58, 0.55, 0.68, 0.18, 0.60);
+    let general = AdaptiveRoutingPlanner::new().plan(
+        TaskProfile::General,
+        0.55,
+        RoutingContext::default(),
+        vec![candidate.clone()],
+    );
+    let coding = AdaptiveRoutingPlanner::new().plan(
+        TaskProfile::Coding,
+        0.55,
+        RoutingContext {
+            profile: TaskProfile::Coding,
+            hierarchy: HierarchyWeights::new(0.20, 0.65, 0.15),
+            ..RoutingContext::default()
+        },
+        vec![candidate],
+    );
+
+    assert!(coding.average_score > general.average_score);
+    assert!(coding.include >= general.include);
+}
+
+#[test]
+fn adaptive_routing_reward_history_reinforces_or_penalizes_candidates() {
+    let rewarded = route_candidate("rewarded-memory", 64, 0.58, 0.62, 0.70, 0.18, 0.95);
+    let penalized = route_candidate("penalized-memory", 64, 0.58, 0.62, 0.70, 0.18, 0.05);
+    let context = RoutingContext {
+        profile: TaskProfile::Coding,
+        ..RoutingContext::default()
+    };
+
+    let plan = AdaptiveRoutingPlanner::new().plan(
+        TaskProfile::Coding,
+        0.58,
+        context,
+        vec![rewarded, penalized],
+    );
+    let rewarded = plan
+        .decisions
+        .iter()
+        .find(|decision| decision.candidate_id == "rewarded-memory")
+        .unwrap();
+    let penalized = plan
+        .decisions
+        .iter()
+        .find(|decision| decision.candidate_id == "penalized-memory")
+        .unwrap();
+
+    assert!(rewarded.score > penalized.score);
+    assert_ne!(rewarded.action, AdaptiveRouteAction::Skip);
+    assert!(matches!(
+        penalized.action,
+        AdaptiveRouteAction::Defer | AdaptiveRouteAction::Skip
+    ));
+}
+
 fn assert_threshold_close(left: f32, right: f32) {
     assert!((left - right).abs() < 0.0001);
+}
+
+fn route_candidate(
+    id: &str,
+    estimated_tokens: usize,
+    task_intent: f32,
+    memory_fitness: f32,
+    trust: f32,
+    compute_cost: f32,
+    reward_history: f32,
+) -> AdaptiveRouteCandidate {
+    AdaptiveRouteCandidate::new(
+        id,
+        AdaptiveRouteSource::SemanticMemory,
+        estimated_tokens,
+        AdaptiveRouteScoreComponents::new(
+            task_intent,
+            0.55,
+            0.90,
+            memory_fitness,
+            0.70,
+            trust,
+            compute_cost,
+            reward_history,
+        ),
+    )
 }

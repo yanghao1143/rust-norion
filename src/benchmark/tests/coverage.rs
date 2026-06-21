@@ -6,6 +6,7 @@ fn gate_reports_missing_sparse_filtering_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -107,6 +108,7 @@ fn gate_reports_missing_sparse_filtering_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -204,6 +206,7 @@ fn gate_reports_missing_device_profile_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -235,6 +238,7 @@ fn gate_reports_missing_device_profile_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -338,6 +342,7 @@ fn gate_reports_missing_recursive_device_profile_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -370,6 +375,7 @@ fn gate_reports_missing_recursive_device_profile_coverage() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -411,6 +417,7 @@ fn gate_reports_drift_failures() {
         genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 

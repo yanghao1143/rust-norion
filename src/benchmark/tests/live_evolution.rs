@@ -100,6 +100,7 @@ fn gate_reports_missing_live_evolution_detail_device_profile_coverage() {
             replay_live_evolution_critical_reflection_issue_devices: Vec::new(),
             replay_live_evolution_revision_action_devices: Vec::new(),
         },
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 

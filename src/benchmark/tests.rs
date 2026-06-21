@@ -23,6 +23,8 @@ mod memory_governance;
 mod recursive_reflection;
 #[path = "tests/roundtrip_quant.rs"]
 mod roundtrip_quant;
+#[path = "tests/routing.rs"]
+mod routing;
 #[path = "tests/runtime_adapter.rs"]
 mod runtime_adapter;
 #[path = "tests/runtime_device.rs"]

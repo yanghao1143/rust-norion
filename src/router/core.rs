@@ -1,10 +1,11 @@
 use crate::hierarchy::TaskProfile;
 
+use super::adaptive::AdaptiveRoutingPlanner;
 use super::adjustment::threshold_after_observation;
 use super::scoring::{choose_route, estimate_token_entropy, routing_score, tokenize};
 use super::types::{
-    GenerationMetrics, ProfileObservations, ProfileThresholds, Route, RouteBudget, RouterState,
-    RoutingContext, RoutingDecision,
+    AdaptiveRouteCandidate, AdaptiveRoutingPlan, GenerationMetrics, ProfileObservations,
+    ProfileThresholds, Route, RouteBudget, RouterState, RoutingContext, RoutingDecision,
 };
 
 #[derive(Debug, Clone)]
@@ -139,6 +140,19 @@ impl NoironRouter {
     ) -> RouteBudget {
         let decisions = self.route_prompt_with_context(prompt, context);
         RouteBudget::from_decisions(self.threshold_for(context.profile), &decisions)
+    }
+
+    pub fn adaptive_plan_with_context(
+        &self,
+        context: RoutingContext,
+        candidates: Vec<AdaptiveRouteCandidate>,
+    ) -> AdaptiveRoutingPlan {
+        AdaptiveRoutingPlanner::new().plan(
+            context.profile,
+            self.threshold_for(context.profile),
+            context,
+            candidates,
+        )
     }
 
     pub fn observe(&mut self, metrics: GenerationMetrics) {

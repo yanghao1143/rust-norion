@@ -13,6 +13,7 @@ mod genome;
 mod jsonl;
 mod memory;
 mod required_fields;
+mod routing;
 mod runtime_device;
 mod runtime_kv;
 mod schema_jsonl_gate;
@@ -35,6 +36,7 @@ use memory::{
     evaluate_trace_drift, evaluate_trace_memory_admission, evaluate_trace_memory_feedback,
     evaluate_trace_memory_governance,
 };
+use routing::evaluate_trace_adaptive_routing;
 use specialized::{
     evaluate_business_contract_trace_schema_line, evaluate_rust_check_trace_schema_line,
 };
@@ -79,6 +81,7 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_runtime_device_execution(line));
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
+    failures.extend(evaluate_trace_adaptive_routing(line));
     failures.extend(evaluate_trace_memory_feedback(line));
     failures.extend(evaluate_trace_memory_admission(line));
     failures.extend(evaluate_trace_memory_governance(line));

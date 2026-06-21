@@ -11,6 +11,7 @@ mod live_evidence;
 mod memory_evidence;
 mod reflection_evidence;
 mod roundtrip;
+mod routing_evidence;
 mod runtime_evidence;
 mod summary;
 mod summary_gate;
@@ -32,6 +33,7 @@ pub use roundtrip::{
     PersistentRoundtripDeviceReport, PersistentRoundtripInput, PersistentRoundtripMatrixReport,
     PersistentRoundtripReport,
 };
+pub use routing_evidence::BenchmarkRoutingEvidence;
 pub use runtime_evidence::{
     BenchmarkRuntimeArchitectureEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
 };
