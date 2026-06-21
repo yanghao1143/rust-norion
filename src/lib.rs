@@ -181,7 +181,12 @@ pub use runtime_manifest::{
     RuntimeQuantizationPolicy, TransformerRuntimeArchitecture,
     default_transformer_runtime_architecture,
 };
-pub use rust_validation::{RustSnippetCheck, RustSnippetCheckReport, RustSnippetValidator};
+pub use rust_validation::{
+    RustCodingCommandEvidence, RustCodingRepairCandidateSummary, RustCodingRepairCommandKind,
+    RustCodingRepairDecision, RustCodingRepairFailureClass, RustCodingRepairHarness,
+    RustCodingRepairInput, RustCodingRepairOutcome, RustCodingRepairPolicy, RustCodingRepairReport,
+    RustSnippetCheck, RustSnippetCheckReport, RustSnippetValidator,
+};
 pub use self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionPolicy,
     SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
