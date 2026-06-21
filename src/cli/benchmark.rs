@@ -8,7 +8,7 @@ use rust_norion::{
     ProductionKernelConformanceMatrixReport, ProductionKernelConformanceReport, ReflectionIssue,
     ReflectionSeverity, RewardAction, RouteBudget, RouterThresholdAdjustmentPreviewPlanner,
     RuntimeBackend, RuntimeDiagnostics, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
-    SelfEvolutionAdmissionReport, TaskProfile, default_benchmark_cases,
+    SelfEvolutionAdmissionReport, TaskProfile, default_benchmark_cases, split,
 };
 
 use crate::Args;
@@ -463,7 +463,7 @@ pub(crate) fn benchmark_self_evolution_admission_report(
         metrics,
     );
 
-    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+    let mut evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
         candidate_id,
         summary.evolution_ledger(),
         gate_report,
@@ -471,7 +471,76 @@ pub(crate) fn benchmark_self_evolution_admission_report(
     .with_router_threshold_preview_report(&router_preview)
     .with_hierarchy_adjustment_preview_report(&hierarchy_preview);
 
+    if let Some(kv_policy_preview) = benchmark_kv_fusion_policy_preview(summary) {
+        evidence = evidence.with_kv_fusion_policy_observation_preview_report(&kv_policy_preview);
+    }
+
     SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
+fn benchmark_kv_fusion_policy_preview(
+    summary: &BenchmarkSummary,
+) -> Option<split::bridge::KvFusionPolicyObservationDryRunReport> {
+    let runtime_kv_exported = summary.total_runtime_kv_exported();
+    let runtime_kv_stored = summary.total_runtime_kv_stored();
+    let runtime_kv_imported = summary.total_runtime_kv_imported();
+    let runtime_kv_held = summary.total_runtime_kv_held();
+    let runtime_kv_total = runtime_kv_exported
+        .saturating_add(runtime_kv_stored)
+        .saturating_add(runtime_kv_imported)
+        .saturating_add(runtime_kv_held);
+
+    if runtime_kv_total == 0 {
+        return None;
+    }
+
+    let quality = finite_clamped(summary.average_quality(), 0.0, 1.0);
+    let reward = finite_clamped(summary.average_reward(), 0.0, 1.0);
+    let accepted = quality >= 0.50 && reward >= 0.50;
+    let amount = if accepted {
+        ((quality + reward) * 0.5).clamp(0.05, 1.0)
+    } else {
+        (1.0 - ((quality + reward) * 0.5)).clamp(0.05, 1.0)
+    };
+    let action = if accepted {
+        split::agent::AgentRecallOutcomeAttributionAction::Reinforce
+    } else {
+        split::agent::AgentRecallOutcomeAttributionAction::Penalize
+    };
+    let attribution = split::agent::AgentRecallOutcomeAttribution {
+        task_id: "benchmark_runtime_kv".to_owned(),
+        record_id: format!(
+            "runtime_kv:benchmark:exported={runtime_kv_exported}:stored={runtime_kv_stored}:imported={runtime_kv_imported}:held={runtime_kv_held}"
+        ),
+        source: "runtime_kv".to_owned(),
+        action,
+        amount,
+        reason_codes: vec![
+            format!("runtime_kv_exported={runtime_kv_exported}"),
+            format!("runtime_kv_stored={runtime_kv_stored}"),
+            format!("runtime_kv_imported={runtime_kv_imported}"),
+            format!("runtime_kv_held={runtime_kv_held}"),
+            format!("benchmark_average_quality={quality:.3}"),
+            format!("benchmark_average_reward={reward:.3}"),
+        ],
+    };
+    let recall_report = split::agent::AgentRecallOutcomeAttributionReport {
+        attributions: vec![attribution],
+        reinforced_count: usize::from(accepted),
+        penalized_count: usize::from(!accepted),
+        skipped_rejected_recall_count: 0,
+        skipped_missing_outcome_task_ids: Vec::new(),
+        read_only: true,
+        memory_store_write_allowed: false,
+        telemetry: Vec::new(),
+    };
+    let reward_preview =
+        split::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(&recall_report);
+
+    Some(split::bridge::kv_fusion_reward_policy_observation_dry_run(
+        &reward_preview,
+        split::core::ReinforcedKvFusionPolicy::default(),
+    ))
 }
 
 fn benchmark_admission_generation_metrics(summary: &BenchmarkSummary) -> GenerationMetrics {

@@ -30,6 +30,7 @@ fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
     assert!(report.adaptive_preview_evidence_present);
     assert!(report.router_threshold_preview_ready);
     assert!(report.hierarchy_adjustment_preview_ready);
+    assert!(!report.kv_fusion_policy_observation_preview_ready);
     assert_eq!(report.adaptive_preview_source_count, 2);
     assert!(report.adaptive_preview_read_only);
     assert!(report.adaptive_preview_report_only);

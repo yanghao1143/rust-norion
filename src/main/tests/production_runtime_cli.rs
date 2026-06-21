@@ -616,6 +616,13 @@ fn production_reference_kernel_benchmark_passes_runtime_and_trace_gates() {
 
     let summary = run_benchmark(&mut engine, &mut backend, &trace_path).unwrap();
     let gate_report = summary.evaluate(&args.benchmark_gate());
+    let admission_report = benchmark_self_evolution_admission_report(
+        "benchmark:production-reference",
+        &engine,
+        &summary,
+        &gate_report,
+        args.profile,
+    );
     let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
 
     assert_eq!(summary.len(), 4);
@@ -624,6 +631,16 @@ fn production_reference_kernel_benchmark_passes_runtime_and_trace_gates() {
     assert!(summary.summary_line().contains("runtime_forward_cases=4"));
     assert!(summary.summary_line().contains("runtime_kv_exported="));
     assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert!(admission_report.read_only);
+    assert!(admission_report.report_only);
+    assert!(admission_report.preview_only);
+    assert!(admission_report.kv_fusion_policy_observation_preview_ready);
+    assert_eq!(admission_report.adaptive_preview_source_count, 3);
+    assert!(admission_report.adaptive_preview_read_only);
+    assert!(admission_report.adaptive_preview_report_only);
+    assert!(admission_report.adaptive_preview_preview_only);
+    assert!(!admission_report.adaptive_preview_write_allowed);
+    assert!(!admission_report.adaptive_preview_applied);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert_eq!(trace_report.checked_lines, 4);
     assert!(backend.last_error().is_none());
