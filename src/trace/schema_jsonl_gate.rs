@@ -9,7 +9,7 @@ use super::fields::{
     trace_note_bool,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TraceSchemaGateReport {
     pub passed: bool,
     pub checked_lines: usize,
@@ -46,13 +46,43 @@ pub struct TraceSchemaGateReport {
     pub improvement_corpus_benchmark_passed: usize,
     pub improvement_corpus_privacy_rejected: usize,
     pub improvement_corpus_secret_leaks: usize,
+    pub memory_admission_events: usize,
+    pub memory_admission_candidates: usize,
+    pub memory_admission_ready: usize,
+    pub memory_admission_blocked: usize,
+    pub memory_admission_admitted: usize,
+    pub memory_admission_hold: usize,
+    pub memory_admission_reject: usize,
+    pub memory_admission_quarantine: usize,
+    pub memory_admission_review_packets: usize,
+    pub memory_admission_ledger_records: usize,
+    pub memory_admission_ledger_authorized: usize,
+    pub memory_admission_ledger_applied: usize,
+    pub memory_admission_ledger_preview_only: usize,
+    pub memory_admission_ledger_held: usize,
+    pub memory_admission_ledger_rejected: usize,
+    pub memory_admission_ledger_duplicate: usize,
+    pub memory_admission_ledger_decayed: usize,
+    pub memory_admission_ledger_merged: usize,
+    pub memory_admission_ledger_rollback: usize,
+    pub kv_fusion_events: usize,
+    pub kv_fusion_candidates: usize,
+    pub kv_fusion_fused: usize,
+    pub kv_fusion_compressed: usize,
+    pub kv_fusion_skipped: usize,
+    pub kv_fusion_held: usize,
+    pub kv_fusion_rejected: usize,
+    pub kv_fusion_approval_blocked: usize,
+    pub kv_fusion_input_tokens: usize,
+    pub kv_fusion_retained_tokens: usize,
+    pub kv_fusion_saved_tokens: usize,
     pub failures: Vec<String>,
 }
 
 impl TraceSchemaGateReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -88,7 +118,37 @@ impl TraceSchemaGateReport {
             self.improvement_corpus_test_passed,
             self.improvement_corpus_benchmark_passed,
             self.improvement_corpus_privacy_rejected,
-            self.improvement_corpus_secret_leaks
+            self.improvement_corpus_secret_leaks,
+            self.memory_admission_events,
+            self.memory_admission_candidates,
+            self.memory_admission_ready,
+            self.memory_admission_blocked,
+            self.memory_admission_admitted,
+            self.memory_admission_hold,
+            self.memory_admission_reject,
+            self.memory_admission_quarantine,
+            self.memory_admission_review_packets,
+            self.memory_admission_ledger_records,
+            self.memory_admission_ledger_authorized,
+            self.memory_admission_ledger_applied,
+            self.memory_admission_ledger_preview_only,
+            self.memory_admission_ledger_held,
+            self.memory_admission_ledger_rejected,
+            self.memory_admission_ledger_duplicate,
+            self.memory_admission_ledger_decayed,
+            self.memory_admission_ledger_merged,
+            self.memory_admission_ledger_rollback,
+            self.kv_fusion_events,
+            self.kv_fusion_candidates,
+            self.kv_fusion_fused,
+            self.kv_fusion_compressed,
+            self.kv_fusion_skipped,
+            self.kv_fusion_held,
+            self.kv_fusion_rejected,
+            self.kv_fusion_approval_blocked,
+            self.kv_fusion_input_tokens,
+            self.kv_fusion_retained_tokens,
+            self.kv_fusion_saved_tokens
         )
     }
 }
@@ -129,6 +189,36 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut improvement_corpus_benchmark_passed = 0;
     let mut improvement_corpus_privacy_rejected = 0;
     let mut improvement_corpus_secret_leaks = 0;
+    let mut memory_admission_events = 0;
+    let mut memory_admission_candidates = 0;
+    let mut memory_admission_ready = 0;
+    let mut memory_admission_blocked = 0;
+    let mut memory_admission_admitted = 0;
+    let mut memory_admission_hold = 0;
+    let mut memory_admission_reject = 0;
+    let mut memory_admission_quarantine = 0;
+    let mut memory_admission_review_packets = 0;
+    let mut memory_admission_ledger_records = 0;
+    let mut memory_admission_ledger_authorized = 0;
+    let mut memory_admission_ledger_applied = 0;
+    let mut memory_admission_ledger_preview_only = 0;
+    let mut memory_admission_ledger_held = 0;
+    let mut memory_admission_ledger_rejected = 0;
+    let mut memory_admission_ledger_duplicate = 0;
+    let mut memory_admission_ledger_decayed = 0;
+    let mut memory_admission_ledger_merged = 0;
+    let mut memory_admission_ledger_rollback = 0;
+    let mut kv_fusion_events = 0;
+    let mut kv_fusion_candidates = 0;
+    let mut kv_fusion_fused = 0;
+    let mut kv_fusion_compressed = 0;
+    let mut kv_fusion_skipped = 0;
+    let mut kv_fusion_held = 0;
+    let mut kv_fusion_rejected = 0;
+    let mut kv_fusion_approval_blocked = 0;
+    let mut kv_fusion_input_tokens = 0;
+    let mut kv_fusion_retained_tokens = 0;
+    let mut kv_fusion_saved_tokens = 0;
     let mut failures = Vec::new();
 
     for (index, line) in content.lines().enumerate() {
@@ -182,6 +272,40 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             improvement_corpus_privacy_rejected += summary.privacy_rejected;
             improvement_corpus_secret_leaks += summary.secret_leaks;
         }
+        if let Some(summary) = memory_admission_trace_gate_summary(line) {
+            memory_admission_events += summary.events;
+            memory_admission_candidates += summary.candidates;
+            memory_admission_ready += summary.ready;
+            memory_admission_blocked += summary.blocked;
+            memory_admission_admitted += summary.admitted;
+            memory_admission_hold += summary.hold;
+            memory_admission_reject += summary.reject;
+            memory_admission_quarantine += summary.quarantine;
+            memory_admission_review_packets += summary.review_packets;
+            memory_admission_ledger_records += summary.ledger_records;
+            memory_admission_ledger_authorized += summary.ledger_authorized;
+            memory_admission_ledger_applied += summary.ledger_applied;
+            memory_admission_ledger_preview_only += summary.ledger_preview_only;
+            memory_admission_ledger_held += summary.ledger_held;
+            memory_admission_ledger_rejected += summary.ledger_rejected;
+            memory_admission_ledger_duplicate += summary.ledger_duplicate;
+            memory_admission_ledger_decayed += summary.ledger_decayed;
+            memory_admission_ledger_merged += summary.ledger_merged;
+            memory_admission_ledger_rollback += summary.ledger_rollback;
+        }
+        if let Some(summary) = kv_fusion_trace_gate_summary(line) {
+            kv_fusion_events += summary.events;
+            kv_fusion_candidates += summary.candidates;
+            kv_fusion_fused += summary.fused;
+            kv_fusion_compressed += summary.compressed;
+            kv_fusion_skipped += summary.skipped;
+            kv_fusion_held += summary.held;
+            kv_fusion_rejected += summary.rejected;
+            kv_fusion_approval_blocked += summary.approval_blocked;
+            kv_fusion_input_tokens += summary.input_tokens;
+            kv_fusion_retained_tokens += summary.retained_tokens;
+            kv_fusion_saved_tokens += summary.saved_tokens;
+        }
         failures.extend(
             evaluate_trace_schema_line(line)
                 .into_iter()
@@ -229,6 +353,36 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         improvement_corpus_benchmark_passed,
         improvement_corpus_privacy_rejected,
         improvement_corpus_secret_leaks,
+        memory_admission_events,
+        memory_admission_candidates,
+        memory_admission_ready,
+        memory_admission_blocked,
+        memory_admission_admitted,
+        memory_admission_hold,
+        memory_admission_reject,
+        memory_admission_quarantine,
+        memory_admission_review_packets,
+        memory_admission_ledger_records,
+        memory_admission_ledger_authorized,
+        memory_admission_ledger_applied,
+        memory_admission_ledger_preview_only,
+        memory_admission_ledger_held,
+        memory_admission_ledger_rejected,
+        memory_admission_ledger_duplicate,
+        memory_admission_ledger_decayed,
+        memory_admission_ledger_merged,
+        memory_admission_ledger_rollback,
+        kv_fusion_events,
+        kv_fusion_candidates,
+        kv_fusion_fused,
+        kv_fusion_compressed,
+        kv_fusion_skipped,
+        kv_fusion_held,
+        kv_fusion_rejected,
+        kv_fusion_approval_blocked,
+        kv_fusion_input_tokens,
+        kv_fusion_retained_tokens,
+        kv_fusion_saved_tokens,
         failures,
     })
 }
@@ -442,5 +596,88 @@ fn improvement_corpus_trace_gate_summary(line: &str) -> Option<ImprovementCorpus
         secret_leaks: privacy
             .and_then(|object| extract_json_usize_field(object, "secret_leaks"))
             .unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct MemoryAdmissionTraceGateSummary {
+    events: usize,
+    candidates: usize,
+    ready: usize,
+    blocked: usize,
+    admitted: usize,
+    hold: usize,
+    reject: usize,
+    quarantine: usize,
+    review_packets: usize,
+    ledger_records: usize,
+    ledger_authorized: usize,
+    ledger_applied: usize,
+    ledger_preview_only: usize,
+    ledger_held: usize,
+    ledger_rejected: usize,
+    ledger_duplicate: usize,
+    ledger_decayed: usize,
+    ledger_merged: usize,
+    ledger_rollback: usize,
+}
+
+fn memory_admission_trace_gate_summary(line: &str) -> Option<MemoryAdmissionTraceGateSummary> {
+    let admission = json_object_after_field(line, "memory_admission")?;
+
+    Some(MemoryAdmissionTraceGateSummary {
+        events: 1,
+        candidates: extract_json_usize_field(admission, "candidates").unwrap_or(0),
+        ready: extract_json_usize_field(admission, "ready").unwrap_or(0),
+        blocked: extract_json_usize_field(admission, "blocked").unwrap_or(0),
+        admitted: extract_json_usize_field(admission, "admitted").unwrap_or(0),
+        hold: extract_json_usize_field(admission, "hold").unwrap_or(0),
+        reject: extract_json_usize_field(admission, "reject").unwrap_or(0),
+        quarantine: extract_json_usize_field(admission, "quarantine").unwrap_or(0),
+        review_packets: extract_json_usize_field(admission, "review_packets").unwrap_or(0),
+        ledger_records: extract_json_usize_field(admission, "ledger_records").unwrap_or(0),
+        ledger_authorized: extract_json_usize_field(admission, "ledger_authorized").unwrap_or(0),
+        ledger_applied: extract_json_usize_field(admission, "ledger_applied").unwrap_or(0),
+        ledger_preview_only: extract_json_usize_field(admission, "ledger_preview_only")
+            .unwrap_or(0),
+        ledger_held: extract_json_usize_field(admission, "ledger_held").unwrap_or(0),
+        ledger_rejected: extract_json_usize_field(admission, "ledger_rejected").unwrap_or(0),
+        ledger_duplicate: extract_json_usize_field(admission, "ledger_duplicate").unwrap_or(0),
+        ledger_decayed: extract_json_usize_field(admission, "ledger_decayed").unwrap_or(0),
+        ledger_merged: extract_json_usize_field(admission, "ledger_merged").unwrap_or(0),
+        ledger_rollback: extract_json_usize_field(admission, "ledger_rollback").unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct KvFusionTraceGateSummary {
+    events: usize,
+    candidates: usize,
+    fused: usize,
+    compressed: usize,
+    skipped: usize,
+    held: usize,
+    rejected: usize,
+    approval_blocked: usize,
+    input_tokens: usize,
+    retained_tokens: usize,
+    saved_tokens: usize,
+}
+
+fn kv_fusion_trace_gate_summary(line: &str) -> Option<KvFusionTraceGateSummary> {
+    let fusion = json_object_after_field(line, "kv_fusion")?;
+
+    Some(KvFusionTraceGateSummary {
+        events: 1,
+        candidates: extract_json_usize_field(fusion, "candidates").unwrap_or(0),
+        fused: extract_json_usize_field(fusion, "fused").unwrap_or(0),
+        compressed: extract_json_usize_field(fusion, "compressed").unwrap_or(0),
+        skipped: extract_json_usize_field(fusion, "skipped").unwrap_or(0),
+        held: extract_json_usize_field(fusion, "held").unwrap_or(0),
+        rejected: extract_json_usize_field(fusion, "rejected").unwrap_or(0),
+        approval_blocked: extract_json_usize_field(fusion, "approval_blocked").unwrap_or(0),
+        input_tokens: extract_json_usize_field(fusion, "input_tokens").unwrap_or(0),
+        retained_tokens: extract_json_usize_field(fusion, "retained_tokens").unwrap_or(0),
+        saved_tokens: extract_json_usize_field(fusion, "saved_tokens").unwrap_or(0),
     })
 }

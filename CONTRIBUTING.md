@@ -21,9 +21,9 @@ from the copyright holder.
   prompts, generated files, or assets into this repository.
 - `fortunto2/rust-code` may be used as an MIT-licensed reference. Any code port
   requires explicit attribution and review.
-- `Kuberwastaken/claurst` may be used only for clean-room architecture
-  inspiration unless the project explicitly accepts GPL-3.0 obligations in a
-  written decision.
+- `Kuberwastaken/claurst` may be used only for clean-room architecture inspiration
+  unless the project explicitly accepts GPL-3.0 obligations in a written
+  decision.
 - Do not commit local state, memory databases, `.ndkv` files, model weights,
   credentials, logs, generated `target` directories, or private datasets.
 

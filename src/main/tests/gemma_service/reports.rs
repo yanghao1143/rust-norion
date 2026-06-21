@@ -376,6 +376,7 @@ fn model_service_state_json_includes_gate_evidence() {
         improvement_corpus_privacy_rejected: 0,
         improvement_corpus_secret_leaks: 0,
         failures: Vec::new(),
+        ..TraceSchemaGateReport::default()
     };
 
     let body =
