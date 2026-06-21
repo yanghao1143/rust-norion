@@ -157,10 +157,13 @@ pub use router::{
     RoutingDecision,
 };
 pub use runtime::{
+    ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,
     CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat,
-    MistralRsHttpRuntime, ModelRuntime, RuntimeAdapterObservation, RuntimeBackend,
-    RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
-    RuntimeTokenId, parse_runtime_response_json, runtime_request_json,
+    MistralRsHttpRuntime, MockRustNativeAdapter, ModelRuntime, RuntimeAdapterObservation,
+    RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
+    RuntimeResponse, RuntimeToken, RuntimeTokenId, RustNativeAdapterReport,
+    RustNativeAdapterRequest, RustNativeInferenceAdapter, parse_runtime_response_json,
+    runtime_request_json,
 };
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,
