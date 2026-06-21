@@ -3,6 +3,8 @@ use crate::kv_exchange::RuntimeKvBlock;
 
 use super::model::{GeneScissorsIntent, MutationPlan};
 
+const MAX_SEGMENT_DECAY_AGE: u32 = 16;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneSegmentSource {
     Prompt,
@@ -146,7 +148,9 @@ pub struct GeneSegment {
     pub end_token: usize,
     pub label: String,
     pub purpose: String,
+    pub last_confirmed_purpose: String,
     pub semantic_gist: String,
+    pub age: u32,
     pub kv_residency: GeneKvResidency,
     pub fitness: f32,
     pub drift_score: f32,
@@ -173,7 +177,9 @@ impl GeneSegment {
             end_token,
             label: "unlabelled segment".to_owned(),
             purpose: "carry bounded reasoning evidence".to_owned(),
+            last_confirmed_purpose: "carry bounded reasoning evidence".to_owned(),
             semantic_gist: String::new(),
+            age: 0,
             kv_residency: GeneKvResidency::ColdEvidence,
             fitness: 1.0,
             drift_score: 0.0,
@@ -201,7 +207,21 @@ impl GeneSegment {
     ) -> Self {
         self.label = label.into();
         self.purpose = purpose.into();
+        self.last_confirmed_purpose = self.purpose.clone();
         self.semantic_gist = semantic_gist.into();
+        self
+    }
+
+    pub fn with_age(mut self, age: u32) -> Self {
+        self.age = age;
+        self
+    }
+
+    pub fn with_last_confirmed_purpose(
+        mut self,
+        last_confirmed_purpose: impl Into<String>,
+    ) -> Self {
+        self.last_confirmed_purpose = last_confirmed_purpose.into();
         self
     }
 
@@ -257,8 +277,19 @@ impl GeneSegment {
         self.end_token.saturating_sub(self.start_token)
     }
 
-    pub fn has_stale_label(&self) -> bool {
-        self.label.trim().is_empty() || self.purpose.trim().is_empty()
+    pub fn decay_score(&self) -> f32 {
+        let age_pressure =
+            (self.age.min(MAX_SEGMENT_DECAY_AGE) as f32 / MAX_SEGMENT_DECAY_AGE as f32) * 0.40;
+        let fitness_pressure = (1.0 - clamp_unit(self.fitness)) * 0.35;
+        let drift_pressure = clamp_unit(self.drift_score) * 0.25;
+        clamp_unit(age_pressure + fitness_pressure + drift_pressure)
+    }
+
+    pub fn has_stale_label(&self, max_segment_age: u32) -> bool {
+        self.label.trim().is_empty()
+            || self.purpose.trim().is_empty()
+            || self.last_confirmed_purpose.trim().is_empty()
+            || self.age >= max_segment_age
     }
 }
 
@@ -269,6 +300,7 @@ pub struct DnaSplicerPolicy {
     pub max_exon_privacy_risk: f32,
     pub max_segment_tokens: usize,
     pub max_planned_overlap_tokens: usize,
+    pub max_segment_age: u32,
     pub require_source_hash: bool,
 }
 
@@ -280,6 +312,7 @@ impl Default for DnaSplicerPolicy {
             max_exon_privacy_risk: 0.20,
             max_segment_tokens: 512,
             max_planned_overlap_tokens: 256,
+            max_segment_age: 8,
             require_source_hash: true,
         }
     }
@@ -708,13 +741,13 @@ impl MutDetector {
                     "segment exceeds the splicer token budget and should be re-sliced",
                 ));
             }
-            if segment.has_stale_label() {
+            if segment.has_stale_label(self.policy.max_segment_age) {
                 findings.push(MutationFinding::new(
                     &segment.id,
                     GeneVariantKind::StaleLabel,
                     GeneVariantSeverity::Repair,
                     GeneScissorsIntent::Relabel,
-                    "segment label or purpose is stale and cannot explain its function",
+                    "segment label, purpose, or age metadata is stale and cannot explain its function",
                 ));
             }
             if has_contradictory_metadata(segment) {
@@ -1097,11 +1130,14 @@ fn segment_reason_summary(segment: &ClassifiedGeneSegment) -> String {
     }
 
     format!(
-        "source={} class={} disposition={} tokens={} kv={} hash_present={} findings={}",
+        "source={} class={} disposition={} tokens={} age={} decay={:.3} last_purpose_present={} kv={} hash_present={} findings={}",
         segment.segment.source.as_str(),
         segment.class.as_str(),
         segment.disposition.as_str(),
         segment.segment.token_count(),
+        segment.segment.age,
+        segment.segment.decay_score(),
+        !segment.segment.last_confirmed_purpose.trim().is_empty(),
         segment.segment.kv_residency.as_str(),
         !segment.segment.source_hash.trim().is_empty(),
         finding_kinds.join("|")

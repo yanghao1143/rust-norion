@@ -65,3 +65,8 @@ quarantine, regenerate, rollback, and cut decisions. Each record includes:
 - validation status, rollback anchor, replacement candidate, and tombstone
   candidate IDs
 - `admission_write_authorized = false` and `applied = false` during preview
+
+`GeneSegment` splicing previews also carry age, last-confirmed-purpose, decay,
+fitness, and drift metadata. Old but still useful segments become relabel
+candidates so the system can refresh their purpose tags instead of deleting
+validated experience.

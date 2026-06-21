@@ -676,6 +676,38 @@ fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
 }
 
 #[test]
+fn mut_detector_relabels_aged_segment_with_last_confirmed_purpose() {
+    let detector = MutDetector::default();
+    let segments = vec![
+        GeneSegment::new(
+            "segment:aged-heuristic",
+            TaskProfile::Coding,
+            GeneSegmentSource::SemanticMemory,
+            0,
+            24,
+        )
+        .with_source_hash("sha256:aged")
+        .with_metadata(
+            "compiler repair heuristic",
+            "preserve validated Rust compiler repair strategy",
+            "bounded compiler repair memory",
+        )
+        .with_last_confirmed_purpose("validated Rust compiler repair strategy")
+        .with_age(12)
+        .with_health(0.82, 0.04, 0.01),
+    ];
+
+    let findings = detector.detect(&segments);
+
+    assert!(segments[0].decay_score() > 0.0);
+    assert!(findings.iter().any(|finding| {
+        finding.segment_id == "segment:aged-heuristic"
+            && finding.kind == GeneVariantKind::StaleLabel
+            && finding.suggested_intent == GeneScissorsIntent::Relabel
+    }));
+}
+
+#[test]
 fn mut_detector_reports_contradiction_and_low_fitness_repetition() {
     let detector = MutDetector::default();
     let segments = vec![
