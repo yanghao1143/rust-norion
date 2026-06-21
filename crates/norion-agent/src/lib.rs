@@ -597,10 +597,11 @@ pub use memory::{
 pub use message::{AgentMessage, AgentMessageKind};
 pub use ports::{
     EnginePort, MemoryNote, MemoryPort, MemoryRecord, ToolBuildPort, ToolBuildReceipt,
-    ToolBuildReport, ToolBuildReportDashboard, ToolBuildReportHealth, ToolBuildReportHealthPolicy,
-    ToolBuildReportHealthStatus, ToolBuildReportHistoryGate, ToolBuildReportHistoryGateDecision,
-    ToolBuildReportHistoryGateRecord, ToolBuildReportSummary, ToolBuildReportSummaryHistory,
-    ToolBuildReportSummaryHistoryRecord, ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest,
+    ToolBuildReliabilitySummary, ToolBuildReport, ToolBuildReportDashboard, ToolBuildReportHealth,
+    ToolBuildReportHealthPolicy, ToolBuildReportHealthStatus, ToolBuildReportHistoryGate,
+    ToolBuildReportHistoryGateDecision, ToolBuildReportHistoryGateRecord, ToolBuildReportSummary,
+    ToolBuildReportSummaryHistory, ToolBuildReportSummaryHistoryRecord,
+    ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest,
 };
 pub use reflection::{
     ReflectionEntry, ReflectionError, ReflectionLoop, ReflectionLoopDashboard,
