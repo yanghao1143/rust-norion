@@ -189,6 +189,7 @@ fn gate_reports_missing_reflection_diagnostics_coverage() {
 fn gate_reports_auto_replay_recursive_pressure_failures() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![BenchmarkCaseResult {
             requires_recursion: true,
             recursive_chunks: 4,
@@ -235,6 +236,7 @@ fn gate_reports_auto_replay_recursive_pressure_failures() {
 fn gate_reports_missing_auto_replay_recursive_pressure() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![BenchmarkCaseResult {
             requires_recursion: true,
             recursive_chunks: 4,

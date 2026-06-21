@@ -10,6 +10,7 @@ pub mod gemma_runtime;
 pub mod gist_memory;
 pub mod hardware;
 pub mod hierarchy;
+pub mod improvement_corpus;
 pub mod infini_memory;
 pub mod kv_cache;
 pub mod kv_exchange;
@@ -41,8 +42,9 @@ pub use agent_team::{
 };
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,
-    BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence, BenchmarkRoutingEvidence,
-    BenchmarkSummary, KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
+    BenchmarkImprovementCorpusEvidence, BenchmarkLiveEvolutionEvidence,
+    BenchmarkMemoryGovernanceEvidence, BenchmarkRoutingEvidence, BenchmarkSummary,
+    KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
     KvQuantBenchmarkSummary, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
     PersistentRoundtripMatrixReport, PersistentRoundtripReport, default_benchmark_cases,
 };
@@ -87,6 +89,11 @@ pub use hierarchy::{
     TaskAwareHierarchyInput, TaskAwareHierarchyPlan, TaskAwareHierarchyPlanner, TaskComputeBudget,
     TaskHierarchyMutationKind, TaskHierarchyMutationRecord, TaskHierarchyReplayReport,
     TaskLanguageMode, TaskMode, TaskModeSignals, TaskProfile,
+};
+pub use improvement_corpus::{
+    ImprovementApprovalState, ImprovementCorpus, ImprovementCorpusReport, ImprovementEpisodeClass,
+    ImprovementEpisodeInput, ImprovementEpisodeRecord, ImprovementEvidenceLane,
+    ImprovementPrivacyState, ImprovementValidationStatus,
 };
 pub use infini_memory::{
     InfiniMemoryCounts, InfiniMemoryItem, InfiniMemoryPlan, InfiniMemoryPlanner, InfiniMemoryScope,
@@ -171,11 +178,12 @@ pub use toolsmith::{
     ToolBlueprint, ToolBuildStatus, ToolIntent, ToolsmithInput, ToolsmithPlan, ToolsmithPlanner,
 };
 pub use trace::{
-    TraceSchemaGateReport, append_business_contract_trace_jsonl, append_rust_check_trace_jsonl,
+    TraceSchemaGateReport, append_business_contract_trace_jsonl,
+    append_improvement_corpus_trace_jsonl, append_rust_check_trace_jsonl,
     append_self_evolution_admission_trace_jsonl, append_trace_jsonl, append_trace_jsonl_with_case,
     business_contract_trace_json_line, evaluate_trace_schema_jsonl, evaluate_trace_schema_line,
-    rust_check_trace_json_line, self_evolution_admission_trace_json_line, trace_json_line,
-    trace_json_line_with_case,
+    improvement_corpus_trace_json_line, rust_check_trace_json_line,
+    self_evolution_admission_trace_json_line, trace_json_line, trace_json_line_with_case,
 };
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,

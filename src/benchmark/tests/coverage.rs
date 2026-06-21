@@ -4,6 +4,7 @@ use super::*;
 fn gate_reports_missing_sparse_filtering_coverage() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),
@@ -106,6 +107,7 @@ fn gate_reports_missing_sparse_filtering_coverage() {
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),
@@ -204,6 +206,7 @@ fn gate_reports_missing_device_profile_coverage() {
     };
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),
@@ -236,6 +239,7 @@ fn gate_reports_missing_device_profile_coverage() {
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),
@@ -340,6 +344,7 @@ fn gate_reports_missing_recursive_device_profile_coverage() {
     gate.min_recursive_device_profiles = Some(DeviceClass::explicit_profiles().len());
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),
@@ -373,6 +378,7 @@ fn gate_reports_missing_recursive_device_profile_coverage() {
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),
@@ -415,6 +421,7 @@ fn gate_reports_missing_recursive_device_profile_coverage() {
 fn gate_reports_drift_failures() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         routing_evidence: BenchmarkRoutingEvidence::default(),

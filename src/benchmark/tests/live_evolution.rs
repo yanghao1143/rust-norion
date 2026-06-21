@@ -81,6 +81,7 @@ fn gate_reports_missing_live_evolution_detail_device_profile_coverage() {
         baseline_benchmark_result("live_detail", TaskProfile::General, DeviceClass::CpuOnly);
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence {
             inference_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
@@ -162,6 +163,7 @@ fn gate_reports_missing_live_evolution_detail_device_profile_coverage() {
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence {
             router_threshold_mutation_devices: vec![
                 DeviceClass::CpuOnly,

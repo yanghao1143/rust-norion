@@ -38,13 +38,21 @@ pub struct TraceSchemaGateReport {
     pub self_evolution_admission_review_packets: usize,
     pub self_evolution_admission_evidence_ids: usize,
     pub self_evolution_admission_missing_review_packet_refs: usize,
+    pub improvement_corpus_events: usize,
+    pub improvement_corpus_episodes: usize,
+    pub improvement_corpus_active_adaptation: usize,
+    pub improvement_corpus_compiler_passed: usize,
+    pub improvement_corpus_test_passed: usize,
+    pub improvement_corpus_benchmark_passed: usize,
+    pub improvement_corpus_privacy_rejected: usize,
+    pub improvement_corpus_secret_leaks: usize,
     pub failures: Vec<String>,
 }
 
 impl TraceSchemaGateReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -72,7 +80,15 @@ impl TraceSchemaGateReport {
             self.self_evolution_admission_blocked,
             self.self_evolution_admission_review_packets,
             self.self_evolution_admission_evidence_ids,
-            self.self_evolution_admission_missing_review_packet_refs
+            self.self_evolution_admission_missing_review_packet_refs,
+            self.improvement_corpus_events,
+            self.improvement_corpus_episodes,
+            self.improvement_corpus_active_adaptation,
+            self.improvement_corpus_compiler_passed,
+            self.improvement_corpus_test_passed,
+            self.improvement_corpus_benchmark_passed,
+            self.improvement_corpus_privacy_rejected,
+            self.improvement_corpus_secret_leaks
         )
     }
 }
@@ -105,6 +121,14 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_evolution_admission_review_packets = 0;
     let mut self_evolution_admission_evidence_ids = 0;
     let mut self_evolution_admission_missing_review_packet_refs = 0;
+    let mut improvement_corpus_events = 0;
+    let mut improvement_corpus_episodes = 0;
+    let mut improvement_corpus_active_adaptation = 0;
+    let mut improvement_corpus_compiler_passed = 0;
+    let mut improvement_corpus_test_passed = 0;
+    let mut improvement_corpus_benchmark_passed = 0;
+    let mut improvement_corpus_privacy_rejected = 0;
+    let mut improvement_corpus_secret_leaks = 0;
     let mut failures = Vec::new();
 
     for (index, line) in content.lines().enumerate() {
@@ -148,6 +172,16 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_evolution_admission_missing_review_packet_refs +=
                 summary.missing_review_packet_refs;
         }
+        if let Some(summary) = improvement_corpus_trace_gate_summary(line) {
+            improvement_corpus_events += summary.events;
+            improvement_corpus_episodes += summary.episodes;
+            improvement_corpus_active_adaptation += summary.active_adaptation;
+            improvement_corpus_compiler_passed += summary.compiler_passed;
+            improvement_corpus_test_passed += summary.test_passed;
+            improvement_corpus_benchmark_passed += summary.benchmark_passed;
+            improvement_corpus_privacy_rejected += summary.privacy_rejected;
+            improvement_corpus_secret_leaks += summary.secret_leaks;
+        }
         failures.extend(
             evaluate_trace_schema_line(line)
                 .into_iter()
@@ -187,6 +221,14 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_evolution_admission_review_packets,
         self_evolution_admission_evidence_ids,
         self_evolution_admission_missing_review_packet_refs,
+        improvement_corpus_events,
+        improvement_corpus_episodes,
+        improvement_corpus_active_adaptation,
+        improvement_corpus_compiler_passed,
+        improvement_corpus_test_passed,
+        improvement_corpus_benchmark_passed,
+        improvement_corpus_privacy_rejected,
+        improvement_corpus_secret_leaks,
         failures,
     })
 }
@@ -352,5 +394,53 @@ fn self_evolution_admission_trace_gate_summary(
         review_packets,
         evidence_ids,
         missing_review_packet_refs,
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ImprovementCorpusTraceGateSummary {
+    events: usize,
+    episodes: usize,
+    active_adaptation: usize,
+    compiler_passed: usize,
+    test_passed: usize,
+    benchmark_passed: usize,
+    privacy_rejected: usize,
+    secret_leaks: usize,
+}
+
+fn improvement_corpus_trace_gate_summary(line: &str) -> Option<ImprovementCorpusTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-improvement-corpus-v1\"") {
+        return None;
+    }
+
+    let records = json_object_after_field(line, "records");
+    let active_adaptation = json_object_after_field(line, "active_adaptation");
+    let evidence = json_object_after_field(line, "evidence");
+    let privacy = json_object_after_field(line, "privacy");
+
+    Some(ImprovementCorpusTraceGateSummary {
+        events: 1,
+        episodes: records
+            .and_then(|object| extract_json_usize_field(object, "total"))
+            .unwrap_or(0),
+        active_adaptation: active_adaptation
+            .and_then(|object| extract_json_usize_field(object, "eligible"))
+            .unwrap_or(0),
+        compiler_passed: evidence
+            .and_then(|object| extract_json_usize_field(object, "compiler_passed"))
+            .unwrap_or(0),
+        test_passed: evidence
+            .and_then(|object| extract_json_usize_field(object, "test_passed"))
+            .unwrap_or(0),
+        benchmark_passed: evidence
+            .and_then(|object| extract_json_usize_field(object, "benchmark_passed"))
+            .unwrap_or(0),
+        privacy_rejected: privacy
+            .and_then(|object| extract_json_usize_field(object, "rejected"))
+            .unwrap_or(0),
+        secret_leaks: privacy
+            .and_then(|object| extract_json_usize_field(object, "secret_leaks"))
+            .unwrap_or(0),
     })
 }

@@ -367,6 +367,14 @@ fn model_service_state_json_includes_gate_evidence() {
         self_evolution_admission_review_packets: 0,
         self_evolution_admission_evidence_ids: 0,
         self_evolution_admission_missing_review_packet_refs: 0,
+        improvement_corpus_events: 0,
+        improvement_corpus_episodes: 0,
+        improvement_corpus_active_adaptation: 0,
+        improvement_corpus_compiler_passed: 0,
+        improvement_corpus_test_passed: 0,
+        improvement_corpus_benchmark_passed: 0,
+        improvement_corpus_privacy_rejected: 0,
+        improvement_corpus_secret_leaks: 0,
         failures: Vec::new(),
     };
 

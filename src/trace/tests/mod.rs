@@ -82,6 +82,7 @@ mod adapter;
 mod admission;
 mod core_line;
 mod evolution_replay;
+mod improvement_corpus;
 mod jsonl_gate;
 mod memory_runtime;
 mod runtime_kv;

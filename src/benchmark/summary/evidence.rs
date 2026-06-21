@@ -1,9 +1,10 @@
 use super::super::{
-    BenchmarkEmbeddingEvidence, BenchmarkGenomeEvidence, BenchmarkLiveEvolutionEvidence,
-    BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence,
+    BenchmarkEmbeddingEvidence, BenchmarkGenomeEvidence, BenchmarkImprovementCorpusEvidence,
+    BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence,
     BenchmarkRuntimeDeviceExecutionEvidence,
 };
 use super::BenchmarkSummary;
+use crate::improvement_corpus::ImprovementCorpusReport;
 
 impl BenchmarkSummary {
     pub fn reflection_evidence(&self) -> BenchmarkReflectionEvidence {
@@ -16,6 +17,38 @@ impl BenchmarkSummary {
 
     pub fn genome_evidence(&self) -> BenchmarkGenomeEvidence {
         self.genome_evidence.clone()
+    }
+
+    pub fn record_improvement_corpus_report(&mut self, report: &ImprovementCorpusReport) {
+        self.improvement_corpus_evidence.record_report(report);
+    }
+
+    pub fn improvement_corpus_evidence(&self) -> BenchmarkImprovementCorpusEvidence {
+        self.improvement_corpus_evidence.clone()
+    }
+
+    pub fn improvement_corpus_reports(&self) -> usize {
+        self.improvement_corpus_evidence.reports
+    }
+
+    pub fn improvement_corpus_episodes(&self) -> usize {
+        self.improvement_corpus_evidence.episodes
+    }
+
+    pub fn improvement_corpus_active_adaptation(&self) -> usize {
+        self.improvement_corpus_evidence.active_adaptation
+    }
+
+    pub fn improvement_corpus_compiler_passed(&self) -> u64 {
+        self.improvement_corpus_evidence.compiler_passed
+    }
+
+    pub fn improvement_corpus_test_passed(&self) -> u64 {
+        self.improvement_corpus_evidence.test_passed
+    }
+
+    pub fn improvement_corpus_benchmark_passed(&self) -> u64 {
+        self.improvement_corpus_evidence.benchmark_passed
     }
 
     pub fn reasoning_genome_expression_cases(&self) -> usize {

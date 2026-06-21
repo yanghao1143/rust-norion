@@ -4,6 +4,7 @@ use super::*;
 fn gate_reports_missing_auto_replay_control_plane_coverage() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![BenchmarkCaseResult {
             auto_replay_applied: 1,
             ..baseline_benchmark_result(
@@ -71,6 +72,7 @@ fn gate_reports_missing_auto_replay_control_plane_coverage() {
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![BenchmarkCaseResult {
             auto_replay_router_updates: 1,
             auto_replay_hierarchy_updates: 1,
