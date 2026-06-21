@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io;
+use std::path::Path;
 
 use norion_memory::{
     DefaultMemorySemanticRetriever, MemoryIndexDocument, MemoryIndexSource, MemoryScope,
@@ -10,6 +13,7 @@ use crate::hierarchy::TaskProfile;
 use crate::reasoning_genome::{
     ClassifiedGeneSegment, DnaSplicePreview, GeneSegment, GeneSegmentDisposition,
 };
+use crate::runtime::RuntimeEmbedding;
 use crate::self_evolving_memory::{
     SelfEvolvingEpisodeRecord, SelfEvolvingHeuristicRecord, SelfEvolvingMemoryStore,
     ToolReliabilityRecord,
@@ -17,6 +21,366 @@ use crate::self_evolving_memory::{
 
 const MOCK_EMBEDDING_DIMS: usize = 8;
 const PRIVACY_BLOCK_THRESHOLD: f32 = 0.20;
+const SEMANTIC_VECTOR_CACHE_SCHEMA: &str = "rust-norion-semantic-vector-cache-v1";
+
+pub trait SemanticEmbeddingProvider {
+    fn model_id(&self) -> &str;
+    fn embedding_version(&self) -> &str;
+    fn dimensions(&self) -> usize;
+    fn embed_text(&self, text: &str) -> RuntimeEmbedding;
+
+    fn embed_values(&self, text: &str) -> Vec<f32> {
+        let embedding = self.embed_text(text);
+        embedding.values
+    }
+
+    fn cache_key_for(&self, record: &SemanticIndexRecord) -> SemanticVectorCacheKey {
+        SemanticVectorCacheKey {
+            record_id: record.id.clone(),
+            lane: record.lane,
+            profile: record.profile,
+            tenant_scope: record.tenant_scope.clone(),
+            content_digest: record.content_digest.clone(),
+            model_id: self.model_id().to_owned(),
+            embedding_version: self.embedding_version().to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeterministicSemanticEmbeddingProvider {
+    pub model_id: String,
+    pub embedding_version: String,
+    pub dimensions: usize,
+}
+
+impl DeterministicSemanticEmbeddingProvider {
+    pub fn new(
+        model_id: impl Into<String>,
+        embedding_version: impl Into<String>,
+        dimensions: usize,
+    ) -> Self {
+        Self {
+            model_id: model_id.into(),
+            embedding_version: embedding_version.into(),
+            dimensions: dimensions.max(1),
+        }
+    }
+}
+
+impl Default for DeterministicSemanticEmbeddingProvider {
+    fn default() -> Self {
+        Self::new("deterministic-local-embedding", "v1", MOCK_EMBEDDING_DIMS)
+    }
+}
+
+impl SemanticEmbeddingProvider for DeterministicSemanticEmbeddingProvider {
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn embedding_version(&self) -> &str {
+        &self.embedding_version
+    }
+
+    fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
+    fn embed_text(&self, text: &str) -> RuntimeEmbedding {
+        let mut embedding = vec![0.0_f32; self.dimensions.max(1)];
+        for token in normalized_tokens(text) {
+            let hash = stable_hash(
+                format!("{}:{}:{token}", self.model_id, self.embedding_version).as_bytes(),
+            );
+            let index = hash as usize % embedding.len();
+            embedding[index] += 1.0;
+        }
+        normalize_embedding(&mut embedding);
+        RuntimeEmbedding::new(embedding)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticVectorCacheKey {
+    pub record_id: String,
+    pub lane: SemanticIndexLane,
+    pub profile: TaskProfile,
+    pub tenant_scope: String,
+    pub content_digest: String,
+    pub model_id: String,
+    pub embedding_version: String,
+}
+
+impl SemanticVectorCacheKey {
+    pub fn digest(&self) -> String {
+        stable_digest(&format!(
+            "{}:{}:{}:{}:{}:{}:{}",
+            self.record_id,
+            self.lane.as_str(),
+            profile_slug(self.profile),
+            self.tenant_scope,
+            self.content_digest,
+            self.model_id,
+            self.embedding_version
+        ))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SemanticVectorCacheRecord {
+    pub key: SemanticVectorCacheKey,
+    pub dimensions: usize,
+    pub values: Vec<f32>,
+    pub vector_digest: String,
+    pub redacted: bool,
+}
+
+impl SemanticVectorCacheRecord {
+    pub fn from_record(
+        record: &SemanticIndexRecord,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> Self {
+        let values = provider.embed_values(&record.document.content);
+        let dimensions = values.len();
+        let vector_digest = vector_digest(&values);
+        Self {
+            key: provider.cache_key_for(record),
+            dimensions,
+            values,
+            vector_digest,
+            redacted: true,
+        }
+    }
+
+    pub fn matches_record_provider(
+        &self,
+        record: &SemanticIndexRecord,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> bool {
+        self.key == provider.cache_key_for(record)
+            && self.dimensions == provider.dimensions().max(1)
+            && self.values.len() == self.dimensions
+    }
+
+    pub fn is_stale_for(
+        &self,
+        record: &SemanticIndexRecord,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> bool {
+        !self.matches_record_provider(record, provider)
+    }
+
+    fn serialized_line(&self) -> String {
+        format!(
+            "record\tid={}\tlane={}\tprofile={}\ttenant={}\tcontent_digest={}\tmodel={}\tversion={}\tdimensions={}\tvector_digest={}\tredacted={}\tvalues={}",
+            hex_encode(&self.key.record_id),
+            self.key.lane.as_str(),
+            profile_slug(self.key.profile),
+            hex_encode(&self.key.tenant_scope),
+            hex_encode(&self.key.content_digest),
+            hex_encode(&self.key.model_id),
+            hex_encode(&self.key.embedding_version),
+            self.dimensions,
+            hex_encode(&self.vector_digest),
+            self.redacted,
+            serialize_vector(&self.values)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SemanticVectorCache {
+    records: Vec<SemanticVectorCacheRecord>,
+}
+
+impl SemanticVectorCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn build(
+        index: &SemanticIndex,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> SemanticVectorCacheBuildReport {
+        let mut cache = Self::new();
+        let mut skipped = Vec::new();
+        for record in index.records() {
+            if let Some(reason) = vector_cache_skip_reason(record) {
+                skipped.push(SemanticVectorCacheSkippedRecord {
+                    id: record.id.clone(),
+                    lane: record.lane,
+                    reason: reason.to_owned(),
+                });
+                continue;
+            }
+            cache
+                .records
+                .push(SemanticVectorCacheRecord::from_record(record, provider));
+        }
+        SemanticVectorCacheBuildReport {
+            cached_records: cache.records.len(),
+            skipped,
+            cache,
+            redacted: true,
+            read_only: true,
+            write_allowed: false,
+        }
+    }
+
+    pub fn records(&self) -> &[SemanticVectorCacheRecord] {
+        &self.records
+    }
+
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+
+    pub fn find_for(
+        &self,
+        record: &SemanticIndexRecord,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> Option<&SemanticVectorCacheRecord> {
+        let key = provider.cache_key_for(record);
+        self.records.iter().find(|item| item.key == key)
+    }
+
+    pub fn stale_records_for(
+        &self,
+        index: &SemanticIndex,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> Vec<&SemanticVectorCacheRecord> {
+        let active_keys = index
+            .records()
+            .iter()
+            .map(active_cache_record_key)
+            .collect::<BTreeSet<_>>();
+        self.records
+            .iter()
+            .filter(|item| {
+                let active = active_keys.contains(&active_cache_key(&item.key));
+                active
+                    && (item.key.model_id != provider.model_id()
+                        || item.key.embedding_version != provider.embedding_version()
+                        || item.dimensions != provider.dimensions().max(1))
+            })
+            .collect()
+    }
+
+    pub fn rebuild_digest(&self) -> u64 {
+        let mut lines = self
+            .records
+            .iter()
+            .map(SemanticVectorCacheRecord::serialized_line)
+            .collect::<Vec<_>>();
+        lines.sort();
+        stable_hash(lines.join("\n").as_bytes())
+    }
+
+    pub fn save_to_disk(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        let mut lines = vec![format!(
+            "{}\trecords={}\tread_only=true\twrite_allowed=false\tredacted=true",
+            SEMANTIC_VECTOR_CACHE_SCHEMA,
+            self.records.len()
+        )];
+        lines.extend(
+            self.records
+                .iter()
+                .map(SemanticVectorCacheRecord::serialized_line),
+        );
+        fs::write(path, lines.join("\n"))
+    }
+
+    pub fn load_from_disk(path: impl AsRef<Path>) -> io::Result<Self> {
+        let content = fs::read_to_string(path)?;
+        let mut lines = content.lines();
+        let Some(header) = lines.next() else {
+            return Err(invalid_data("semantic vector cache is empty"));
+        };
+        if !header.starts_with(SEMANTIC_VECTOR_CACHE_SCHEMA) {
+            return Err(invalid_data("semantic vector cache schema mismatch"));
+        }
+        let mut records = Vec::new();
+        for line in lines {
+            if line.trim().is_empty() {
+                continue;
+            }
+            records.push(deserialize_cache_record(line)?);
+        }
+        Ok(Self { records })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticVectorCacheSkippedRecord {
+    pub id: String,
+    pub lane: SemanticIndexLane,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SemanticVectorCacheBuildReport {
+    pub cached_records: usize,
+    pub skipped: Vec<SemanticVectorCacheSkippedRecord>,
+    pub cache: SemanticVectorCache,
+    pub redacted: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+}
+
+impl SemanticVectorCacheBuildReport {
+    pub fn skipped_count_for_reason(&self, reason: &str) -> usize {
+        self.skipped
+            .iter()
+            .filter(|item| item.reason == reason)
+            .count()
+    }
+
+    pub fn skipped_ids_for_reason(&self, reason: &str) -> Vec<String> {
+        self.skipped
+            .iter()
+            .filter(|item| item.reason == reason)
+            .map(|item| item.id.clone())
+            .collect()
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        self.skipped
+            .iter()
+            .map(|item| item.reason.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn evidence_digest(&self) -> String {
+        stable_digest(&format!(
+            "{}:{}:{}:{}",
+            self.cached_records,
+            self.skipped.len(),
+            self.cache.rebuild_digest(),
+            self.reason_codes().join("|")
+        ))
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "semantic_vector_cache_build cached={} skipped={} cache_digest={:016x} reasons={} redacted={} read_only={} write_allowed={} evidence_digest={}",
+            self.cached_records,
+            self.skipped.len(),
+            self.cache.rebuild_digest(),
+            self.reason_codes().join("|"),
+            self.redacted,
+            self.read_only,
+            self.write_allowed,
+            self.evidence_digest()
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SemanticIndexLane {
@@ -393,23 +757,108 @@ impl SemanticIndex {
     }
 
     pub fn rebuild_digest(&self) -> u64 {
-        let documents = self.documents();
+        let documents = self
+            .documents_with_embedding_provider(&DeterministicSemanticEmbeddingProvider::default());
         memory_index_digest(&documents)
     }
 
     pub fn retrieve(&self, query: &SemanticIndexQuery) -> SemanticIndexRetrievalReport {
-        let documents = self.documents();
-        let memory_query = query.to_memory_query();
-        let plan = DefaultMemorySemanticRetriever.retrieve(&documents, &memory_query);
-        SemanticIndexRetrievalReport::from_plan(query, &plan, &self.records)
+        self.retrieve_with_embedding_provider(
+            query,
+            &DeterministicSemanticEmbeddingProvider::default(),
+        )
     }
 
-    fn documents(&self) -> Vec<MemoryIndexDocument> {
+    pub fn retrieve_with_embedding_provider(
+        &self,
+        query: &SemanticIndexQuery,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> SemanticIndexRetrievalReport {
+        let documents = self.documents_with_embedding_provider(provider);
+        let memory_query = query.to_memory_query_with_provider(provider);
+        let plan = DefaultMemorySemanticRetriever.retrieve(&documents, &memory_query);
+        SemanticIndexRetrievalReport::from_plan(query, &plan, &self.records)
+            .with_embedding_backend(provider, 0, 0, 0)
+    }
+
+    pub fn retrieve_with_vector_cache(
+        &self,
+        query: &SemanticIndexQuery,
+        provider: &impl SemanticEmbeddingProvider,
+        cache: &SemanticVectorCache,
+    ) -> SemanticIndexRetrievalReport {
+        let lookup = self.documents_with_vector_cache(provider, cache);
+        let memory_query = query.to_memory_query_with_provider(provider);
+        let plan = DefaultMemorySemanticRetriever.retrieve(&lookup.documents, &memory_query);
+        SemanticIndexRetrievalReport::from_plan(query, &plan, &self.records).with_embedding_backend(
+            provider,
+            lookup.cache_hits,
+            lookup.cache_misses,
+            lookup.stale_vectors,
+        )
+    }
+
+    fn documents_with_embedding_provider(
+        &self,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> Vec<MemoryIndexDocument> {
         self.records
             .iter()
-            .map(|record| record.document.clone())
+            .map(|record| {
+                let mut document = record.document.clone();
+                document.embedding = provider.embed_values(&document.content);
+                annotate_embedding_metadata(&mut document, provider, false);
+                document
+            })
             .collect()
     }
+
+    fn documents_with_vector_cache(
+        &self,
+        provider: &impl SemanticEmbeddingProvider,
+        cache: &SemanticVectorCache,
+    ) -> SemanticVectorCacheLookup {
+        let mut documents = Vec::with_capacity(self.records.len());
+        let mut cache_hits = 0usize;
+        let mut cache_misses = 0usize;
+        let mut stale_vectors = 0usize;
+
+        for record in &self.records {
+            let mut document = record.document.clone();
+            if let Some(cached) = cache.find_for(record, provider) {
+                document.embedding = cached.values.clone();
+                annotate_embedding_metadata(&mut document, provider, true);
+                cache_hits = cache_hits.saturating_add(1);
+            } else {
+                if cache.records.iter().any(|item| {
+                    active_cache_key(&item.key) == active_cache_record_key(record)
+                        && item.is_stale_for(record, provider)
+                }) {
+                    stale_vectors = stale_vectors.saturating_add(1);
+                } else {
+                    cache_misses = cache_misses.saturating_add(1);
+                }
+                document.embedding = provider.embed_values(&document.content);
+                annotate_embedding_metadata(&mut document, provider, false);
+            }
+            documents.push(document);
+        }
+
+        SemanticVectorCacheLookup {
+            documents,
+            cache_hits,
+            cache_misses,
+            stale_vectors,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct SemanticVectorCacheLookup {
+    documents: Vec<MemoryIndexDocument>,
+    cache_hits: usize,
+    cache_misses: usize,
+    stale_vectors: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -467,9 +916,12 @@ impl SemanticIndexQuery {
         self
     }
 
-    fn to_memory_query(&self) -> MemorySemanticQuery {
+    fn to_memory_query_with_provider(
+        &self,
+        provider: &impl SemanticEmbeddingProvider,
+    ) -> MemorySemanticQuery {
         MemorySemanticQuery::new(self.text.clone(), self.record_limit)
-            .with_embedding(mock_embedding(&self.text))
+            .with_embedding(provider.embed_values(&self.text))
             .with_scope(memory_scope(self.profile, &self.tenant_scope))
             .with_token_budget(self.token_budget)
             .with_min_score(self.min_score)
@@ -506,6 +958,11 @@ pub struct SemanticIndexRetrievalReport {
     pub record_count: usize,
     pub matches: Vec<SemanticIndexMatch>,
     pub skipped: Vec<SemanticIndexSkip>,
+    pub embedding_backend: String,
+    pub embedding_version: String,
+    pub vector_cache_hits: usize,
+    pub vector_cache_misses: usize,
+    pub stale_vectors: usize,
     pub redacted: bool,
     pub read_only: bool,
     pub write_allowed: bool,
@@ -566,10 +1023,30 @@ impl SemanticIndexRetrievalReport {
             record_count: records.len(),
             matches,
             skipped,
+            embedding_backend: "unspecified".to_owned(),
+            embedding_version: "unspecified".to_owned(),
+            vector_cache_hits: 0,
+            vector_cache_misses: 0,
+            stale_vectors: 0,
             redacted: true,
             read_only: true,
             write_allowed: false,
         }
+    }
+
+    fn with_embedding_backend(
+        mut self,
+        provider: &impl SemanticEmbeddingProvider,
+        vector_cache_hits: usize,
+        vector_cache_misses: usize,
+        stale_vectors: usize,
+    ) -> Self {
+        self.embedding_backend = provider.model_id().to_owned();
+        self.embedding_version = provider.embedding_version().to_owned();
+        self.vector_cache_hits = vector_cache_hits;
+        self.vector_cache_misses = vector_cache_misses;
+        self.stale_vectors = stale_vectors;
+        self
     }
 
     pub fn matched_ids(&self) -> Vec<String> {
@@ -621,11 +1098,16 @@ impl SemanticIndexRetrievalReport {
 
     pub fn evidence_digest(&self) -> String {
         stable_digest(&format!(
-            "{}:{}:{}:{}:{}:{}",
+            "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
             self.requested_limit,
             self.token_budget,
             self.used_tokens,
             self.source_digest,
+            self.embedding_backend,
+            self.embedding_version,
+            self.vector_cache_hits,
+            self.vector_cache_misses,
+            self.stale_vectors,
             self.matched_ids().join("|"),
             self.reason_codes().join("|")
         ))
@@ -633,12 +1115,17 @@ impl SemanticIndexRetrievalReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "semantic_index_retrieval records={} matches={} skipped={} used_tokens={} source_digest={:016x} lanes={} reasons={} redacted={} read_only={} write_allowed={} evidence_digest={}",
+            "semantic_index_retrieval records={} matches={} skipped={} used_tokens={} source_digest={:016x} embedding_backend={} embedding_version={} vector_cache_hits={} vector_cache_misses={} stale_vectors={} lanes={} reasons={} redacted={} read_only={} write_allowed={} evidence_digest={}",
             self.record_count,
             self.matches.len(),
             self.skipped.len(),
             self.used_tokens,
             self.source_digest,
+            self.embedding_backend,
+            self.embedding_version,
+            self.vector_cache_hits,
+            self.vector_cache_misses,
+            self.stale_vectors,
             self.lane_codes().join("|"),
             self.reason_codes().join("|"),
             self.redacted,
@@ -647,6 +1134,165 @@ impl SemanticIndexRetrievalReport {
             self.evidence_digest()
         )
     }
+}
+
+fn annotate_embedding_metadata(
+    document: &mut MemoryIndexDocument,
+    provider: &impl SemanticEmbeddingProvider,
+    vector_cache_hit: bool,
+) {
+    document.metadata.insert(
+        "embedding_backend".to_owned(),
+        provider.model_id().to_owned(),
+    );
+    document.metadata.insert(
+        "embedding_version".to_owned(),
+        provider.embedding_version().to_owned(),
+    );
+    document.metadata.insert(
+        "embedding_dimensions".to_owned(),
+        provider.dimensions().to_string(),
+    );
+    document
+        .metadata
+        .insert("vector_cache_hit".to_owned(), vector_cache_hit.to_string());
+}
+
+fn active_cache_record_key(record: &SemanticIndexRecord) -> String {
+    format!(
+        "{}:{}:{}:{}:{}",
+        record.id,
+        record.lane.as_str(),
+        profile_slug(record.profile),
+        record.tenant_scope,
+        record.content_digest
+    )
+}
+
+fn active_cache_key(key: &SemanticVectorCacheKey) -> String {
+    format!(
+        "{}:{}:{}:{}:{}",
+        key.record_id,
+        key.lane.as_str(),
+        profile_slug(key.profile),
+        key.tenant_scope,
+        key.content_digest
+    )
+}
+
+fn vector_cache_skip_reason(record: &SemanticIndexRecord) -> Option<&'static str> {
+    if metadata_bool(&record.document.metadata, "privacy_blocked")
+        || record
+            .document
+            .metadata
+            .get("privacy")
+            .is_some_and(|value| value == "blocked")
+    {
+        return Some("privacy_blocked");
+    }
+    if metadata_bool(&record.document.metadata, "quarantined") {
+        return Some("quarantined");
+    }
+    if record.lane == SemanticIndexLane::GeneSegment {
+        match record
+            .document
+            .metadata
+            .get("gene_status")
+            .map(String::as_str)
+        {
+            Some("corrupt") | Some("malignant") => return Some("gene_segment_corrupt"),
+            Some("quarantined") => return Some("gene_segment_quarantined"),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn metadata_bool(metadata: &Metadata, key: &str) -> bool {
+    metadata
+        .get(key)
+        .is_some_and(|value| matches!(value.as_str(), "true" | "1" | "yes"))
+}
+
+fn deserialize_cache_record(line: &str) -> io::Result<SemanticVectorCacheRecord> {
+    if !line.starts_with("record\t") {
+        return Err(invalid_data("semantic vector cache record prefix missing"));
+    }
+    let fields = line
+        .split('\t')
+        .skip(1)
+        .filter_map(|field| field.split_once('='))
+        .map(|(key, value)| (key.to_owned(), value.to_owned()))
+        .collect::<BTreeMap<_, _>>();
+    let record_id = hex_decode(required_field(&fields, "id")?)?;
+    let lane = lane_from_slug(required_field(&fields, "lane")?)?;
+    let profile = profile_from_slug(required_field(&fields, "profile")?)?;
+    let tenant_scope = hex_decode(required_field(&fields, "tenant")?)?;
+    let content_digest = hex_decode(required_field(&fields, "content_digest")?)?;
+    let model_id = hex_decode(required_field(&fields, "model")?)?;
+    let embedding_version = hex_decode(required_field(&fields, "version")?)?;
+    let dimensions = required_field(&fields, "dimensions")?
+        .parse::<usize>()
+        .map_err(|_| invalid_data("semantic vector cache dimensions invalid"))?;
+    let vector_digest_field = hex_decode(required_field(&fields, "vector_digest")?)?;
+    let redacted = required_field(&fields, "redacted")?
+        .parse::<bool>()
+        .map_err(|_| invalid_data("semantic vector cache redacted flag invalid"))?;
+    let values = parse_vector(required_field(&fields, "values")?)?;
+    if dimensions != values.len() {
+        return Err(invalid_data("semantic vector cache dimensions mismatch"));
+    }
+    let computed_digest = vector_digest(&values);
+    if vector_digest_field != computed_digest {
+        return Err(invalid_data("semantic vector cache vector digest mismatch"));
+    }
+    Ok(SemanticVectorCacheRecord {
+        key: SemanticVectorCacheKey {
+            record_id,
+            lane,
+            profile,
+            tenant_scope,
+            content_digest,
+            model_id,
+            embedding_version,
+        },
+        dimensions,
+        values,
+        vector_digest: vector_digest_field,
+        redacted,
+    })
+}
+
+fn required_field<'a>(fields: &'a BTreeMap<String, String>, key: &str) -> io::Result<&'a str> {
+    fields
+        .get(key)
+        .map(String::as_str)
+        .ok_or_else(|| invalid_data(&format!("semantic vector cache missing field {key}")))
+}
+
+fn lane_from_slug(value: &str) -> io::Result<SemanticIndexLane> {
+    match value {
+        "experience" => Ok(SemanticIndexLane::Experience),
+        "episode" => Ok(SemanticIndexLane::Episode),
+        "heuristic" => Ok(SemanticIndexLane::Heuristic),
+        "tool_reliability" => Ok(SemanticIndexLane::ToolReliability),
+        "gene_segment" => Ok(SemanticIndexLane::GeneSegment),
+        _ => Err(invalid_data("semantic vector cache lane invalid")),
+    }
+}
+
+fn profile_from_slug(value: &str) -> io::Result<TaskProfile> {
+    match value {
+        "general" => Ok(TaskProfile::General),
+        "coding" => Ok(TaskProfile::Coding),
+        "writing" => Ok(TaskProfile::Writing),
+        "long_document" => Ok(TaskProfile::LongDocument),
+        _ => Err(invalid_data("semantic vector cache profile invalid")),
+    }
+}
+
+fn invalid_data(message: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.to_owned())
 }
 
 fn find_record<'a>(
@@ -742,22 +1388,20 @@ fn gene_segment_content(segment: &GeneSegment) -> String {
 }
 
 fn mock_embedding(text: &str) -> Vec<f32> {
-    let mut embedding = vec![0.0_f32; MOCK_EMBEDDING_DIMS];
-    for token in normalized_tokens(text) {
-        let index = stable_hash(token.as_bytes()) as usize % MOCK_EMBEDDING_DIMS;
-        embedding[index] += 1.0;
-    }
+    DeterministicSemanticEmbeddingProvider::default().embed_values(text)
+}
+
+fn normalize_embedding(embedding: &mut [f32]) {
     let norm = embedding
         .iter()
         .map(|value| value * value)
         .sum::<f32>()
         .sqrt();
     if norm > 0.0 {
-        for value in &mut embedding {
+        for value in embedding.iter_mut() {
             *value /= norm;
         }
     }
-    embedding
 }
 
 fn normalized_tokens(value: &str) -> Vec<String> {
@@ -809,6 +1453,60 @@ fn format_unit(value: f32) -> String {
 
 fn stable_digest(value: &str) -> String {
     format!("digest:{:016x}", stable_hash(value.as_bytes()))
+}
+
+fn vector_digest(values: &[f32]) -> String {
+    stable_digest(&serialize_vector(values))
+}
+
+fn serialize_vector(values: &[f32]) -> String {
+    values
+        .iter()
+        .map(|value| format!("{:.8}", finite_f32(*value)))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn parse_vector(value: &str) -> io::Result<Vec<f32>> {
+    if value.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    value
+        .split(',')
+        .map(|part| {
+            part.parse::<f32>()
+                .map(finite_f32)
+                .map_err(|_| invalid_data("semantic vector cache vector value invalid"))
+        })
+        .collect()
+}
+
+fn finite_f32(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
+}
+
+fn hex_encode(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn hex_decode(value: &str) -> io::Result<String> {
+    if value.len() % 2 != 0 {
+        return Err(invalid_data("hex field has odd length"));
+    }
+    let mut bytes = Vec::with_capacity(value.len() / 2);
+    let chars = value.as_bytes();
+    for index in (0..chars.len()).step_by(2) {
+        let pair = std::str::from_utf8(&chars[index..index + 2])
+            .map_err(|_| invalid_data("hex field utf8 invalid"))?;
+        let byte =
+            u8::from_str_radix(pair, 16).map_err(|_| invalid_data("hex field byte invalid"))?;
+        bytes.push(byte);
+    }
+    String::from_utf8(bytes).map_err(|_| invalid_data("hex decoded string invalid"))
 }
 
 fn stable_hash(bytes: &[u8]) -> u64 {
@@ -896,6 +1594,8 @@ mod tests {
 
         assert_eq!(index.len(), 3);
         assert!(report.matches.len() >= 2);
+        assert_eq!(report.embedding_backend, "deterministic-local-embedding");
+        assert_eq!(report.vector_cache_hits, 0);
         assert!(report.lane_codes().contains(&"episode".to_owned()));
         assert!(report.lane_codes().contains(&"heuristic".to_owned()));
         assert!(report.redacted);
@@ -1099,6 +1799,139 @@ mod tests {
         assert!(!report.evidence_digest().is_empty());
     }
 
+    #[test]
+    fn semantic_vector_cache_builds_digest_addressed_redacted_disk_records() {
+        let first = retained_gene("cache-left", 0, "local vector cache runtime router");
+        let second = retained_gene("cache-right", 1, "local vector cache runtime adapter");
+        let mut index = SemanticIndex::new();
+        index.push_record(SemanticIndexRecord::from_gene_segment(&first));
+        index.push_record(SemanticIndexRecord::from_gene_segment(&second));
+        let provider = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v1", 8);
+
+        let build = SemanticVectorCache::build(&index, &provider);
+        let path = temp_path("semantic-vector-cache");
+        build.cache.save_to_disk(&path).unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let loaded = SemanticVectorCache::load_from_disk(&path).unwrap();
+        cleanup(path);
+
+        assert_eq!(build.cached_records, 2);
+        assert!(build.skipped.is_empty());
+        assert!(build.redacted);
+        assert!(!build.write_allowed);
+        assert_eq!(build.cache.rebuild_digest(), loaded.rebuild_digest());
+        assert_eq!(build.cache.records()[0].key.tenant_scope, "tenant-a");
+        assert!(
+            build.cache.records()[0]
+                .key
+                .content_digest
+                .starts_with("digest:")
+        );
+        assert_eq!(build.cache.records()[0].key.model_id, "local-test-embed");
+        assert_eq!(build.cache.records()[0].key.embedding_version, "v1");
+        assert!(!raw.contains("local vector cache runtime router"));
+        assert!(build.summary_line().contains("write_allowed=false"));
+    }
+
+    #[test]
+    fn semantic_vector_cache_retrieval_uses_hits_and_detects_stale_versions() {
+        let first = retained_gene("cache-hit-a", 0, "adapter vector cache ranking");
+        let second = retained_gene("cache-hit-b", 0, "adapter vector cache fallback");
+        let mut index = SemanticIndex::new();
+        index.push_record(SemanticIndexRecord::from_gene_segment(&first));
+        index.push_record(SemanticIndexRecord::from_gene_segment(&second));
+        let v1 = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v1", 8);
+        let v2 = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v2", 8);
+        let cache = SemanticVectorCache::build(&index, &v1).cache;
+
+        let hit_report = index.retrieve_with_vector_cache(
+            &SemanticIndexQuery::new("adapter vector cache", TaskProfile::Coding, "tenant-a")
+                .with_record_limit(2)
+                .with_token_budget(128),
+            &v1,
+            &cache,
+        );
+        let stale_report = index.retrieve_with_vector_cache(
+            &SemanticIndexQuery::new("adapter vector cache", TaskProfile::Coding, "tenant-a")
+                .with_record_limit(2)
+                .with_token_budget(128),
+            &v2,
+            &cache,
+        );
+
+        assert_eq!(hit_report.vector_cache_hits, 2);
+        assert_eq!(hit_report.vector_cache_misses, 0);
+        assert_eq!(hit_report.stale_vectors, 0);
+        assert_eq!(hit_report.embedding_version, "v1");
+        assert_eq!(stale_report.vector_cache_hits, 0);
+        assert_eq!(stale_report.stale_vectors, 2);
+        assert_eq!(stale_report.vector_cache_misses, 0);
+        assert_eq!(stale_report.embedding_version, "v2");
+        assert_eq!(cache.stale_records_for(&index, &v2).len(), 2);
+        assert!(stale_report.used_tokens <= 128);
+    }
+
+    #[test]
+    fn semantic_vector_cache_skips_privacy_and_corrupt_records() {
+        let active = retained_gene("cache-active", 0, "splice repair cache safe anchor");
+        let private = classified_gene(
+            GeneSegment::new(
+                "cache-private",
+                TaskProfile::Coding,
+                GeneSegmentSource::SemanticMemory,
+                0,
+                16,
+            )
+            .with_scope("tenant-a")
+            .with_source_hash("sha256:cache-private")
+            .with_metadata(
+                "cache private anchor",
+                "private memory anchor",
+                "cache private anchor",
+            )
+            .with_health(0.9, 0.1, 0.95),
+            GeneSegmentDisposition::Retained,
+        );
+        let corrupt = classified_gene(
+            GeneSegment::new(
+                "cache-corrupt",
+                TaskProfile::Coding,
+                GeneSegmentSource::SemanticMemory,
+                0,
+                16,
+            )
+            .with_scope("tenant-a")
+            .with_source_hash("sha256:cache-corrupt")
+            .with_metadata(
+                "cache corrupt anchor",
+                "repair candidate",
+                "cache corrupt anchor",
+            )
+            .with_schema(false, true),
+            GeneSegmentDisposition::RepairCandidate,
+        );
+        let mut index = SemanticIndex::new();
+        index.push_record(SemanticIndexRecord::from_gene_segment(&active));
+        index.push_record(SemanticIndexRecord::from_gene_segment(&private));
+        index.push_record(SemanticIndexRecord::from_gene_segment(&corrupt));
+
+        let build =
+            SemanticVectorCache::build(&index, &DeterministicSemanticEmbeddingProvider::default());
+
+        assert_eq!(build.cached_records, 1);
+        assert_eq!(
+            build.skipped_ids_for_reason("privacy_blocked"),
+            vec!["cache-private".to_owned()]
+        );
+        assert_eq!(
+            build.skipped_ids_for_reason("gene_segment_corrupt"),
+            vec!["cache-corrupt".to_owned()]
+        );
+        assert_eq!(build.skipped_count_for_reason("privacy_blocked"), 1);
+        assert_eq!(build.skipped_count_for_reason("gene_segment_corrupt"), 1);
+        assert!(build.summary_line().contains("redacted=true"));
+    }
+
     fn approval() -> SelfEvolvingMemoryApproval {
         SelfEvolvingMemoryApproval::approved("rollback:semantic-index", vec!["cargo:test".into()])
     }
@@ -1131,5 +1964,20 @@ mod tests {
             disposition,
             reasons: Vec::new(),
         }
+    }
+
+    fn temp_path(label: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-{label}-{}-{nanos}.svcache",
+            std::process::id()
+        ))
+    }
+
+    fn cleanup(path: std::path::PathBuf) {
+        let _ = std::fs::remove_file(path);
     }
 }

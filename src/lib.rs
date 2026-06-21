@@ -202,8 +202,11 @@ pub use self_evolving_memory::{
     ToolReliabilityRecord,
 };
 pub use semantic_index::{
-    SemanticIndex, SemanticIndexLane, SemanticIndexMatch, SemanticIndexQuery, SemanticIndexRecord,
-    SemanticIndexRetrievalReport, SemanticIndexSkip,
+    DeterministicSemanticEmbeddingProvider, SemanticEmbeddingProvider, SemanticIndex,
+    SemanticIndexLane, SemanticIndexMatch, SemanticIndexQuery, SemanticIndexRecord,
+    SemanticIndexRetrievalReport, SemanticIndexSkip, SemanticVectorCache,
+    SemanticVectorCacheBuildReport, SemanticVectorCacheKey, SemanticVectorCacheRecord,
+    SemanticVectorCacheSkippedRecord,
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
