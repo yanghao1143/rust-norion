@@ -3,6 +3,7 @@ use std::fs;
 
 const TRACE_FLOAT_EPSILON: f32 = 0.000_001;
 mod adapter;
+mod admission;
 mod device_contract;
 mod embedding;
 mod evolution;
@@ -16,6 +17,7 @@ mod schema_jsonl_gate;
 mod specialized;
 
 use adapter::evaluate_trace_adapter_observations;
+use admission::evaluate_self_evolution_admission_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
@@ -53,6 +55,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-business-contract-v1\"") {
         failures.extend(evaluate_business_contract_trace_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\"") {
+        failures.extend(evaluate_self_evolution_admission_schema_line(line));
         return failures;
     }
 

@@ -31,13 +31,16 @@ pub struct TraceSchemaGateReport {
     pub business_contract_event_canonical_fallbacks: usize,
     pub runtime_error_events: usize,
     pub runtime_timeout_events: usize,
+    pub self_evolution_admission_events: usize,
+    pub self_evolution_admission_admitted: usize,
+    pub self_evolution_admission_blocked: usize,
     pub failures: Vec<String>,
 }
 
 impl TraceSchemaGateReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -59,7 +62,10 @@ impl TraceSchemaGateReport {
             self.business_contract_event_sanitized,
             self.business_contract_event_canonical_fallbacks,
             self.runtime_error_events,
-            self.runtime_timeout_events
+            self.runtime_timeout_events,
+            self.self_evolution_admission_events,
+            self.self_evolution_admission_admitted,
+            self.self_evolution_admission_blocked
         )
     }
 }
@@ -86,6 +92,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut business_contract_event_canonical_fallbacks = 0;
     let mut runtime_error_events = 0;
     let mut runtime_timeout_events = 0;
+    let mut self_evolution_admission_events = 0;
+    let mut self_evolution_admission_admitted = 0;
+    let mut self_evolution_admission_blocked = 0;
     let mut failures = Vec::new();
 
     for (index, line) in content.lines().enumerate() {
@@ -120,6 +129,11 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             runtime_error_events += summary.events;
             runtime_timeout_events += summary.timeouts;
         }
+        if let Some(summary) = self_evolution_admission_trace_gate_summary(line) {
+            self_evolution_admission_events += summary.events;
+            self_evolution_admission_admitted += summary.admitted;
+            self_evolution_admission_blocked += summary.blocked;
+        }
         failures.extend(
             evaluate_trace_schema_line(line)
                 .into_iter()
@@ -153,6 +167,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         business_contract_event_canonical_fallbacks,
         runtime_error_events,
         runtime_timeout_events,
+        self_evolution_admission_events,
+        self_evolution_admission_admitted,
+        self_evolution_admission_blocked,
         failures,
     })
 }
@@ -277,4 +294,30 @@ fn runtime_error_trace_gate_summary(line: &str) -> Option<RuntimeErrorTraceGateS
     }
 
     (summary.events > 0).then_some(summary)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionAdmissionTraceGateSummary {
+    events: usize,
+    admitted: usize,
+    blocked: usize,
+}
+
+fn self_evolution_admission_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionAdmissionTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\"") {
+        return None;
+    }
+
+    let admitted = extract_json_bool_field(line, "admitted_for_human_review").unwrap_or(false);
+    let blocked_reasons = extract_json_string_array_field(line, "blocked_reasons")
+        .map(|reasons| reasons.len())
+        .unwrap_or(0);
+
+    Some(SelfEvolutionAdmissionTraceGateSummary {
+        events: 1,
+        admitted: usize::from(admitted),
+        blocked: usize::from(!admitted || blocked_reasons > 0),
+    })
 }

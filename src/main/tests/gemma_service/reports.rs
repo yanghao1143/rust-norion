@@ -361,6 +361,9 @@ fn model_service_state_json_includes_gate_evidence() {
         business_contract_event_canonical_fallbacks: 0,
         runtime_error_events: 0,
         runtime_timeout_events: 0,
+        self_evolution_admission_events: 0,
+        self_evolution_admission_admitted: 0,
+        self_evolution_admission_blocked: 0,
         failures: Vec::new(),
     };
 
