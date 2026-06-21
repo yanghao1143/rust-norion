@@ -221,11 +221,13 @@ pub use trace::{
     TraceSchemaGateReport, append_business_contract_trace_jsonl,
     append_improvement_corpus_trace_jsonl, append_rust_check_trace_jsonl,
     append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
+    append_self_evolution_operator_approval_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
     append_self_evolution_rollback_replay_trace_jsonl, append_trace_jsonl,
     append_trace_jsonl_with_case, business_contract_trace_json_line, evaluate_trace_schema_jsonl,
     evaluate_trace_schema_line, improvement_corpus_trace_json_line, rust_check_trace_json_line,
     self_evolution_admission_trace_json_line, self_evolution_experiment_trace_json_line,
+    self_evolution_operator_approval_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
     self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
 };

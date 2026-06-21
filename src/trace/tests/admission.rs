@@ -37,7 +37,7 @@ fn admitted_self_evolution_admission_line() -> String {
     report.json_line()
 }
 
-fn operator_approval_trace_line(approved: bool) -> String {
+fn operator_approval_trace_report(approved: bool) -> SelfEvolutionOperatorApprovalReport {
     let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
         NoironRouter::new().state(),
         TaskProfile::Coding,
@@ -89,7 +89,11 @@ fn operator_approval_trace_line(approved: bool) -> String {
         .evaluate(&replay_gate.review_packet, &approval_evidence);
 
     assert_eq!(approval.operator_approved, approved);
-    approval.json_line()
+    approval
+}
+
+fn operator_approval_trace_line(approved: bool) -> String {
+    operator_approval_trace_report(approved).json_line()
 }
 
 #[test]
@@ -184,6 +188,33 @@ fn self_evolution_operator_approval_trace_schema_accepts_redacted_hold() {
     assert!(!line.contains("\"blocked_reasons\":["));
     assert!(!line.contains("operator-approval-ticket"));
     assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn self_evolution_operator_approval_trace_append_is_gate_consumable() {
+    let approval = operator_approval_trace_report(true);
+    let path = temp_path("self-evolution-operator-approval-trace-append");
+
+    crate::append_self_evolution_operator_approval_trace_jsonl(&path, &approval).unwrap();
+    let gate = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(gate.passed, "{:?}", gate.failures);
+    assert_eq!(gate.checked_lines, 1);
+    assert_eq!(gate.self_evolution_operator_approval_events, 1);
+    assert_eq!(gate.self_evolution_operator_approval_approved, 1);
+    assert_eq!(gate.self_evolution_operator_approval_held, 0);
+    assert_eq!(gate.self_evolution_operator_approval_review_packets, 1);
+    assert!(gate.self_evolution_operator_approval_evidence_ids > 0);
+    assert!(gate.self_evolution_operator_approval_rollback_anchor_ids > 0);
+    assert!(gate.self_evolution_operator_approval_content_digests > 0);
+    assert!(gate.self_evolution_operator_approval_source_report_schemas > 0);
+    assert_eq!(
+        gate.self_evolution_operator_approval_missing_review_packet_refs,
+        0
+    );
+    assert_eq!(gate.self_evolution_operator_approval_write_allowed, 0);
+    assert_eq!(gate.self_evolution_operator_approval_applied, 0);
+    cleanup(path);
 }
 
 #[test]
