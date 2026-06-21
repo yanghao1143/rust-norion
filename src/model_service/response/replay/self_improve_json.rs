@@ -58,6 +58,9 @@ struct SelfImproveGateSummary {
     self_evolution_admission_human_approval_required: bool,
     self_evolution_admission_blocked: bool,
     self_evolution_admission_blocked_reasons: usize,
+    self_evolution_admission_trace_events: usize,
+    self_evolution_admission_trace_admitted: usize,
+    self_evolution_admission_trace_blocked: usize,
 }
 
 impl SelfImproveGateSummary {
@@ -77,6 +80,15 @@ impl SelfImproveGateSummary {
         let trace_gate_passed = trace_gate_report
             .map(|report| report.passed)
             .unwrap_or(true);
+        let self_evolution_admission_trace_events = trace_gate_report
+            .map(|report| report.self_evolution_admission_events)
+            .unwrap_or(0);
+        let self_evolution_admission_trace_admitted = trace_gate_report
+            .map(|report| report.self_evolution_admission_admitted)
+            .unwrap_or(0);
+        let self_evolution_admission_trace_blocked = trace_gate_report
+            .map(|report| report.self_evolution_admission_blocked)
+            .unwrap_or(0);
 
         Self {
             passed: replay_passed && state_gate_passed && trace_gate_passed,
@@ -102,13 +114,16 @@ impl SelfImproveGateSummary {
             self_evolution_admission_blocked_reasons: self_evolution_admission_report
                 .blocked_reasons
                 .len(),
+            self_evolution_admission_trace_events,
+            self_evolution_admission_trace_admitted,
+            self_evolution_admission_trace_blocked,
         }
     }
 }
 
 fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
     format!(
-        "{{\"passed\":{},\"replay_passed\":{},\"replay_planned\":{},\"replay_applied\":{},\"state_gate_checked\":{},\"state_gate_passed\":{},\"trace_gate_checked\":{},\"trace_gate_passed\":{},\"state_gate\":{},\"business_gate\":{},\"business_cycle_gate\":{},\"model_service_gate\":{},\"self_evolution_admission_checked\":{},\"self_evolution_admission_admitted_for_human_review\":{},\"self_evolution_admission_human_approval_required\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_blocked_reasons\":{}}}",
+        "{{\"passed\":{},\"replay_passed\":{},\"replay_planned\":{},\"replay_applied\":{},\"state_gate_checked\":{},\"state_gate_passed\":{},\"trace_gate_checked\":{},\"trace_gate_passed\":{},\"state_gate\":{},\"business_gate\":{},\"business_cycle_gate\":{},\"model_service_gate\":{},\"self_evolution_admission_checked\":{},\"self_evolution_admission_admitted_for_human_review\":{},\"self_evolution_admission_human_approval_required\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_blocked_reasons\":{},\"self_evolution_admission_trace_events\":{},\"self_evolution_admission_trace_admitted\":{},\"self_evolution_admission_trace_blocked\":{}}}",
         summary.passed,
         summary.replay_passed,
         summary.replay_planned,
@@ -125,13 +140,16 @@ fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
         summary.self_evolution_admission_admitted_for_human_review,
         summary.self_evolution_admission_human_approval_required,
         summary.self_evolution_admission_blocked,
-        summary.self_evolution_admission_blocked_reasons
+        summary.self_evolution_admission_blocked_reasons,
+        summary.self_evolution_admission_trace_events,
+        summary.self_evolution_admission_trace_admitted,
+        summary.self_evolution_admission_trace_blocked
     )
 }
 
 fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> String {
     format!(
-        "{{\"candidate_id\":{},\"summary\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"policy_valid\":{},\"mutation_write_allowed\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"model_weight_write_allowed\":{},\"git_write_allowed\":{},\"human_approval_required\":{},\"admitted_for_human_review\":{},\"rust_validation_passed\":{},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"benchmark_gate_passed\":{},\"benchmark_gate_failures\":{},\"rollback_budget_clean\":{},\"adaptive_preview_evidence_present\":{},\"adaptive_preview_source_count\":{},\"adaptive_preview_read_only\":{},\"adaptive_preview_report_only\":{},\"adaptive_preview_preview_only\":{},\"adaptive_preview_write_allowed\":{},\"adaptive_preview_applied\":{},\"blocked_reasons\":{},\"telemetry\":{}}}",
+        "{{\"candidate_id\":{},\"summary\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"policy_valid\":{},\"mutation_write_allowed\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"model_weight_write_allowed\":{},\"git_write_allowed\":{},\"human_approval_required\":{},\"admitted_for_human_review\":{},\"rust_validation_passed\":{},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"benchmark_gate_passed\":{},\"benchmark_gate_failures\":{},\"rollback_budget_clean\":{},\"drift_rollbacks\":{},\"rollback_router_threshold_delta\":{:.6},\"rollback_hierarchy_weight_delta\":{:.6},\"adaptive_preview_evidence_present\":{},\"adaptive_preview_source_count\":{},\"adaptive_preview_readiness\":{{\"router_threshold_preview_ready\":{},\"hierarchy_adjustment_preview_ready\":{},\"kv_fusion_policy_observation_preview_ready\":{},\"blocked_reasons\":{}}},\"adaptive_preview_read_only\":{},\"adaptive_preview_report_only\":{},\"adaptive_preview_preview_only\":{},\"adaptive_preview_write_allowed\":{},\"adaptive_preview_applied\":{},\"blocked_reasons\":{},\"telemetry\":{}}}",
         service_json_string(&report.candidate_id),
         service_json_string(&report.summary_line()),
         report.read_only,
@@ -152,8 +170,15 @@ fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> Strin
         report.benchmark_gate_passed,
         service_json_string_array(&report.benchmark_gate_failures),
         report.rollback_budget_clean,
+        report.drift_rollbacks,
+        report.rollback_router_threshold_delta,
+        report.rollback_hierarchy_weight_delta,
         report.adaptive_preview_evidence_present,
         report.adaptive_preview_source_count,
+        report.router_threshold_preview_ready,
+        report.hierarchy_adjustment_preview_ready,
+        report.kv_fusion_policy_observation_preview_ready,
+        service_json_string_array(&report.adaptive_preview_blocked_reasons),
         report.adaptive_preview_read_only,
         report.adaptive_preview_report_only,
         report.adaptive_preview_preview_only,
@@ -167,6 +192,7 @@ fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model_service::request::ModelServiceInspectRequest;
 
     #[test]
     fn self_improve_summary_json_renders_gate_outcome() {
@@ -188,6 +214,9 @@ mod tests {
             self_evolution_admission_human_approval_required: true,
             self_evolution_admission_blocked: true,
             self_evolution_admission_blocked_reasons: 2,
+            self_evolution_admission_trace_events: 2,
+            self_evolution_admission_trace_admitted: 1,
+            self_evolution_admission_trace_blocked: 1,
         });
 
         assert!(json.contains("\"passed\":true"));
@@ -197,6 +226,9 @@ mod tests {
         assert!(json.contains("\"business_gate\":false"));
         assert!(json.contains("\"self_evolution_admission_checked\":true"));
         assert!(json.contains("\"self_evolution_admission_blocked_reasons\":2"));
+        assert!(json.contains("\"self_evolution_admission_trace_events\":2"));
+        assert!(json.contains("\"self_evolution_admission_trace_admitted\":1"));
+        assert!(json.contains("\"self_evolution_admission_trace_blocked\":1"));
     }
 
     #[test]
@@ -219,6 +251,9 @@ mod tests {
             self_evolution_admission_human_approval_required: true,
             self_evolution_admission_blocked: true,
             self_evolution_admission_blocked_reasons: 1,
+            self_evolution_admission_trace_events: 0,
+            self_evolution_admission_trace_admitted: 0,
+            self_evolution_admission_trace_blocked: 0,
         });
 
         assert!(json.contains("\"passed\":false"));
@@ -226,11 +261,98 @@ mod tests {
         assert!(json.contains("\"replay_applied\":0"));
         assert!(json.contains("\"trace_gate_checked\":false"));
         assert!(json.contains("\"self_evolution_admission_blocked\":true"));
+        assert!(json.contains("\"self_evolution_admission_trace_events\":0"));
+    }
+
+    #[test]
+    fn self_improve_summary_from_reports_records_trace_admission_counts() {
+        let request = ModelServiceSelfImproveRequest {
+            limit: 2,
+            inspect: ModelServiceInspectRequest {
+                trace_gate: Some(true),
+                ..ModelServiceInspectRequest::default()
+            },
+        };
+        let replay = ExperienceReplayReport {
+            planned: 2,
+            applied: 1,
+            ..ExperienceReplayReport::default()
+        };
+        let trace_gate = TraceSchemaGateReport {
+            passed: true,
+            checked_lines: 5,
+            rust_check_events: 0,
+            rust_check_passed: 0,
+            rust_check_failed: 0,
+            rust_check_feedback_updates: 0,
+            rust_check_feedback_applied: 0,
+            business_contract_events: 0,
+            business_contract_event_passed: 0,
+            business_contract_event_failed: 0,
+            business_contract_event_missing_signals: 0,
+            business_contract_event_protocol_leaks: 0,
+            business_contract_event_substitutions: 0,
+            business_contract_event_evasive_denials: 0,
+            business_contract_event_raw_passed: 0,
+            business_contract_event_raw_failed: 0,
+            business_contract_event_response_normalized: 0,
+            business_contract_event_sanitized: 0,
+            business_contract_event_canonical_fallbacks: 0,
+            runtime_error_events: 0,
+            runtime_timeout_events: 0,
+            self_evolution_admission_events: 3,
+            self_evolution_admission_admitted: 2,
+            self_evolution_admission_blocked: 1,
+            failures: Vec::new(),
+        };
+        let admission = blocked_admission_report();
+
+        let summary = SelfImproveGateSummary::from_reports(
+            &request,
+            &replay,
+            None,
+            Some(&trace_gate),
+            &admission,
+        );
+
+        assert!(summary.passed);
+        assert_eq!(summary.self_evolution_admission_trace_events, 3);
+        assert_eq!(summary.self_evolution_admission_trace_admitted, 2);
+        assert_eq!(summary.self_evolution_admission_trace_blocked, 1);
     }
 
     #[test]
     fn self_evolution_admission_json_exposes_read_only_review_boundary() {
-        let report = SelfEvolutionAdmissionReport {
+        let report = blocked_admission_report();
+
+        let json = self_evolution_admission_json(&report);
+
+        assert!(json.contains("\"candidate_id\":\"service-candidate\""));
+        assert!(json.contains("\"read_only\":true"));
+        assert!(json.contains("\"report_only\":true"));
+        assert!(json.contains("\"preview_only\":true"));
+        assert!(json.contains("\"memory_store_write_allowed\":false"));
+        assert!(json.contains("\"ndkv_write_allowed\":false"));
+        assert!(json.contains("\"model_weight_write_allowed\":false"));
+        assert!(json.contains("\"admitted_for_human_review\":false"));
+        assert!(json.contains("\"benchmark_gate_passed\":false"));
+        assert!(json.contains("\"drift_rollbacks\":1"));
+        assert!(json.contains("\"rollback_router_threshold_delta\":0.125000"));
+        assert!(json.contains("\"rollback_hierarchy_weight_delta\":0.250000"));
+        assert!(json.contains("\"adaptive_preview_readiness\":{"));
+        assert!(json.contains("\"router_threshold_preview_ready\":false"));
+        assert!(json.contains("\"hierarchy_adjustment_preview_ready\":true"));
+        assert!(json.contains("\"kv_fusion_policy_observation_preview_ready\":false"));
+        assert!(json.contains("hierarchy_preview_ready_but_kv_policy_missing"));
+        assert!(json.contains("self_evolution_admission_benchmark_gate_failed"));
+        assert!(json.contains("self_evolution_admission_adaptive_preview_evidence_missing"));
+        assert!(
+            json.contains("self_evolution_admission_model_service_benchmark_gate_evidence_missing")
+        );
+    }
+
+    fn blocked_admission_report() -> SelfEvolutionAdmissionReport {
+        SelfEvolutionAdmissionReport {
             candidate_id: "service-candidate".to_owned(),
             read_only: true,
             report_only: true,
@@ -252,12 +374,12 @@ mod tests {
                 "self_evolution_admission_model_service_benchmark_gate_evidence_missing".to_owned(),
             ],
             rollback_budget_clean: true,
-            drift_rollbacks: 0,
-            rollback_router_threshold_delta: 0.0,
-            rollback_hierarchy_weight_delta: 0.0,
+            drift_rollbacks: 1,
+            rollback_router_threshold_delta: 0.125,
+            rollback_hierarchy_weight_delta: 0.25,
             adaptive_preview_evidence_present: false,
             router_threshold_preview_ready: false,
-            hierarchy_adjustment_preview_ready: false,
+            hierarchy_adjustment_preview_ready: true,
             kv_fusion_policy_observation_preview_ready: false,
             adaptive_preview_source_count: 0,
             adaptive_preview_read_only: true,
@@ -265,29 +387,14 @@ mod tests {
             adaptive_preview_preview_only: true,
             adaptive_preview_write_allowed: false,
             adaptive_preview_applied: false,
-            adaptive_preview_blocked_reasons: Vec::new(),
+            adaptive_preview_blocked_reasons: vec![
+                "hierarchy_preview_ready_but_kv_policy_missing".to_owned(),
+            ],
             blocked_reasons: vec![
                 "self_evolution_admission_benchmark_gate_failed".to_owned(),
                 "self_evolution_admission_adaptive_preview_evidence_missing".to_owned(),
             ],
             telemetry: vec!["self_evolution_admission=true".to_owned()],
-        };
-
-        let json = self_evolution_admission_json(&report);
-
-        assert!(json.contains("\"candidate_id\":\"service-candidate\""));
-        assert!(json.contains("\"read_only\":true"));
-        assert!(json.contains("\"report_only\":true"));
-        assert!(json.contains("\"preview_only\":true"));
-        assert!(json.contains("\"memory_store_write_allowed\":false"));
-        assert!(json.contains("\"ndkv_write_allowed\":false"));
-        assert!(json.contains("\"model_weight_write_allowed\":false"));
-        assert!(json.contains("\"admitted_for_human_review\":false"));
-        assert!(json.contains("\"benchmark_gate_passed\":false"));
-        assert!(json.contains("self_evolution_admission_benchmark_gate_failed"));
-        assert!(json.contains("self_evolution_admission_adaptive_preview_evidence_missing"));
-        assert!(
-            json.contains("self_evolution_admission_model_service_benchmark_gate_evidence_missing")
-        );
+        }
     }
 }
