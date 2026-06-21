@@ -172,9 +172,28 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 report.self_evolution_rollback_replay_apply_write_allowed,
                 report.self_evolution_rollback_replay_apply_applied,
             );
-            json.replacen(
+            let json = json.replacen(
                 "\"improvement_corpus_events\"",
                 &format!("{apply_fields},\"improvement_corpus_events\""),
+                1,
+            );
+            let operator_approval_counters = format!(
+                "\"self_evolution_operator_approval_counters\":{{\"events\":{},\"approved\":{},\"held\":{},\"review_packets\":{},\"evidence_ids\":{},\"rollback_anchor_ids\":{},\"content_digests\":{},\"source_report_schemas\":{},\"missing_review_packet_refs\":{},\"write_allowed\":{},\"applied\":{}}}",
+                report.self_evolution_operator_approval_events,
+                report.self_evolution_operator_approval_approved,
+                report.self_evolution_operator_approval_held,
+                report.self_evolution_operator_approval_review_packets,
+                report.self_evolution_operator_approval_evidence_ids,
+                report.self_evolution_operator_approval_rollback_anchor_ids,
+                report.self_evolution_operator_approval_content_digests,
+                report.self_evolution_operator_approval_source_report_schemas,
+                report.self_evolution_operator_approval_missing_review_packet_refs,
+                report.self_evolution_operator_approval_write_allowed,
+                report.self_evolution_operator_approval_applied,
+            );
+            json.replacen(
+                "\"summary\"",
+                &format!("{operator_approval_counters},\"summary\""),
                 1,
             )
         })
@@ -443,5 +462,42 @@ mod tests {
         assert!(json.contains("task_hierarchy_mutation_records=4"));
         assert!(json.contains("memory_admission_ledger_records=3"));
         assert!(json.contains("kv_fusion_saved_tokens=100"));
+    }
+
+    #[test]
+    fn trace_gate_service_json_exposes_operator_approval_counter_object() {
+        let report = TraceSchemaGateReport {
+            passed: true,
+            checked_lines: 2,
+            self_evolution_operator_approval_events: 2,
+            self_evolution_operator_approval_approved: 1,
+            self_evolution_operator_approval_held: 1,
+            self_evolution_operator_approval_review_packets: 3,
+            self_evolution_operator_approval_evidence_ids: 4,
+            self_evolution_operator_approval_rollback_anchor_ids: 5,
+            self_evolution_operator_approval_content_digests: 6,
+            self_evolution_operator_approval_source_report_schemas: 2,
+            self_evolution_operator_approval_missing_review_packet_refs: 1,
+            self_evolution_operator_approval_write_allowed: 0,
+            self_evolution_operator_approval_applied: 0,
+            failures: Vec::new(),
+            ..TraceSchemaGateReport::default()
+        };
+
+        let json = option_trace_gate_service_json(Some(&report));
+
+        assert!(json.contains("\"self_evolution_operator_approval_counters\":{"));
+        assert!(json.contains("\"events\":2"));
+        assert!(json.contains("\"approved\":1"));
+        assert!(json.contains("\"held\":1"));
+        assert!(json.contains("\"review_packets\":3"));
+        assert!(json.contains("\"evidence_ids\":4"));
+        assert!(json.contains("\"rollback_anchor_ids\":5"));
+        assert!(json.contains("\"content_digests\":6"));
+        assert!(json.contains("\"source_report_schemas\":2"));
+        assert!(json.contains("\"missing_review_packet_refs\":1"));
+        assert!(json.contains("\"write_allowed\":0"));
+        assert!(json.contains("\"applied\":0"));
+        assert!(json.contains("\"summary\":"));
     }
 }
