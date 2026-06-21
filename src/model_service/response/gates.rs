@@ -18,7 +18,7 @@ pub(super) fn option_state_gate_service_json(report: Option<&StateInspectionGate
 pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateReport>) -> String {
     report
         .map(|report| {
-            format!(
+            let json = format!(
                 "{{\"passed\":{},\"checked_lines\":{},\"rust_check_events\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_feedback_updates\":{},\"rust_check_feedback_applied\":{},\"business_contract_events\":{},\"business_contract_event_passed\":{},\"business_contract_event_failed\":{},\"business_contract_event_missing_signals\":{},\"business_contract_event_protocol_leaks\":{},\"business_contract_event_substitutions\":{},\"business_contract_event_evasive_denials\":{},\"business_contract_event_raw_passed\":{},\"business_contract_event_raw_failed\":{},\"business_contract_event_response_normalized\":{},\"business_contract_event_sanitized\":{},\"business_contract_event_canonical_fallbacks\":{},\"runtime_error_events\":{},\"runtime_timeout_events\":{},\"self_evolution_admission_events\":{},\"self_evolution_admission_admitted\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_review_packets\":{},\"self_evolution_admission_evidence_ids\":{},\"self_evolution_admission_missing_review_packet_refs\":{},\"self_evolution_experiment_events\":{},\"self_evolution_experiment_admit\":{},\"self_evolution_experiment_hold\":{},\"self_evolution_experiment_reject\":{},\"self_evolution_experiment_rollback\":{},\"self_evolution_experiment_repeated\":{},\"self_evolution_experiment_conflicts\":{},\"self_evolution_experiment_rollback_replayable\":{},\"self_evolution_experiment_active_candidates\":{},\"self_evolution_experiment_write_allowed\":{},\"self_evolution_experiment_applied\":{},\"self_evolution_rollback_replay_events\":{},\"self_evolution_rollback_replay_items\":{},\"self_evolution_rollback_replay_replayable\":{},\"self_evolution_rollback_replay_blocked\":{},\"self_evolution_rollback_replay_all_replayable\":{},\"self_evolution_rollback_replay_rollback_anchor_ids\":{},\"self_evolution_rollback_replay_evidence_ids\":{},\"self_evolution_rollback_replay_active_candidates\":{},\"self_evolution_rollback_replay_item_write_allowed\":{},\"self_evolution_rollback_replay_item_applied\":{},\"self_evolution_rollback_replay_write_allowed\":{},\"self_evolution_rollback_replay_applied\":{},\"self_evolution_rollback_replay_gate_events\":{},\"self_evolution_rollback_replay_gate_admitted\":{},\"self_evolution_rollback_replay_gate_held\":{},\"self_evolution_rollback_replay_gate_review_packets\":{},\"self_evolution_rollback_replay_gate_review_evidence_ids\":{},\"self_evolution_rollback_replay_gate_missing_review_packet_refs\":{},\"self_evolution_rollback_replay_gate_items\":{},\"self_evolution_rollback_replay_gate_replayable\":{},\"self_evolution_rollback_replay_gate_blocked\":{},\"self_evolution_rollback_replay_gate_all_replayable\":{},\"self_evolution_rollback_replay_gate_rollback_anchor_ids\":{},\"self_evolution_rollback_replay_gate_evidence_ids\":{},\"self_evolution_rollback_replay_gate_active_candidates\":{},\"self_evolution_rollback_replay_gate_item_write_allowed\":{},\"self_evolution_rollback_replay_gate_item_applied\":{},\"self_evolution_rollback_replay_gate_plan_write_allowed\":{},\"self_evolution_rollback_replay_gate_plan_applied\":{},\"self_evolution_rollback_replay_gate_write_allowed\":{},\"self_evolution_rollback_replay_gate_applied\":{},\"self_evolution_operator_approval_events\":{},\"self_evolution_operator_approval_approved\":{},\"self_evolution_operator_approval_held\":{},\"self_evolution_operator_approval_review_packets\":{},\"self_evolution_operator_approval_evidence_ids\":{},\"self_evolution_operator_approval_rollback_anchor_ids\":{},\"self_evolution_operator_approval_content_digests\":{},\"self_evolution_operator_approval_source_report_schemas\":{},\"self_evolution_operator_approval_missing_review_packet_refs\":{},\"self_evolution_operator_approval_write_allowed\":{},\"self_evolution_operator_approval_applied\":{},\"improvement_corpus_events\":{},\"improvement_corpus_episodes\":{},\"improvement_corpus_active_adaptation\":{},\"improvement_corpus_compiler_passed\":{},\"improvement_corpus_test_passed\":{},\"improvement_corpus_benchmark_passed\":{},\"improvement_corpus_privacy_rejected\":{},\"improvement_corpus_secret_leaks\":{},\"adaptive_routing_events\":{},\"adaptive_routing_candidates\":{},\"adaptive_routing_include\":{},\"adaptive_routing_compress\":{},\"adaptive_routing_defer\":{},\"adaptive_routing_skip\":{},\"adaptive_routing_input_tokens\":{},\"adaptive_routing_retained_tokens\":{},\"adaptive_routing_saved_tokens\":{},\"task_hierarchy_events\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_route_pressure_milli\":{},\"task_hierarchy_compute_reduction_milli\":{},\"memory_admission_events\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_admitted\":{},\"memory_admission_hold\":{},\"memory_admission_reject\":{},\"memory_admission_quarantine\":{},\"memory_admission_review_packets\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_held\":{},\"memory_admission_ledger_rejected\":{},\"memory_admission_ledger_duplicate\":{},\"memory_admission_ledger_decayed\":{},\"memory_admission_ledger_merged\":{},\"memory_admission_ledger_rollback\":{},\"kv_fusion_events\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"summary\":{},\"failures\":{}}}",
                 report.passed,
                 report.checked_lines,
@@ -153,6 +153,29 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 report.kv_fusion_saved_tokens,
                 service_json_string(&report.summary_line()),
                 service_json_string_array(&report.failures)
+            );
+            let apply_fields = format!(
+                "\"self_evolution_rollback_replay_apply_events\":{},\"self_evolution_rollback_replay_apply_ready\":{},\"self_evolution_rollback_replay_apply_held\":{},\"self_evolution_rollback_replay_apply_items\":{},\"self_evolution_rollback_replay_apply_replayable\":{},\"self_evolution_rollback_replay_apply_blocked\":{},\"self_evolution_rollback_replay_apply_review_packets\":{},\"self_evolution_rollback_replay_apply_evidence_ids\":{},\"self_evolution_rollback_replay_apply_rollback_anchor_ids\":{},\"self_evolution_rollback_replay_apply_content_digests\":{},\"self_evolution_rollback_replay_apply_source_report_schemas\":{},\"self_evolution_rollback_replay_apply_missing_refs\":{},\"self_evolution_rollback_replay_apply_blocked_reasons\":{},\"self_evolution_rollback_replay_apply_write_allowed\":{},\"self_evolution_rollback_replay_apply_applied\":{}",
+                report.self_evolution_rollback_replay_apply_events,
+                report.self_evolution_rollback_replay_apply_ready,
+                report.self_evolution_rollback_replay_apply_held,
+                report.self_evolution_rollback_replay_apply_items,
+                report.self_evolution_rollback_replay_apply_replayable,
+                report.self_evolution_rollback_replay_apply_blocked,
+                report.self_evolution_rollback_replay_apply_review_packets,
+                report.self_evolution_rollback_replay_apply_evidence_ids,
+                report.self_evolution_rollback_replay_apply_rollback_anchor_ids,
+                report.self_evolution_rollback_replay_apply_content_digests,
+                report.self_evolution_rollback_replay_apply_source_report_schemas,
+                report.self_evolution_rollback_replay_apply_missing_refs,
+                report.self_evolution_rollback_replay_apply_blocked_reasons,
+                report.self_evolution_rollback_replay_apply_write_allowed,
+                report.self_evolution_rollback_replay_apply_applied,
+            );
+            json.replacen(
+                "\"improvement_corpus_events\"",
+                &format!("{apply_fields},\"improvement_corpus_events\""),
+                1,
             )
         })
         .unwrap_or_else(|| "null".to_owned())
@@ -245,6 +268,21 @@ mod tests {
             self_evolution_operator_approval_missing_review_packet_refs: 0,
             self_evolution_operator_approval_write_allowed: 0,
             self_evolution_operator_approval_applied: 0,
+            self_evolution_rollback_replay_apply_events: 2,
+            self_evolution_rollback_replay_apply_ready: 1,
+            self_evolution_rollback_replay_apply_held: 1,
+            self_evolution_rollback_replay_apply_items: 2,
+            self_evolution_rollback_replay_apply_replayable: 2,
+            self_evolution_rollback_replay_apply_blocked: 0,
+            self_evolution_rollback_replay_apply_review_packets: 2,
+            self_evolution_rollback_replay_apply_evidence_ids: 4,
+            self_evolution_rollback_replay_apply_rollback_anchor_ids: 4,
+            self_evolution_rollback_replay_apply_content_digests: 6,
+            self_evolution_rollback_replay_apply_source_report_schemas: 4,
+            self_evolution_rollback_replay_apply_missing_refs: 0,
+            self_evolution_rollback_replay_apply_blocked_reasons: 1,
+            self_evolution_rollback_replay_apply_write_allowed: 0,
+            self_evolution_rollback_replay_apply_applied: 0,
             improvement_corpus_events: 0,
             improvement_corpus_episodes: 0,
             improvement_corpus_active_adaptation: 0,
@@ -358,6 +396,21 @@ mod tests {
         assert!(json.contains("\"self_evolution_operator_approval_missing_review_packet_refs\":0"));
         assert!(json.contains("\"self_evolution_operator_approval_write_allowed\":0"));
         assert!(json.contains("\"self_evolution_operator_approval_applied\":0"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_events\":2"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_ready\":1"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_held\":1"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_items\":2"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_replayable\":2"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_blocked\":0"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_review_packets\":2"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_evidence_ids\":4"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_rollback_anchor_ids\":4"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_content_digests\":6"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_source_report_schemas\":4"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_missing_refs\":0"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_blocked_reasons\":1"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_write_allowed\":0"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_applied\":0"));
         assert!(json.contains("\"improvement_corpus_events\":0"));
         assert!(json.contains("\"adaptive_routing_events\":2"));
         assert!(json.contains("\"adaptive_routing_candidates\":5"));
@@ -384,6 +437,8 @@ mod tests {
         assert!(json.contains("self_evolution_operator_approval_events=2"));
         assert!(json.contains("self_evolution_operator_approval_held=1"));
         assert!(json.contains("self_evolution_operator_approval_review_packets=2"));
+        assert!(json.contains("self_evolution_rollback_replay_apply_events=2"));
+        assert!(json.contains("self_evolution_rollback_replay_apply_ready=1"));
         assert!(json.contains("adaptive_routing_candidates=5"));
         assert!(json.contains("task_hierarchy_mutation_records=4"));
         assert!(json.contains("memory_admission_ledger_records=3"));

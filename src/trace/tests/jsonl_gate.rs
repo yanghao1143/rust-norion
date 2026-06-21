@@ -524,6 +524,93 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_operator_approvals() {
     cleanup(path);
 }
 
+#[test]
+fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_apply_preflights() {
+    let path = temp_path("trace-schema-self-evolution-rollback-replay-apply");
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    ledger.append_admission_report(
+        "experiment-rollback",
+        &self_evolution_experiment_rollback_report("candidate-rollback"),
+    );
+    let plan = ledger.rollback_replay_plan();
+    let replay_gate = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+    let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+        "maintainer-jy",
+        "approval-ticket-apply-jsonl",
+        &replay_gate.review_packet,
+        "approved for rollback replay apply trace aggregation",
+    );
+    let approved =
+        SelfEvolutionOperatorApprovalGate::new().evaluate(&replay_gate.review_packet, &evidence);
+    let ready = SelfEvolutionRollbackReplayApplyGate::new().evaluate(&replay_gate, &approved);
+    let mut held_evidence = evidence.clone();
+    held_evidence.approval_ticket_id.clear();
+    let held_approval = SelfEvolutionOperatorApprovalGate::new()
+        .evaluate(&replay_gate.review_packet, &held_evidence);
+    let held = SelfEvolutionRollbackReplayApplyGate::new().evaluate(&replay_gate, &held_approval);
+
+    append_self_evolution_rollback_replay_apply_trace_jsonl(&path, &ready).unwrap();
+    append_self_evolution_rollback_replay_apply_trace_jsonl(&path, &held).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 2);
+    assert_eq!(report.self_evolution_rollback_replay_apply_events, 2);
+    assert_eq!(report.self_evolution_rollback_replay_apply_ready, 1);
+    assert_eq!(report.self_evolution_rollback_replay_apply_held, 1);
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_items,
+        ready.item_count * 2
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_replayable,
+        ready.replayable * 2
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_blocked,
+        ready.blocked + held.blocked
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_review_packets,
+        ready.review_packet_count + held.review_packet_count
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_evidence_ids,
+        ready.evidence_id_count + held.evidence_id_count
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_rollback_anchor_ids,
+        ready.rollback_anchor_count + held.rollback_anchor_count
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_content_digests,
+        ready.content_digest_count + held.content_digest_count
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_source_report_schemas,
+        ready.source_report_schema_count + held.source_report_schema_count
+    );
+    assert_eq!(report.self_evolution_rollback_replay_apply_missing_refs, 0);
+    assert_eq!(
+        report.self_evolution_rollback_replay_apply_blocked_reasons,
+        held.blocked_reasons.len()
+    );
+    assert_eq!(report.self_evolution_rollback_replay_apply_write_allowed, 0);
+    assert_eq!(report.self_evolution_rollback_replay_apply_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_apply_events=2")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_apply_ready=1")
+    );
+    cleanup(path);
+}
+
 fn self_evolution_experiment_passing_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
     let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
         NoironRouter::new().state(),

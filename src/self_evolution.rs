@@ -2449,6 +2449,61 @@ impl SelfEvolutionRollbackReplayApplyReport {
         )
     }
 
+    pub fn json_line(&self) -> String {
+        let blocked_reasons_digest = self_evolution_json_escape(&self.blocked_reasons_digest());
+        let content_digest = self_evolution_json_escape(&self.content_digest);
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-rollback-replay-apply-v1\",\
+             \"decision\":\"{}\",\
+             \"ready_for_operator_apply\":{},\
+             \"explicit_apply_required\":{},\
+             \"rollback_gate_admitted_for_human_review\":{},\
+             \"operator_approved\":{},\
+             \"item_count\":{},\
+             \"replayable\":{},\
+             \"blocked\":{},\
+             \"review_packet_count\":{},\
+             \"evidence_id_count\":{},\
+             \"rollback_anchor_count\":{},\
+             \"content_digest_count\":{},\
+             \"source_report_schema_count\":{},\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"activation_write_allowed\":{},\
+             \"active_candidate\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"blocked_reasons_count\":{},\
+             \"blocked_reasons_digest\":\"{blocked_reasons_digest}\",\
+             \"content_digest\":\"{content_digest}\"\
+             }}",
+            self.decision.as_str(),
+            self.ready_for_operator_apply,
+            self.explicit_apply_required,
+            self.rollback_gate_admitted_for_human_review,
+            self.operator_approved,
+            self.item_count,
+            self.replayable,
+            self.blocked,
+            self.review_packet_count,
+            self.evidence_id_count,
+            self.rollback_anchor_count,
+            self.content_digest_count,
+            self.source_report_schema_count,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.activation_write_allowed,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+            self.blocked_reasons.len(),
+        )
+    }
+
     pub fn is_read_only_preflight(&self) -> bool {
         self.read_only
             && self.report_only
@@ -2457,6 +2512,10 @@ impl SelfEvolutionRollbackReplayApplyReport {
             && !self.active_candidate
             && !self.write_allowed
             && !self.applied
+    }
+
+    fn blocked_reasons_digest(&self) -> String {
+        self_evolution_stable_digest(&format!("blocked_reasons={:?}", self.blocked_reasons))
     }
 }
 

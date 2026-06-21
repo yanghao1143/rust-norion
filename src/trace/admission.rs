@@ -960,6 +960,220 @@ pub(super) fn evaluate_self_evolution_operator_approval_schema_line(line: &str) 
     failures
 }
 
+pub(super) fn evaluate_self_evolution_rollback_replay_apply_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolution-rollback-replay-apply-v1\"",
+        ),
+        ("decision", "\"decision\":"),
+        ("ready_for_operator_apply", "\"ready_for_operator_apply\":"),
+        ("explicit_apply_required", "\"explicit_apply_required\":"),
+        (
+            "rollback_gate_admitted_for_human_review",
+            "\"rollback_gate_admitted_for_human_review\":",
+        ),
+        ("operator_approved", "\"operator_approved\":"),
+        ("item_count", "\"item_count\":"),
+        ("replayable", "\"replayable\":"),
+        ("blocked", "\"blocked\":"),
+        ("review_packet_count", "\"review_packet_count\":"),
+        ("evidence_id_count", "\"evidence_id_count\":"),
+        ("rollback_anchor_count", "\"rollback_anchor_count\":"),
+        ("content_digest_count", "\"content_digest_count\":"),
+        (
+            "source_report_schema_count",
+            "\"source_report_schema_count\":",
+        ),
+        ("read_only", "\"read_only\":"),
+        ("report_only", "\"report_only\":"),
+        ("preview_only", "\"preview_only\":"),
+        ("activation_write_allowed", "\"activation_write_allowed\":"),
+        ("active_candidate", "\"active_candidate\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("blocked_reasons_count", "\"blocked_reasons_count\":"),
+        ("blocked_reasons_digest", "\"blocked_reasons_digest\":"),
+        ("content_digest", "\"content_digest\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_evolution_rollback_replay_apply field {name}"
+            ));
+        }
+    }
+
+    for raw_array in [
+        "approval_review_packet_ids",
+        "evidence_ids",
+        "rollback_anchor_ids",
+        "content_digests",
+        "source_report_schemas",
+        "blocked_reasons",
+    ] {
+        if line.contains(&format!("\"{raw_array}\":[")) {
+            failures.push(format!(
+                "self_evolution_rollback_replay_apply must expose {raw_array} as count/digest only"
+            ));
+        }
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "report_only",
+        true,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "preview_only",
+        true,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "explicit_apply_required",
+        true,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "activation_write_allowed",
+        false,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "active_candidate",
+        false,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_evolution_rollback_replay_apply",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_evolution_rollback_replay_apply",
+    );
+
+    for field in ["blocked_reasons_digest", "content_digest"] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if !value.starts_with("fnv64:") {
+            failures.push(format!(
+                "self_evolution_rollback_replay_apply {field} must be stable fnv64"
+            ));
+        }
+    }
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    let ready_for_operator_apply =
+        extract_json_bool_field(line, "ready_for_operator_apply").unwrap_or(false);
+    let rollback_gate_admitted =
+        extract_json_bool_field(line, "rollback_gate_admitted_for_human_review").unwrap_or(false);
+    let operator_approved = extract_json_bool_field(line, "operator_approved").unwrap_or(false);
+    let item_count = extract_json_usize_field(line, "item_count").unwrap_or(0);
+    let replayable = extract_json_usize_field(line, "replayable").unwrap_or(0);
+    let blocked = extract_json_usize_field(line, "blocked").unwrap_or(0);
+    let review_packet_count = extract_json_usize_field(line, "review_packet_count").unwrap_or(0);
+    let evidence_id_count = extract_json_usize_field(line, "evidence_id_count").unwrap_or(0);
+    let rollback_anchor_count =
+        extract_json_usize_field(line, "rollback_anchor_count").unwrap_or(0);
+    let content_digest_count = extract_json_usize_field(line, "content_digest_count").unwrap_or(0);
+    let source_report_schema_count =
+        extract_json_usize_field(line, "source_report_schema_count").unwrap_or(0);
+    let blocked_reasons_count =
+        extract_json_usize_field(line, "blocked_reasons_count").unwrap_or(0);
+
+    if replayable.saturating_add(blocked) != item_count {
+        failures.push(format!(
+            "self_evolution_rollback_replay_apply replayable+blocked {} does not match item_count {item_count}",
+            replayable.saturating_add(blocked)
+        ));
+    }
+
+    match decision.as_str() {
+        "ready_for_operator_apply" => {
+            if !ready_for_operator_apply {
+                failures.push(
+                    "self_evolution_rollback_replay_apply ready decision requires ready_for_operator_apply=true"
+                        .to_owned(),
+                );
+            }
+            if !rollback_gate_admitted || !operator_approved {
+                failures.push(
+                    "self_evolution_rollback_replay_apply ready decision requires admitted gate and approved operator"
+                        .to_owned(),
+                );
+            }
+            if item_count == 0 || replayable != item_count || blocked != 0 {
+                failures.push(
+                    "self_evolution_rollback_replay_apply ready decision requires a non-empty all-replayable plan"
+                        .to_owned(),
+                );
+            }
+            for (field, count) in [
+                ("review_packet_count", review_packet_count),
+                ("evidence_id_count", evidence_id_count),
+                ("rollback_anchor_count", rollback_anchor_count),
+                ("content_digest_count", content_digest_count),
+                ("source_report_schema_count", source_report_schema_count),
+            ] {
+                if count == 0 {
+                    failures.push(format!(
+                        "self_evolution_rollback_replay_apply ready decision requires {field}>0"
+                    ));
+                }
+            }
+            if blocked_reasons_count != 0 {
+                failures.push(
+                    "self_evolution_rollback_replay_apply ready decision must not have blocked reasons"
+                        .to_owned(),
+                );
+            }
+        }
+        "hold" => {
+            if ready_for_operator_apply {
+                failures.push(
+                    "self_evolution_rollback_replay_apply hold decision requires ready_for_operator_apply=false"
+                        .to_owned(),
+                );
+            }
+            if blocked_reasons_count == 0 {
+                failures.push(
+                    "self_evolution_rollback_replay_apply hold decision requires blocked reasons"
+                        .to_owned(),
+                );
+            }
+        }
+        _ => failures.push(format!(
+            "self_evolution_rollback_replay_apply decision {decision} is not supported"
+        )),
+    }
+
+    failures
+}
+
 fn evaluate_self_evolution_rollback_replay_item(item: &str, failures: &mut Vec<String>) {
     for (name, marker) in [
         ("sequence", "\"sequence\":"),
