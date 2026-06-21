@@ -1685,6 +1685,474 @@ impl SelfEvolutionRollbackReplayGateReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionOperatorApprovalEvidence {
+    pub operator_id: String,
+    pub approval_ticket_id: String,
+    pub approved_review_packet_ids: Vec<String>,
+    pub approved_evidence_ids: Vec<String>,
+    pub approved_rollback_anchor_ids: Vec<String>,
+    pub approved_content_digests: Vec<String>,
+    pub approved_source_report_schemas: Vec<String>,
+    pub approval_reason: String,
+    pub approval_attestation_digest: String,
+}
+
+impl SelfEvolutionOperatorApprovalEvidence {
+    pub fn from_review_packet(
+        operator_id: impl Into<String>,
+        approval_ticket_id: impl Into<String>,
+        review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
+        approval_reason: impl Into<String>,
+    ) -> Self {
+        let operator_id = operator_id.into();
+        let approval_ticket_id = approval_ticket_id.into();
+        let approval_reason = approval_reason.into();
+        let approval_attestation_digest = self_evolution_stable_digest(&format!(
+            "operator={operator_id};ticket={approval_ticket_id};review_packets={:?};evidence={:?};rollback_anchors={:?};content_digests={:?};schemas={:?};reason={approval_reason}",
+            review_packet.approval_review_packet_ids,
+            review_packet.evidence_ids,
+            review_packet.rollback_anchor_ids,
+            review_packet.content_digests,
+            review_packet.source_report_schemas,
+        ));
+
+        Self {
+            operator_id,
+            approval_ticket_id,
+            approved_review_packet_ids: review_packet.approval_review_packet_ids.clone(),
+            approved_evidence_ids: review_packet.evidence_ids.clone(),
+            approved_rollback_anchor_ids: review_packet.rollback_anchor_ids.clone(),
+            approved_content_digests: review_packet.content_digests.clone(),
+            approved_source_report_schemas: review_packet.source_report_schemas.clone(),
+            approval_reason,
+            approval_attestation_digest,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionOperatorApprovalDecision {
+    Approved,
+    Hold,
+}
+
+impl SelfEvolutionOperatorApprovalDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::Hold => "hold",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfEvolutionOperatorApprovalPolicy {
+    pub require_review_packet_ids: bool,
+    pub require_evidence_ids: bool,
+    pub require_rollback_anchor_ids: bool,
+    pub require_content_digests: bool,
+    pub require_source_report_schemas: bool,
+}
+
+impl Default for SelfEvolutionOperatorApprovalPolicy {
+    fn default() -> Self {
+        Self {
+            require_review_packet_ids: true,
+            require_evidence_ids: true,
+            require_rollback_anchor_ids: true,
+            require_content_digests: true,
+            require_source_report_schemas: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelfEvolutionOperatorApprovalGate {
+    pub policy: SelfEvolutionOperatorApprovalPolicy,
+}
+
+impl Default for SelfEvolutionOperatorApprovalGate {
+    fn default() -> Self {
+        Self {
+            policy: SelfEvolutionOperatorApprovalPolicy::default(),
+        }
+    }
+}
+
+impl SelfEvolutionOperatorApprovalGate {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_policy(mut self, policy: SelfEvolutionOperatorApprovalPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn evaluate(
+        &self,
+        review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
+        evidence: &SelfEvolutionOperatorApprovalEvidence,
+    ) -> SelfEvolutionOperatorApprovalReport {
+        let mut blocked_reasons = Vec::new();
+
+        if evidence.operator_id.trim().is_empty() {
+            blocked_reasons.push("self_evolution_operator_approval_operator_id_empty".to_owned());
+        }
+        if evidence.approval_ticket_id.trim().is_empty() {
+            blocked_reasons.push("self_evolution_operator_approval_ticket_id_empty".to_owned());
+        }
+        if evidence.approval_reason.trim().is_empty() {
+            blocked_reasons.push("self_evolution_operator_approval_reason_empty".to_owned());
+        }
+        if !evidence.approval_attestation_digest.starts_with("fnv64:") {
+            blocked_reasons
+                .push("self_evolution_operator_approval_attestation_digest_invalid".to_owned());
+        }
+
+        push_operator_approval_presence_reason(
+            &mut blocked_reasons,
+            self.policy.require_review_packet_ids,
+            "review_packet_ids",
+            &review_packet.approval_review_packet_ids,
+            &evidence.approved_review_packet_ids,
+        );
+        push_operator_approval_presence_reason(
+            &mut blocked_reasons,
+            self.policy.require_evidence_ids,
+            "evidence_ids",
+            &review_packet.evidence_ids,
+            &evidence.approved_evidence_ids,
+        );
+        push_operator_approval_presence_reason(
+            &mut blocked_reasons,
+            self.policy.require_rollback_anchor_ids,
+            "rollback_anchor_ids",
+            &review_packet.rollback_anchor_ids,
+            &evidence.approved_rollback_anchor_ids,
+        );
+        push_operator_approval_presence_reason(
+            &mut blocked_reasons,
+            self.policy.require_content_digests,
+            "content_digests",
+            &review_packet.content_digests,
+            &evidence.approved_content_digests,
+        );
+        push_operator_approval_presence_reason(
+            &mut blocked_reasons,
+            self.policy.require_source_report_schemas,
+            "source_report_schemas",
+            &review_packet.source_report_schemas,
+            &evidence.approved_source_report_schemas,
+        );
+
+        push_operator_approval_missing_refs(
+            &mut blocked_reasons,
+            "review_packet_ids",
+            &review_packet.approval_review_packet_ids,
+            &evidence.approved_review_packet_ids,
+        );
+        push_operator_approval_missing_refs(
+            &mut blocked_reasons,
+            "evidence_ids",
+            &review_packet.evidence_ids,
+            &evidence.approved_evidence_ids,
+        );
+        push_operator_approval_missing_refs(
+            &mut blocked_reasons,
+            "rollback_anchor_ids",
+            &review_packet.rollback_anchor_ids,
+            &evidence.approved_rollback_anchor_ids,
+        );
+        push_operator_approval_missing_refs(
+            &mut blocked_reasons,
+            "content_digests",
+            &review_packet.content_digests,
+            &evidence.approved_content_digests,
+        );
+        push_operator_approval_missing_refs(
+            &mut blocked_reasons,
+            "source_report_schemas",
+            &review_packet.source_report_schemas,
+            &evidence.approved_source_report_schemas,
+        );
+
+        let operator_approved = blocked_reasons.is_empty();
+        let decision = if operator_approved {
+            SelfEvolutionOperatorApprovalDecision::Approved
+        } else {
+            SelfEvolutionOperatorApprovalDecision::Hold
+        };
+        let content_digest = self_evolution_stable_digest(&format!(
+            "operator_approval;operator={};ticket={};decision={};review_packets={:?};content_digests={:?};attestation={}",
+            evidence.operator_id,
+            evidence.approval_ticket_id,
+            decision.as_str(),
+            evidence.approved_review_packet_ids,
+            evidence.approved_content_digests,
+            evidence.approval_attestation_digest,
+        ));
+
+        SelfEvolutionOperatorApprovalReport {
+            decision,
+            operator_approved,
+            operator_id: evidence.operator_id.clone(),
+            approval_ticket_id: evidence.approval_ticket_id.clone(),
+            approved_review_packet_ids: evidence.approved_review_packet_ids.clone(),
+            approved_evidence_ids: evidence.approved_evidence_ids.clone(),
+            approved_rollback_anchor_ids: evidence.approved_rollback_anchor_ids.clone(),
+            approved_content_digests: evidence.approved_content_digests.clone(),
+            approved_source_report_schemas: evidence.approved_source_report_schemas.clone(),
+            approval_reason: evidence.approval_reason.clone(),
+            approval_attestation_digest: evidence.approval_attestation_digest.clone(),
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            activation_write_allowed: false,
+            active_candidate: false,
+            write_allowed: false,
+            applied: false,
+            blocked_reasons,
+            content_digest,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionOperatorApprovalReport {
+    pub decision: SelfEvolutionOperatorApprovalDecision,
+    pub operator_approved: bool,
+    pub operator_id: String,
+    pub approval_ticket_id: String,
+    pub approved_review_packet_ids: Vec<String>,
+    pub approved_evidence_ids: Vec<String>,
+    pub approved_rollback_anchor_ids: Vec<String>,
+    pub approved_content_digests: Vec<String>,
+    pub approved_source_report_schemas: Vec<String>,
+    pub approval_reason: String,
+    pub approval_attestation_digest: String,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub activation_write_allowed: bool,
+    pub active_candidate: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub blocked_reasons: Vec<String>,
+    pub content_digest: String,
+}
+
+impl SelfEvolutionOperatorApprovalReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_operator_approval decision={} operator_approved={} operator={} ticket={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} schemas={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} digest={}",
+            self.decision.as_str(),
+            self.operator_approved,
+            self.operator_id,
+            self.approval_ticket_id,
+            self.approved_review_packet_ids.len(),
+            self.approved_evidence_ids.len(),
+            self.approved_rollback_anchor_ids.len(),
+            self.approved_content_digests.len(),
+            self.approved_source_report_schemas.len(),
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.activation_write_allowed,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+            self.blocked_reasons.len(),
+            self.content_digest,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let operator_id = self_evolution_json_escape(&self.operator_id);
+        let approval_ticket_id = self_evolution_json_escape(&self.approval_ticket_id);
+        let approval_reason = self_evolution_json_escape(&self.approval_reason);
+        let approval_attestation_digest =
+            self_evolution_json_escape(&self.approval_attestation_digest);
+        let content_digest = self_evolution_json_escape(&self.content_digest);
+        let approved_review_packet_ids =
+            self_evolution_string_array_json(&self.approved_review_packet_ids);
+        let approved_evidence_ids = self_evolution_string_array_json(&self.approved_evidence_ids);
+        let approved_rollback_anchor_ids =
+            self_evolution_string_array_json(&self.approved_rollback_anchor_ids);
+        let approved_content_digests =
+            self_evolution_string_array_json(&self.approved_content_digests);
+        let approved_source_report_schemas =
+            self_evolution_string_array_json(&self.approved_source_report_schemas);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-operator-approval-v1\",\
+             \"decision\":\"{}\",\
+             \"operator_approved\":{},\
+             \"operator_id\":\"{operator_id}\",\
+             \"approval_ticket_id\":\"{approval_ticket_id}\",\
+             \"approved_review_packet_ids\":{approved_review_packet_ids},\
+             \"approved_evidence_ids\":{approved_evidence_ids},\
+             \"approved_rollback_anchor_ids\":{approved_rollback_anchor_ids},\
+             \"approved_content_digests\":{approved_content_digests},\
+             \"approved_source_report_schemas\":{approved_source_report_schemas},\
+             \"approval_reason\":\"{approval_reason}\",\
+             \"approval_attestation_digest\":\"{approval_attestation_digest}\",\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"activation_write_allowed\":{},\
+             \"active_candidate\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"blocked_reasons\":{blocked_reasons},\
+             \"content_digest\":\"{content_digest}\"\
+             }}",
+            self.decision.as_str(),
+            self.operator_approved,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.activation_write_allowed,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionOperatorApprovalRecord {
+    pub sequence: u64,
+    pub report: SelfEvolutionOperatorApprovalReport,
+}
+
+impl SelfEvolutionOperatorApprovalRecord {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_operator_approval_record sequence={} {}",
+            self.sequence,
+            self.report.summary_line()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SelfEvolutionOperatorApprovalLedger {
+    records: Vec<SelfEvolutionOperatorApprovalRecord>,
+}
+
+impl SelfEvolutionOperatorApprovalLedger {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn records(&self) -> &[SelfEvolutionOperatorApprovalRecord] {
+        &self.records
+    }
+
+    pub fn append_report(
+        &mut self,
+        report: &SelfEvolutionOperatorApprovalReport,
+    ) -> SelfEvolutionOperatorApprovalRecord {
+        let record = SelfEvolutionOperatorApprovalRecord {
+            sequence: self.records.len() as u64 + 1,
+            report: report.clone(),
+        };
+        self.records.push(record.clone());
+        record
+    }
+
+    pub fn approved(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.report.operator_approved)
+            .count()
+    }
+
+    pub fn held(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| !record.report.operator_approved)
+            .count()
+    }
+
+    pub fn write_allowed_records(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.report.write_allowed || record.report.activation_write_allowed)
+            .count()
+    }
+
+    pub fn applied_records(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.report.applied || record.report.active_candidate)
+            .count()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_operator_approval_ledger records={} approved={} held={} write_allowed_records={} applied_records={}",
+            self.records.len(),
+            self.approved(),
+            self.held(),
+            self.write_allowed_records(),
+            self.applied_records(),
+        )
+    }
+}
+
+fn push_operator_approval_presence_reason(
+    blocked_reasons: &mut Vec<String>,
+    required: bool,
+    field: &str,
+    expected: &[String],
+    approved: &[String],
+) {
+    if !required {
+        return;
+    }
+    if expected.is_empty() {
+        blocked_reasons.push(format!(
+            "self_evolution_operator_approval_review_packet_{field}_empty"
+        ));
+    }
+    if approved.is_empty() {
+        blocked_reasons.push(format!(
+            "self_evolution_operator_approval_approved_{field}_empty"
+        ));
+    }
+}
+
+fn push_operator_approval_missing_refs(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    expected: &[String],
+    approved: &[String],
+) {
+    for value in expected {
+        if value.trim().is_empty() {
+            blocked_reasons.push(format!(
+                "self_evolution_operator_approval_review_packet_{field}_contains_empty"
+            ));
+        } else if !approved.iter().any(|approved| approved == value) {
+            blocked_reasons.push(format!(
+                "self_evolution_operator_approval_missing_{field}={value}"
+            ));
+        }
+    }
+    for value in approved {
+        if value.trim().is_empty() {
+            blocked_reasons.push(format!(
+                "self_evolution_operator_approval_approved_{field}_contains_empty"
+            ));
+        }
+    }
+}
+
 fn self_evolution_f32_json(value: f32) -> String {
     if value.is_finite() {
         format!("{value:.6}")
@@ -2790,6 +3258,169 @@ mod tests {
         assert!(report.preview_only);
         assert!(!report.write_allowed);
         assert!(!report.applied);
+    }
+
+    #[test]
+    fn self_evolution_operator_approval_gate_approves_review_packet_without_activation() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        let plan = ledger.rollback_replay_plan();
+        let gate_report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+        let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "maintainer-jy",
+            "approval-ticket-001",
+            &gate_report.review_packet,
+            "reviewed rollback replay packet and approved candidate for the next gated stage",
+        );
+
+        let report = SelfEvolutionOperatorApprovalGate::new()
+            .evaluate(&gate_report.review_packet, &evidence);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionOperatorApprovalDecision::Approved
+        );
+        assert!(report.operator_approved);
+        assert_eq!(report.operator_id, "maintainer-jy");
+        assert_eq!(report.approval_ticket_id, "approval-ticket-001");
+        assert_eq!(
+            report.approved_review_packet_ids,
+            gate_report.review_packet.approval_review_packet_ids
+        );
+        assert_eq!(
+            report.approved_evidence_ids,
+            gate_report.review_packet.evidence_ids
+        );
+        assert_eq!(
+            report.approved_rollback_anchor_ids,
+            gate_report.review_packet.rollback_anchor_ids
+        );
+        assert!(report.approval_attestation_digest.starts_with("fnv64:"));
+        assert!(report.read_only);
+        assert!(report.report_only);
+        assert!(report.preview_only);
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(report.blocked_reasons.is_empty());
+        assert!(report.content_digest.starts_with("fnv64:"));
+        assert!(
+            report
+                .summary_line()
+                .contains("self_evolution_operator_approval decision=approved")
+        );
+        assert!(
+            report
+                .json_line()
+                .contains("\"schema\":\"rust-norion-self-evolution-operator-approval-v1\"")
+        );
+        assert!(report.json_line().contains("\"operator_approved\":true"));
+        assert!(
+            report
+                .json_line()
+                .contains("\"activation_write_allowed\":false")
+        );
+    }
+
+    #[test]
+    fn self_evolution_operator_approval_gate_holds_missing_or_mismatched_refs() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        let plan = ledger.rollback_replay_plan();
+        let gate_report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+        let mut evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "",
+            "",
+            &gate_report.review_packet,
+            "",
+        );
+        evidence.approved_review_packet_ids.clear();
+        evidence.approved_evidence_ids.clear();
+        evidence.approved_content_digests = vec!["wrong-digest".to_owned()];
+        evidence.approval_attestation_digest = "not-a-digest".to_owned();
+
+        let report = SelfEvolutionOperatorApprovalGate::new()
+            .evaluate(&gate_report.review_packet, &evidence);
+
+        assert_eq!(report.decision, SelfEvolutionOperatorApprovalDecision::Hold);
+        assert!(!report.operator_approved);
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        for reason in [
+            "self_evolution_operator_approval_operator_id_empty",
+            "self_evolution_operator_approval_ticket_id_empty",
+            "self_evolution_operator_approval_reason_empty",
+            "self_evolution_operator_approval_attestation_digest_invalid",
+            "self_evolution_operator_approval_approved_review_packet_ids_empty",
+            "self_evolution_operator_approval_approved_evidence_ids_empty",
+        ] {
+            assert!(
+                report.blocked_reasons.contains(&reason.to_owned()),
+                "missing operator approval blocked reason {reason}: {:?}",
+                report.blocked_reasons
+            );
+        }
+        assert!(report.blocked_reasons.iter().any(|reason| {
+            reason.starts_with("self_evolution_operator_approval_missing_content_digests=")
+        }));
+        assert!(report.json_line().contains("\"decision\":\"hold\""));
+    }
+
+    #[test]
+    fn self_evolution_operator_approval_ledger_is_append_only_and_read_only() {
+        let mut experiment_ledger = SelfEvolutionExperimentLedger::new();
+        experiment_ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        let plan = experiment_ledger.rollback_replay_plan();
+        let gate_report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+        let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "maintainer-jy",
+            "approval-ticket-append-only",
+            &gate_report.review_packet,
+            "approved for audit trail only",
+        );
+        let approved = SelfEvolutionOperatorApprovalGate::new()
+            .evaluate(&gate_report.review_packet, &evidence);
+        let mut held_evidence = evidence.clone();
+        held_evidence.approval_ticket_id.clear();
+        let held = SelfEvolutionOperatorApprovalGate::new()
+            .evaluate(&gate_report.review_packet, &held_evidence);
+        let mut approval_ledger = SelfEvolutionOperatorApprovalLedger::new();
+
+        let first = approval_ledger.append_report(&approved);
+        let first_snapshot = first.clone();
+        let second = approval_ledger.append_report(&held);
+
+        assert_eq!(first.sequence, 1);
+        assert_eq!(second.sequence, 2);
+        assert_eq!(approval_ledger.records().len(), 2);
+        assert_eq!(approval_ledger.records()[0], first_snapshot);
+        assert_eq!(approval_ledger.approved(), 1);
+        assert_eq!(approval_ledger.held(), 1);
+        assert_eq!(approval_ledger.write_allowed_records(), 0);
+        assert_eq!(approval_ledger.applied_records(), 0);
+        assert!(approval_ledger.summary_line().contains("records=2"));
+        assert!(approval_ledger.summary_line().contains("approved=1"));
+        assert!(
+            first
+                .summary_line()
+                .contains("self_evolution_operator_approval_record sequence=1")
+        );
+        assert!(!approved.write_allowed);
+        assert!(!approved.activation_write_allowed);
+        assert!(!approved.applied);
+        assert!(!approved.active_candidate);
     }
 
     #[test]

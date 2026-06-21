@@ -164,10 +164,14 @@ pub use self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionPolicy,
     SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
     SelfEvolutionExperimentDecision, SelfEvolutionExperimentLedger, SelfEvolutionExperimentRecord,
-    SelfEvolutionRollbackReplayDecision, SelfEvolutionRollbackReplayGate,
-    SelfEvolutionRollbackReplayGateReport, SelfEvolutionRollbackReplayItem,
-    SelfEvolutionRollbackReplayPlan, SelfEvolutionRollbackReplayPolicy,
-    SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
+    SelfEvolutionOperatorApprovalDecision, SelfEvolutionOperatorApprovalEvidence,
+    SelfEvolutionOperatorApprovalGate, SelfEvolutionOperatorApprovalLedger,
+    SelfEvolutionOperatorApprovalPolicy, SelfEvolutionOperatorApprovalRecord,
+    SelfEvolutionOperatorApprovalReport, SelfEvolutionRollbackReplayDecision,
+    SelfEvolutionRollbackReplayGate, SelfEvolutionRollbackReplayGateReport,
+    SelfEvolutionRollbackReplayItem, SelfEvolutionRollbackReplayPlan,
+    SelfEvolutionRollbackReplayPolicy, SelfEvolutionValidationEvidence,
+    SelfEvolutionValidationLane,
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
