@@ -14,6 +14,10 @@ written permission from the copyright holder. See [LICENSE](LICENSE).
 
 Public issues and pull requests are welcome, but merges require repository
 owner or maintainer review and approval. See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [NOTICE.md](NOTICE.md) and
+[Public Collaboration Governance](docs/governance/public-collaboration.md) for
+research deployment boundaries, clean-room reference rules, and protected-branch
+review requirements.
 
 本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过仓库所有者或维护者审核批准。
 
