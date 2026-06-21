@@ -23,6 +23,7 @@ pub mod router;
 pub mod runtime;
 pub mod runtime_manifest;
 pub mod rust_validation;
+pub mod self_evolution;
 pub mod split;
 pub mod state_inspect;
 pub mod tiered_cache;
@@ -127,6 +128,10 @@ pub use runtime_manifest::{
     default_transformer_runtime_architecture,
 };
 pub use rust_validation::{RustSnippetCheck, RustSnippetCheckReport, RustSnippetValidator};
+pub use self_evolution::{
+    SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionPolicy,
+    SelfEvolutionAdmissionReport,
+};
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
     StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
