@@ -27,6 +27,7 @@ pub mod runtime;
 pub mod runtime_manifest;
 pub mod rust_validation;
 pub mod self_evolution;
+pub mod self_evolving_memory;
 pub mod split;
 pub mod state_inspect;
 pub mod tiered_cache;
@@ -172,6 +173,16 @@ pub use self_evolution::{
     SelfEvolutionRollbackReplayItem, SelfEvolutionRollbackReplayPlan,
     SelfEvolutionRollbackReplayPolicy, SelfEvolutionValidationEvidence,
     SelfEvolutionValidationLane,
+};
+pub use self_evolving_memory::{
+    SelfEvolvingEpisodeContext, SelfEvolvingEpisodeInput, SelfEvolvingEpisodeRecord,
+    SelfEvolvingHeuristicContext, SelfEvolvingHeuristicInput, SelfEvolvingHeuristicRecord,
+    SelfEvolvingMemoryAdmissionCandidatePreview, SelfEvolvingMemoryAdmissionPreview,
+    SelfEvolvingMemoryApproval, SelfEvolvingMemoryMaintenancePolicy,
+    SelfEvolvingMemoryMaintenanceReport, SelfEvolvingMemoryQuery,
+    SelfEvolvingMemoryRetrievalReport, SelfEvolvingMemoryStore, SelfEvolvingMemoryWriteReport,
+    ToolReliabilityContext, ToolReliabilityObservationInput, ToolReliabilityObservationRecord,
+    ToolReliabilityRecord,
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
