@@ -61,6 +61,22 @@ pub mod bridge {
         pub telemetry: Vec<String>,
     }
 
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct KvFusionPolicyObservationDryRunReport {
+        pub preview_only: bool,
+        pub policy_observation_ready: bool,
+        pub policy_observation_applied: bool,
+        pub policy_write_allowed: bool,
+        pub reward: f32,
+        pub previous_similarity_threshold: f32,
+        pub preview_similarity_threshold: f32,
+        pub threshold_delta: f32,
+        pub threshold_changed: bool,
+        pub threshold_within_bounds: bool,
+        pub blocked_reasons: Vec<String>,
+        pub telemetry: Vec<String>,
+    }
+
     pub fn memory_reuse_dry_run_to_agent_evidence(
         summary: &super::memory::MemoryReuseDryRunSummary,
     ) -> super::agent::MemoryRecallDryRunEvidence {
@@ -175,6 +191,93 @@ pub mod bridge {
         }
     }
 
+    impl KvFusionPolicyObservationDryRunReport {
+        pub fn can_use_policy_observation_preview(&self) -> bool {
+            self.preview_only
+                && self.policy_observation_ready
+                && !self.policy_observation_applied
+                && !self.policy_write_allowed
+                && self.threshold_within_bounds
+                && self.blocked_reasons.is_empty()
+        }
+
+        pub fn summary_line(&self) -> String {
+            format!(
+                "kv_fusion_policy_observation_dry_run preview_only={} ready={} applied={} reward={:.3} previous_threshold={:.3} preview_threshold={:.3} changed={} blocked_reasons={}",
+                self.preview_only,
+                self.policy_observation_ready,
+                self.policy_observation_applied,
+                self.reward,
+                self.previous_similarity_threshold,
+                self.preview_similarity_threshold,
+                self.threshold_changed,
+                self.blocked_reasons.len(),
+            )
+        }
+    }
+
+    pub fn kv_fusion_reward_policy_observation_dry_run(
+        preview: &KvFusionRewardPreviewReport,
+        policy: super::core::ReinforcedKvFusionPolicy,
+    ) -> KvFusionPolicyObservationDryRunReport {
+        let previous_similarity_threshold = policy.similarity_threshold;
+        let mut preview_policy = policy;
+        let mut blocked_reasons = preview.blocked_reasons.clone();
+
+        if !preview.preview_only {
+            blocked_reasons.push("kv_fusion_reward_preview_not_preview_only".to_owned());
+        }
+        if preview.memory_store_write_allowed {
+            blocked_reasons.push("kv_fusion_reward_preview_memory_store_write_allowed".to_owned());
+        }
+        if preview.kv_cache_write_allowed {
+            blocked_reasons.push("kv_fusion_reward_preview_kv_cache_write_allowed".to_owned());
+        }
+        if preview.policy_observation_applied {
+            blocked_reasons.push("kv_fusion_reward_preview_already_applied".to_owned());
+        }
+        if !preview.policy_observation_ready {
+            blocked_reasons.push("kv_fusion_reward_preview_not_ready".to_owned());
+        }
+
+        let policy_observation_ready = blocked_reasons.is_empty();
+        if policy_observation_ready {
+            super::core::KvFusionPolicy::observe_reward(&mut preview_policy, preview.reward);
+        }
+
+        let preview_similarity_threshold = preview_policy.similarity_threshold;
+        let threshold_delta = preview_similarity_threshold - previous_similarity_threshold;
+        let threshold_changed =
+            !float_close(preview_similarity_threshold, previous_similarity_threshold);
+        let threshold_within_bounds =
+            threshold_within_reward_observation_bounds(previous_similarity_threshold)
+                && threshold_within_reward_observation_bounds(preview_similarity_threshold);
+        let telemetry = kv_fusion_policy_observation_dry_run_telemetry(
+            policy_observation_ready,
+            preview.reward,
+            previous_similarity_threshold,
+            preview_similarity_threshold,
+            threshold_changed,
+            threshold_within_bounds,
+            &blocked_reasons,
+        );
+
+        KvFusionPolicyObservationDryRunReport {
+            preview_only: true,
+            policy_observation_ready,
+            policy_observation_applied: false,
+            policy_write_allowed: false,
+            reward: preview.reward,
+            previous_similarity_threshold,
+            preview_similarity_threshold,
+            threshold_delta,
+            threshold_changed,
+            threshold_within_bounds,
+            blocked_reasons,
+            telemetry,
+        }
+    }
+
     fn kv_fusion_reward_preview_report(
         source: &super::agent::AgentRecallOutcomeAttributionReport,
         items: Vec<KvFusionRewardPreviewItem>,
@@ -235,6 +338,54 @@ pub mod bridge {
         } else {
             0.01
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn kv_fusion_policy_observation_dry_run_telemetry(
+        policy_observation_ready: bool,
+        reward: f32,
+        previous_similarity_threshold: f32,
+        preview_similarity_threshold: f32,
+        threshold_changed: bool,
+        threshold_within_bounds: bool,
+        blocked_reasons: &[String],
+    ) -> Vec<String> {
+        let mut telemetry = vec![
+            "kv_fusion_policy_observation_dry_run=true".to_owned(),
+            "kv_fusion_policy_observation_dry_run_preview_only=true".to_owned(),
+            "kv_fusion_policy_observation_dry_run_policy_write_allowed=false".to_owned(),
+            "kv_fusion_policy_observation_dry_run_applied=false".to_owned(),
+            format!("kv_fusion_policy_observation_dry_run_ready={policy_observation_ready}"),
+            format!("kv_fusion_policy_observation_dry_run_reward={reward:.3}"),
+            format!(
+                "kv_fusion_policy_observation_dry_run_previous_threshold={previous_similarity_threshold:.3}"
+            ),
+            format!(
+                "kv_fusion_policy_observation_dry_run_preview_threshold={preview_similarity_threshold:.3}"
+            ),
+            format!("kv_fusion_policy_observation_dry_run_threshold_changed={threshold_changed}"),
+            format!(
+                "kv_fusion_policy_observation_dry_run_threshold_within_bounds={threshold_within_bounds}"
+            ),
+            format!(
+                "kv_fusion_policy_observation_dry_run_blocked_reasons={}",
+                blocked_reasons.len()
+            ),
+        ];
+        telemetry.extend(
+            blocked_reasons.iter().map(|reason| {
+                format!("kv_fusion_policy_observation_dry_run_blocked_reason={reason}")
+            }),
+        );
+        telemetry
+    }
+
+    fn threshold_within_reward_observation_bounds(threshold: f32) -> bool {
+        threshold.is_finite() && (0.75..=0.99).contains(&threshold)
+    }
+
+    fn float_close(left: f32, right: f32) -> bool {
+        (left - right).abs() <= 0.0001
     }
 
     fn attribution_has_runtime_kv_source(
@@ -428,6 +579,149 @@ mod tests {
                 .any(|line| { line == "kv_fusion_reward_preview_policy_observation_ready=true" })
         );
         assert!(preview.summary_line().contains("preview_only=true"));
+    }
+
+    #[test]
+    fn kv_fusion_policy_observation_dry_run_previews_reward_without_mutating_policy() {
+        let report = super::agent::AgentRecallOutcomeAttributionReport {
+            attributions: vec![super::agent::AgentRecallOutcomeAttribution {
+                task_id: "runtime-recall".to_owned(),
+                record_id: "runtime_kv:l0h0:0-8".to_owned(),
+                source: "runtime_kv".to_owned(),
+                action: super::agent::AgentRecallOutcomeAttributionAction::Reinforce,
+                amount: 0.24,
+                reason_codes: vec!["result_accepted".to_owned()],
+            }],
+            reinforced_count: 1,
+            penalized_count: 0,
+            skipped_rejected_recall_count: 0,
+            skipped_missing_outcome_task_ids: Vec::new(),
+            read_only: true,
+            memory_store_write_allowed: false,
+            telemetry: Vec::new(),
+        };
+        let preview =
+            super::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(&report);
+        let policy = super::core::ReinforcedKvFusionPolicy::new(0.92, 64);
+
+        let dry_run = super::bridge::kv_fusion_reward_policy_observation_dry_run(&preview, policy);
+
+        assert!(dry_run.preview_only);
+        assert!(dry_run.policy_observation_ready);
+        assert!(!dry_run.policy_observation_applied);
+        assert!(!dry_run.policy_write_allowed);
+        assert!(dry_run.can_use_policy_observation_preview());
+        assert_eq!(dry_run.reward, 0.24);
+        assert_eq!(dry_run.previous_similarity_threshold, 0.92);
+        assert!((dry_run.preview_similarity_threshold - 0.9152).abs() < 0.0001);
+        assert!((dry_run.threshold_delta + 0.0048).abs() < 0.0001);
+        assert!(dry_run.threshold_changed);
+        assert!(dry_run.threshold_within_bounds);
+        assert!(dry_run.blocked_reasons.is_empty());
+        assert_eq!(policy.similarity_threshold, 0.92);
+        assert!(
+            dry_run
+                .telemetry
+                .iter()
+                .any(|line| line == "kv_fusion_policy_observation_dry_run_applied=false")
+        );
+        assert!(
+            dry_run
+                .summary_line()
+                .contains("kv_fusion_policy_observation_dry_run preview_only=true")
+        );
+    }
+
+    #[test]
+    fn kv_fusion_policy_observation_dry_run_blocks_unsafe_reward_preview() {
+        let report = super::agent::AgentRecallOutcomeAttributionReport {
+            attributions: vec![super::agent::AgentRecallOutcomeAttribution {
+                task_id: "runtime-recall".to_owned(),
+                record_id: "runtime_kv:l0h0:0-8".to_owned(),
+                source: "runtime_kv".to_owned(),
+                action: super::agent::AgentRecallOutcomeAttributionAction::Penalize,
+                amount: 0.32,
+                reason_codes: vec!["execution_failed".to_owned()],
+            }],
+            reinforced_count: 0,
+            penalized_count: 1,
+            skipped_rejected_recall_count: 0,
+            skipped_missing_outcome_task_ids: Vec::new(),
+            read_only: false,
+            memory_store_write_allowed: true,
+            telemetry: Vec::new(),
+        };
+        let preview =
+            super::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(&report);
+        let policy = super::core::ReinforcedKvFusionPolicy::new(0.92, 64);
+
+        let dry_run = super::bridge::kv_fusion_reward_policy_observation_dry_run(&preview, policy);
+
+        assert!(!dry_run.policy_observation_ready);
+        assert!(!dry_run.policy_observation_applied);
+        assert!(!dry_run.policy_write_allowed);
+        assert!(!dry_run.can_use_policy_observation_preview());
+        assert_eq!(dry_run.reward, 0.0);
+        assert_eq!(dry_run.previous_similarity_threshold, 0.92);
+        assert_eq!(dry_run.preview_similarity_threshold, 0.92);
+        assert_eq!(dry_run.threshold_delta, 0.0);
+        assert!(!dry_run.threshold_changed);
+        assert!(dry_run.threshold_within_bounds);
+        assert_eq!(
+            dry_run.blocked_reasons,
+            vec![
+                "recall_attribution_not_read_only".to_owned(),
+                "recall_attribution_memory_store_write_allowed".to_owned(),
+                "kv_fusion_reward_preview_not_ready".to_owned(),
+            ]
+        );
+        assert_eq!(policy.similarity_threshold, 0.92);
+        assert!(
+            dry_run
+                .telemetry
+                .iter()
+                .any(|line| line == "kv_fusion_policy_observation_dry_run_ready=false")
+        );
+    }
+
+    #[test]
+    fn kv_fusion_policy_observation_dry_run_preserves_threshold_bounds() {
+        let report = super::agent::AgentRecallOutcomeAttributionReport {
+            attributions: vec![super::agent::AgentRecallOutcomeAttribution {
+                task_id: "runtime-recall".to_owned(),
+                record_id: "runtime_kv:l0h0:0-8".to_owned(),
+                source: "runtime_kv".to_owned(),
+                action: super::agent::AgentRecallOutcomeAttributionAction::Reinforce,
+                amount: 1.0,
+                reason_codes: vec!["result_accepted".to_owned()],
+            }],
+            reinforced_count: 1,
+            penalized_count: 0,
+            skipped_rejected_recall_count: 0,
+            skipped_missing_outcome_task_ids: Vec::new(),
+            read_only: true,
+            memory_store_write_allowed: false,
+            telemetry: Vec::new(),
+        };
+        let preview =
+            super::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(&report);
+        let policy = super::core::ReinforcedKvFusionPolicy::new(0.75, 64);
+
+        let dry_run = super::bridge::kv_fusion_reward_policy_observation_dry_run(&preview, policy);
+
+        assert!(dry_run.policy_observation_ready);
+        assert!(!dry_run.policy_observation_applied);
+        assert_eq!(dry_run.reward, 1.0);
+        assert_eq!(dry_run.previous_similarity_threshold, 0.75);
+        assert_eq!(dry_run.preview_similarity_threshold, 0.75);
+        assert_eq!(dry_run.threshold_delta, 0.0);
+        assert!(!dry_run.threshold_changed);
+        assert!(dry_run.threshold_within_bounds);
+        assert!(dry_run.can_use_policy_observation_preview());
+        assert_eq!(policy.similarity_threshold, 0.75);
+        assert!(dry_run.telemetry.iter().any(|line| {
+            line == "kv_fusion_policy_observation_dry_run_threshold_within_bounds=true"
+        }));
     }
 
     #[test]
