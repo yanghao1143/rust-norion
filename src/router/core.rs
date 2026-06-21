@@ -1,5 +1,6 @@
 use crate::hierarchy::TaskProfile;
 
+use super::adjustment::threshold_after_observation;
 use super::scoring::{choose_route, estimate_token_entropy, routing_score, tokenize};
 use super::types::{
     GenerationMetrics, ProfileObservations, ProfileThresholds, Route, RouteBudget, RouterState,
@@ -146,18 +147,14 @@ impl NoironRouter {
 
     pub fn observe_with_profile(&mut self, profile: TaskProfile, metrics: GenerationMetrics) {
         let quality = metrics.quality_score();
-        let contradiction_pressure = (metrics.contradiction_count as f32 * 0.025).min(0.12);
-        let mut threshold = self.threshold_for(profile);
-
-        if quality < 0.58 {
-            let delta = self.learning_rate * (0.58 - quality) + contradiction_pressure;
-            threshold -= delta;
-        } else if quality > 0.82 && metrics.perplexity <= 9.0 {
-            let delta = self.learning_rate * (quality - 0.82);
-            threshold += delta;
-        }
-
-        threshold = threshold.clamp(self.min_threshold, self.max_threshold);
+        let threshold = threshold_after_observation(
+            self.threshold_for(profile),
+            self.learning_rate,
+            self.min_threshold,
+            self.max_threshold,
+            metrics,
+            quality,
+        );
         self.profile_thresholds.set(profile, threshold);
         self.threshold = threshold;
         self.observations += 1;

@@ -112,7 +112,8 @@ pub use reflection::{
 };
 pub use router::{
     GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds, Route, RouteBudget,
-    RouterState, RoutingContext, RoutingDecision,
+    RouterState, RouterThresholdAdjustmentPreviewPlanner, RouterThresholdAdjustmentPreviewPolicy,
+    RouterThresholdAdjustmentPreviewReport, RoutingContext, RoutingDecision,
 };
 pub use runtime::{
     CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat,
