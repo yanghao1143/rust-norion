@@ -25,6 +25,12 @@ time without retraining model weights on every interaction.
 
 本项目目标是构建一个实用、自主可控优先的本地推理控制引擎，让自研模型后端在不频繁重训权重的前提下，能够随着使用逐步调整推理策略、记忆选择和计算分配。
 
+The project now also targets a Reasoning Genome Chain: DNA/NDA-style reasoning
+genes and Gene Scissors for controlled, auditable evolution of local reasoning
+behavior through validation and rollback gates.
+
+项目也新增推理基因链目标：用 DNA/NDA 风格的 reasoning genes 与 Gene Scissors，在验证、回滚和审计门禁下推动本地推理行为受控进化。
+
 The optimized target combines five non-negotiable requirements:
 
 优化后的目标由五个硬约束共同定义：
@@ -132,13 +138,24 @@ The target algorithm stack is model-weight independent:
 - self-evolution loop: test-time scaling, RLVR-style rewards for control
   decisions, same-inference online reward feedback, reflection scoring, drift
   gates, adaptive rollback, experience replay, and auditable evolution evidence
+- reasoning genome chain: DNA/NDA-style reasoning genes encode reusable
+  retrieval, routing, reflection, language, safety, and tool-use strategies;
+  Gene Scissors can propose gated cuts, splices, quarantines, and rollbacks so
+  the control plane evolves behavior without direct weight retraining
 - Rust Transformer refactor: explicit layer templates for local-window,
   global-memory, and convolutional-fusion compute paths
 
 - 超长上下文：Infini 风格全局/局部 KV 分离、递归长上下文调度、层级 gist 记忆、SpeContext 风格稀疏 KV 筛选
 - 轻量 KV 系统：自研 4/8-bit uniform KV 量化、强化式 KV-Fusion、时间衰减、语义聚类和 Hot/Warm/Cold 分层存储
 - 自进化闭环：Test-time Scaling、针对控制决策的 RLVR 风格奖励、同轮推理在线奖励反馈、反思评分、漂移门控、自适应回滚、经验回放和可审计进化证据
+- 推理基因链：用 DNA/NDA 风格的 reasoning genes 表达可复用的检索、路由、反思、语言、安全和工具使用策略；Gene Scissors 只能在门禁下提出剪切、拼接、隔离和回滚，让控制层在不直接重训权重的前提下进化行为
 - Rust Transformer 重构：用显式层模板表达局部窗口、全局记忆、卷积融合等计算路径
+
+See [docs/architecture/reasoning-genome-chain.md](docs/architecture/reasoning-genome-chain.md)
+for the initial Reasoning Genome Chain and Gene Scissors target.
+
+初始的推理基因链与基因剪目标见
+[docs/architecture/reasoning-genome-chain.md](docs/architecture/reasoning-genome-chain.md)。
 
 ## Current Status / 当前状态
 

@@ -80,7 +80,8 @@ The north star is now explicitly scoped around five core requirements:
    Multi-factor router, hierarchy controller, recursive scheduler,
    Hot/Warm/Cold cache scheduler, sparse KV filter, reflection loop, RLVR-style
    process rewards, drift guard, Rust-only Toolsmith planning, read-only Agent
-   Team coordination, experience replay, and persisted adaptive state.
+   Team coordination, Reasoning Genome Chain, Gene Scissors, experience replay,
+   and persisted adaptive state.
 
 3. Memory system / 记忆系统
    Infini-attention-style global/local KV split, hierarchical gist memory,
@@ -215,6 +216,18 @@ The north star is now explicitly scoped around five core requirements:
     messages, risks, gates, and evolution hints into a blackboard, while the
     main thread remains the only writer to code, memory, and adaptive state.
 
+16. Reasoning Genome Chain and Gene Scissors / 推理基因链与基因剪
+    Add a DNA/NDA-style layer above routing, memory, reflection, and tools:
+    reasoning genes encode reusable strategy atoms, genome chains compose those
+    atoms per task profile, expression traces record how a chain affected an
+    inference, and fitness comes from process reward, compiler/test/benchmark
+    evidence, reflection diagnostics, latency, memory usefulness, and drift.
+    Gene Scissors is the controlled editor for this genome. It can propose
+    cutting weak genes, quarantining contaminated genes, splicing validated
+    genes, or rolling back low-fitness changes, but every durable edit must
+    pass dry-run evidence, trace/schema gates, benchmark floors, rollback caps,
+    and human/operator approval before it can mutate persisted adaptive state.
+
 ## Target Module Fusion / 目标模块融合
 
 The following algorithmic ideas are merged into the project goal as owned local
@@ -262,6 +275,16 @@ modules, not external product dependencies:
   reports and the cumulative evolution ledger should record when that
   structured live-evolution evidence is consumed, so self-evolution can be
   audited beyond text notes.
+- Reasoning Genome Chain and Gene Scissors:
+  [`docs/architecture/reasoning-genome-chain.md`](docs/architecture/reasoning-genome-chain.md)
+  defines the new DNA/NDA-style evolution goal. Reasoning genes capture local
+  strategy atoms such as retrieval posture, routing preference, adaptive
+  threshold policy, reflection checks, language mode, budget rules, and
+  tool-use constraints. Genome expression influences router, hierarchy, memory,
+  Toolsmith, Agent Team, and reflection inputs without modifying model weights.
+  Gene Scissors can only edit the genome through auditable proposals, dry-run
+  traces, process-reward fitness, Rust compiler/tests/benchmarks, drift gates,
+  and rollback ledgers, so self-evolution remains reviewable and reversible.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
