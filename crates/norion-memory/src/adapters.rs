@@ -3,11 +3,13 @@ use std::collections::BTreeSet;
 use crate::{
     ContextCandidate, ContextDecisionKind, ContextInjectionGate, ContextInjectionPlan,
     DefaultContextInjectionGate, DefaultExperienceGovernance, DefaultMemoryIndexPlanner,
-    DefaultMemoryRepairPlanner, DefaultTieredMemoryPlanner, DiskKvOffload, ExperienceEnvelope,
-    ExperienceGovernance, ExperienceIndexQualityGate, GovernanceReport, IndexRebuildPlan,
-    KvShardMetadata, KvSwapIntent, MemoryAdapter, MemoryIndexDocument, MemoryIndexPlan,
-    MemoryIndexPlanner, MemoryPlacementCandidate, MemoryRepairPlan, MemoryRepairPlanner,
-    MemoryResult, MemoryScope, TierBudgets, TieredMemoryPlan, TieredMemoryPlanner,
+    DefaultMemoryRepairPlanner, DefaultMemorySemanticRetriever, DefaultTieredMemoryPlanner,
+    DiskKvOffload, ExperienceEnvelope, ExperienceGovernance, ExperienceIndexQualityGate,
+    GovernanceReport, IndexRebuildPlan, KvShardMetadata, KvSwapIntent, MemoryAdapter,
+    MemoryIndexDocument, MemoryIndexPlan, MemoryIndexPlanner, MemoryPlacementCandidate,
+    MemoryRepairPlan, MemoryRepairPlanner, MemoryResult, MemoryScope, MemorySemanticQuery,
+    MemorySemanticRetrievalPlan, MemorySemanticRetriever, TierBudgets, TieredMemoryPlan,
+    TieredMemoryPlanner,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,6 +187,7 @@ pub struct ReadOnlyMemoryPlan {
     pub quality_gate: ExperienceIndexQualityGate,
     pub repair: MemoryRepairPlan,
     pub index: MemoryIndexPlan,
+    pub semantic: MemorySemanticRetrievalPlan,
     pub context: ContextInjectionPlan,
     pub placement: TieredMemoryPlan,
     pub kvswap: KvSwapIntent,
@@ -1421,10 +1424,27 @@ impl ReadOnlyMemoryPlan {
         let index = DefaultMemoryIndexPlanner.plan(&documents, &rebuild);
         let context_request_scope = scope.cloned().unwrap_or_default();
         let context_request = crate::MemoryRequestContext::new(
-            context_request_scope,
+            context_request_scope.clone(),
             crate::MemoryAccessPurpose::Recall,
         );
-        let context_candidates = documents
+        let semantic_query = MemorySemanticQuery::new(
+            read_only_semantic_query_text(scope, &context_request_scope),
+            context_request.limit,
+        )
+        .with_scope(context_request_scope.clone())
+        .with_token_budget(context_request.limit.saturating_mul(128).max(1));
+        let semantic = DefaultMemorySemanticRetriever.retrieve(&documents, &semantic_query);
+        let semantic_documents = semantic
+            .matches
+            .iter()
+            .map(|item| {
+                MemoryIndexDocument::new(item.id.clone(), item.source, item.content.clone())
+                    .with_scope(item.scope.clone())
+                    .with_metadata(item.metadata.clone())
+                    .with_strength(item.score.max(item.strength))
+            })
+            .collect::<Vec<_>>();
+        let context_candidates = semantic_documents
             .iter()
             .map(ContextCandidate::from_index_document)
             .collect::<Vec<_>>();
@@ -1453,6 +1473,7 @@ impl ReadOnlyMemoryPlan {
             quality_gate,
             repair,
             index,
+            semantic,
             context,
             placement,
             kvswap,
@@ -1487,6 +1508,7 @@ impl ReadOnlyMemoryPlan {
             self.repair.skipped_reason_codes(),
         );
         insert_prefixed_codes(&mut codes, "index", self.index.reason_codes());
+        insert_prefixed_codes(&mut codes, "semantic", self.semantic.reason_codes());
         insert_prefixed_codes(&mut codes, "context", self.context.reason_codes());
         insert_prefixed_codes(&mut codes, "kvswap", self.kvswap.reason_codes());
         codes.into_iter().collect()
@@ -1499,6 +1521,7 @@ impl ReadOnlyMemoryPlan {
         insert_prefixed_codes(&mut codes, "quality_gate", self.quality_gate.detail_codes());
         insert_prefixed_codes(&mut codes, "repair", self.repair.detail_codes());
         insert_prefixed_codes(&mut codes, "index", self.index.detail_codes());
+        insert_prefixed_codes(&mut codes, "semantic", self.semantic.skip_detail_codes());
         insert_prefixed_codes(&mut codes, "context", self.context.detail_codes());
         insert_prefixed_codes(&mut codes, "kvswap", self.kvswap.detail_codes());
         codes.into_iter().collect()
@@ -1521,7 +1544,7 @@ impl ReadOnlyMemoryPlan {
         let context_reject = self.context.decisions.len() - context_admit - context_summarize;
 
         format!(
-            "memory_read_only_plan adapter={} write_mode={} review={} experiences={} kv_shards={} noisy={} context_rot={} rebuild_required={} rebuild_reasons={} quality_gate_ready={} quality_gate_blockers={} quality_gate_warnings={} repair_items={} repair_skipped={} index_ops={} index_skipped={} context_admit={} context_summarize={} context_reject={} context_tokens={} hot_gpu={} warm_ram={} cold_disk={} kvswap_empty={} reason_codes={} detail_codes={}",
+            "memory_read_only_plan adapter={} write_mode={} review={} experiences={} kv_shards={} noisy={} context_rot={} rebuild_required={} rebuild_reasons={} quality_gate_ready={} quality_gate_blockers={} quality_gate_warnings={} repair_items={} repair_skipped={} index_ops={} index_skipped={} semantic_matches={} semantic_skipped={} semantic_tokens={} context_admit={} context_summarize={} context_reject={} context_tokens={} hot_gpu={} warm_ram={} cold_disk={} kvswap_empty={} reason_codes={} detail_codes={}",
             self.summary.adapter_name,
             self.summary.write_mode.as_str(),
             self.requires_operator_review(),
@@ -1538,6 +1561,9 @@ impl ReadOnlyMemoryPlan {
             self.repair.skipped.len(),
             self.index.operations.len(),
             self.index.skipped_ids.len(),
+            self.semantic.matches.len(),
+            self.semantic.skipped.len(),
+            self.semantic.used_tokens,
             context_admit,
             context_summarize,
             context_reject,
@@ -1550,6 +1576,17 @@ impl ReadOnlyMemoryPlan {
             join_codes(self.detail_codes()),
         )
     }
+}
+
+fn read_only_semantic_query_text(
+    scope: Option<&MemoryScope>,
+    fallback_scope: &MemoryScope,
+) -> String {
+    scope
+        .and_then(|scope| scope.task_id.as_deref())
+        .or(fallback_scope.task_id.as_deref())
+        .unwrap_or("memory recall")
+        .to_owned()
 }
 
 fn insert_prefixed_codes(codes: &mut BTreeSet<String>, prefix: &str, source: Vec<String>) {
@@ -2064,14 +2101,18 @@ mod tests {
                 .any(|operation| operation.source_id == "polluted")
         );
         assert!(!plan.repair.items.is_empty());
-        assert!(plan.context.rejected_ids().contains(&"polluted".to_owned()));
+        assert_eq!(
+            plan.semantic.skipped_ids_for_reason("cross_task_scope"),
+            vec!["polluted".to_owned()]
+        );
+        assert!(plan.context.rejected_ids().is_empty());
         assert_eq!(plan.kvswap.prefetch.promote_ids, vec!["promote".to_owned()]);
         assert_eq!(plan.kvswap.evict.demote_ids, vec!["demote".to_owned()]);
         let reason_codes = plan.reason_codes();
         assert!(
             reason_codes
                 .iter()
-                .any(|code| code == "context:cross_task_scope")
+                .any(|code| code == "semantic:cross_task_scope")
         );
         assert!(
             reason_codes
@@ -2088,9 +2129,9 @@ mod tests {
             code == "governance:context_rot:polluted:cross_task_transcript_pollution"
         }));
         assert!(
-            detail_codes
-                .iter()
-                .any(|code| { code == "context:reject_scope:cross_task_scope:706f6c6c75746564" })
+            detail_codes.iter().any(|code| {
+                code == "semantic:skip:experience:cross_task_scope:706f6c6c75746564"
+            })
         );
         assert!(detail_codes.iter().any(|code| {
             code == "repair:quarantine:governance_quarantine_candidate:706f6c6c75746564"
@@ -2110,12 +2151,13 @@ mod tests {
         assert!(summary.contains("memory_read_only_plan adapter=fake_service"));
         assert!(summary.contains("review=true"));
         assert!(summary.contains("experiences=2 kv_shards=2"));
-        assert!(summary.contains("context_reject=1"));
+        assert!(summary.contains("semantic_skipped=1"));
+        assert!(summary.contains("context_reject=0"));
         assert!(summary.contains("kvswap_empty=false"));
         assert!(summary.contains("reason_codes="));
-        assert!(summary.contains("context:cross_task_scope"));
+        assert!(summary.contains("semantic:cross_task_scope"));
         assert!(summary.contains("detail_codes="));
-        assert!(summary.contains("context:reject_scope:cross_task_scope:706f6c6c75746564"));
+        assert!(summary.contains("semantic:skip:experience:cross_task_scope:706f6c6c75746564"));
         assert!(
             summary.contains("governance:context_rot:polluted:cross_task_transcript_pollution")
         );
@@ -2128,14 +2170,13 @@ mod tests {
         assert!(readiness.operator_review_required);
         assert_eq!(
             readiness.summary_line(),
-            "memory_migration_readiness isolated_write_ready=true review=true blockers=0 warnings=7 blocker_codes=none warning_codes=context_rejections|governance_rebuild_required|kvswap_intent_pending|quality_gate_blockers|quality_gate_warnings|repair_items|repair_skipped blocker_detail_codes=none warning_detail_codes=context_rejections=1|governance_rebuild_required|kvswap_intent_pending|quality_gate_blockers=1|quality_gate_warnings=2|repair_items=1|repair_skipped=1 blocker_details=none warning_details=context_rejections=1|governance_rebuild_required|kvswap_intent_pending|quality_gate_blockers=1|quality_gate_warnings=2|repair_items=1|repair_skipped=1"
+            "memory_migration_readiness isolated_write_ready=true review=true blockers=0 warnings=6 blocker_codes=none warning_codes=governance_rebuild_required|kvswap_intent_pending|quality_gate_blockers|quality_gate_warnings|repair_items|repair_skipped blocker_detail_codes=none warning_detail_codes=governance_rebuild_required|kvswap_intent_pending|quality_gate_blockers=1|quality_gate_warnings=2|repair_items=1|repair_skipped=1 blocker_details=none warning_details=governance_rebuild_required|kvswap_intent_pending|quality_gate_blockers=1|quality_gate_warnings=2|repair_items=1|repair_skipped=1"
         );
         assert_eq!(readiness.blocker_details(), Vec::<String>::new());
         assert_eq!(readiness.blocker_detail_codes(), Vec::<String>::new());
         assert_eq!(
             readiness.warning_details(),
             vec![
-                "context_rejections=1".to_owned(),
                 "governance_rebuild_required".to_owned(),
                 "kvswap_intent_pending".to_owned(),
                 "quality_gate_blockers=1".to_owned(),
@@ -2147,7 +2188,6 @@ mod tests {
         assert_eq!(
             readiness.warning_detail_codes(),
             vec![
-                "context_rejections=1".to_owned(),
                 "governance_rebuild_required".to_owned(),
                 "kvswap_intent_pending".to_owned(),
                 "quality_gate_blockers=1".to_owned(),
@@ -2159,7 +2199,6 @@ mod tests {
         assert_eq!(
             readiness.warning_codes(),
             vec![
-                "context_rejections".to_owned(),
                 "governance_rebuild_required".to_owned(),
                 "kvswap_intent_pending".to_owned(),
                 "quality_gate_blockers".to_owned(),

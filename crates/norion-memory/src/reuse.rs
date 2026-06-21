@@ -2,9 +2,10 @@ use std::collections::BTreeSet;
 
 use crate::{
     ContextCandidate, ContextInjectionGate, ContextInjectionPlan, DefaultContextInjectionGate,
-    KvPrefetchPlan, KvSwap, LongTermMatch, LongTermMemory, LongTermQuery, MemoryAdapter,
-    MemoryAdapterCapability, MemoryAdapterDescriptor, MemoryAdapterHealth, MemoryIndexSource,
-    MemoryRequestContext, MemoryResult,
+    DefaultMemorySemanticRetriever, KvPrefetchPlan, KvSwap, LongTermMatch, LongTermMemory,
+    LongTermQuery, MemoryAdapter, MemoryAdapterCapability, MemoryAdapterDescriptor,
+    MemoryAdapterHealth, MemoryIndexDocument, MemoryIndexSource, MemoryRequestContext,
+    MemoryResult, MemorySemanticQuery, MemorySemanticRetrievalPlan, MemorySemanticRetriever,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +35,7 @@ pub struct MemoryReusePlan {
     pub read_only: bool,
     pub candidate_count: usize,
     pub long_term_matches: Vec<LongTermMatch>,
+    pub semantic_retrieval: Option<MemorySemanticRetrievalPlan>,
     pub context_plan: ContextInjectionPlan,
     pub requested_kv_ids: Vec<String>,
     pub kv_prefetch_plan: Option<KvPrefetchPlan>,
@@ -128,6 +130,21 @@ impl MemoryReusePlan {
         if !self.long_term_matches.is_empty() {
             codes.insert("long_term_matches".to_owned());
         }
+        if let Some(semantic) = &self.semantic_retrieval {
+            codes.insert("semantic_retrieval".to_owned());
+            if !semantic.matches.is_empty() {
+                codes.insert("semantic_matches".to_owned());
+            }
+            if !semantic.skipped.is_empty() {
+                codes.insert("semantic_skipped".to_owned());
+            }
+            codes.extend(
+                semantic
+                    .reason_codes()
+                    .into_iter()
+                    .map(|code| format!("semantic_{code}")),
+            );
+        }
         if self.accepted_context_count() > 0 {
             codes.insert("context_accepted".to_owned());
         }
@@ -164,6 +181,14 @@ impl MemoryReusePlan {
                 .iter()
                 .map(|item| format!("long_term_match:{}", item.id)),
         );
+        if let Some(semantic) = &self.semantic_retrieval {
+            codes.extend(
+                semantic
+                    .detail_codes()
+                    .into_iter()
+                    .map(|code| format!("semantic:{code}")),
+            );
+        }
         codes.extend(
             self.context_plan
                 .detail_codes()
@@ -255,6 +280,34 @@ impl DefaultMemoryReusePlanner {
         plan.long_term_matches = matches;
         Ok(plan)
     }
+
+    pub fn plan_from_index_documents(
+        &self,
+        documents: &[MemoryIndexDocument],
+        query: MemorySemanticQuery,
+        request: &MemoryRequestContext,
+        kv_swap: Option<&dyn KvSwap>,
+    ) -> MemoryReusePlan {
+        let semantic = DefaultMemorySemanticRetriever.retrieve(documents, &query);
+        let semantic_documents = semantic
+            .matches
+            .iter()
+            .map(|item| {
+                MemoryIndexDocument::new(item.id.clone(), item.source, item.content.clone())
+                    .with_scope(item.scope.clone())
+                    .with_metadata(item.metadata.clone())
+                    .with_strength(item.score.max(item.strength))
+            })
+            .collect::<Vec<_>>();
+        let candidates = semantic_documents
+            .iter()
+            .map(ContextCandidate::from_index_document)
+            .collect::<Vec<_>>();
+        let mut plan = self.plan_from_candidates(&candidates, request, kv_swap);
+        plan.candidate_count = documents.len();
+        plan.semantic_retrieval = Some(semantic);
+        plan
+    }
 }
 
 impl MemoryAdapter for DefaultMemoryReusePlanner {
@@ -263,6 +316,7 @@ impl MemoryAdapter for DefaultMemoryReusePlanner {
             "default_memory_reuse_planner",
             vec![
                 MemoryAdapterCapability::LongTermMemory,
+                MemoryAdapterCapability::SemanticRetrieval,
                 MemoryAdapterCapability::ContextInjection,
                 MemoryAdapterCapability::KvSwap,
             ],
@@ -295,6 +349,7 @@ impl MemoryReusePlanner for DefaultMemoryReusePlanner {
             read_only: true,
             candidate_count: candidates.len(),
             long_term_matches: Vec::new(),
+            semantic_retrieval: None,
             context_plan,
             requested_kv_ids,
             kv_prefetch_plan,
@@ -475,6 +530,97 @@ mod tests {
     }
 
     #[test]
+    fn reuse_planner_routes_index_documents_through_semantic_retrieval() {
+        let runtime_scope = MemoryScope::for_task("runtime");
+        let mut safe_metadata = metadata_with_kv("safe-cold");
+        safe_metadata.insert("confidence".to_owned(), "0.9".to_owned());
+        let mut private_metadata = Metadata::new();
+        private_metadata.insert("privacy".to_owned(), "blocked".to_owned());
+        let mut corrupt_gene_metadata = Metadata::new();
+        corrupt_gene_metadata.insert("gene_status".to_owned(), "corrupt".to_owned());
+        let documents = vec![
+            MemoryIndexDocument::new(
+                "safe-memory",
+                MemoryIndexSource::Experience,
+                "runtime adapter semantic reuse lesson",
+            )
+            .with_scope(runtime_scope.clone())
+            .with_metadata(safe_metadata)
+            .with_strength(0.9),
+            MemoryIndexDocument::new(
+                "private-memory",
+                MemoryIndexSource::Experience,
+                "runtime adapter semantic reuse private payload",
+            )
+            .with_scope(runtime_scope.clone())
+            .with_metadata(private_metadata)
+            .with_strength(0.95),
+            MemoryIndexDocument::new(
+                "corrupt-gene",
+                MemoryIndexSource::GeneSegment,
+                "runtime adapter semantic reuse gene payload",
+            )
+            .with_scope(runtime_scope.clone())
+            .with_metadata(corrupt_gene_metadata)
+            .with_strength(0.95),
+        ];
+
+        let backend = InMemoryDiskKvOffload::new();
+        let mut swap = KvSwapManager::new(backend);
+        swap.stage_hot("safe-cold".to_owned(), b"safe bytes".to_vec(), 0.5)
+            .unwrap();
+        let eviction = swap.plan_eviction(0);
+        swap.evict(&eviction).unwrap();
+
+        let plan = DefaultMemoryReusePlanner::new().plan_from_index_documents(
+            &documents,
+            MemorySemanticQuery::new("runtime adapter semantic reuse", 8)
+                .with_scope(runtime_scope.clone())
+                .with_token_budget(128),
+            &request("runtime"),
+            Some(&swap),
+        );
+
+        let semantic = plan.semantic_retrieval.as_ref().unwrap();
+        assert_eq!(plan.candidate_count, 3);
+        assert_eq!(semantic.matched_ids(), vec!["safe-memory".to_owned()]);
+        assert_eq!(
+            semantic.skipped_ids_for_reason("privacy_blocked"),
+            vec!["private-memory".to_owned()]
+        );
+        assert_eq!(
+            semantic.skipped_ids_for_reason("gene_segment_corrupt"),
+            vec!["corrupt-gene".to_owned()]
+        );
+        assert_eq!(
+            plan.context_plan.accepted_ids(),
+            vec!["safe-memory".to_owned()]
+        );
+        assert_eq!(plan.context_plan.rejected_ids(), Vec::<String>::new());
+        assert_eq!(plan.requested_kv_ids, vec!["safe-cold".to_owned()]);
+        assert_eq!(
+            plan.kv_prefetch_plan.as_ref().unwrap().promote_ids,
+            vec!["safe-cold".to_owned()]
+        );
+        assert!(
+            plan.reason_codes()
+                .contains(&"semantic_privacy_blocked".to_owned())
+        );
+        assert!(
+            plan.reason_codes()
+                .contains(&"semantic_gene_segment_corrupt".to_owned())
+        );
+        assert!(plan.detail_codes().iter().any(|code| {
+            code == "semantic:skip:experience:privacy_blocked:707269766174652d6d656d6f7279"
+        }));
+        assert!(plan.detail_codes().iter().any(|code| {
+            code == "semantic:skip:gene_segment:gene_segment_corrupt:636f72727570742d67656e65"
+        }));
+        assert!(!plan.summary_line().contains("private payload"));
+        assert!(!plan.summary_line().contains("gene payload"));
+    }
+
+    #[test]
     fn reuse_planner_ignores_rejected_context_for_kv_prefetch() {
         let mut accepted = ContextCandidate::new("accepted", "safe runtime lesson", 0.9)
             .with_scope(MemoryScope::for_task("runtime"));
@@ -550,6 +696,11 @@ mod tests {
             descriptor
                 .capabilities
                 .contains(&MemoryAdapterCapability::LongTermMemory)
+        );
+        assert!(
+            descriptor
+                .capabilities
+                .contains(&MemoryAdapterCapability::SemanticRetrieval)
         );
         assert!(
             descriptor
