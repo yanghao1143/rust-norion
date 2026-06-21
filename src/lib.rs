@@ -30,6 +30,7 @@ pub mod self_evolution;
 pub mod self_evolving_memory;
 pub mod split;
 pub mod state_inspect;
+pub mod tenant_scope;
 pub mod tiered_cache;
 pub mod token_stream;
 pub mod toolsmith;
@@ -195,6 +196,12 @@ pub use state_inspect::{
     StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
     StateInspectionMatrixGate, StateInspectionMatrixGateReport, StateInspectionReport,
     StateMemorySummary, StateMemoryVectorDimensions,
+};
+pub use tenant_scope::{
+    TenantAccessDecision, TenantAccessKind, TenantIsolationAuditEvent, TenantIsolationGate,
+    TenantIsolationReport, TenantMigrationAction, TenantMigrationPlan, TenantMigrationRecord,
+    TenantResourceLane, TenantScope, TenantScopedKey, TenantScopedKvReadReport,
+    TenantScopedKvWriteReport, tenant_scoped_delete, tenant_scoped_get, tenant_scoped_put,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
