@@ -105,6 +105,190 @@ pub(super) fn evaluate_self_evolution_admission_schema_line(line: &str) -> Vec<S
     failures
 }
 
+pub(super) fn evaluate_self_evolution_experiment_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolution-experiment-v1\"",
+        ),
+        ("sequence", "\"sequence\":"),
+        ("experiment_id", "\"experiment_id\":"),
+        ("candidate_id", "\"candidate_id\":"),
+        ("decision", "\"decision\":"),
+        ("repeated_experiment", "\"repeated_experiment\":"),
+        ("conflicting_evidence", "\"conflicting_evidence\":"),
+        ("rollback_required", "\"rollback_required\":"),
+        ("rollback_replayable", "\"rollback_replayable\":"),
+        ("human_approval_required", "\"human_approval_required\":"),
+        ("active_candidate", "\"active_candidate\":"),
+        ("read_only", "\"read_only\":"),
+        ("report_only", "\"report_only\":"),
+        ("preview_only", "\"preview_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("evidence_ids", "\"evidence_ids\":"),
+        ("rollback_anchor_ids", "\"rollback_anchor_ids\":"),
+        ("blocked_reasons", "\"blocked_reasons\":"),
+        ("content_digest", "\"content_digest\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing self_evolution_experiment field {name}"));
+        }
+    }
+
+    let sequence = extract_json_usize_field(line, "sequence").unwrap_or(0);
+    if sequence == 0 {
+        failures.push("self_evolution_experiment sequence must be positive".to_owned());
+    }
+    for field in ["experiment_id", "candidate_id", "content_digest"] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if value.trim().is_empty() {
+            failures.push(format!("self_evolution_experiment {field} is empty"));
+        }
+    }
+    let content_digest = extract_json_string_field(line, "content_digest").unwrap_or_default();
+    if !content_digest.starts_with("fnv64:") {
+        failures.push("self_evolution_experiment content_digest must be stable fnv64".to_owned());
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_evolution_experiment",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "report_only",
+        true,
+        "self_evolution_experiment",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "preview_only",
+        true,
+        "self_evolution_experiment",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "human_approval_required",
+        true,
+        "self_evolution_experiment",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "active_candidate",
+        false,
+        "self_evolution_experiment",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_evolution_experiment",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_evolution_experiment",
+    );
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    let rollback_required = extract_json_bool_field(line, "rollback_required");
+    let rollback_replayable = extract_json_bool_field(line, "rollback_replayable");
+    let conflicting_evidence = extract_json_bool_field(line, "conflicting_evidence");
+    let evidence_ids = extract_json_string_array_field(line, "evidence_ids").unwrap_or_default();
+    let rollback_anchor_ids =
+        extract_json_string_array_field(line, "rollback_anchor_ids").unwrap_or_default();
+    let blocked_reasons =
+        extract_json_string_array_field(line, "blocked_reasons").unwrap_or_default();
+
+    for (field, values) in [
+        ("evidence_ids", &evidence_ids),
+        ("rollback_anchor_ids", &rollback_anchor_ids),
+        ("blocked_reasons", &blocked_reasons),
+    ] {
+        if values.iter().any(|value| value.trim().is_empty()) {
+            failures.push(format!(
+                "self_evolution_experiment {field} contains empty item"
+            ));
+        }
+    }
+    if evidence_ids.is_empty() {
+        failures.push("self_evolution_experiment requires evidence_ids".to_owned());
+    }
+    if rollback_anchor_ids.is_empty() {
+        failures.push("self_evolution_experiment requires rollback_anchor_ids".to_owned());
+    }
+
+    match decision.as_str() {
+        "admit_for_human_review" => {
+            if !blocked_reasons.is_empty() {
+                failures.push(
+                    "self_evolution_experiment admitted record must not have blocked reasons"
+                        .to_owned(),
+                );
+            }
+            if rollback_required != Some(false) {
+                failures.push(
+                    "self_evolution_experiment admitted record must not require rollback"
+                        .to_owned(),
+                );
+            }
+        }
+        "hold" => {
+            if blocked_reasons.is_empty() && conflicting_evidence != Some(true) {
+                failures.push(
+                    "self_evolution_experiment hold requires blocked reasons or conflict"
+                        .to_owned(),
+                );
+            }
+            if rollback_required != Some(false) {
+                failures
+                    .push("self_evolution_experiment hold must not require rollback".to_owned());
+            }
+        }
+        "reject" => {
+            if blocked_reasons.is_empty() {
+                failures
+                    .push("self_evolution_experiment reject requires blocked reasons".to_owned());
+            }
+            if rollback_required != Some(false) {
+                failures
+                    .push("self_evolution_experiment reject must not require rollback".to_owned());
+            }
+        }
+        "rollback" => {
+            if rollback_required != Some(true) {
+                failures
+                    .push("self_evolution_experiment rollback must require rollback".to_owned());
+            }
+            if rollback_replayable != Some(true) {
+                failures.push("self_evolution_experiment rollback must be replayable".to_owned());
+            }
+            if blocked_reasons.is_empty() {
+                failures
+                    .push("self_evolution_experiment rollback requires blocked reasons".to_owned());
+            }
+        }
+        _ => failures.push(format!(
+            "self_evolution_experiment decision {decision} is not supported"
+        )),
+    }
+
+    failures
+}
+
 fn evaluate_review_packet(
     failures: &mut Vec<String>,
     line: &str,

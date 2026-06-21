@@ -228,6 +228,181 @@ fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
     cleanup(path);
 }
 
+#[test]
+fn trace_schema_jsonl_gate_aggregates_self_evolution_experiments() {
+    let path = temp_path("trace-schema-self-evolution-experiments");
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    let admitted = ledger.append_admission_report(
+        "experiment-pass",
+        &self_evolution_experiment_passing_report("candidate-pass"),
+    );
+    let held = ledger.append_admission_report(
+        "experiment-hold",
+        &self_evolution_experiment_hold_report("candidate-hold"),
+    );
+    let rejected = ledger.append_admission_report(
+        "experiment-reject",
+        &self_evolution_experiment_reject_report("candidate-reject"),
+    );
+    let rollback = ledger.append_admission_report(
+        "experiment-pass",
+        &self_evolution_experiment_rollback_report("candidate-rollback"),
+    );
+
+    append_self_evolution_experiment_trace_jsonl(&path, &admitted).unwrap();
+    append_self_evolution_experiment_trace_jsonl(&path, &held).unwrap();
+    append_self_evolution_experiment_trace_jsonl(&path, &rejected).unwrap();
+    append_self_evolution_experiment_trace_jsonl(&path, &rollback).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 4);
+    assert_eq!(report.self_evolution_experiment_events, 4);
+    assert_eq!(report.self_evolution_experiment_admit, 1);
+    assert_eq!(report.self_evolution_experiment_hold, 1);
+    assert_eq!(report.self_evolution_experiment_reject, 1);
+    assert_eq!(report.self_evolution_experiment_rollback, 1);
+    assert_eq!(report.self_evolution_experiment_repeated, 1);
+    assert_eq!(report.self_evolution_experiment_conflicts, 0);
+    assert_eq!(report.self_evolution_experiment_rollback_replayable, 1);
+    assert_eq!(report.self_evolution_experiment_active_candidates, 0);
+    assert_eq!(report.self_evolution_experiment_write_allowed, 0);
+    assert_eq!(report.self_evolution_experiment_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_experiment_events=4")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_experiment_rollback=1")
+    );
+    cleanup(path);
+}
+
+fn self_evolution_experiment_passing_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+    let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        NoironRouter::new().state(),
+        TaskProfile::Coding,
+        GenerationMetrics {
+            perplexity: 36.0,
+            semantic_consistency: 0.20,
+            contradiction_count: 2,
+            token_count: 64,
+        },
+    );
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        candidate_id,
+        EvolutionLedger {
+            replay_rust_check_items: 2,
+            replay_rust_check_passed: 2,
+            replay_rust_check_failed: 0,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ))
+    .with_router_threshold_preview_report(&router_preview);
+
+    SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
+fn self_evolution_experiment_hold_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        candidate_id,
+        EvolutionLedger {
+            replay_rust_check_items: 2,
+            replay_rust_check_passed: 2,
+            replay_rust_check_failed: 0,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ));
+
+    SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
+fn self_evolution_experiment_reject_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        candidate_id,
+        EvolutionLedger {
+            replay_rust_check_items: 1,
+            replay_rust_check_passed: 0,
+            replay_rust_check_failed: 1,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: false,
+            failures: vec!["trace experiment failed benchmark gate".to_owned()],
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(1, 0, 1),
+        SelfEvolutionValidationLane::new(1, 0, 1),
+        SelfEvolutionValidationLane::new(1, 0, 1),
+        SelfEvolutionValidationLane::new(1, 0, 1),
+    ));
+
+    SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
+fn self_evolution_experiment_rollback_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
+    let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        NoironRouter::new().state(),
+        TaskProfile::Coding,
+        GenerationMetrics {
+            perplexity: 36.0,
+            semantic_consistency: 0.20,
+            contradiction_count: 2,
+            token_count: 64,
+        },
+    );
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        candidate_id,
+        EvolutionLedger {
+            replay_rust_check_items: 2,
+            replay_rust_check_passed: 2,
+            replay_rust_check_failed: 0,
+            drift_rollbacks: 1,
+            rollback_router_threshold_delta: 0.02,
+            rollback_hierarchy_weight_delta: 0.03,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ))
+    .with_router_threshold_preview_report(&router_preview);
+
+    SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
 fn trace_milli(value: f32) -> usize {
     if value.is_finite() {
         (value.clamp(0.0, 1.0) * 1000.0).round() as usize
