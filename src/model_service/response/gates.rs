@@ -191,9 +191,70 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 report.self_evolution_operator_approval_write_allowed,
                 report.self_evolution_operator_approval_applied,
             );
+            let experiment_counters = format!(
+                "\"self_evolution_experiment_counters\":{{\"events\":{},\"admit\":{},\"hold\":{},\"reject\":{},\"rollback\":{},\"repeated\":{},\"conflicts\":{},\"rollback_replayable\":{},\"active_candidates\":{},\"write_allowed\":{},\"applied\":{}}}",
+                report.self_evolution_experiment_events,
+                report.self_evolution_experiment_admit,
+                report.self_evolution_experiment_hold,
+                report.self_evolution_experiment_reject,
+                report.self_evolution_experiment_rollback,
+                report.self_evolution_experiment_repeated,
+                report.self_evolution_experiment_conflicts,
+                report.self_evolution_experiment_rollback_replayable,
+                report.self_evolution_experiment_active_candidates,
+                report.self_evolution_experiment_write_allowed,
+                report.self_evolution_experiment_applied,
+            );
+            let rollback_replay_counters = format!(
+                "\"self_evolution_rollback_replay_counters\":{{\"events\":{},\"items\":{},\"replayable\":{},\"blocked\":{},\"all_replayable\":{},\"rollback_anchor_ids\":{},\"evidence_ids\":{},\"active_candidates\":{},\"item_write_allowed\":{},\"item_applied\":{},\"write_allowed\":{},\"applied\":{},\"gate_events\":{},\"gate_admitted\":{},\"gate_held\":{},\"gate_review_packets\":{},\"gate_review_evidence_ids\":{},\"gate_missing_review_packet_refs\":{},\"gate_item_write_allowed\":{},\"gate_item_applied\":{},\"gate_plan_write_allowed\":{},\"gate_plan_applied\":{},\"gate_write_allowed\":{},\"gate_applied\":{}}}",
+                report.self_evolution_rollback_replay_events,
+                report.self_evolution_rollback_replay_items,
+                report.self_evolution_rollback_replay_replayable,
+                report.self_evolution_rollback_replay_blocked,
+                report.self_evolution_rollback_replay_all_replayable,
+                report.self_evolution_rollback_replay_rollback_anchor_ids,
+                report.self_evolution_rollback_replay_evidence_ids,
+                report.self_evolution_rollback_replay_active_candidates,
+                report.self_evolution_rollback_replay_item_write_allowed,
+                report.self_evolution_rollback_replay_item_applied,
+                report.self_evolution_rollback_replay_write_allowed,
+                report.self_evolution_rollback_replay_applied,
+                report.self_evolution_rollback_replay_gate_events,
+                report.self_evolution_rollback_replay_gate_admitted,
+                report.self_evolution_rollback_replay_gate_held,
+                report.self_evolution_rollback_replay_gate_review_packets,
+                report.self_evolution_rollback_replay_gate_review_evidence_ids,
+                report.self_evolution_rollback_replay_gate_missing_review_packet_refs,
+                report.self_evolution_rollback_replay_gate_item_write_allowed,
+                report.self_evolution_rollback_replay_gate_item_applied,
+                report.self_evolution_rollback_replay_gate_plan_write_allowed,
+                report.self_evolution_rollback_replay_gate_plan_applied,
+                report.self_evolution_rollback_replay_gate_write_allowed,
+                report.self_evolution_rollback_replay_gate_applied,
+            );
+            let rollback_replay_apply_counters = format!(
+                "\"self_evolution_rollback_replay_apply_counters\":{{\"events\":{},\"ready\":{},\"held\":{},\"items\":{},\"replayable\":{},\"blocked\":{},\"review_packets\":{},\"evidence_ids\":{},\"rollback_anchor_ids\":{},\"content_digests\":{},\"source_report_schemas\":{},\"missing_refs\":{},\"blocked_reasons\":{},\"write_allowed\":{},\"applied\":{}}}",
+                report.self_evolution_rollback_replay_apply_events,
+                report.self_evolution_rollback_replay_apply_ready,
+                report.self_evolution_rollback_replay_apply_held,
+                report.self_evolution_rollback_replay_apply_items,
+                report.self_evolution_rollback_replay_apply_replayable,
+                report.self_evolution_rollback_replay_apply_blocked,
+                report.self_evolution_rollback_replay_apply_review_packets,
+                report.self_evolution_rollback_replay_apply_evidence_ids,
+                report.self_evolution_rollback_replay_apply_rollback_anchor_ids,
+                report.self_evolution_rollback_replay_apply_content_digests,
+                report.self_evolution_rollback_replay_apply_source_report_schemas,
+                report.self_evolution_rollback_replay_apply_missing_refs,
+                report.self_evolution_rollback_replay_apply_blocked_reasons,
+                report.self_evolution_rollback_replay_apply_write_allowed,
+                report.self_evolution_rollback_replay_apply_applied,
+            );
             json.replacen(
                 "\"summary\"",
-                &format!("{operator_approval_counters},\"summary\""),
+                &format!(
+                    "{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{rollback_replay_apply_counters},\"summary\""
+                ),
                 1,
             )
         })
@@ -499,5 +560,88 @@ mod tests {
         assert!(json.contains("\"write_allowed\":0"));
         assert!(json.contains("\"applied\":0"));
         assert!(json.contains("\"summary\":"));
+    }
+
+    #[test]
+    fn trace_gate_service_json_exposes_self_evolution_gate_counter_objects() {
+        let report = TraceSchemaGateReport {
+            passed: true,
+            checked_lines: 5,
+            self_evolution_experiment_events: 4,
+            self_evolution_experiment_admit: 1,
+            self_evolution_experiment_hold: 1,
+            self_evolution_experiment_reject: 1,
+            self_evolution_experiment_rollback: 1,
+            self_evolution_experiment_repeated: 1,
+            self_evolution_experiment_conflicts: 1,
+            self_evolution_experiment_rollback_replayable: 1,
+            self_evolution_experiment_active_candidates: 0,
+            self_evolution_experiment_write_allowed: 0,
+            self_evolution_experiment_applied: 0,
+            self_evolution_rollback_replay_events: 1,
+            self_evolution_rollback_replay_items: 2,
+            self_evolution_rollback_replay_replayable: 2,
+            self_evolution_rollback_replay_blocked: 0,
+            self_evolution_rollback_replay_all_replayable: 1,
+            self_evolution_rollback_replay_rollback_anchor_ids: 2,
+            self_evolution_rollback_replay_evidence_ids: 3,
+            self_evolution_rollback_replay_active_candidates: 0,
+            self_evolution_rollback_replay_item_write_allowed: 0,
+            self_evolution_rollback_replay_item_applied: 0,
+            self_evolution_rollback_replay_write_allowed: 0,
+            self_evolution_rollback_replay_applied: 0,
+            self_evolution_rollback_replay_gate_events: 1,
+            self_evolution_rollback_replay_gate_admitted: 1,
+            self_evolution_rollback_replay_gate_held: 0,
+            self_evolution_rollback_replay_gate_review_packets: 1,
+            self_evolution_rollback_replay_gate_review_evidence_ids: 4,
+            self_evolution_rollback_replay_gate_missing_review_packet_refs: 0,
+            self_evolution_rollback_replay_gate_item_write_allowed: 0,
+            self_evolution_rollback_replay_gate_item_applied: 0,
+            self_evolution_rollback_replay_gate_plan_write_allowed: 0,
+            self_evolution_rollback_replay_gate_plan_applied: 0,
+            self_evolution_rollback_replay_gate_write_allowed: 0,
+            self_evolution_rollback_replay_gate_applied: 0,
+            self_evolution_rollback_replay_apply_events: 2,
+            self_evolution_rollback_replay_apply_ready: 1,
+            self_evolution_rollback_replay_apply_held: 1,
+            self_evolution_rollback_replay_apply_items: 2,
+            self_evolution_rollback_replay_apply_replayable: 2,
+            self_evolution_rollback_replay_apply_blocked: 0,
+            self_evolution_rollback_replay_apply_review_packets: 1,
+            self_evolution_rollback_replay_apply_evidence_ids: 4,
+            self_evolution_rollback_replay_apply_rollback_anchor_ids: 2,
+            self_evolution_rollback_replay_apply_content_digests: 3,
+            self_evolution_rollback_replay_apply_source_report_schemas: 2,
+            self_evolution_rollback_replay_apply_missing_refs: 0,
+            self_evolution_rollback_replay_apply_blocked_reasons: 1,
+            self_evolution_rollback_replay_apply_write_allowed: 0,
+            self_evolution_rollback_replay_apply_applied: 0,
+            failures: Vec::new(),
+            ..TraceSchemaGateReport::default()
+        };
+
+        let json = option_trace_gate_service_json(Some(&report));
+
+        assert!(json.contains(
+            "\"self_evolution_experiment_counters\":{\"events\":4,\"admit\":1,\"hold\":1,\"reject\":1,\"rollback\":1"
+        ));
+        assert!(json.contains("\"repeated\":1"));
+        assert!(json.contains("\"conflicts\":1"));
+        assert!(json.contains("\"rollback_replayable\":1"));
+        assert!(json.contains("\"active_candidates\":0"));
+        assert!(json.contains("\"self_evolution_rollback_replay_counters\":{"));
+        assert!(json.contains("\"items\":2"));
+        assert!(json.contains("\"all_replayable\":1"));
+        assert!(json.contains("\"gate_admitted\":1"));
+        assert!(json.contains("\"gate_held\":0"));
+        assert!(json.contains("\"gate_plan_write_allowed\":0"));
+        assert!(json.contains("\"self_evolution_rollback_replay_apply_counters\":{"));
+        assert!(json.contains("\"ready\":1"));
+        assert!(json.contains("\"held\":1"));
+        assert!(json.contains("\"missing_refs\":0"));
+        assert!(json.contains("\"blocked_reasons\":1"));
+        assert!(json.contains("\"write_allowed\":0"));
+        assert!(json.contains("\"applied\":0"));
     }
 }
