@@ -7,6 +7,7 @@ use crate::reflection::ReflectionReport;
 pub enum MemoryAdmissionKind {
     RetrospectiveEpisode,
     ProceduralHeuristic,
+    ToolReliabilityObservation,
     GistEvidence,
     RuntimeKvEvidence,
 }
@@ -16,6 +17,7 @@ impl MemoryAdmissionKind {
         match self {
             Self::RetrospectiveEpisode => "retrospective_episode",
             Self::ProceduralHeuristic => "procedural_heuristic",
+            Self::ToolReliabilityObservation => "tool_reliability_observation",
             Self::GistEvidence => "gist_evidence",
             Self::RuntimeKvEvidence => "runtime_kv_evidence",
         }
@@ -198,6 +200,21 @@ impl MemoryAdmissionPreview {
                 process_reward,
                 &rollback_anchor_id,
                 heuristic_evidence(input.report),
+            ));
+        }
+
+        if input.has_tool_reliability_signal() {
+            candidates.push(candidate(
+                format!("memory_admission:{profile_slug}:tool-reliability:{prompt_digest}"),
+                MemoryAdmissionKind::ToolReliabilityObservation,
+                tool_reliability_decision(input),
+                input,
+                &prompt_digest,
+                prompt_chars,
+                quality,
+                process_reward,
+                &rollback_anchor_id,
+                tool_reliability_evidence(input),
             ));
         }
 
@@ -435,6 +452,25 @@ pub struct MemoryAdmissionInput<'a> {
     pub runtime_kv_hold: bool,
     pub used_memories: usize,
     pub memory_feedback_updates: usize,
+    pub runtime_adapter_observations: usize,
+    pub runtime_adapter_selection_mismatch: bool,
+    pub runtime_adapter_best_score: Option<f32>,
+    pub runtime_adapter_best_reward: Option<f32>,
+    pub runtime_adapter_best_quality: Option<f32>,
+    pub toolsmith_blueprints: usize,
+    pub toolsmith_ready: usize,
+    pub toolsmith_held: usize,
+    pub toolsmith_rejected: usize,
+    pub toolsmith_gate_passed: bool,
+}
+
+impl MemoryAdmissionInput<'_> {
+    fn has_tool_reliability_signal(&self) -> bool {
+        self.runtime_adapter_observations > 0
+            || self.toolsmith_blueprints > 0
+            || self.toolsmith_rejected > 0
+            || self.runtime_adapter_selection_mismatch
+    }
 }
 
 fn candidate(
@@ -516,6 +552,26 @@ fn runtime_kv_decision(input: MemoryAdmissionInput<'_>) -> MemoryAdmissionDecisi
     }
 }
 
+fn tool_reliability_decision(input: MemoryAdmissionInput<'_>) -> MemoryAdmissionDecision {
+    if input.drift_report.rollback_adaptive || input.report.critical_issue_count() > 0 {
+        MemoryAdmissionDecision::Quarantine
+    } else if input.process_reward.action == RewardAction::Penalize
+        || input.runtime_adapter_selection_mismatch
+        || input.toolsmith_rejected > 0
+    {
+        MemoryAdmissionDecision::Hold
+    } else if input
+        .runtime_adapter_best_score
+        .filter(|score| *score >= 0.70)
+        .is_some()
+        || (input.toolsmith_ready > 0 && input.toolsmith_gate_passed)
+    {
+        MemoryAdmissionDecision::Ready
+    } else {
+        MemoryAdmissionDecision::Hold
+    }
+}
+
 fn episode_evidence(input: MemoryAdmissionInput<'_>) -> Vec<String> {
     vec![
         format!("store_as_memory={}", input.report.store_as_memory),
@@ -545,6 +601,43 @@ fn heuristic_evidence(report: &ReflectionReport) -> Vec<String> {
         evidence.push(format!("revision_action={action}"));
     }
     evidence
+}
+
+fn tool_reliability_evidence(input: MemoryAdmissionInput<'_>) -> Vec<String> {
+    vec![
+        format!(
+            "runtime_adapter_observations={}",
+            input.runtime_adapter_observations
+        ),
+        format!(
+            "runtime_adapter_selection_mismatch={}",
+            input.runtime_adapter_selection_mismatch
+        ),
+        format!(
+            "runtime_adapter_best_score={}",
+            option_score(input.runtime_adapter_best_score)
+        ),
+        format!(
+            "runtime_adapter_best_reward={}",
+            option_score(input.runtime_adapter_best_reward)
+        ),
+        format!(
+            "runtime_adapter_best_quality={}",
+            option_score(input.runtime_adapter_best_quality)
+        ),
+        format!("toolsmith_blueprints={}", input.toolsmith_blueprints),
+        format!("toolsmith_ready={}", input.toolsmith_ready),
+        format!("toolsmith_held={}", input.toolsmith_held),
+        format!("toolsmith_rejected={}", input.toolsmith_rejected),
+        format!("toolsmith_gate_passed={}", input.toolsmith_gate_passed),
+    ]
+}
+
+fn option_score(value: Option<f32>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| format!("{:.3}", value.clamp(0.0, 1.0)))
+        .unwrap_or_else(|| "none".to_owned())
 }
 
 fn prompt_digest(prompt: &str) -> String {
@@ -644,6 +737,16 @@ mod tests {
             runtime_kv_hold: false,
             used_memories: 1,
             memory_feedback_updates: 0,
+            runtime_adapter_observations: 0,
+            runtime_adapter_selection_mismatch: false,
+            runtime_adapter_best_score: None,
+            runtime_adapter_best_reward: None,
+            runtime_adapter_best_quality: None,
+            toolsmith_blueprints: 0,
+            toolsmith_ready: 0,
+            toolsmith_held: 0,
+            toolsmith_rejected: 0,
+            toolsmith_gate_passed: true,
         });
 
         assert_eq!(preview.candidate_count(), 1);
@@ -719,6 +822,16 @@ mod tests {
             runtime_kv_hold: true,
             used_memories: 1,
             memory_feedback_updates: 1,
+            runtime_adapter_observations: 0,
+            runtime_adapter_selection_mismatch: false,
+            runtime_adapter_best_score: None,
+            runtime_adapter_best_reward: None,
+            runtime_adapter_best_quality: None,
+            toolsmith_blueprints: 0,
+            toolsmith_ready: 0,
+            toolsmith_held: 0,
+            toolsmith_rejected: 0,
+            toolsmith_gate_passed: true,
         });
 
         assert_eq!(preview.candidate_count(), 3);
@@ -745,6 +858,156 @@ mod tests {
                 .candidates
                 .iter()
                 .all(|candidate| candidate.rollback_anchor_id == "memory_admission:coding:stable")
+        );
+    }
+
+    #[test]
+    fn tool_reliability_signal_creates_approval_packet_without_runtime_payload_leak() {
+        let report = ReflectionReport {
+            quality: 0.78,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "runtime adapter completed safely".to_owned(),
+            store_as_memory: true,
+            lesson: "prefer reliable runtime adapter".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.81,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Reinforce,
+            notes: Vec::new(),
+        };
+        let drift = DriftReport {
+            severity: DriftSeverity::Stable,
+            allow_memory_write: true,
+            allow_runtime_kv_write: true,
+            penalize_used_memory: false,
+            rollback_adaptive: false,
+            notes: Vec::new(),
+        };
+
+        let preview = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
+            prompt: "runtime adapter reliability prompt should stay private",
+            profile: TaskProfile::Coding,
+            report: &report,
+            process_reward: &reward,
+            drift_report: &drift,
+            stored_memory: true,
+            gist_records: 0,
+            stored_gist_memories: 0,
+            exported_runtime_kv_blocks: 0,
+            stored_runtime_kv_memories: 0,
+            runtime_kv_hold: false,
+            used_memories: 2,
+            memory_feedback_updates: 1,
+            runtime_adapter_observations: 2,
+            runtime_adapter_selection_mismatch: false,
+            runtime_adapter_best_score: Some(0.82),
+            runtime_adapter_best_reward: Some(0.81),
+            runtime_adapter_best_quality: Some(0.78),
+            toolsmith_blueprints: 1,
+            toolsmith_ready: 1,
+            toolsmith_held: 0,
+            toolsmith_rejected: 0,
+            toolsmith_gate_passed: true,
+        });
+
+        let tool_candidate = preview
+            .candidates
+            .iter()
+            .find(|candidate| candidate.kind == MemoryAdmissionKind::ToolReliabilityObservation)
+            .expect("tool reliability candidate");
+
+        assert_eq!(preview.candidate_count(), 2);
+        assert_eq!(tool_candidate.decision, MemoryAdmissionDecision::Ready);
+        assert!(
+            tool_candidate
+                .evidence
+                .iter()
+                .any(|item| item == "runtime_adapter_best_score=0.820")
+        );
+        assert!(preview.review_packet_summaries().iter().any(|summary| {
+            summary.contains("tool_reliability_observation")
+                && summary.contains("approval=pending_approval")
+                && summary.contains("requires_approval_gate")
+        }));
+        assert!(
+            !preview
+                .review_packet_summaries()
+                .iter()
+                .any(|summary| summary.contains("runtime adapter reliability prompt"))
+        );
+    }
+
+    #[test]
+    fn tool_reliability_conflict_is_held_for_more_evidence() {
+        let report = ReflectionReport {
+            quality: 0.66,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "adapter mismatch needs review".to_owned(),
+            store_as_memory: true,
+            lesson: "review runtime adapter mismatch".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.67,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Hold,
+            notes: Vec::new(),
+        };
+        let drift = DriftReport {
+            severity: DriftSeverity::Watch,
+            allow_memory_write: true,
+            allow_runtime_kv_write: false,
+            penalize_used_memory: false,
+            rollback_adaptive: false,
+            notes: Vec::new(),
+        };
+
+        let preview = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
+            prompt: "tool mismatch",
+            profile: TaskProfile::Coding,
+            report: &report,
+            process_reward: &reward,
+            drift_report: &drift,
+            stored_memory: false,
+            gist_records: 0,
+            stored_gist_memories: 0,
+            exported_runtime_kv_blocks: 0,
+            stored_runtime_kv_memories: 0,
+            runtime_kv_hold: false,
+            used_memories: 1,
+            memory_feedback_updates: 0,
+            runtime_adapter_observations: 1,
+            runtime_adapter_selection_mismatch: true,
+            runtime_adapter_best_score: Some(0.91),
+            runtime_adapter_best_reward: Some(0.67),
+            runtime_adapter_best_quality: Some(0.66),
+            toolsmith_blueprints: 1,
+            toolsmith_ready: 0,
+            toolsmith_held: 0,
+            toolsmith_rejected: 1,
+            toolsmith_gate_passed: false,
+        });
+
+        let tool_candidate = preview
+            .candidates
+            .iter()
+            .find(|candidate| candidate.kind == MemoryAdmissionKind::ToolReliabilityObservation)
+            .expect("tool reliability candidate");
+
+        assert_eq!(tool_candidate.decision, MemoryAdmissionDecision::Hold);
+        assert_eq!(preview.hold_count(), 1);
+        assert!(
+            preview
+                .review_packet_summaries()
+                .iter()
+                .any(|summary| summary.contains("approval=held_for_evidence")
+                    && summary.contains("needs_more_evidence"))
         );
     }
 }

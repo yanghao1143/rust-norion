@@ -320,6 +320,14 @@ impl NoironEngine {
         let runtime_kv_stored_count = stored_runtime_kv_memory_ids.len();
         let runtime_kv_hold =
             exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
+        let best_adapter_observation = runtime_adapter_observations.first();
+        let runtime_adapter_selection_mismatch = match (
+            best_adapter_observation.map(|observation| observation.adapter.as_str()),
+            runtime_diagnostics.selected_adapter.as_deref(),
+        ) {
+            (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
+            _ => false,
+        };
         let memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt: &request.prompt,
             profile: request.profile,
@@ -334,6 +342,19 @@ impl NoironEngine {
             runtime_kv_hold,
             used_memories: used_memories.len(),
             memory_feedback_updates: memory_feedback.total_updates(),
+            runtime_adapter_observations: runtime_adapter_observations.len(),
+            runtime_adapter_selection_mismatch,
+            runtime_adapter_best_score: best_adapter_observation
+                .map(|observation| observation.score),
+            runtime_adapter_best_reward: best_adapter_observation
+                .map(|observation| observation.reward),
+            runtime_adapter_best_quality: best_adapter_observation
+                .map(|observation| observation.quality),
+            toolsmith_blueprints: toolsmith_plan.blueprint_count(),
+            toolsmith_ready: toolsmith_plan.ready_count(),
+            toolsmith_held: toolsmith_plan.held_count(),
+            toolsmith_rejected: toolsmith_plan.rejected_count(),
+            toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
         });
         let genome_input = GenomeExpressionInput {
             profile: request.profile,

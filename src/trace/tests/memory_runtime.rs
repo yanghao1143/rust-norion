@@ -55,11 +55,14 @@ fn trace_json_line_emits_memory_admission_preview() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
     let outcome = engine.infer(
-        InferenceRequest::new("trace memory admission preview", TaskProfile::Coding),
+        InferenceRequest::new(
+            "trace memory admission preview by building a Rust runtime adapter tool",
+            TaskProfile::Coding,
+        ),
         &mut backend,
     );
     let line = trace_json_line(
-        "trace memory admission preview",
+        "trace memory admission preview by building a Rust runtime adapter tool",
         TaskProfile::Coding,
         5,
         &outcome,
@@ -72,6 +75,12 @@ fn trace_json_line_emits_memory_admission_preview() {
     assert_eq!(
         extract_json_usize_field(admission, "review_packets"),
         extract_json_usize_field(admission, "candidates")
+    );
+    assert!(
+        extract_json_string_array_field(admission, "kinds")
+            .unwrap()
+            .iter()
+            .any(|kind| kind == "tool_reliability_observation")
     );
     assert_eq!(extract_json_usize_field(admission, "admitted"), Some(0));
     assert_eq!(extract_json_bool_field(admission, "read_only"), Some(true));
