@@ -123,10 +123,24 @@ impl ReasoningGene {
         self
     }
 
+    pub fn with_status(mut self, status: ReasoningGeneStatus) -> Self {
+        self.status = status;
+        self
+    }
+
     pub fn derived_status(&self) -> ReasoningGeneStatus {
+        match self.status {
+            ReasoningGeneStatus::Quarantined
+            | ReasoningGeneStatus::Regenerating
+            | ReasoningGeneStatus::Malignant => return self.status,
+            ReasoningGeneStatus::Active | ReasoningGeneStatus::Aging => {}
+        }
+
         if self.drift_score >= MALIGNANT_DRIFT_THRESHOLD {
             ReasoningGeneStatus::Malignant
         } else if self.age >= AGING_AGE_THRESHOLD || self.fitness < LOW_FITNESS_THRESHOLD {
+            ReasoningGeneStatus::Aging
+        } else if self.status == ReasoningGeneStatus::Aging {
             ReasoningGeneStatus::Aging
         } else {
             ReasoningGeneStatus::Active
@@ -151,6 +165,9 @@ pub struct MutationPlan {
     pub target_gene_id: String,
     pub source_gene_ids: Vec<String>,
     pub replacement_gene_id: Option<String>,
+    pub proposed_label: Option<String>,
+    pub proposed_purpose: Option<String>,
+    pub proposed_tags: Vec<String>,
     pub reason: String,
     pub expected_effect: String,
     pub rollback_anchor_id: String,
@@ -174,6 +191,9 @@ impl MutationPlan {
             target_gene_id: target_gene_id.into(),
             source_gene_ids: Vec::new(),
             replacement_gene_id: None,
+            proposed_label: None,
+            proposed_purpose: None,
+            proposed_tags: Vec::new(),
             reason: reason.into(),
             expected_effect: expected_effect.into(),
             rollback_anchor_id: rollback_anchor_id.into(),
@@ -191,6 +211,34 @@ impl MutationPlan {
     pub fn with_replacement(mut self, replacement_gene_id: impl Into<String>) -> Self {
         self.replacement_gene_id = Some(replacement_gene_id.into());
         self
+    }
+
+    pub fn with_repair_payload(
+        mut self,
+        label: impl Into<String>,
+        purpose: impl Into<String>,
+        tags: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.proposed_label = Some(label.into());
+        self.proposed_purpose = Some(purpose.into());
+        self.proposed_tags = tags.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn has_repair_payload(&self) -> bool {
+        self.proposed_label
+            .as_deref()
+            .is_some_and(|label| !label.trim().is_empty())
+            && self
+                .proposed_purpose
+                .as_deref()
+                .is_some_and(|purpose| !purpose.trim().is_empty())
+    }
+
+    pub fn has_regeneration_payload(&self) -> bool {
+        self.intent == GeneScissorsIntent::Regenerate
+            && self.replacement_gene_id.is_some()
+            && self.has_repair_payload()
     }
 
     pub fn is_read_only_preview(&self) -> bool {
@@ -296,6 +344,7 @@ impl ReasoningGenome {
                     active_gene_ids.push(gene.id.clone());
                     aged_gene_ids.push(gene.id.clone());
                     if gene.needs_relabel() {
+                        let (label, purpose, tags) = relabel_payload(gene);
                         relabel_candidate_ids.push(gene.id.clone());
                         mutation_plans.push(MutationPlan::preview(
                             format!("mutation:{}:relabel", gene.id),
@@ -304,12 +353,14 @@ impl ReasoningGenome {
                             "gene label or purpose is aging and needs refreshed function metadata",
                             "refresh label and purpose while preserving the stable gene anchor",
                             self.stable_anchor_id.clone(),
-                        ));
+                        )
+                        .with_repair_payload(label, purpose, tags));
                     }
                 }
                 ReasoningGeneStatus::Malignant => {
                     malignant_gene_ids.push(gene.id.clone());
                     regeneration_candidate_ids.push(gene.id.clone());
+                    let (label, purpose, tags) = regeneration_payload(gene);
                     mutation_plans.push(
                         MutationPlan::preview(
                             format!("mutation:{}:quarantine", gene.id),
@@ -330,7 +381,9 @@ impl ReasoningGenome {
                             "regenerate a young strategy candidate after validation gates pass",
                             self.stable_anchor_id.clone(),
                         )
-                        .with_sources([self.stable_anchor_id.clone()]),
+                        .with_sources([self.stable_anchor_id.clone()])
+                        .with_replacement(regenerated_gene_id(gene))
+                        .with_repair_payload(label, purpose, tags),
                     );
                 }
                 ReasoningGeneStatus::Quarantined | ReasoningGeneStatus::Regenerating => {}
@@ -347,6 +400,7 @@ impl ReasoningGenome {
                 if !malignant_gene_ids.contains(&gene.id) {
                     malignant_gene_ids.push(gene.id.clone());
                     regeneration_candidate_ids.push(gene.id.clone());
+                    let (label, purpose, tags) = regeneration_payload(gene);
                     mutation_plans.push(
                         MutationPlan::preview(
                             format!("mutation:{}:quarantine", gene.id),
@@ -367,7 +421,9 @@ impl ReasoningGenome {
                             "produce a young replacement candidate after validation gates pass",
                             self.stable_anchor_id.clone(),
                         )
-                        .with_sources([self.stable_anchor_id.clone()]),
+                        .with_sources([self.stable_anchor_id.clone()])
+                        .with_replacement(regenerated_gene_id(gene))
+                        .with_repair_payload(label, purpose, tags),
                     );
                 }
                 mutation_plans.push(MutationPlan::preview(
@@ -482,6 +538,20 @@ impl GenomeExpression {
         self.mutation_plans.len()
     }
 
+    pub fn repair_payload_count(&self) -> usize {
+        self.mutation_plans
+            .iter()
+            .filter(|plan| plan.has_repair_payload())
+            .count()
+    }
+
+    pub fn regeneration_payload_count(&self) -> usize {
+        self.mutation_plans
+            .iter()
+            .filter(|plan| plan.has_regeneration_payload())
+            .count()
+    }
+
     pub fn mutation_intents(&self) -> Vec<String> {
         let mut intents = Vec::new();
         for plan in &self.mutation_plans {
@@ -549,6 +619,89 @@ fn compute_youth_pressure(
         pressure += 0.04;
     }
     clamp_unit(pressure)
+}
+
+fn relabel_payload(gene: &ReasoningGene) -> (String, String, Vec<String>) {
+    let label = if gene.label.trim().is_empty() {
+        canonical_label(gene.kind).to_owned()
+    } else {
+        format!("refreshed {}", gene.label.trim())
+    };
+    let purpose = if gene.purpose.trim().is_empty() {
+        canonical_purpose(gene.kind).to_owned()
+    } else {
+        format!(
+            "{}; refreshed to preserve its current function after aging evidence",
+            gene.purpose.trim()
+        )
+    };
+    let mut tags = gene.tags.clone();
+    push_tag_once(&mut tags, gene.kind.as_str());
+    push_tag_once(&mut tags, "relabel");
+    push_tag_once(&mut tags, "youth_renewal");
+    (label, purpose, tags)
+}
+
+fn regeneration_payload(gene: &ReasoningGene) -> (String, String, Vec<String>) {
+    let label = format!("regenerated {}", canonical_label(gene.kind));
+    let purpose = format!(
+        "{}; young candidate rebuilt from the stable anchor after malignant drift isolation",
+        canonical_purpose(gene.kind)
+    );
+    let mut tags = gene.tags.clone();
+    push_tag_once(&mut tags, gene.kind.as_str());
+    push_tag_once(&mut tags, "quarantine");
+    push_tag_once(&mut tags, "regenerate");
+    push_tag_once(&mut tags, "stable_anchor");
+    (label, purpose, tags)
+}
+
+fn regenerated_gene_id(gene: &ReasoningGene) -> String {
+    format!("{}:young", gene.id)
+}
+
+fn canonical_label(kind: ReasoningGeneKind) -> &'static str {
+    match kind {
+        ReasoningGeneKind::Retrieval => "memory retrieval gene",
+        ReasoningGeneKind::Routing => "adaptive routing gene",
+        ReasoningGeneKind::Reflection => "closed-loop reflection gene",
+        ReasoningGeneKind::Language => "task language gene",
+        ReasoningGeneKind::Safety => "drift safety gene",
+        ReasoningGeneKind::ToolUse => "local tool-use gene",
+        ReasoningGeneKind::Budget => "compute budget gene",
+    }
+}
+
+fn canonical_purpose(kind: ReasoningGeneKind) -> &'static str {
+    match kind {
+        ReasoningGeneKind::Retrieval => {
+            "select useful semantic, gist, and runtime KV memory with bounded evidence"
+        }
+        ReasoningGeneKind::Routing => {
+            "route attention thresholds using task, hardware, entropy, and cache signals"
+        }
+        ReasoningGeneKind::Reflection => {
+            "surface contradictions, repair actions, and validated memory admission evidence"
+        }
+        ReasoningGeneKind::Language => {
+            "keep English, Chinese, coding, writing, and long-context behavior profile-scoped"
+        }
+        ReasoningGeneKind::Safety => {
+            "block unsafe memory admission, drift, privacy leaks, and unreviewed mutation writes"
+        }
+        ReasoningGeneKind::ToolUse => {
+            "prefer Rust-written local tools behind explicit build and validation gates"
+        }
+        ReasoningGeneKind::Budget => {
+            "reduce wasted compute while preserving rollback and regeneration evidence"
+        }
+    }
+}
+
+fn push_tag_once(tags: &mut Vec<String>, tag: &str) {
+    if !tags.iter().any(|existing| existing == tag) {
+        tags.push(tag.to_owned());
+    }
 }
 
 fn clamp_unit(value: f32) -> f32 {

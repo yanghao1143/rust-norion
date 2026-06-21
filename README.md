@@ -140,15 +140,16 @@ The target algorithm stack is model-weight independent:
   gates, adaptive rollback, experience replay, and auditable evolution evidence
 - reasoning genome chain: DNA/NDA-style reasoning genes encode reusable
   retrieval, routing, reflection, language, safety, and tool-use strategies;
-  Gene Scissors can propose gated cuts, splices, quarantines, and rollbacks so
-  the control plane evolves behavior without direct weight retraining
+  Gene Scissors can propose gated relabels for aging genes, cuts/splices,
+  quarantines, regeneration candidates, and rollbacks so the control plane
+  evolves behavior without direct weight retraining
 - Rust Transformer refactor: explicit layer templates for local-window,
   global-memory, and convolutional-fusion compute paths
 
 - 超长上下文：Infini 风格全局/局部 KV 分离、递归长上下文调度、层级 gist 记忆、SpeContext 风格稀疏 KV 筛选
 - 轻量 KV 系统：自研 4/8-bit uniform KV 量化、强化式 KV-Fusion、时间衰减、语义聚类和 Hot/Warm/Cold 分层存储
 - 自进化闭环：Test-time Scaling、针对控制决策的 RLVR 风格奖励、同轮推理在线奖励反馈、反思评分、漂移门控、自适应回滚、经验回放和可审计进化证据
-- 推理基因链：用 DNA/NDA 风格的 reasoning genes 表达可复用的检索、路由、反思、语言、安全和工具使用策略；Gene Scissors 只能在门禁下提出剪切、拼接、隔离和回滚，让控制层在不直接重训权重的前提下进化行为
+- 推理基因链：用 DNA/NDA 风格的 reasoning genes 表达可复用的检索、路由、反思、语言、安全和工具使用策略；Gene Scissors 只能在门禁下提出老化基因重打标签、剪切、拼接、隔离、再生候选和回滚，让控制层在不直接重训权重的前提下进化行为
 - Rust Transformer 重构：用显式层模板表达局部窗口、全局记忆、卷积融合等计算路径
 
 See [docs/architecture/reasoning-genome-chain.md](docs/architecture/reasoning-genome-chain.md)
@@ -859,7 +860,9 @@ repair proposals:
 `--benchmark-min-reasoning-genome-splice-cases`, and
 `--benchmark-min-gene-scissors-proposal-cases`. With `--benchmark-all-devices`,
 or by using the matching `*-device-profiles` flags, the same audit can require
-those genome signals across explicit hardware profiles.
+those genome signals across explicit hardware profiles. Trace and benchmark
+evidence also require aging-gene relabel proposals to carry repair payloads and
+malignant-gene regeneration proposals to carry young replacement payloads.
 
 当实验必须证明 DNA 基因链路径已经产生可审计的 expression / splice 证据，并且 Gene
 Scissors 已经输出修复 proposal 时，可以使用
@@ -867,6 +870,7 @@ Scissors 已经输出修复 proposal 时，可以使用
 `--benchmark-min-reasoning-genome-splice-cases` 和
 `--benchmark-min-gene-scissors-proposal-cases`。配合 `--benchmark-all-devices`，
 或者直接使用对应的 `*-device-profiles` 参数时，可以要求这些基因证据覆盖指定数量的显式硬件 profile。
+trace 与 benchmark 证据还会要求老化基因的 relabel proposal 带有修复载荷，并要求恶性基因的 regeneration proposal 带有年轻替代载荷。
 
 Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
 online inference itself mutated control policy, updated live memory feedback,

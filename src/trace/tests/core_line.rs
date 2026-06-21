@@ -77,6 +77,8 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"relabel_candidates\":"));
     assert!(line.contains("\"regeneration_candidates\":"));
     assert!(line.contains("\"gene_scissors_proposals\":"));
+    assert!(line.contains("\"repair_payloads\":"));
+    assert!(line.contains("\"regeneration_payloads\":"));
     assert!(line.contains("\"mutation_intents\":"));
     assert!(line.contains("\"proposal_ids\":"));
     assert!(line.contains("\"youth_pressure\":"));
@@ -266,6 +268,36 @@ fn trace_schema_gate_rejects_reasoning_genome_applied_preview() {
         failures
             .iter()
             .any(|failure| failure.contains("reasoning_genome mutation_applied")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_malignant_genome_without_regeneration_payload() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome repair payload gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome repair payload gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"malignant_genes\":0",
+        "\"malignant_genes\":1",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("regeneration_payloads")),
         "{failures:?}"
     );
 }

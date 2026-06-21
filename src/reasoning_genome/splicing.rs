@@ -549,21 +549,34 @@ impl MutFixer {
                             "replace the quarantined segment only after validation gates pass",
                             stable_anchor_id.clone(),
                         )
-                        .with_sources([stable_anchor_id.clone(), finding.segment_id.clone()]),
+                        .with_sources([stable_anchor_id.clone(), finding.segment_id.clone()])
+                        .with_replacement(regenerated_segment_id(&finding.segment_id))
+                        .with_repair_payload(
+                            format!("regenerated {}", finding.segment_id),
+                            "young replacement segment rebuilt from the stable genome anchor",
+                            ["regenerate", "stable_anchor", finding.kind.as_str()],
+                        ),
                     );
                 }
-                GeneScissorsIntent::Relabel => push_plan_once(
-                    &mut plans,
-                    MutationPlan::preview(
-                        format!("mutation:{}:relabel", finding.segment_id),
-                        GeneScissorsIntent::Relabel,
-                        finding.segment_id.clone(),
-                        finding.reason.clone(),
-                        "refresh segment label and purpose while preserving the stable anchor",
-                        stable_anchor_id.clone(),
-                    )
-                    .with_sources([finding.segment_id.clone()]),
-                ),
+                GeneScissorsIntent::Relabel => {
+                    push_plan_once(
+                        &mut plans,
+                        MutationPlan::preview(
+                            format!("mutation:{}:relabel", finding.segment_id),
+                            GeneScissorsIntent::Relabel,
+                            finding.segment_id.clone(),
+                            finding.reason.clone(),
+                            "refresh segment label and purpose while preserving the stable anchor",
+                            stable_anchor_id.clone(),
+                        )
+                        .with_sources([finding.segment_id.clone()])
+                        .with_repair_payload(
+                            format!("refreshed {}", finding.segment_id),
+                            "restore the segment function label before reuse in expression or KV prefill",
+                            ["relabel", "youth_renewal", finding.kind.as_str()],
+                        ),
+                    );
+                }
                 GeneScissorsIntent::Splice => push_plan_once(
                     &mut plans,
                     MutationPlan::preview(
@@ -683,6 +696,10 @@ fn push_plan_once(plans: &mut Vec<MutationPlan>, plan: MutationPlan) {
         return;
     }
     plans.push(plan);
+}
+
+fn regenerated_segment_id(segment_id: &str) -> String {
+    format!("{segment_id}:young")
 }
 
 fn clamp_unit(value: f32) -> f32 {

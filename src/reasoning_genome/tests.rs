@@ -71,6 +71,19 @@ fn aging_gene_gets_relabel_plan_without_writes() {
         expression.mutation_plans[0].intent,
         GeneScissorsIntent::Relabel
     );
+    assert_eq!(expression.repair_payload_count(), 1);
+    assert!(
+        expression.mutation_plans[0]
+            .proposed_label
+            .as_deref()
+            .is_some_and(|label| label.contains("memory retrieval gene"))
+    );
+    assert!(
+        expression.mutation_plans[0]
+            .proposed_tags
+            .iter()
+            .any(|tag| tag == "youth_renewal")
+    );
     assert!(expression.is_read_only_preview());
 }
 
@@ -115,6 +128,28 @@ fn malignant_gene_is_quarantined_and_regenerated_from_stable_anchor() {
     assert!(intents.contains(&"regenerate".to_owned()));
     assert!(intents.contains(&"rollback".to_owned()));
     assert!(expression.youth_pressure > 0.50);
+    assert_eq!(expression.regeneration_payload_count(), 1);
+    let regenerate = expression
+        .mutation_plans
+        .iter()
+        .find(|plan| plan.intent == GeneScissorsIntent::Regenerate)
+        .expect("regeneration plan");
+    assert_eq!(
+        regenerate.replacement_gene_id.as_deref(),
+        Some("gene:test:safety:young")
+    );
+    assert!(
+        regenerate
+            .proposed_purpose
+            .as_deref()
+            .is_some_and(|purpose| purpose.contains("young candidate"))
+    );
+    assert!(
+        regenerate
+            .proposed_tags
+            .iter()
+            .any(|tag| tag == "stable_anchor")
+    );
     assert!(expression.is_read_only_preview());
     assert!(
         expression
@@ -122,6 +157,57 @@ fn malignant_gene_is_quarantined_and_regenerated_from_stable_anchor() {
             .iter()
             .all(|plan| plan.rollback_anchor_id == "genome:test:stable")
     );
+}
+
+#[test]
+fn quarantined_gene_is_cut_from_expression_until_regeneration_is_validated() {
+    let genome = ReasoningGenome::new(
+        "genome:test:v1",
+        TaskProfile::Coding,
+        "genome:test:stable",
+        vec![
+            ReasoningGene::new(
+                "gene:test:unsafe",
+                ReasoningGeneKind::Safety,
+                "quarantined unsafe strategy",
+                "must not be expressed",
+            )
+            .with_status(ReasoningGeneStatus::Quarantined),
+            ReasoningGene::new(
+                "gene:test:retrieval",
+                ReasoningGeneKind::Retrieval,
+                "memory retrieval",
+                "safe memory selection",
+            ),
+        ],
+    );
+
+    let expression = genome.express(GenomeExpressionInput {
+        profile: TaskProfile::Coding,
+        quality: 0.91,
+        process_reward: 0.85,
+        contradiction_count: 0,
+        critical_reflection_issue_count: 0,
+        revision_action_count: 0,
+        used_memories: 1,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.30,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: true,
+        drift_rollback: false,
+        runtime_kv_hold: false,
+    });
+
+    assert_eq!(expression.expression_gene_count, 2);
+    assert_eq!(expression.active_gene_count(), 1);
+    assert!(
+        !expression
+            .active_gene_ids
+            .contains(&"gene:test:unsafe".to_owned())
+    );
+    assert_eq!(expression.scissors_proposal_count(), 0);
+    assert!(expression.is_read_only_preview());
 }
 
 #[test]
@@ -151,6 +237,7 @@ fn rollback_pressure_quarantines_and_regenerates_active_safety_gene() {
     assert!(intents.contains(&"quarantine".to_owned()));
     assert!(intents.contains(&"regenerate".to_owned()));
     assert!(intents.contains(&"rollback".to_owned()));
+    assert_eq!(expression.regeneration_payload_count(), 1);
     assert!(expression.is_read_only_preview());
 }
 
@@ -342,6 +429,24 @@ fn mut_fixer_maps_stale_label_to_relabel_and_drift_to_quarantine_regenerate() {
     assert!(intents.contains(&("segment:stale", GeneScissorsIntent::Relabel)));
     assert!(intents.contains(&("segment:drift", GeneScissorsIntent::Quarantine)));
     assert!(intents.contains(&("segment:drift", GeneScissorsIntent::Regenerate)));
+    let stale = plans
+        .iter()
+        .find(|plan| {
+            plan.target_gene_id == "segment:stale" && plan.intent == GeneScissorsIntent::Relabel
+        })
+        .expect("stale relabel plan");
+    assert!(stale.has_repair_payload());
+    let regenerate = plans
+        .iter()
+        .find(|plan| {
+            plan.target_gene_id == "segment:drift" && plan.intent == GeneScissorsIntent::Regenerate
+        })
+        .expect("drift regenerate plan");
+    assert_eq!(
+        regenerate.replacement_gene_id.as_deref(),
+        Some("segment:drift:young")
+    );
+    assert!(regenerate.has_regeneration_payload());
     assert!(
         plans
             .iter()

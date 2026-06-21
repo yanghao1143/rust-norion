@@ -19,6 +19,9 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
         extract_json_usize_field(genome, "regeneration_candidates").unwrap_or(0);
     let gene_scissors_proposals =
         extract_json_usize_field(genome, "gene_scissors_proposals").unwrap_or(0);
+    let repair_payloads = extract_json_usize_field(genome, "repair_payloads").unwrap_or(0);
+    let regeneration_payloads =
+        extract_json_usize_field(genome, "regeneration_payloads").unwrap_or(0);
     let mutation_intents =
         extract_json_string_array_field(genome, "mutation_intents").unwrap_or_default();
     let proposal_ids = extract_json_string_array_field(genome, "proposal_ids").unwrap_or_default();
@@ -77,6 +80,21 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
         failures.push(format!(
             "reasoning_genome proposal_ids {} do not match gene_scissors_proposals {gene_scissors_proposals}",
             proposal_ids.len()
+        ));
+    }
+    if repair_payloads > gene_scissors_proposals {
+        failures.push(format!(
+            "reasoning_genome repair_payloads {repair_payloads} exceed gene_scissors_proposals {gene_scissors_proposals}"
+        ));
+    }
+    if relabel_candidates > 0 && repair_payloads < relabel_candidates {
+        failures.push(format!(
+            "reasoning_genome relabel_candidates {relabel_candidates} require repair_payloads >= relabel_candidates"
+        ));
+    }
+    if malignant_genes > 0 && regeneration_payloads < malignant_genes {
+        failures.push(format!(
+            "reasoning_genome malignant_genes {malignant_genes} require regeneration_payloads >= malignant_genes"
         ));
     }
     if gene_scissors_proposals > 0 && mutation_intents.is_empty() {

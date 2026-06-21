@@ -96,9 +96,27 @@ impl BenchmarkGenomeEvidence {
                 case.name
             ));
         }
+        if expression.relabel_candidate_count() > 0
+            && expression.repair_payload_count() < expression.relabel_candidate_count()
+        {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome relabel candidates require repair payloads",
+                device.as_str(),
+                case.name
+            ));
+        }
         if expression.malignant_gene_count() > expression.regeneration_candidate_count() {
             self.failures.push(format!(
                 "{}:{} reasoning_genome malignant genes require regeneration candidates",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if expression.malignant_gene_count() > 0
+            && expression.regeneration_payload_count() < expression.malignant_gene_count()
+        {
+            self.failures.push(format!(
+                "{}:{} reasoning_genome malignant genes require regeneration payloads",
                 device.as_str(),
                 case.name
             ));

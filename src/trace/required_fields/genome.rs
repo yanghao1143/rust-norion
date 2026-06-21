@@ -20,6 +20,11 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "reasoning_genome_gene_scissors_proposals",
         "\"gene_scissors_proposals\":",
     ),
+    required_field("reasoning_genome_repair_payloads", "\"repair_payloads\":"),
+    required_field(
+        "reasoning_genome_regeneration_payloads",
+        "\"regeneration_payloads\":",
+    ),
     required_field("reasoning_genome_mutation_intents", "\"mutation_intents\":"),
     required_field("reasoning_genome_proposal_ids", "\"proposal_ids\":"),
     required_field("reasoning_genome_read_only", "\"read_only\":"),
