@@ -1,5 +1,8 @@
 use super::*;
 use crate::engine::{HeuristicBackend, InferenceRequest, NoironEngine};
+use crate::reasoning_genome::{
+    GenomeExpressionInput, ReasoningGene, ReasoningGeneKind, ReasoningGenome,
+};
 
 #[test]
 fn summary_records_reasoning_genome_expression_evidence() {
@@ -47,12 +50,97 @@ fn summary_records_reasoning_genome_expression_evidence() {
             .summary_line()
             .contains("reasoning_genome_failures=0")
     );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_repair_payloads=0")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_regeneration_payloads=0")
+    );
 
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_expression_cases: Some(1),
         min_reasoning_genome_expression_device_profiles: Some(1),
         min_reasoning_genome_splice_cases: Some(1),
         min_reasoning_genome_splice_device_profiles: Some(1),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(report.passed, "{:?}", report.failures);
+}
+
+#[test]
+fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let case = BenchmarkCase::new(
+        "reasoning_genome_payloads",
+        TaskProfile::Coding,
+        "Force a Reasoning Genome repair payload audit.",
+    );
+    let mut outcome = engine.infer(
+        InferenceRequest::new(case.prompt.clone(), case.profile),
+        &mut backend,
+    );
+    outcome.reasoning_genome = ReasoningGenome::new(
+        "genome:coding:v1",
+        TaskProfile::Coding,
+        "genome:coding:stable",
+        vec![
+            ReasoningGene::new(
+                "gene:coding:retrieval",
+                ReasoningGeneKind::Retrieval,
+                "",
+                "retrieve useful memory",
+            )
+            .with_health(12, 0.74, 0.04),
+            ReasoningGene::new(
+                "gene:coding:safety",
+                ReasoningGeneKind::Safety,
+                "unsafe drift guard",
+                "this safety behavior drifted",
+            )
+            .with_health(1, 0.20, 0.91),
+        ],
+    )
+    .express(GenomeExpressionInput {
+        profile: TaskProfile::Coding,
+        quality: 0.42,
+        process_reward: 0.38,
+        contradiction_count: 1,
+        critical_reflection_issue_count: 1,
+        revision_action_count: 1,
+        used_memories: 0,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.50,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: false,
+        drift_rollback: false,
+        runtime_kv_hold: false,
+    });
+    let mut summary = BenchmarkSummary::new();
+
+    summary.record(&case, 5, &outcome);
+
+    assert_eq!(summary.total_reasoning_genome_repair_payloads(), 2);
+    assert_eq!(summary.total_reasoning_genome_regeneration_payloads(), 1);
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_repair_payloads=2")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("reasoning_genome_regeneration_payloads=1")
+    );
+    let report = summary.evaluate(&BenchmarkGate {
+        min_reasoning_genome_repair_payloads: Some(2),
+        min_reasoning_genome_regeneration_payloads: Some(1),
         ..BenchmarkGate::default()
     });
 
@@ -69,6 +157,8 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         min_reasoning_genome_splice_device_profiles: Some(1),
         min_gene_scissors_proposal_cases: Some(1),
         min_gene_scissors_proposal_device_profiles: Some(1),
+        min_reasoning_genome_repair_payloads: Some(1),
+        min_reasoning_genome_regeneration_payloads: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -82,6 +172,8 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         "reasoning_genome_splice_device_profiles",
         "gene_scissors_proposal_cases",
         "gene_scissors_proposal_device_profiles",
+        "reasoning_genome_repair_payloads",
+        "reasoning_genome_regeneration_payloads",
     ] {
         assert!(
             report

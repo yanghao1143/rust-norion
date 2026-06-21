@@ -85,4 +85,26 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_reasoning_genome_repair_payloads) = gate.min_reasoning_genome_repair_payloads {
+        let observed = summary.total_reasoning_genome_repair_payloads();
+        if observed < min_reasoning_genome_repair_payloads {
+            failures.push(format!(
+                "reasoning_genome_repair_payloads {} below minimum {}",
+                observed, min_reasoning_genome_repair_payloads
+            ));
+        }
+    }
+
+    if let Some(min_reasoning_genome_regeneration_payloads) =
+        gate.min_reasoning_genome_regeneration_payloads
+    {
+        let observed = summary.total_reasoning_genome_regeneration_payloads();
+        if observed < min_reasoning_genome_regeneration_payloads {
+            failures.push(format!(
+                "reasoning_genome_regeneration_payloads {} below minimum {}",
+                observed, min_reasoning_genome_regeneration_payloads
+            ));
+        }
+    }
 }

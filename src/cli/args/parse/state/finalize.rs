@@ -227,6 +227,8 @@ impl ParseState {
             benchmark_min_reasoning_genome_splice_device_profiles: self.benchmark_min_reasoning_genome_splice_device_profiles,
             benchmark_min_gene_scissors_proposal_cases: self.benchmark_min_gene_scissors_proposal_cases,
             benchmark_min_gene_scissors_proposal_device_profiles: self.benchmark_min_gene_scissors_proposal_device_profiles,
+            benchmark_min_reasoning_genome_repair_payloads: self.benchmark_min_reasoning_genome_repair_payloads,
+            benchmark_min_reasoning_genome_regeneration_payloads: self.benchmark_min_reasoning_genome_regeneration_payloads,
             benchmark_min_memory_governance_cases: self.benchmark_min_memory_governance_cases,
             benchmark_min_memory_governance_device_profiles: self.benchmark_min_memory_governance_device_profiles,
             benchmark_min_memory_retention_activity_cases: self.benchmark_min_memory_retention_activity_cases,

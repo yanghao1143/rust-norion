@@ -858,7 +858,11 @@ chain path is producing auditable expression/splice evidence and Gene Scissors
 repair proposals:
 `--benchmark-min-reasoning-genome-expression-cases`,
 `--benchmark-min-reasoning-genome-splice-cases`, and
-`--benchmark-min-gene-scissors-proposal-cases`. With `--benchmark-all-devices`,
+`--benchmark-min-gene-scissors-proposal-cases`. Add
+`--benchmark-min-reasoning-genome-repair-payloads` and
+`--benchmark-min-reasoning-genome-regeneration-payloads` when the run must
+prove aging-gene relabel and malignant-gene regeneration proposals include
+auditable repair payloads. With `--benchmark-all-devices`,
 or by using the matching `*-device-profiles` flags, the same audit can require
 those genome signals across explicit hardware profiles. Trace and benchmark
 evidence also require aging-gene relabel proposals to carry repair payloads and
@@ -868,7 +872,10 @@ malignant-gene regeneration proposals to carry young replacement payloads.
 Scissors 已经输出修复 proposal 时，可以使用
 `--benchmark-min-reasoning-genome-expression-cases`、
 `--benchmark-min-reasoning-genome-splice-cases` 和
-`--benchmark-min-gene-scissors-proposal-cases`。配合 `--benchmark-all-devices`，
+`--benchmark-min-gene-scissors-proposal-cases`。当同一次运行还必须证明老化基因的
+relabel proposal 和恶性基因的 regeneration proposal 带有可审计修复载荷时，加入
+`--benchmark-min-reasoning-genome-repair-payloads` 和
+`--benchmark-min-reasoning-genome-regeneration-payloads`。配合 `--benchmark-all-devices`，
 或者直接使用对应的 `*-device-profiles` 参数时，可以要求这些基因证据覆盖指定数量的显式硬件 profile。
 trace 与 benchmark 证据还会要求老化基因的 relabel proposal 带有修复载荷，并要求恶性基因的 regeneration proposal 带有年轻替代载荷。
 

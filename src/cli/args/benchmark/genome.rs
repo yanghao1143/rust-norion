@@ -46,6 +46,18 @@ pub(crate) fn parse(
             *parser.benchmark_all_devices = true;
             Some(2)
         }
+        "--benchmark-min-reasoning-genome-repair-payloads" if index + 1 < raw.len() => {
+            *parser.benchmark_min_reasoning_genome_repair_payloads =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-reasoning-genome-regeneration-payloads" if index + 1 < raw.len() => {
+            *parser.benchmark_min_reasoning_genome_regeneration_payloads =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         _ => None,
     }
 }

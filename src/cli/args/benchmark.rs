@@ -173,6 +173,8 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_reasoning_genome_splice_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_min_gene_scissors_proposal_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_gene_scissors_proposal_device_profiles: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_repair_payloads: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_regeneration_payloads: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_governance_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_governance_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_retention_activity_cases: &'a mut Option<usize>,

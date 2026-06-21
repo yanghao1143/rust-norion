@@ -273,6 +273,8 @@ impl Args {
                 benchmark_min_reasoning_genome_splice_device_profiles: &mut state.benchmark_min_reasoning_genome_splice_device_profiles,
                 benchmark_min_gene_scissors_proposal_cases: &mut state.benchmark_min_gene_scissors_proposal_cases,
                 benchmark_min_gene_scissors_proposal_device_profiles: &mut state.benchmark_min_gene_scissors_proposal_device_profiles,
+                benchmark_min_reasoning_genome_repair_payloads: &mut state.benchmark_min_reasoning_genome_repair_payloads,
+                benchmark_min_reasoning_genome_regeneration_payloads: &mut state.benchmark_min_reasoning_genome_regeneration_payloads,
                 benchmark_min_memory_governance_cases: &mut state.benchmark_min_memory_governance_cases,
                 benchmark_min_memory_governance_device_profiles: &mut state.benchmark_min_memory_governance_device_profiles,
                 benchmark_min_memory_retention_activity_cases: &mut state.benchmark_min_memory_retention_activity_cases,

@@ -43,6 +43,14 @@ impl BenchmarkSummary {
             .gene_scissors_proposal_device_profiles()
     }
 
+    pub fn total_reasoning_genome_repair_payloads(&self) -> usize {
+        self.genome_evidence.total_repair_payloads
+    }
+
+    pub fn total_reasoning_genome_regeneration_payloads(&self) -> usize {
+        self.genome_evidence.total_regeneration_payloads
+    }
+
     pub fn total_reasoning_genome_failures(&self) -> usize {
         self.genome_evidence.failures.len()
     }

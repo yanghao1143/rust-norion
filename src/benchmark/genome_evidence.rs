@@ -15,6 +15,8 @@ pub struct BenchmarkGenomeEvidence {
     pub total_relabel_candidates: usize,
     pub total_regeneration_candidates: usize,
     pub total_gene_scissors_proposals: usize,
+    pub total_repair_payloads: usize,
+    pub total_regeneration_payloads: usize,
     pub total_splice_segments: usize,
     pub total_splice_exons: usize,
     pub total_splice_introns: usize,
@@ -53,6 +55,8 @@ impl BenchmarkGenomeEvidence {
         self.total_relabel_candidates += expression.relabel_candidate_count();
         self.total_regeneration_candidates += expression.regeneration_candidate_count();
         self.total_gene_scissors_proposals += expression.scissors_proposal_count();
+        self.total_repair_payloads += expression.repair_payload_count();
+        self.total_regeneration_payloads += expression.regeneration_payload_count();
         self.total_splice_segments += splice.segments.len();
         self.total_splice_exons += splice.exon_count();
         self.total_splice_introns += splice.intron_count();
