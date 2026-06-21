@@ -68,7 +68,10 @@ pub use jsonl::{
     self_evolution_rollback_replay_gate_trace_json_line,
     self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
 };
-pub use schema_jsonl_gate::{TraceSchemaGateReport, evaluate_trace_schema_jsonl};
+pub use schema_jsonl_gate::{
+    OPERATOR_HEALTH_SCHEMA, OperatorHealthMetric, OperatorHealthSection, OperatorHealthSnapshot,
+    TraceSchemaGateReport, evaluate_trace_schema_jsonl,
+};
 
 pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();

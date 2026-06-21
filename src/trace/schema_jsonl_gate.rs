@@ -6,8 +6,108 @@ use super::evaluate_trace_schema_line;
 use super::fields::{
     extract_json_bool_field, extract_json_f32_field, extract_json_string_array_field,
     extract_json_string_field, extract_json_usize_field, extract_last_json_string_array_field,
-    json_object_after_field, trace_note_bool,
+    json_escape, json_object_after_field, trace_note_bool,
 };
+
+pub const OPERATOR_HEALTH_SCHEMA: &str = "rust-norion-operator-health-v1";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperatorHealthMetric {
+    pub name: &'static str,
+    pub value: usize,
+}
+
+impl OperatorHealthMetric {
+    fn new(name: &'static str, value: usize) -> Self {
+        Self { name, value }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperatorHealthSection {
+    pub name: &'static str,
+    pub data_present: bool,
+    pub ready: bool,
+    pub review_required: bool,
+    pub blocked: bool,
+    pub events: usize,
+    pub metrics: Vec<OperatorHealthMetric>,
+}
+
+impl OperatorHealthSection {
+    fn new(
+        name: &'static str,
+        data_present: bool,
+        review_required: bool,
+        blocked: bool,
+        events: usize,
+        metrics: Vec<OperatorHealthMetric>,
+        gate_passed: bool,
+    ) -> Self {
+        Self {
+            name,
+            data_present,
+            ready: data_present && gate_passed && !review_required && !blocked,
+            review_required,
+            blocked,
+            events,
+            metrics,
+        }
+    }
+
+    pub fn status(&self) -> &'static str {
+        if !self.data_present {
+            "missing"
+        } else if self.blocked {
+            "blocked"
+        } else if self.review_required {
+            "review_required"
+        } else if self.ready {
+            "ready"
+        } else {
+            "observed"
+        }
+    }
+
+    pub fn metric(&self, name: &str) -> Option<usize> {
+        self.metrics
+            .iter()
+            .find(|metric| metric.name == name)
+            .map(|metric| metric.value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperatorHealthSnapshot {
+    pub schema: &'static str,
+    pub passed: bool,
+    pub checked_lines: usize,
+    pub failure_count: usize,
+    pub sections: Vec<OperatorHealthSection>,
+}
+
+impl OperatorHealthSnapshot {
+    pub fn section(&self, name: &str) -> Option<&OperatorHealthSection> {
+        self.sections.iter().find(|section| section.name == name)
+    }
+
+    pub fn json_line(&self) -> String {
+        let sections = self
+            .sections
+            .iter()
+            .map(operator_health_section_json)
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "{{\"schema\":\"{}\",\"passed\":{},\"checked_lines\":{},\"failure_count\":{},\"sections\":[{}]}}",
+            json_escape(self.schema),
+            self.passed,
+            self.checked_lines,
+            self.failure_count,
+            sections
+        )
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TraceSchemaGateReport {
@@ -163,6 +263,32 @@ pub struct TraceSchemaGateReport {
     pub compute_budget_avoided_tokens: usize,
     pub compute_budget_write_allowed: usize,
     pub compute_budget_applied: usize,
+    pub reasoning_genome_events: usize,
+    pub reasoning_genome_genes: usize,
+    pub reasoning_genome_active_genes: usize,
+    pub reasoning_genome_aged_genes: usize,
+    pub reasoning_genome_malignant_genes: usize,
+    pub reasoning_genome_relabel_candidates: usize,
+    pub reasoning_genome_regeneration_candidates: usize,
+    pub reasoning_genome_gene_scissors_proposals: usize,
+    pub reasoning_genome_repair_payloads: usize,
+    pub reasoning_genome_regeneration_payloads: usize,
+    pub reasoning_genome_lifecycle_records: usize,
+    pub reasoning_genome_lifecycle_tombstone_candidates: usize,
+    pub reasoning_genome_lifecycle_pending_validations: usize,
+    pub reasoning_genome_lifecycle_source_evidence: usize,
+    pub reasoning_genome_splice_segments: usize,
+    pub reasoning_genome_splice_exons: usize,
+    pub reasoning_genome_splice_introns: usize,
+    pub reasoning_genome_splice_variants: usize,
+    pub reasoning_genome_splice_quarantined: usize,
+    pub reasoning_genome_splice_repair_candidates: usize,
+    pub reasoning_genome_splice_findings: usize,
+    pub reasoning_genome_splice_proposals: usize,
+    pub reasoning_genome_write_allowed: usize,
+    pub reasoning_genome_mutation_applied: usize,
+    pub reasoning_genome_splice_write_allowed: usize,
+    pub reasoning_genome_splice_applied: usize,
     pub memory_admission_events: usize,
     pub memory_admission_candidates: usize,
     pub memory_admission_ready: usize,
@@ -388,6 +514,443 @@ impl TraceSchemaGateReport {
             self.memory_residency_applied,
         )
     }
+
+    pub fn operator_health_snapshot(&self) -> OperatorHealthSnapshot {
+        let mut sections = Vec::new();
+
+        let trace_blocked = !self.passed;
+        sections.push(OperatorHealthSection::new(
+            "trace_gate",
+            self.checked_lines > 0,
+            trace_blocked,
+            trace_blocked,
+            self.checked_lines,
+            vec![
+                OperatorHealthMetric::new("checked_lines", self.checked_lines),
+                OperatorHealthMetric::new("failure_count", self.failures.len()),
+                OperatorHealthMetric::new("runtime_error_events", self.runtime_error_events),
+                OperatorHealthMetric::new("runtime_timeout_events", self.runtime_timeout_events),
+            ],
+            self.passed,
+        ));
+
+        let memory_events = self
+            .memory_admission_events
+            .saturating_add(self.self_evolving_memory_store_events)
+            .saturating_add(self.memory_residency_events)
+            .saturating_add(self.kv_fusion_events);
+        let memory_review = self
+            .memory_admission_review_packets
+            .saturating_add(self.memory_admission_ledger_preview_only)
+            .saturating_add(self.memory_admission_hold)
+            .saturating_add(self.memory_admission_ledger_held)
+            .saturating_add(self.self_evolving_memory_store_admission_preview_events)
+            .saturating_add(self.memory_residency_protected_rollback_anchors);
+        let memory_blocked = self
+            .memory_admission_blocked
+            .saturating_add(self.memory_admission_reject)
+            .saturating_add(self.memory_admission_quarantine)
+            .saturating_add(self.memory_admission_ledger_rejected)
+            .saturating_add(self.memory_residency_quarantined)
+            .saturating_add(self.kv_fusion_approval_blocked)
+            .saturating_add(self.kv_fusion_rejected);
+        sections.push(OperatorHealthSection::new(
+            "memory",
+            memory_events > 0,
+            memory_review > 0,
+            memory_blocked > 0,
+            memory_events,
+            vec![
+                OperatorHealthMetric::new("admission_events", self.memory_admission_events),
+                OperatorHealthMetric::new("admission_candidates", self.memory_admission_candidates),
+                OperatorHealthMetric::new("admission_ready", self.memory_admission_ready),
+                OperatorHealthMetric::new("admission_blocked", self.memory_admission_blocked),
+                OperatorHealthMetric::new("review_packets", self.memory_admission_review_packets),
+                OperatorHealthMetric::new(
+                    "ledger_preview_only",
+                    self.memory_admission_ledger_preview_only,
+                ),
+                OperatorHealthMetric::new("ledger_applied", self.memory_admission_ledger_applied),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_events",
+                    self.self_evolving_memory_store_events,
+                ),
+                OperatorHealthMetric::new("residency_events", self.memory_residency_events),
+                OperatorHealthMetric::new(
+                    "residency_quarantined",
+                    self.memory_residency_quarantined,
+                ),
+                OperatorHealthMetric::new("kv_fusion_events", self.kv_fusion_events),
+                OperatorHealthMetric::new("kv_fusion_candidates", self.kv_fusion_candidates),
+                OperatorHealthMetric::new("kv_fusion_saved_tokens", self.kv_fusion_saved_tokens),
+                OperatorHealthMetric::new(
+                    "kv_fusion_approval_blocked",
+                    self.kv_fusion_approval_blocked,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let genome_review = self
+            .reasoning_genome_relabel_candidates
+            .saturating_add(self.reasoning_genome_regeneration_candidates)
+            .saturating_add(self.reasoning_genome_gene_scissors_proposals)
+            .saturating_add(self.reasoning_genome_repair_payloads)
+            .saturating_add(self.reasoning_genome_regeneration_payloads)
+            .saturating_add(self.reasoning_genome_lifecycle_pending_validations)
+            .saturating_add(self.reasoning_genome_splice_repair_candidates)
+            .saturating_add(self.reasoning_genome_splice_proposals);
+        let genome_blocked = self
+            .reasoning_genome_malignant_genes
+            .saturating_add(self.reasoning_genome_splice_quarantined)
+            .saturating_add(self.reasoning_genome_write_allowed)
+            .saturating_add(self.reasoning_genome_mutation_applied)
+            .saturating_add(self.reasoning_genome_splice_write_allowed)
+            .saturating_add(self.reasoning_genome_splice_applied);
+        sections.push(OperatorHealthSection::new(
+            "genome",
+            self.reasoning_genome_events > 0,
+            genome_review > 0,
+            genome_blocked > 0,
+            self.reasoning_genome_events,
+            vec![
+                OperatorHealthMetric::new("events", self.reasoning_genome_events),
+                OperatorHealthMetric::new("genes", self.reasoning_genome_genes),
+                OperatorHealthMetric::new("active_genes", self.reasoning_genome_active_genes),
+                OperatorHealthMetric::new("aged_genes", self.reasoning_genome_aged_genes),
+                OperatorHealthMetric::new("malignant_genes", self.reasoning_genome_malignant_genes),
+                OperatorHealthMetric::new(
+                    "gene_scissors_proposals",
+                    self.reasoning_genome_gene_scissors_proposals,
+                ),
+                OperatorHealthMetric::new("repair_payloads", self.reasoning_genome_repair_payloads),
+                OperatorHealthMetric::new(
+                    "regeneration_payloads",
+                    self.reasoning_genome_regeneration_payloads,
+                ),
+                OperatorHealthMetric::new("splice_segments", self.reasoning_genome_splice_segments),
+                OperatorHealthMetric::new(
+                    "splice_quarantined",
+                    self.reasoning_genome_splice_quarantined,
+                ),
+                OperatorHealthMetric::new(
+                    "splice_repair_candidates",
+                    self.reasoning_genome_splice_repair_candidates,
+                ),
+                OperatorHealthMetric::new("write_allowed", self.reasoning_genome_write_allowed),
+                OperatorHealthMetric::new(
+                    "mutation_applied",
+                    self.reasoning_genome_mutation_applied,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let routing_events = self
+            .adaptive_routing_events
+            .saturating_add(self.task_hierarchy_events)
+            .saturating_add(self.compute_budget_events);
+        let routing_review = self
+            .compute_budget_low
+            .saturating_add(self.compute_budget_kv_lookups_skipped)
+            .saturating_add(self.compute_budget_low_value_skipped)
+            .saturating_add(self.compute_budget_write_allowed)
+            .saturating_add(self.compute_budget_applied);
+        sections.push(OperatorHealthSection::new(
+            "routing",
+            routing_events > 0,
+            routing_review > 0,
+            false,
+            routing_events,
+            vec![
+                OperatorHealthMetric::new("adaptive_routing_events", self.adaptive_routing_events),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_candidates",
+                    self.adaptive_routing_candidates,
+                ),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_saved_tokens",
+                    self.adaptive_routing_saved_tokens,
+                ),
+                OperatorHealthMetric::new("task_hierarchy_events", self.task_hierarchy_events),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_mutation_records",
+                    self.task_hierarchy_mutation_records,
+                ),
+                OperatorHealthMetric::new("compute_budget_events", self.compute_budget_events),
+                OperatorHealthMetric::new(
+                    "compute_budget_selected_candidates",
+                    self.compute_budget_selected_candidates,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_saved_tokens",
+                    self.compute_budget_saved_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_avoided_tokens",
+                    self.compute_budget_avoided_tokens,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let approval_events = self
+            .self_evolution_admission_events
+            .saturating_add(self.self_evolution_experiment_events)
+            .saturating_add(self.self_evolution_operator_approval_events)
+            .saturating_add(self.self_evolution_rollback_replay_gate_events)
+            .saturating_add(self.self_evolution_rollback_replay_apply_events);
+        let approval_review = self
+            .self_evolution_admission_review_packets
+            .saturating_add(self.self_evolution_operator_approval_review_packets)
+            .saturating_add(self.self_evolution_rollback_replay_gate_review_packets)
+            .saturating_add(self.self_evolution_rollback_replay_apply_review_packets);
+        let approval_missing_refs = self
+            .self_evolution_operator_approval_missing_review_packet_refs
+            .saturating_add(self.self_evolution_rollback_replay_gate_missing_review_packet_refs)
+            .saturating_add(self.self_evolution_rollback_replay_apply_missing_refs);
+        let approval_blocked = self
+            .self_evolution_admission_blocked
+            .saturating_add(self.self_evolution_experiment_reject)
+            .saturating_add(self.self_evolution_experiment_conflicts)
+            .saturating_add(self.self_evolution_operator_approval_held)
+            .saturating_add(self.self_evolution_rollback_replay_gate_held)
+            .saturating_add(self.self_evolution_rollback_replay_apply_held)
+            .saturating_add(self.self_evolution_rollback_replay_apply_blocked)
+            .saturating_add(approval_missing_refs);
+        sections.push(OperatorHealthSection::new(
+            "approval",
+            approval_events > 0,
+            approval_review > 0,
+            approval_blocked > 0,
+            approval_events,
+            vec![
+                OperatorHealthMetric::new("admission_events", self.self_evolution_admission_events),
+                OperatorHealthMetric::new(
+                    "admission_admitted",
+                    self.self_evolution_admission_admitted,
+                ),
+                OperatorHealthMetric::new(
+                    "admission_blocked",
+                    self.self_evolution_admission_blocked,
+                ),
+                OperatorHealthMetric::new(
+                    "experiment_events",
+                    self.self_evolution_experiment_events,
+                ),
+                OperatorHealthMetric::new("experiment_admit", self.self_evolution_experiment_admit),
+                OperatorHealthMetric::new("experiment_hold", self.self_evolution_experiment_hold),
+                OperatorHealthMetric::new(
+                    "experiment_reject",
+                    self.self_evolution_experiment_reject,
+                ),
+                OperatorHealthMetric::new(
+                    "operator_approval_events",
+                    self.self_evolution_operator_approval_events,
+                ),
+                OperatorHealthMetric::new(
+                    "operator_approved",
+                    self.self_evolution_operator_approval_approved,
+                ),
+                OperatorHealthMetric::new(
+                    "operator_held",
+                    self.self_evolution_operator_approval_held,
+                ),
+                OperatorHealthMetric::new("review_packets", approval_review),
+                OperatorHealthMetric::new("missing_review_refs", approval_missing_refs),
+            ],
+            self.passed,
+        ));
+
+        let rollback_events = self
+            .self_evolution_rollback_replay_events
+            .saturating_add(self.self_evolution_rollback_replay_gate_events)
+            .saturating_add(self.self_evolution_rollback_replay_apply_events);
+        let rollback_review = self
+            .self_evolution_rollback_replay_gate_review_packets
+            .saturating_add(self.self_evolution_rollback_replay_apply_review_packets)
+            .saturating_add(self.self_evolution_rollback_replay_rollback_anchor_ids)
+            .saturating_add(self.self_evolution_rollback_replay_gate_rollback_anchor_ids)
+            .saturating_add(self.self_evolution_rollback_replay_apply_rollback_anchor_ids);
+        let rollback_blocked = self
+            .self_evolution_rollback_replay_blocked
+            .saturating_add(self.self_evolution_rollback_replay_gate_blocked)
+            .saturating_add(self.self_evolution_rollback_replay_gate_missing_review_packet_refs)
+            .saturating_add(self.self_evolution_rollback_replay_apply_blocked)
+            .saturating_add(self.self_evolution_rollback_replay_apply_missing_refs);
+        sections.push(OperatorHealthSection::new(
+            "rollback",
+            rollback_events > 0,
+            rollback_review > 0,
+            rollback_blocked > 0,
+            rollback_events,
+            vec![
+                OperatorHealthMetric::new(
+                    "replay_events",
+                    self.self_evolution_rollback_replay_events,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_items",
+                    self.self_evolution_rollback_replay_items,
+                ),
+                OperatorHealthMetric::new(
+                    "replayable",
+                    self.self_evolution_rollback_replay_replayable,
+                ),
+                OperatorHealthMetric::new("blocked", self.self_evolution_rollback_replay_blocked),
+                OperatorHealthMetric::new(
+                    "rollback_anchor_ids",
+                    self.self_evolution_rollback_replay_rollback_anchor_ids,
+                ),
+                OperatorHealthMetric::new(
+                    "gate_events",
+                    self.self_evolution_rollback_replay_gate_events,
+                ),
+                OperatorHealthMetric::new(
+                    "apply_events",
+                    self.self_evolution_rollback_replay_apply_events,
+                ),
+                OperatorHealthMetric::new(
+                    "apply_ready",
+                    self.self_evolution_rollback_replay_apply_ready,
+                ),
+                OperatorHealthMetric::new(
+                    "apply_held",
+                    self.self_evolution_rollback_replay_apply_held,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let privacy_events = self
+            .improvement_corpus_events
+            .saturating_add(self.business_contract_events);
+        let privacy_review = self
+            .improvement_corpus_privacy_rejected
+            .saturating_add(self.business_contract_event_protocol_leaks)
+            .saturating_add(self.business_contract_event_response_normalized)
+            .saturating_add(self.business_contract_event_sanitized)
+            .saturating_add(self.business_contract_event_canonical_fallbacks);
+        let privacy_blocked = self
+            .improvement_corpus_secret_leaks
+            .saturating_add(self.business_contract_event_protocol_leaks);
+        sections.push(OperatorHealthSection::new(
+            "privacy",
+            privacy_events > 0,
+            privacy_review > 0,
+            privacy_blocked > 0,
+            privacy_events,
+            vec![
+                OperatorHealthMetric::new(
+                    "improvement_corpus_events",
+                    self.improvement_corpus_events,
+                ),
+                OperatorHealthMetric::new(
+                    "privacy_rejected",
+                    self.improvement_corpus_privacy_rejected,
+                ),
+                OperatorHealthMetric::new("secret_leaks", self.improvement_corpus_secret_leaks),
+                OperatorHealthMetric::new(
+                    "business_contract_events",
+                    self.business_contract_events,
+                ),
+                OperatorHealthMetric::new(
+                    "protocol_leaks",
+                    self.business_contract_event_protocol_leaks,
+                ),
+                OperatorHealthMetric::new(
+                    "response_normalized",
+                    self.business_contract_event_response_normalized,
+                ),
+                OperatorHealthMetric::new("sanitized", self.business_contract_event_sanitized),
+            ],
+            self.passed,
+        ));
+
+        let benchmark_events = self
+            .rust_check_events
+            .saturating_add(self.business_contract_events)
+            .saturating_add(self.improvement_corpus_events);
+        let benchmark_review = self
+            .rust_check_feedback_updates
+            .saturating_add(self.business_contract_event_response_normalized)
+            .saturating_add(self.business_contract_event_sanitized)
+            .saturating_add(self.business_contract_event_canonical_fallbacks);
+        let benchmark_blocked = self
+            .rust_check_failed
+            .saturating_add(self.business_contract_event_failed)
+            .saturating_add(self.improvement_corpus_secret_leaks);
+        sections.push(OperatorHealthSection::new(
+            "benchmark",
+            benchmark_events > 0,
+            benchmark_review > 0,
+            benchmark_blocked > 0,
+            benchmark_events,
+            vec![
+                OperatorHealthMetric::new("rust_check_events", self.rust_check_events),
+                OperatorHealthMetric::new("rust_check_passed", self.rust_check_passed),
+                OperatorHealthMetric::new("rust_check_failed", self.rust_check_failed),
+                OperatorHealthMetric::new(
+                    "business_contract_events",
+                    self.business_contract_events,
+                ),
+                OperatorHealthMetric::new(
+                    "business_contract_passed",
+                    self.business_contract_event_passed,
+                ),
+                OperatorHealthMetric::new(
+                    "business_contract_failed",
+                    self.business_contract_event_failed,
+                ),
+                OperatorHealthMetric::new(
+                    "improvement_corpus_events",
+                    self.improvement_corpus_events,
+                ),
+                OperatorHealthMetric::new(
+                    "compiler_passed",
+                    self.improvement_corpus_compiler_passed,
+                ),
+                OperatorHealthMetric::new("test_passed", self.improvement_corpus_test_passed),
+                OperatorHealthMetric::new(
+                    "benchmark_passed",
+                    self.improvement_corpus_benchmark_passed,
+                ),
+            ],
+            self.passed,
+        ));
+
+        OperatorHealthSnapshot {
+            schema: OPERATOR_HEALTH_SCHEMA,
+            passed: self.passed,
+            checked_lines: self.checked_lines,
+            failure_count: self.failures.len(),
+            sections,
+        }
+    }
+
+    pub fn operator_health_json(&self) -> String {
+        self.operator_health_snapshot().json_line()
+    }
+}
+
+fn operator_health_section_json(section: &OperatorHealthSection) -> String {
+    let metrics = section
+        .metrics
+        .iter()
+        .map(|metric| format!("\"{}\":{}", json_escape(metric.name), metric.value))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"name\":\"{}\",\"status\":\"{}\",\"data_present\":{},\"ready\":{},\"review_required\":{},\"blocked\":{},\"events\":{},\"metrics\":{{{}}}}}",
+        json_escape(section.name),
+        json_escape(section.status()),
+        section.data_present,
+        section.ready,
+        section.review_required,
+        section.blocked,
+        section.events,
+        metrics
+    )
 }
 
 pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSchemaGateReport> {
@@ -543,6 +1106,32 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut compute_budget_avoided_tokens = 0;
     let mut compute_budget_write_allowed = 0;
     let mut compute_budget_applied = 0;
+    let mut reasoning_genome_events = 0;
+    let mut reasoning_genome_genes = 0;
+    let mut reasoning_genome_active_genes = 0;
+    let mut reasoning_genome_aged_genes = 0;
+    let mut reasoning_genome_malignant_genes = 0;
+    let mut reasoning_genome_relabel_candidates = 0;
+    let mut reasoning_genome_regeneration_candidates = 0;
+    let mut reasoning_genome_gene_scissors_proposals = 0;
+    let mut reasoning_genome_repair_payloads = 0;
+    let mut reasoning_genome_regeneration_payloads = 0;
+    let mut reasoning_genome_lifecycle_records = 0;
+    let mut reasoning_genome_lifecycle_tombstone_candidates = 0;
+    let mut reasoning_genome_lifecycle_pending_validations = 0;
+    let mut reasoning_genome_lifecycle_source_evidence = 0;
+    let mut reasoning_genome_splice_segments = 0;
+    let mut reasoning_genome_splice_exons = 0;
+    let mut reasoning_genome_splice_introns = 0;
+    let mut reasoning_genome_splice_variants = 0;
+    let mut reasoning_genome_splice_quarantined = 0;
+    let mut reasoning_genome_splice_repair_candidates = 0;
+    let mut reasoning_genome_splice_findings = 0;
+    let mut reasoning_genome_splice_proposals = 0;
+    let mut reasoning_genome_write_allowed = 0;
+    let mut reasoning_genome_mutation_applied = 0;
+    let mut reasoning_genome_splice_write_allowed = 0;
+    let mut reasoning_genome_splice_applied = 0;
     let mut memory_admission_events = 0;
     let mut memory_admission_candidates = 0;
     let mut memory_admission_ready = 0;
@@ -766,6 +1355,35 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             compute_budget_write_allowed += summary.write_allowed;
             compute_budget_applied += summary.applied;
         }
+        if let Some(summary) = reasoning_genome_trace_gate_summary(line) {
+            reasoning_genome_events += summary.events;
+            reasoning_genome_genes += summary.genes;
+            reasoning_genome_active_genes += summary.active_genes;
+            reasoning_genome_aged_genes += summary.aged_genes;
+            reasoning_genome_malignant_genes += summary.malignant_genes;
+            reasoning_genome_relabel_candidates += summary.relabel_candidates;
+            reasoning_genome_regeneration_candidates += summary.regeneration_candidates;
+            reasoning_genome_gene_scissors_proposals += summary.gene_scissors_proposals;
+            reasoning_genome_repair_payloads += summary.repair_payloads;
+            reasoning_genome_regeneration_payloads += summary.regeneration_payloads;
+            reasoning_genome_lifecycle_records += summary.lifecycle_records;
+            reasoning_genome_lifecycle_tombstone_candidates +=
+                summary.lifecycle_tombstone_candidates;
+            reasoning_genome_lifecycle_pending_validations += summary.lifecycle_pending_validations;
+            reasoning_genome_lifecycle_source_evidence += summary.lifecycle_source_evidence;
+            reasoning_genome_splice_segments += summary.splice_segments;
+            reasoning_genome_splice_exons += summary.splice_exons;
+            reasoning_genome_splice_introns += summary.splice_introns;
+            reasoning_genome_splice_variants += summary.splice_variants;
+            reasoning_genome_splice_quarantined += summary.splice_quarantined;
+            reasoning_genome_splice_repair_candidates += summary.splice_repair_candidates;
+            reasoning_genome_splice_findings += summary.splice_findings;
+            reasoning_genome_splice_proposals += summary.splice_proposals;
+            reasoning_genome_write_allowed += summary.write_allowed;
+            reasoning_genome_mutation_applied += summary.mutation_applied;
+            reasoning_genome_splice_write_allowed += summary.splice_write_allowed;
+            reasoning_genome_splice_applied += summary.splice_applied;
+        }
         if let Some(summary) = memory_admission_trace_gate_summary(line) {
             memory_admission_events += summary.events;
             memory_admission_candidates += summary.candidates;
@@ -964,6 +1582,32 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         compute_budget_avoided_tokens,
         compute_budget_write_allowed,
         compute_budget_applied,
+        reasoning_genome_events,
+        reasoning_genome_genes,
+        reasoning_genome_active_genes,
+        reasoning_genome_aged_genes,
+        reasoning_genome_malignant_genes,
+        reasoning_genome_relabel_candidates,
+        reasoning_genome_regeneration_candidates,
+        reasoning_genome_gene_scissors_proposals,
+        reasoning_genome_repair_payloads,
+        reasoning_genome_regeneration_payloads,
+        reasoning_genome_lifecycle_records,
+        reasoning_genome_lifecycle_tombstone_candidates,
+        reasoning_genome_lifecycle_pending_validations,
+        reasoning_genome_lifecycle_source_evidence,
+        reasoning_genome_splice_segments,
+        reasoning_genome_splice_exons,
+        reasoning_genome_splice_introns,
+        reasoning_genome_splice_variants,
+        reasoning_genome_splice_quarantined,
+        reasoning_genome_splice_repair_candidates,
+        reasoning_genome_splice_findings,
+        reasoning_genome_splice_proposals,
+        reasoning_genome_write_allowed,
+        reasoning_genome_mutation_applied,
+        reasoning_genome_splice_write_allowed,
+        reasoning_genome_splice_applied,
         memory_admission_events,
         memory_admission_candidates,
         memory_admission_ready,
@@ -1670,6 +2314,90 @@ fn compute_budget_trace_gate_summary(line: &str) -> Option<ComputeBudgetTraceGat
             extract_json_bool_field(budget, "write_allowed").unwrap_or(false),
         ),
         applied: usize::from(extract_json_bool_field(budget, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ReasoningGenomeTraceGateSummary {
+    events: usize,
+    genes: usize,
+    active_genes: usize,
+    aged_genes: usize,
+    malignant_genes: usize,
+    relabel_candidates: usize,
+    regeneration_candidates: usize,
+    gene_scissors_proposals: usize,
+    repair_payloads: usize,
+    regeneration_payloads: usize,
+    lifecycle_records: usize,
+    lifecycle_tombstone_candidates: usize,
+    lifecycle_pending_validations: usize,
+    lifecycle_source_evidence: usize,
+    splice_segments: usize,
+    splice_exons: usize,
+    splice_introns: usize,
+    splice_variants: usize,
+    splice_quarantined: usize,
+    splice_repair_candidates: usize,
+    splice_findings: usize,
+    splice_proposals: usize,
+    write_allowed: usize,
+    mutation_applied: usize,
+    splice_write_allowed: usize,
+    splice_applied: usize,
+}
+
+fn reasoning_genome_trace_gate_summary(line: &str) -> Option<ReasoningGenomeTraceGateSummary> {
+    let genome = json_object_after_field(line, "reasoning_genome")?;
+
+    Some(ReasoningGenomeTraceGateSummary {
+        events: 1,
+        genes: extract_json_usize_field(genome, "gene_count").unwrap_or(0),
+        active_genes: extract_json_usize_field(genome, "active_genes").unwrap_or(0),
+        aged_genes: extract_json_usize_field(genome, "aged_genes").unwrap_or(0),
+        malignant_genes: extract_json_usize_field(genome, "malignant_genes").unwrap_or(0),
+        relabel_candidates: extract_json_usize_field(genome, "relabel_candidates").unwrap_or(0),
+        regeneration_candidates: extract_json_usize_field(genome, "regeneration_candidates")
+            .unwrap_or(0),
+        gene_scissors_proposals: extract_json_usize_field(genome, "gene_scissors_proposals")
+            .unwrap_or(0),
+        repair_payloads: extract_json_usize_field(genome, "repair_payloads").unwrap_or(0),
+        regeneration_payloads: extract_json_usize_field(genome, "regeneration_payloads")
+            .unwrap_or(0),
+        lifecycle_records: extract_json_usize_field(genome, "lifecycle_records").unwrap_or(0),
+        lifecycle_tombstone_candidates: extract_json_usize_field(
+            genome,
+            "lifecycle_tombstone_candidates",
+        )
+        .unwrap_or(0),
+        lifecycle_pending_validations: extract_json_usize_field(
+            genome,
+            "lifecycle_pending_validations",
+        )
+        .unwrap_or(0),
+        lifecycle_source_evidence: extract_json_usize_field(genome, "lifecycle_source_evidence")
+            .unwrap_or(0),
+        splice_segments: extract_json_usize_field(genome, "splice_segments").unwrap_or(0),
+        splice_exons: extract_json_usize_field(genome, "splice_exons").unwrap_or(0),
+        splice_introns: extract_json_usize_field(genome, "splice_introns").unwrap_or(0),
+        splice_variants: extract_json_usize_field(genome, "splice_variants").unwrap_or(0),
+        splice_quarantined: extract_json_usize_field(genome, "splice_quarantined").unwrap_or(0),
+        splice_repair_candidates: extract_json_usize_field(genome, "splice_repair_candidates")
+            .unwrap_or(0),
+        splice_findings: extract_json_usize_field(genome, "splice_findings").unwrap_or(0),
+        splice_proposals: extract_json_usize_field(genome, "splice_proposals").unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(genome, "write_allowed").unwrap_or(false),
+        ),
+        mutation_applied: usize::from(
+            extract_json_bool_field(genome, "mutation_applied").unwrap_or(false),
+        ),
+        splice_write_allowed: usize::from(
+            extract_json_bool_field(genome, "splice_write_allowed").unwrap_or(false),
+        ),
+        splice_applied: usize::from(
+            extract_json_bool_field(genome, "splice_applied").unwrap_or(false),
+        ),
     })
 }
 

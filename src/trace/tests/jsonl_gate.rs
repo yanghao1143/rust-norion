@@ -833,6 +833,144 @@ fn trace_schema_jsonl_gate_aggregates_memory_residency_plans() {
     cleanup(path);
 }
 
+#[test]
+fn trace_schema_jsonl_gate_exports_redacted_operator_health_snapshot() {
+    let path = temp_path("trace-schema-operator-health");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let prompt = "operator health private prompt sk-test-private-operator-health";
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(prompt, TaskProfile::Coding, 9, &outcome);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    let snapshot = report.operator_health_snapshot();
+    let json = report.operator_health_json();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(snapshot.schema, OPERATOR_HEALTH_SCHEMA);
+    assert_eq!(snapshot.checked_lines, 1);
+    assert_eq!(snapshot.failure_count, 0);
+    assert!(snapshot.passed);
+
+    let trace_gate = snapshot.section("trace_gate").unwrap();
+    assert_eq!(trace_gate.status(), "ready");
+    assert_eq!(trace_gate.metric("checked_lines"), Some(1));
+
+    let memory = snapshot.section("memory").unwrap();
+    assert!(memory.data_present);
+    assert_eq!(
+        memory.metric("admission_events"),
+        Some(report.memory_admission_events)
+    );
+    assert_eq!(
+        memory.metric("kv_fusion_saved_tokens"),
+        Some(report.kv_fusion_saved_tokens)
+    );
+
+    let genome = snapshot.section("genome").unwrap();
+    assert!(genome.data_present);
+    assert_eq!(
+        genome.metric("events"),
+        Some(report.reasoning_genome_events)
+    );
+    assert_eq!(genome.metric("genes"), Some(report.reasoning_genome_genes));
+    assert!(report.reasoning_genome_events >= 1);
+    assert!(report.reasoning_genome_genes >= 1);
+
+    let routing = snapshot.section("routing").unwrap();
+    assert!(routing.data_present);
+    assert_eq!(
+        routing.metric("adaptive_routing_events"),
+        Some(report.adaptive_routing_events)
+    );
+    assert_eq!(
+        routing.metric("compute_budget_saved_tokens"),
+        Some(report.compute_budget_saved_tokens)
+    );
+
+    let approval = snapshot.section("approval").unwrap();
+    assert!(!approval.data_present);
+    assert_eq!(approval.status(), "missing");
+
+    assert!(json.contains("\"schema\":\"rust-norion-operator-health-v1\""));
+    assert!(json.contains("\"name\":\"memory\""));
+    assert!(json.contains("\"name\":\"genome\""));
+    assert!(json.contains("\"name\":\"routing\""));
+    assert!(!json.contains("sk-test-private-operator-health"));
+    assert!(!json.contains("prompt_preview"));
+    cleanup(path);
+}
+
+#[test]
+fn operator_health_snapshot_covers_approval_and_rollback_gates() {
+    let path = temp_path("trace-schema-operator-health-approval");
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    ledger.append_admission_report(
+        "operator-health-rollback",
+        &self_evolution_experiment_rollback_report("candidate-operator-health"),
+    );
+    let plan = ledger.rollback_replay_plan();
+    let replay_gate = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+    let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+        "maintainer-jy",
+        "approval-ticket-operator-health",
+        &replay_gate.review_packet,
+        "approved for operator health export",
+    );
+    let approved =
+        SelfEvolutionOperatorApprovalGate::new().evaluate(&replay_gate.review_packet, &evidence);
+    let mut held_evidence = evidence.clone();
+    held_evidence.approval_ticket_id.clear();
+    let held = SelfEvolutionOperatorApprovalGate::new()
+        .evaluate(&replay_gate.review_packet, &held_evidence);
+
+    append_self_evolution_rollback_replay_trace_jsonl(&path, &plan).unwrap();
+    append_self_evolution_rollback_replay_gate_trace_jsonl(&path, &replay_gate).unwrap();
+    append_self_evolution_operator_approval_trace_jsonl(&path, &approved).unwrap();
+    append_self_evolution_operator_approval_trace_jsonl(&path, &held).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    let snapshot = report.operator_health_snapshot();
+    let json = snapshot.json_line();
+
+    assert!(report.passed, "{:?}", report.failures);
+
+    let approval = snapshot.section("approval").unwrap();
+    assert!(approval.data_present);
+    assert!(approval.review_required);
+    assert!(approval.blocked);
+    assert_eq!(
+        approval.metric("operator_approval_events"),
+        Some(report.self_evolution_operator_approval_events)
+    );
+    assert_eq!(approval.metric("operator_approved"), Some(1));
+    assert_eq!(approval.metric("operator_held"), Some(1));
+
+    let rollback = snapshot.section("rollback").unwrap();
+    assert!(rollback.data_present);
+    assert!(rollback.review_required);
+    assert_eq!(
+        rollback.metric("replay_events"),
+        Some(report.self_evolution_rollback_replay_events)
+    );
+    assert_eq!(
+        rollback.metric("gate_events"),
+        Some(report.self_evolution_rollback_replay_gate_events)
+    );
+
+    let memory = snapshot.section("memory").unwrap();
+    assert!(!memory.data_present);
+    assert_eq!(memory.status(), "missing");
+
+    assert!(!json.contains("approval-ticket-operator-health"));
+    assert!(!json.contains("approved for operator health export"));
+    cleanup(path);
+}
+
 fn self_evolution_experiment_passing_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
     let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
         NoironRouter::new().state(),
