@@ -295,13 +295,15 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_plans() {
         &self_evolution_experiment_rollback_report("candidate-rollback"),
     );
     let plan = ledger.rollback_replay_plan();
+    let gate_report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
 
     append_self_evolution_rollback_replay_trace_jsonl(&path, &plan).unwrap();
+    append_self_evolution_rollback_replay_gate_trace_jsonl(&path, &gate_report).unwrap();
 
     let report = evaluate_trace_schema_jsonl(&path).unwrap();
 
     assert!(report.passed, "{:?}", report.failures);
-    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.checked_lines, 2);
     assert_eq!(report.self_evolution_rollback_replay_events, 1);
     assert_eq!(report.self_evolution_rollback_replay_items, 1);
     assert_eq!(report.self_evolution_rollback_replay_replayable, 1);
@@ -320,6 +322,37 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_plans() {
     assert_eq!(report.self_evolution_rollback_replay_item_applied, 0);
     assert_eq!(report.self_evolution_rollback_replay_write_allowed, 0);
     assert_eq!(report.self_evolution_rollback_replay_applied, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_events, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_admitted, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_held, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_items, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_replayable, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_blocked, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_all_replayable, 1);
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_rollback_anchor_ids,
+        gate_report.rollback_anchor_ids.len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_evidence_ids,
+        gate_report.evidence_ids.len()
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_active_candidates,
+        0
+    );
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_item_write_allowed,
+        0
+    );
+    assert_eq!(report.self_evolution_rollback_replay_gate_item_applied, 0);
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_plan_write_allowed,
+        0
+    );
+    assert_eq!(report.self_evolution_rollback_replay_gate_plan_applied, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_write_allowed, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_applied, 0);
     assert!(
         report
             .summary_line()
@@ -329,6 +362,43 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_plans() {
         report
             .summary_line()
             .contains("self_evolution_rollback_replay_replayable=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_gate_admitted=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_accepts_held_self_evolution_rollback_replay_gate() {
+    let path = temp_path("trace-schema-self-evolution-rollback-replay-gate-held");
+    let plan = SelfEvolutionRollbackReplayPlan::new(Vec::new());
+    let gate_report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+
+    append_self_evolution_rollback_replay_gate_trace_jsonl(&path, &gate_report).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_events, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_admitted, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_held, 1);
+    assert_eq!(report.self_evolution_rollback_replay_gate_items, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_replayable, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_blocked, 0);
+    assert_eq!(report.self_evolution_rollback_replay_gate_all_replayable, 1);
+    assert_eq!(
+        report.self_evolution_rollback_replay_gate_rollback_anchor_ids,
+        0
+    );
+    assert_eq!(report.self_evolution_rollback_replay_gate_evidence_ids, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_rollback_replay_gate_held=1")
     );
     cleanup(path);
 }

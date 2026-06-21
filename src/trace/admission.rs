@@ -492,6 +492,255 @@ pub(super) fn evaluate_self_evolution_rollback_replay_schema_line(line: &str) ->
     failures
 }
 
+pub(super) fn evaluate_self_evolution_rollback_replay_gate_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolution-rollback-replay-gate-v1\"",
+        ),
+        ("decision", "\"decision\":"),
+        (
+            "admitted_for_human_review",
+            "\"admitted_for_human_review\":",
+        ),
+        ("human_approval_required", "\"human_approval_required\":"),
+        ("item_count", "\"item_count\":"),
+        ("replayable", "\"replayable\":"),
+        ("blocked", "\"blocked\":"),
+        ("all_replayable", "\"all_replayable\":"),
+        ("active_candidates", "\"active_candidates\":"),
+        ("item_write_allowed", "\"item_write_allowed\":"),
+        ("item_applied", "\"item_applied\":"),
+        ("read_only", "\"read_only\":"),
+        ("report_only", "\"report_only\":"),
+        ("preview_only", "\"preview_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("plan_read_only", "\"plan_read_only\":"),
+        ("plan_report_only", "\"plan_report_only\":"),
+        ("plan_preview_only", "\"plan_preview_only\":"),
+        ("plan_write_allowed", "\"plan_write_allowed\":"),
+        ("plan_applied", "\"plan_applied\":"),
+        ("rollback_anchor_ids", "\"rollback_anchor_ids\":"),
+        ("evidence_ids", "\"evidence_ids\":"),
+        ("blocked_reasons", "\"blocked_reasons\":"),
+        ("content_digest", "\"content_digest\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_evolution_rollback_replay_gate field {name}"
+            ));
+        }
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_evolution_rollback_replay_gate",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "report_only",
+        true,
+        "self_evolution_rollback_replay_gate",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "preview_only",
+        true,
+        "self_evolution_rollback_replay_gate",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_evolution_rollback_replay_gate",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_evolution_rollback_replay_gate",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "human_approval_required",
+        true,
+        "self_evolution_rollback_replay_gate",
+    );
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    let admitted_for_human_review =
+        extract_json_bool_field(line, "admitted_for_human_review").unwrap_or(false);
+    let item_count = extract_json_usize_field(line, "item_count");
+    let replayable = extract_json_usize_field(line, "replayable");
+    let blocked = extract_json_usize_field(line, "blocked");
+    let all_replayable = extract_json_bool_field(line, "all_replayable");
+    let active_candidates = extract_json_usize_field(line, "active_candidates").unwrap_or(0);
+    let item_write_allowed = extract_json_usize_field(line, "item_write_allowed").unwrap_or(0);
+    let item_applied = extract_json_usize_field(line, "item_applied").unwrap_or(0);
+    let plan_read_only = extract_json_bool_field(line, "plan_read_only").unwrap_or(false);
+    let plan_report_only = extract_json_bool_field(line, "plan_report_only").unwrap_or(false);
+    let plan_preview_only = extract_json_bool_field(line, "plan_preview_only").unwrap_or(false);
+    let plan_write_allowed = extract_json_bool_field(line, "plan_write_allowed").unwrap_or(false);
+    let plan_applied = extract_json_bool_field(line, "plan_applied").unwrap_or(false);
+    let rollback_anchor_ids =
+        extract_json_string_array_field(line, "rollback_anchor_ids").unwrap_or_default();
+    let evidence_ids = extract_json_string_array_field(line, "evidence_ids").unwrap_or_default();
+    let blocked_reasons =
+        extract_json_string_array_field(line, "blocked_reasons").unwrap_or_default();
+    let content_digest = extract_json_string_field(line, "content_digest").unwrap_or_default();
+
+    if !content_digest.starts_with("fnv64:") {
+        failures.push(
+            "self_evolution_rollback_replay_gate content_digest must be stable fnv64".to_owned(),
+        );
+    }
+
+    for (field, values) in [
+        ("rollback_anchor_ids", &rollback_anchor_ids),
+        ("evidence_ids", &evidence_ids),
+        ("blocked_reasons", &blocked_reasons),
+    ] {
+        if values.iter().any(|value| value.trim().is_empty()) {
+            failures.push(format!(
+                "self_evolution_rollback_replay_gate {field} contains empty item"
+            ));
+        }
+    }
+
+    match (item_count, replayable, blocked) {
+        (Some(items), Some(replayable), Some(blocked))
+            if replayable.saturating_add(blocked) != items =>
+        {
+            failures.push(format!(
+                "self_evolution_rollback_replay_gate replayable+blocked {} does not match item_count {items}",
+                replayable.saturating_add(blocked)
+            ));
+        }
+        (Some(_), Some(_), Some(_)) => {}
+        _ => failures
+            .push("self_evolution_rollback_replay_gate count fields are incomplete".to_owned()),
+    }
+
+    match (all_replayable, blocked) {
+        (Some(true), Some(0)) | (Some(false), Some(_)) => {}
+        (Some(true), Some(blocked)) => failures.push(format!(
+            "self_evolution_rollback_replay_gate all_replayable=true but blocked={blocked}"
+        )),
+        (Some(_), None) => {
+            failures.push("self_evolution_rollback_replay_gate blocked count is missing".to_owned())
+        }
+        (None, _) => failures
+            .push("self_evolution_rollback_replay_gate all_replayable is missing".to_owned()),
+    }
+
+    match decision.as_str() {
+        "admit_for_human_review" => {
+            if !admitted_for_human_review {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted decision requires admitted_for_human_review=true"
+                        .to_owned(),
+                );
+            }
+            if item_count.unwrap_or(0) == 0 {
+                failures
+                    .push("self_evolution_rollback_replay_gate admitted plan is empty".to_owned());
+            }
+            if blocked.unwrap_or(0) > 0 || !all_replayable.unwrap_or(false) {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan must be all replayable"
+                        .to_owned(),
+                );
+            }
+            if rollback_anchor_ids.is_empty() {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan requires rollback_anchor_ids"
+                        .to_owned(),
+                );
+            }
+            if evidence_ids.is_empty() {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan requires evidence_ids"
+                        .to_owned(),
+                );
+            }
+            if active_candidates > 0 {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan has active candidates"
+                        .to_owned(),
+                );
+            }
+            if item_write_allowed > 0 || item_applied > 0 {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan has item write/applied flags"
+                        .to_owned(),
+                );
+            }
+            if !plan_read_only || !plan_report_only || !plan_preview_only {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan must stay read/report/preview only"
+                        .to_owned(),
+                );
+            }
+            if plan_write_allowed || plan_applied {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan must not write or apply"
+                        .to_owned(),
+                );
+            }
+            if !blocked_reasons.is_empty() {
+                failures.push(
+                    "self_evolution_rollback_replay_gate admitted plan must not have blocked reasons"
+                        .to_owned(),
+                );
+            }
+        }
+        "hold" => {
+            if admitted_for_human_review {
+                failures.push(
+                    "self_evolution_rollback_replay_gate hold requires admitted_for_human_review=false"
+                        .to_owned(),
+                );
+            }
+            if blocked_reasons.is_empty() {
+                failures.push(
+                    "self_evolution_rollback_replay_gate hold requires blocked reasons".to_owned(),
+                );
+            }
+        }
+        _ => failures.push(format!(
+            "self_evolution_rollback_replay_gate decision {decision} is not supported"
+        )),
+    }
+
+    if replayable.unwrap_or(0) > 0 {
+        if rollback_anchor_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay_gate replayable plan requires rollback_anchor_ids"
+                    .to_owned(),
+            );
+        }
+        if evidence_ids.is_empty() {
+            failures.push(
+                "self_evolution_rollback_replay_gate replayable plan requires evidence_ids"
+                    .to_owned(),
+            );
+        }
+    }
+
+    failures
+}
+
 fn evaluate_self_evolution_rollback_replay_item(item: &str, failures: &mut Vec<String>) {
     for (name, marker) in [
         ("sequence", "\"sequence\":"),

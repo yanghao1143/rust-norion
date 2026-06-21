@@ -16,7 +16,8 @@ use crate::router::{
 use crate::rust_validation::RustSnippetCheckReport;
 use crate::self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionReport,
-    SelfEvolutionExperimentLedger, SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
+    SelfEvolutionExperimentLedger, SelfEvolutionRollbackReplayGate,
+    SelfEvolutionRollbackReplayPlan, SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
 };
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};

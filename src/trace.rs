@@ -23,6 +23,7 @@ mod specialized;
 use adapter::evaluate_trace_adapter_observations;
 use admission::{
     evaluate_self_evolution_admission_schema_line, evaluate_self_evolution_experiment_schema_line,
+    evaluate_self_evolution_rollback_replay_gate_schema_line,
     evaluate_self_evolution_rollback_replay_schema_line,
 };
 use agent_team::evaluate_trace_agent_team;
@@ -50,10 +51,12 @@ pub use jsonl::{
     append_business_contract_trace_jsonl, append_improvement_corpus_trace_jsonl,
     append_rust_check_trace_jsonl, append_self_evolution_admission_trace_jsonl,
     append_self_evolution_experiment_trace_jsonl,
+    append_self_evolution_rollback_replay_gate_trace_jsonl,
     append_self_evolution_rollback_replay_trace_jsonl, append_trace_jsonl,
     append_trace_jsonl_with_case, business_contract_trace_json_line,
     improvement_corpus_trace_json_line, rust_check_trace_json_line,
     self_evolution_admission_trace_json_line, self_evolution_experiment_trace_json_line,
+    self_evolution_rollback_replay_gate_trace_json_line,
     self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
 };
 pub use schema_jsonl_gate::{TraceSchemaGateReport, evaluate_trace_schema_jsonl};
@@ -84,6 +87,12 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-plan-v1\"") {
         failures.extend(evaluate_self_evolution_rollback_replay_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-gate-v1\"") {
+        failures.extend(evaluate_self_evolution_rollback_replay_gate_schema_line(
+            line,
+        ));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-improvement-corpus-v1\"") {

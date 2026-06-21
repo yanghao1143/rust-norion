@@ -61,6 +61,22 @@ pub struct TraceSchemaGateReport {
     pub self_evolution_rollback_replay_item_applied: usize,
     pub self_evolution_rollback_replay_write_allowed: usize,
     pub self_evolution_rollback_replay_applied: usize,
+    pub self_evolution_rollback_replay_gate_events: usize,
+    pub self_evolution_rollback_replay_gate_admitted: usize,
+    pub self_evolution_rollback_replay_gate_held: usize,
+    pub self_evolution_rollback_replay_gate_items: usize,
+    pub self_evolution_rollback_replay_gate_replayable: usize,
+    pub self_evolution_rollback_replay_gate_blocked: usize,
+    pub self_evolution_rollback_replay_gate_all_replayable: usize,
+    pub self_evolution_rollback_replay_gate_rollback_anchor_ids: usize,
+    pub self_evolution_rollback_replay_gate_evidence_ids: usize,
+    pub self_evolution_rollback_replay_gate_active_candidates: usize,
+    pub self_evolution_rollback_replay_gate_item_write_allowed: usize,
+    pub self_evolution_rollback_replay_gate_item_applied: usize,
+    pub self_evolution_rollback_replay_gate_plan_write_allowed: usize,
+    pub self_evolution_rollback_replay_gate_plan_applied: usize,
+    pub self_evolution_rollback_replay_gate_write_allowed: usize,
+    pub self_evolution_rollback_replay_gate_applied: usize,
     pub improvement_corpus_events: usize,
     pub improvement_corpus_episodes: usize,
     pub improvement_corpus_active_adaptation: usize,
@@ -118,7 +134,7 @@ pub struct TraceSchemaGateReport {
 impl TraceSchemaGateReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -170,6 +186,22 @@ impl TraceSchemaGateReport {
             self.self_evolution_rollback_replay_item_applied,
             self.self_evolution_rollback_replay_write_allowed,
             self.self_evolution_rollback_replay_applied,
+            self.self_evolution_rollback_replay_gate_events,
+            self.self_evolution_rollback_replay_gate_admitted,
+            self.self_evolution_rollback_replay_gate_held,
+            self.self_evolution_rollback_replay_gate_items,
+            self.self_evolution_rollback_replay_gate_replayable,
+            self.self_evolution_rollback_replay_gate_blocked,
+            self.self_evolution_rollback_replay_gate_all_replayable,
+            self.self_evolution_rollback_replay_gate_rollback_anchor_ids,
+            self.self_evolution_rollback_replay_gate_evidence_ids,
+            self.self_evolution_rollback_replay_gate_active_candidates,
+            self.self_evolution_rollback_replay_gate_item_write_allowed,
+            self.self_evolution_rollback_replay_gate_item_applied,
+            self.self_evolution_rollback_replay_gate_plan_write_allowed,
+            self.self_evolution_rollback_replay_gate_plan_applied,
+            self.self_evolution_rollback_replay_gate_write_allowed,
+            self.self_evolution_rollback_replay_gate_applied,
             self.improvement_corpus_events,
             self.improvement_corpus_episodes,
             self.improvement_corpus_active_adaptation,
@@ -276,6 +308,22 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_evolution_rollback_replay_item_applied = 0;
     let mut self_evolution_rollback_replay_write_allowed = 0;
     let mut self_evolution_rollback_replay_applied = 0;
+    let mut self_evolution_rollback_replay_gate_events = 0;
+    let mut self_evolution_rollback_replay_gate_admitted = 0;
+    let mut self_evolution_rollback_replay_gate_held = 0;
+    let mut self_evolution_rollback_replay_gate_items = 0;
+    let mut self_evolution_rollback_replay_gate_replayable = 0;
+    let mut self_evolution_rollback_replay_gate_blocked = 0;
+    let mut self_evolution_rollback_replay_gate_all_replayable = 0;
+    let mut self_evolution_rollback_replay_gate_rollback_anchor_ids = 0;
+    let mut self_evolution_rollback_replay_gate_evidence_ids = 0;
+    let mut self_evolution_rollback_replay_gate_active_candidates = 0;
+    let mut self_evolution_rollback_replay_gate_item_write_allowed = 0;
+    let mut self_evolution_rollback_replay_gate_item_applied = 0;
+    let mut self_evolution_rollback_replay_gate_plan_write_allowed = 0;
+    let mut self_evolution_rollback_replay_gate_plan_applied = 0;
+    let mut self_evolution_rollback_replay_gate_write_allowed = 0;
+    let mut self_evolution_rollback_replay_gate_applied = 0;
     let mut improvement_corpus_events = 0;
     let mut improvement_corpus_episodes = 0;
     let mut improvement_corpus_active_adaptation = 0;
@@ -396,6 +444,24 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_evolution_rollback_replay_item_applied += summary.item_applied;
             self_evolution_rollback_replay_write_allowed += summary.write_allowed;
             self_evolution_rollback_replay_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolution_rollback_replay_gate_trace_gate_summary(line) {
+            self_evolution_rollback_replay_gate_events += summary.events;
+            self_evolution_rollback_replay_gate_admitted += summary.admitted;
+            self_evolution_rollback_replay_gate_held += summary.held;
+            self_evolution_rollback_replay_gate_items += summary.items;
+            self_evolution_rollback_replay_gate_replayable += summary.replayable;
+            self_evolution_rollback_replay_gate_blocked += summary.blocked;
+            self_evolution_rollback_replay_gate_all_replayable += summary.all_replayable;
+            self_evolution_rollback_replay_gate_rollback_anchor_ids += summary.rollback_anchor_ids;
+            self_evolution_rollback_replay_gate_evidence_ids += summary.evidence_ids;
+            self_evolution_rollback_replay_gate_active_candidates += summary.active_candidates;
+            self_evolution_rollback_replay_gate_item_write_allowed += summary.item_write_allowed;
+            self_evolution_rollback_replay_gate_item_applied += summary.item_applied;
+            self_evolution_rollback_replay_gate_plan_write_allowed += summary.plan_write_allowed;
+            self_evolution_rollback_replay_gate_plan_applied += summary.plan_applied;
+            self_evolution_rollback_replay_gate_write_allowed += summary.write_allowed;
+            self_evolution_rollback_replay_gate_applied += summary.applied;
         }
         if let Some(summary) = improvement_corpus_trace_gate_summary(line) {
             improvement_corpus_events += summary.events;
@@ -520,6 +586,22 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_evolution_rollback_replay_item_applied,
         self_evolution_rollback_replay_write_allowed,
         self_evolution_rollback_replay_applied,
+        self_evolution_rollback_replay_gate_events,
+        self_evolution_rollback_replay_gate_admitted,
+        self_evolution_rollback_replay_gate_held,
+        self_evolution_rollback_replay_gate_items,
+        self_evolution_rollback_replay_gate_replayable,
+        self_evolution_rollback_replay_gate_blocked,
+        self_evolution_rollback_replay_gate_all_replayable,
+        self_evolution_rollback_replay_gate_rollback_anchor_ids,
+        self_evolution_rollback_replay_gate_evidence_ids,
+        self_evolution_rollback_replay_gate_active_candidates,
+        self_evolution_rollback_replay_gate_item_write_allowed,
+        self_evolution_rollback_replay_gate_item_applied,
+        self_evolution_rollback_replay_gate_plan_write_allowed,
+        self_evolution_rollback_replay_gate_plan_applied,
+        self_evolution_rollback_replay_gate_write_allowed,
+        self_evolution_rollback_replay_gate_applied,
         improvement_corpus_events,
         improvement_corpus_episodes,
         improvement_corpus_active_adaptation,
@@ -826,6 +908,63 @@ fn self_evolution_rollback_replay_trace_gate_summary(
         active_candidates: extract_json_usize_field(line, "active_candidates").unwrap_or(0),
         item_write_allowed: extract_json_usize_field(line, "item_write_allowed").unwrap_or(0),
         item_applied: extract_json_usize_field(line, "item_applied").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionRollbackReplayGateTraceGateSummary {
+    events: usize,
+    admitted: usize,
+    held: usize,
+    items: usize,
+    replayable: usize,
+    blocked: usize,
+    all_replayable: usize,
+    rollback_anchor_ids: usize,
+    evidence_ids: usize,
+    active_candidates: usize,
+    item_write_allowed: usize,
+    item_applied: usize,
+    plan_write_allowed: usize,
+    plan_applied: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_rollback_replay_gate_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionRollbackReplayGateTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-gate-v1\"") {
+        return None;
+    }
+
+    let admitted = extract_json_bool_field(line, "admitted_for_human_review").unwrap_or(false);
+
+    Some(SelfEvolutionRollbackReplayGateTraceGateSummary {
+        events: 1,
+        admitted: usize::from(admitted),
+        held: usize::from(!admitted),
+        items: extract_json_usize_field(line, "item_count").unwrap_or(0),
+        replayable: extract_json_usize_field(line, "replayable").unwrap_or(0),
+        blocked: extract_json_usize_field(line, "blocked").unwrap_or(0),
+        all_replayable: usize::from(
+            extract_json_bool_field(line, "all_replayable").unwrap_or(false),
+        ),
+        rollback_anchor_ids: extract_json_string_array_field(line, "rollback_anchor_ids")
+            .map(|ids| ids.len())
+            .unwrap_or(0),
+        evidence_ids: extract_json_string_array_field(line, "evidence_ids")
+            .map(|ids| ids.len())
+            .unwrap_or(0),
+        active_candidates: extract_json_usize_field(line, "active_candidates").unwrap_or(0),
+        item_write_allowed: extract_json_usize_field(line, "item_write_allowed").unwrap_or(0),
+        item_applied: extract_json_usize_field(line, "item_applied").unwrap_or(0),
+        plan_write_allowed: usize::from(
+            extract_json_bool_field(line, "plan_write_allowed").unwrap_or(false),
+        ),
+        plan_applied: usize::from(extract_json_bool_field(line, "plan_applied").unwrap_or(false)),
         write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
         applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
     })
