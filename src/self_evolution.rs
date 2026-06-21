@@ -1041,11 +1041,285 @@ impl SelfEvolutionExperimentLedger {
         )
     }
 
+    pub fn rollback_replay_plan(&self) -> SelfEvolutionRollbackReplayPlan {
+        SelfEvolutionRollbackReplayPlan::new(
+            self.records
+                .iter()
+                .filter(|record| {
+                    record.rollback_required
+                        || record.decision == SelfEvolutionExperimentDecision::Rollback
+                })
+                .map(SelfEvolutionRollbackReplayItem::from_record)
+                .collect(),
+        )
+    }
+
     fn count_decision(&self, decision: SelfEvolutionExperimentDecision) -> usize {
         self.records
             .iter()
             .filter(|record| record.decision == decision)
             .count()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionRollbackReplayItem {
+    pub sequence: u64,
+    pub experiment_id: String,
+    pub candidate_id: String,
+    pub decision: SelfEvolutionExperimentDecision,
+    pub rollback_required: bool,
+    pub rollback_replayable: bool,
+    pub replayable: bool,
+    pub active_candidate: bool,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub evidence_ids: Vec<String>,
+    pub rollback_anchor_ids: Vec<String>,
+    pub blocked_reasons: Vec<String>,
+    pub content_digest: String,
+}
+
+impl SelfEvolutionRollbackReplayItem {
+    fn from_record(record: &SelfEvolutionExperimentRecord) -> Self {
+        let mut blocked_reasons = Vec::new();
+
+        if record.decision != SelfEvolutionExperimentDecision::Rollback {
+            blocked_reasons.push("self_evolution_rollback_replay_decision_not_rollback".to_owned());
+        }
+        if !record.rollback_required {
+            blocked_reasons.push("self_evolution_rollback_replay_rollback_not_required".to_owned());
+        }
+        if !record.rollback_replayable {
+            blocked_reasons.push("self_evolution_rollback_replay_record_not_replayable".to_owned());
+        }
+        if record.evidence_ids.is_empty() {
+            blocked_reasons.push("self_evolution_rollback_replay_evidence_missing".to_owned());
+        }
+        if record.rollback_anchor_ids.is_empty() {
+            blocked_reasons.push("self_evolution_rollback_replay_anchor_missing".to_owned());
+        }
+        if record.active_candidate {
+            blocked_reasons.push("self_evolution_rollback_replay_active_candidate".to_owned());
+        }
+        if !record.read_only {
+            blocked_reasons.push("self_evolution_rollback_replay_not_read_only".to_owned());
+        }
+        if !record.report_only {
+            blocked_reasons.push("self_evolution_rollback_replay_not_report_only".to_owned());
+        }
+        if !record.preview_only {
+            blocked_reasons.push("self_evolution_rollback_replay_not_preview_only".to_owned());
+        }
+        if record.write_allowed {
+            blocked_reasons.push("self_evolution_rollback_replay_write_allowed".to_owned());
+        }
+        if record.applied {
+            blocked_reasons.push("self_evolution_rollback_replay_already_applied".to_owned());
+        }
+
+        Self {
+            sequence: record.sequence,
+            experiment_id: record.experiment_id.clone(),
+            candidate_id: record.candidate_id.clone(),
+            decision: record.decision,
+            rollback_required: record.rollback_required,
+            rollback_replayable: record.rollback_replayable,
+            replayable: blocked_reasons.is_empty(),
+            active_candidate: record.active_candidate,
+            read_only: record.read_only,
+            report_only: record.report_only,
+            preview_only: record.preview_only,
+            write_allowed: record.write_allowed,
+            applied: record.applied,
+            evidence_ids: record.evidence_ids.clone(),
+            rollback_anchor_ids: record.rollback_anchor_ids.clone(),
+            blocked_reasons,
+            content_digest: record.content_digest.clone(),
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_rollback_replay_item sequence={} experiment={} candidate={} decision={} replayable={} rollback_required={} rollback_replayable={} active_candidate={} write_allowed={} applied={} evidence_ids={} rollback_anchors={} blocked_reasons={} digest={}",
+            self.sequence,
+            self.experiment_id,
+            self.candidate_id,
+            self.decision.as_str(),
+            self.replayable,
+            self.rollback_required,
+            self.rollback_replayable,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+            self.evidence_ids.len(),
+            self.rollback_anchor_ids.len(),
+            self.blocked_reasons.len(),
+            self.content_digest,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        format!(
+            "{{\"schema\":\"rust-norion-self-evolution-rollback-replay-item-v1\",{}}}",
+            self.json_fields()
+        )
+    }
+
+    fn json_fields(&self) -> String {
+        let experiment_id = self_evolution_json_escape(&self.experiment_id);
+        let candidate_id = self_evolution_json_escape(&self.candidate_id);
+        let content_digest = self_evolution_json_escape(&self.content_digest);
+        let evidence_ids = self_evolution_string_array_json(&self.evidence_ids);
+        let rollback_anchor_ids = self_evolution_string_array_json(&self.rollback_anchor_ids);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+
+        format!(
+            "\"sequence\":{},\
+             \"experiment_id\":\"{experiment_id}\",\
+             \"candidate_id\":\"{candidate_id}\",\
+             \"decision\":\"{}\",\
+             \"rollback_required\":{},\
+             \"rollback_replayable\":{},\
+             \"replayable\":{},\
+             \"active_candidate\":{},\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"evidence_ids\":{evidence_ids},\
+             \"rollback_anchor_ids\":{rollback_anchor_ids},\
+             \"blocked_reasons\":{blocked_reasons},\
+             \"content_digest\":\"{content_digest}\"",
+            self.sequence,
+            self.decision.as_str(),
+            self.rollback_required,
+            self.rollback_replayable,
+            self.replayable,
+            self.active_candidate,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionRollbackReplayPlan {
+    pub items: Vec<SelfEvolutionRollbackReplayItem>,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfEvolutionRollbackReplayPlan {
+    pub fn new(items: Vec<SelfEvolutionRollbackReplayItem>) -> Self {
+        Self {
+            items,
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn item_count(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn replayable(&self) -> usize {
+        self.items.iter().filter(|item| item.replayable).count()
+    }
+
+    pub fn blocked(&self) -> usize {
+        self.items.iter().filter(|item| !item.replayable).count()
+    }
+
+    pub fn all_replayable(&self) -> bool {
+        self.blocked() == 0
+    }
+
+    pub fn rollback_anchor_ids(&self) -> Vec<String> {
+        let mut ids = Vec::new();
+        for item in &self.items {
+            for anchor_id in &item.rollback_anchor_ids {
+                push_unique_string(&mut ids, anchor_id.clone());
+            }
+        }
+        ids
+    }
+
+    pub fn evidence_ids(&self) -> Vec<String> {
+        let mut ids = Vec::new();
+        for item in &self.items {
+            for evidence_id in &item.evidence_ids {
+                push_unique_string(&mut ids, evidence_id.clone());
+            }
+        }
+        ids
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_rollback_replay_plan items={} replayable={} blocked={} rollback_anchors={} evidence_ids={} read_only={} report_only={} preview_only={} write_allowed={} applied={}",
+            self.item_count(),
+            self.replayable(),
+            self.blocked(),
+            self.rollback_anchor_ids().len(),
+            self.evidence_ids().len(),
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let items = self
+            .items
+            .iter()
+            .map(|item| format!("{{{}}}", item.json_fields()))
+            .collect::<Vec<_>>()
+            .join(",");
+        let rollback_anchor_ids = self_evolution_string_array_json(&self.rollback_anchor_ids());
+        let evidence_ids = self_evolution_string_array_json(&self.evidence_ids());
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-rollback-replay-plan-v1\",\
+             \"item_count\":{},\
+             \"replayable\":{},\
+             \"blocked\":{},\
+             \"all_replayable\":{},\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"rollback_anchor_ids\":{rollback_anchor_ids},\
+             \"evidence_ids\":{evidence_ids},\
+             \"items\":[{items}]\
+             }}",
+            self.item_count(),
+            self.replayable(),
+            self.blocked(),
+            self.all_replayable(),
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+        )
     }
 }
 
@@ -1789,6 +2063,156 @@ mod tests {
         assert!(!record.write_allowed);
         assert_eq!(ledger.conflicting_evidence(), 1);
         assert!(ledger.summary_line().contains("conflicting_evidence=1"));
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_plan_extracts_safe_rollback_records() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-pass",
+            &passing_admission_report("candidate-pass"),
+        );
+        let rollback = ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        let before = ledger.records().to_vec();
+
+        let plan = ledger.rollback_replay_plan();
+
+        assert_eq!(ledger.records(), before.as_slice());
+        assert_eq!(plan.item_count(), 1);
+        assert_eq!(plan.replayable(), 1);
+        assert_eq!(plan.blocked(), 0);
+        assert!(plan.all_replayable());
+        assert!(plan.read_only);
+        assert!(plan.report_only);
+        assert!(plan.preview_only);
+        assert!(!plan.write_allowed);
+        assert!(!plan.applied);
+        assert_eq!(plan.rollback_anchor_ids(), rollback.rollback_anchor_ids);
+        assert_eq!(plan.evidence_ids(), rollback.evidence_ids);
+
+        let item = &plan.items[0];
+        assert_eq!(item.sequence, rollback.sequence);
+        assert_eq!(item.decision, SelfEvolutionExperimentDecision::Rollback);
+        assert!(item.rollback_required);
+        assert!(item.rollback_replayable);
+        assert!(item.replayable);
+        assert!(item.blocked_reasons.is_empty());
+        assert!(item.summary_line().contains("replayable=true"));
+        assert!(
+            item.json_line()
+                .contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-item-v1\"")
+        );
+        assert!(
+            plan.summary_line()
+                .contains("self_evolution_rollback_replay_plan items=1")
+        );
+        assert!(
+            plan.json_line()
+                .contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-plan-v1\"")
+        );
+        assert!(plan.json_line().contains("\"write_allowed\":false"));
+        assert!(plan.json_line().contains("\"applied\":false"));
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_plan_blocks_missing_evidence_or_anchor() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        ledger.records[0].evidence_ids.clear();
+        ledger.records[0].rollback_anchor_ids.clear();
+
+        let plan = ledger.rollback_replay_plan();
+
+        assert_eq!(plan.item_count(), 1);
+        assert_eq!(plan.replayable(), 0);
+        assert_eq!(plan.blocked(), 1);
+        assert!(!plan.all_replayable());
+        assert!(plan.rollback_anchor_ids().is_empty());
+        assert!(plan.evidence_ids().is_empty());
+        assert!(
+            plan.items[0]
+                .blocked_reasons
+                .contains(&"self_evolution_rollback_replay_evidence_missing".to_owned())
+        );
+        assert!(
+            plan.items[0]
+                .blocked_reasons
+                .contains(&"self_evolution_rollback_replay_anchor_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_plan_blocks_unsafe_record_state() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        ledger.records[0].active_candidate = true;
+        ledger.records[0].read_only = false;
+        ledger.records[0].report_only = false;
+        ledger.records[0].preview_only = false;
+        ledger.records[0].write_allowed = true;
+        ledger.records[0].applied = true;
+
+        let plan = ledger.rollback_replay_plan();
+
+        assert_eq!(plan.item_count(), 1);
+        assert_eq!(plan.replayable(), 0);
+        assert_eq!(plan.blocked(), 1);
+        for reason in [
+            "self_evolution_rollback_replay_active_candidate",
+            "self_evolution_rollback_replay_not_read_only",
+            "self_evolution_rollback_replay_not_report_only",
+            "self_evolution_rollback_replay_not_preview_only",
+            "self_evolution_rollback_replay_write_allowed",
+            "self_evolution_rollback_replay_already_applied",
+        ] {
+            assert!(
+                plan.items[0].blocked_reasons.contains(&reason.to_owned()),
+                "missing rollback replay blocked reason {reason}: {:?}",
+                plan.items[0].blocked_reasons
+            );
+        }
+        assert!(plan.read_only);
+        assert!(plan.report_only);
+        assert!(plan.preview_only);
+        assert!(!plan.write_allowed);
+        assert!(!plan.applied);
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_plan_ignores_non_rollback_records() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-pass",
+            &passing_admission_report("candidate-pass"),
+        );
+        ledger.append_admission_report("experiment-hold", &hold_admission_report("candidate-hold"));
+        ledger.append_admission_report(
+            "experiment-reject",
+            &reject_admission_report("candidate-reject"),
+        );
+
+        let plan = ledger.rollback_replay_plan();
+
+        assert_eq!(ledger.records().len(), 3);
+        assert_eq!(plan.item_count(), 0);
+        assert_eq!(plan.replayable(), 0);
+        assert_eq!(plan.blocked(), 0);
+        assert!(plan.all_replayable());
+        assert!(plan.rollback_anchor_ids().is_empty());
+        assert!(plan.evidence_ids().is_empty());
+        assert!(
+            plan.summary_line()
+                .contains("self_evolution_rollback_replay_plan items=0")
+        );
     }
 
     #[test]

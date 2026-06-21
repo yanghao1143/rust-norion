@@ -164,6 +164,7 @@ pub use self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionPolicy,
     SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
     SelfEvolutionExperimentDecision, SelfEvolutionExperimentLedger, SelfEvolutionExperimentRecord,
+    SelfEvolutionRollbackReplayItem, SelfEvolutionRollbackReplayPlan,
     SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
 };
 pub use state_inspect::{
