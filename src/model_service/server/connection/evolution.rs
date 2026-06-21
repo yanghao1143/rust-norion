@@ -1,6 +1,9 @@
 use std::net::TcpStream;
 
-use rust_norion::{NoironEngine, StateInspectionReport, append_rust_check_trace_jsonl};
+use rust_norion::{
+    BenchmarkGateReport, NoironEngine, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
+    SelfEvolutionAdmissionReport, StateInspectionReport, append_rust_check_trace_jsonl,
+};
 
 use super::super::super::feedback::{
     annotate_model_service_feedback_experience,
@@ -66,6 +69,7 @@ pub(super) fn handle_self_improve(
             }
             Err(error) => return Err(error),
         };
+    let admission_report = self_improve_admission_report(request_id, engine);
     let body = model_service_self_improve_response_json(
         request_id,
         &request,
@@ -73,8 +77,27 @@ pub(super) fn handle_self_improve(
         &inspection,
         gate_report.as_ref(),
         trace_gate_report.as_ref(),
+        &admission_report,
     );
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn self_improve_admission_report(
+    request_id: usize,
+    engine: &NoironEngine,
+) -> SelfEvolutionAdmissionReport {
+    let benchmark_gate = BenchmarkGateReport {
+        passed: false,
+        failures: vec![
+            "self_evolution_admission_model_service_benchmark_gate_evidence_missing".to_owned(),
+        ],
+    };
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        format!("model-service-self-improve-{request_id}"),
+        engine.evolution_ledger,
+        &benchmark_gate,
+    );
+    SelfEvolutionAdmissionGate::new().evaluate(&evidence)
 }
 
 pub(super) fn handle_feedback(

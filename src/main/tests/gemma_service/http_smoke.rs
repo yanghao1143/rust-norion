@@ -774,6 +774,39 @@ fn model_service_runs_self_improve_http_smoke() {
         self_improve_body.contains("\"trace_gate\":{\"passed\":true"),
         "{self_improve_body}"
     );
+    assert!(
+        self_improve_body.contains("\"self_evolution_admission\":{"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"self_evolution_admission_checked\":true"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"self_evolution_admission_blocked\":true"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body
+            .contains("\"self_evolution_admission_model_service_benchmark_gate_evidence_missing\""),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"memory_store_write_allowed\":false"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"ndkv_write_allowed\":false"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"model_weight_write_allowed\":false"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"git_write_allowed\":false"),
+        "{self_improve_body}"
+    );
     assert_eq!(
         json_u64_field(self_improve_body, "replay_applied"),
         Some(1),
