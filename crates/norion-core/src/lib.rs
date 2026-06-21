@@ -53,7 +53,8 @@ pub use adapter::{
 pub use attention::{
     AttentionCandidate, AttentionCandidateBatchSummary, AttentionCandidateSummary,
     AttentionDecision, AttentionDecisionSummary, AttentionPolicy, AttentionSelectionReadinessStage,
-    AttentionSelectionReadinessSummary, ThresholdAttentionPolicy, ThresholdAttentionPolicySummary,
+    AttentionSelectionReadinessSummary, ThresholdAttentionAdjustmentAction,
+    ThresholdAttentionAdjustmentReport, ThresholdAttentionPolicy, ThresholdAttentionPolicySummary,
 };
 pub use diagnostics::{
     DeviceExecutionSource, DiagnosticsPressureBand, EmbeddingCallDiagnostics, EmbeddingDiagnostics,
