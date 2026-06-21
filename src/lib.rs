@@ -28,6 +28,7 @@ pub mod runtime_manifest;
 pub mod rust_validation;
 pub mod self_evolution;
 pub mod self_evolving_memory;
+pub mod semantic_index;
 pub mod split;
 pub mod state_inspect;
 pub mod tenant_scope;
@@ -199,6 +200,10 @@ pub use self_evolving_memory::{
     SelfEvolvingMemoryRetrievalReport, SelfEvolvingMemoryStore, SelfEvolvingMemoryWriteReport,
     ToolReliabilityContext, ToolReliabilityObservationInput, ToolReliabilityObservationRecord,
     ToolReliabilityRecord,
+};
+pub use semantic_index::{
+    SemanticIndex, SemanticIndexLane, SemanticIndexMatch, SemanticIndexQuery, SemanticIndexRecord,
+    SemanticIndexRetrievalReport, SemanticIndexSkip,
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
