@@ -27,6 +27,11 @@ impl BenchmarkSummary {
         self.memory_governance_evidence.total_compaction_removed
     }
 
+    pub fn total_memory_compaction_pair_evidence(&self) -> usize {
+        self.memory_governance_evidence
+            .total_compaction_pair_evidence
+    }
+
     pub fn total_live_memory_feedback_reinforcements(&self) -> usize {
         self.reflection_evidence.live_memory_feedback_reinforcements
     }

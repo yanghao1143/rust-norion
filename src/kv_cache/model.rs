@@ -61,6 +61,11 @@ pub struct MemoryCompactionMerge {
     pub primary_id: u64,
     pub removed_id: u64,
     pub similarity: f32,
+    pub namespace: String,
+    pub primary_vector_dimensions: usize,
+    pub removed_vector_dimensions: usize,
+    pub primary_protected: bool,
+    pub removed_protected: bool,
 }
 
 #[derive(Debug, Clone)]

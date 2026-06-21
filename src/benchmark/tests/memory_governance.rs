@@ -19,36 +19,41 @@ fn summary_records_memory_governance_evidence() {
         remove_below_strength: 0.15,
         remove_after_failures: 1,
     });
-    engine.set_memory_compaction_policy(MemoryCompactionPolicy {
+    let compaction_policy = MemoryCompactionPolicy {
         similarity_threshold: 0.90,
         max_candidates: 8,
         max_merges: 2,
-    });
+    };
+    engine.set_memory_compaction_policy(compaction_policy.clone());
     let weak_id =
         engine
             .cache
             .store_or_fuse("benchmark_governance:weak", vec![1.0, 0.0, 0.0, 0.0], 0.05);
     engine.cache.penalize(weak_id, 1.0);
-    engine.cache.store_or_fuse(
-        "benchmark_governance:compact_a",
-        vec![0.0, 1.0, 0.0, 0.0],
-        0.70,
-    );
-    engine.cache.store_or_fuse(
-        "benchmark_governance:compact_b",
-        vec![0.0, 0.96, 0.28, 0.0],
-        0.70,
-    );
     let mut backend = HeuristicBackend;
     let case = BenchmarkCase::new(
         "memory_governance",
         TaskProfile::General,
         "Audit Noiron memory governance retention and compaction evidence.",
     );
-    let outcome = engine.infer(
+    let mut compaction_cache = KvFusionCache::with_limits(0.99, 4096);
+    compaction_cache.store_or_fuse(
+        "benchmark_governance:compact_a",
+        vec![0.0, 1.0, 0.0, 0.0],
+        0.70,
+    );
+    compaction_cache.store_or_fuse(
+        "benchmark_governance:compact_b",
+        vec![0.0, 0.96, 0.28, 0.0],
+        0.70,
+    );
+    let compaction_report = compaction_cache.compact_similar(compaction_policy.clone());
+    let mut outcome = engine.infer(
         InferenceRequest::new(case.prompt.clone(), case.profile),
         &mut backend,
     );
+    outcome.memory_compaction_policy = compaction_policy;
+    outcome.memory_compaction_report = compaction_report;
     let mut summary = BenchmarkSummary::new();
 
     summary.record(&case, 5, &outcome);
@@ -58,6 +63,7 @@ fn summary_records_memory_governance_evidence() {
     assert_eq!(summary.memory_governance_evidence().failures.len(), 0);
     assert!(summary.total_memory_retention_decayed() >= 1);
     assert!(summary.total_memory_retention_removed() >= 1);
+    assert_eq!(summary.total_memory_compaction_pair_evidence(), 1);
     assert!(summary.summary_line().contains("memory_governance_cases=1"));
     assert!(
         summary
@@ -68,6 +74,11 @@ fn summary_records_memory_governance_evidence() {
         summary
             .summary_line()
             .contains("memory_retention_activity_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("memory_compaction_pair_evidence=1")
     );
 
     let gate = BenchmarkGate {
@@ -98,6 +109,7 @@ fn gate_accepts_memory_governance_activity_evidence() {
             total_retention_removed: 1,
             total_compaction_merged: 1,
             total_compaction_removed: 1,
+            total_compaction_pair_evidence: 1,
             governance_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             retention_activity_devices: vec![DeviceClass::CpuOnly],
             compaction_activity_devices: vec![DeviceClass::IntegratedGpu],
@@ -128,6 +140,7 @@ fn gate_accepts_memory_governance_activity_evidence() {
     assert_eq!(summary.total_memory_retention_removed(), 1);
     assert_eq!(summary.total_memory_compaction_merged(), 1);
     assert_eq!(summary.total_memory_compaction_removed(), 1);
+    assert_eq!(summary.total_memory_compaction_pair_evidence(), 1);
     assert!(
         summary
             .summary_line()
@@ -137,6 +150,11 @@ fn gate_accepts_memory_governance_activity_evidence() {
         summary
             .summary_line()
             .contains("memory_compaction_activity_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("memory_compaction_pair_evidence=1")
     );
 }
 

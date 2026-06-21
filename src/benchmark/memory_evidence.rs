@@ -12,6 +12,7 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub total_retention_removed: usize,
     pub total_compaction_merged: usize,
     pub total_compaction_removed: usize,
+    pub total_compaction_pair_evidence: usize,
     pub failures: Vec<String>,
     pub(super) governance_devices: Vec<DeviceClass>,
     pub(super) retention_activity_devices: Vec<DeviceClass>,
@@ -105,6 +106,7 @@ impl BenchmarkMemoryGovernanceEvidence {
         let compaction_removed = compaction.removed.len();
         self.total_compaction_merged += compaction_merged;
         self.total_compaction_removed += compaction_removed;
+        self.total_compaction_pair_evidence += compaction.merged.len();
         if compaction_merged > 0 || compaction_removed > 0 {
             self.compaction_activity_cases += 1;
             push_unique_device(&mut self.compaction_activity_devices, device);
@@ -180,6 +182,16 @@ impl BenchmarkMemoryGovernanceEvidence {
                     compaction.after
                 ));
         }
+        for (index, pair) in compaction.merged.iter().enumerate() {
+            validate_compaction_pair_evidence(
+                &mut self.failures,
+                device,
+                &case.name,
+                index,
+                pair,
+                &compaction.removed,
+            );
+        }
     }
 
     pub fn device_profiles(&self) -> usize {
@@ -193,4 +205,77 @@ impl BenchmarkMemoryGovernanceEvidence {
     pub fn compaction_activity_device_profiles(&self) -> usize {
         explicit_device_count(&self.compaction_activity_devices)
     }
+}
+
+fn validate_compaction_pair_evidence(
+    failures: &mut Vec<String>,
+    device: DeviceClass,
+    case_name: &str,
+    index: usize,
+    pair: &crate::kv_cache::MemoryCompactionMerge,
+    removed_ids: &[u64],
+) {
+    if pair.primary_id == 0 || pair.removed_id == 0 {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} primary_id and removed_id must be non-zero",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if pair.primary_id == pair.removed_id {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} primary_id must differ from removed_id",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if !removed_ids.contains(&pair.removed_id) {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} removed_id {} is missing from removed set",
+            device.as_str(),
+            case_name,
+            pair.removed_id
+        ));
+    }
+    if !(0.10..=1.0).contains(&pair.similarity) {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} similarity {:.6} outside 0.10..=1.0",
+            device.as_str(),
+            case_name,
+            pair.similarity
+        ));
+    }
+    if !namespace_is_safe_for_compaction_evidence(&pair.namespace) {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} namespace is empty, too broad, or leaks prompt text",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if pair.primary_vector_dimensions == 0 || pair.removed_vector_dimensions == 0 {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} vector dimensions must be non-zero",
+            device.as_str(),
+            case_name
+        ));
+    }
+    if pair.removed_protected {
+        failures.push(format!(
+            "{}:{} memory_compaction pair {index} must not remove a protected memory",
+            device.as_str(),
+            case_name
+        ));
+    }
+}
+
+fn namespace_is_safe_for_compaction_evidence(namespace: &str) -> bool {
+    if namespace.is_empty() || namespace.len() > 96 || namespace.contains(" :: ") {
+        return false;
+    }
+    namespace == "semantic"
+        || namespace == "gist"
+        || (namespace.starts_with("runtime_kv:")
+            && namespace
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '-' | '_')))
 }

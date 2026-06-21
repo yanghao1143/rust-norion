@@ -95,7 +95,7 @@ pub fn trace_json_line_with_case(
          \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_online_reward_strength\":{:.6},\"live_online_reward_reinforcement_strength\":{:.6},\"live_online_reward_penalty_strength\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
          \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_online_reward_feedbacks\":{},\"cumulative_live_online_reward_reinforcements\":{},\"cumulative_live_online_reward_penalties\":{},\"cumulative_live_online_reward_strength\":{:.6},\"cumulative_live_online_reward_reinforcement_strength\":{:.6},\"cumulative_live_online_reward_penalty_strength\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_replay_live_memory_feedback_detail_items\":{},\"cumulative_replay_live_memory_feedback_applied\":{},\"cumulative_replay_live_memory_feedback_removed\":{},\"cumulative_replay_live_memory_feedback_missing\":{},\"cumulative_replay_live_memory_feedback_strength_delta\":{:.6},\"cumulative_replay_business_contract_items\":{},\"cumulative_replay_business_contract_passed\":{},\"cumulative_replay_business_contract_failed\":{},\"cumulative_replay_business_contract_raw_passed\":{},\"cumulative_replay_business_contract_raw_failed\":{},\"cumulative_replay_business_contract_response_normalized\":{},\"cumulative_replay_business_contract_sanitized\":{},\"cumulative_replay_business_contract_canonical_fallbacks\":{},\"cumulative_replay_live_evolution_items\":{},\"cumulative_replay_live_evolution_router_threshold_mutations\":{},\"cumulative_replay_live_evolution_hierarchy_weight_mutations\":{},\"cumulative_replay_live_evolution_router_threshold_delta\":{:.6},\"cumulative_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"cumulative_replay_live_evolution_online_reward_feedbacks\":{},\"cumulative_replay_live_evolution_online_reward_reinforcements\":{},\"cumulative_replay_live_evolution_online_reward_penalties\":{},\"cumulative_replay_live_evolution_online_reward_strength\":{:.6},\"cumulative_replay_live_evolution_online_reward_reinforcement_strength\":{:.6},\"cumulative_replay_live_evolution_online_reward_penalty_strength\":{:.6},\"cumulative_replay_live_evolution_memory_updates\":{},\"cumulative_replay_live_evolution_stored_memory_updates\":{},\"cumulative_replay_live_evolution_reflection_issues\":{},\"cumulative_replay_live_evolution_critical_reflection_issues\":{},\"cumulative_replay_live_evolution_revision_actions\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
-         \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
+         \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{},\"pairs\":{}}},\
          \"experience_id\":{}\
          }}",
         option_string_json(case_name),
@@ -491,6 +491,28 @@ pub fn trace_json_line_with_case(
         outcome.memory_compaction_report.after,
         outcome.memory_compaction_report.merged.len(),
         outcome.memory_compaction_report.removed.len(),
+        memory_compaction_pairs_json(&outcome.memory_compaction_report.merged),
         outcome.experience_id
     )
+}
+
+fn memory_compaction_pairs_json(pairs: &[crate::kv_cache::MemoryCompactionMerge]) -> String {
+    let values = pairs
+        .iter()
+        .map(|pair| {
+            format!(
+                "{{\"primary_id\":{},\"removed_id\":{},\"similarity\":{:.6},\"namespace\":\"{}\",\"primary_vector_dimensions\":{},\"removed_vector_dimensions\":{},\"primary_protected\":{},\"removed_protected\":{}}}",
+                pair.primary_id,
+                pair.removed_id,
+                pair.similarity,
+                json_escape(&pair.namespace),
+                pair.primary_vector_dimensions,
+                pair.removed_vector_dimensions,
+                pair.primary_protected,
+                pair.removed_protected
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
 }

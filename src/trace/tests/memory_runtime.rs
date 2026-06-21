@@ -269,6 +269,139 @@ fn trace_schema_gate_rejects_compaction_count_mismatch() {
 }
 
 #[test]
+fn trace_json_line_emits_memory_compaction_pair_evidence() {
+    let policy = crate::kv_cache::MemoryCompactionPolicy {
+        similarity_threshold: 0.90,
+        max_candidates: 8,
+        max_merges: 2,
+    };
+    let mut compaction_cache = crate::kv_cache::KvFusionCache::with_limits(0.99, 4096);
+    let weaker = compaction_cache.store_or_fuse(
+        "trace_compaction_pair:old duplicate",
+        vec![1.0, 0.0, 0.0],
+        0.35,
+    );
+    let stronger = compaction_cache.store_or_fuse(
+        "trace_compaction_pair:strong duplicate",
+        vec![0.93, 0.37, 0.0],
+        0.90,
+    );
+    let report = compaction_cache.compact_similar(policy.clone());
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let mut outcome = engine.infer(
+        InferenceRequest::new("trace compaction pair evidence", TaskProfile::General),
+        &mut backend,
+    );
+    outcome.memory_compaction_policy = policy;
+    outcome.memory_compaction_report = report;
+
+    assert_eq!(outcome.memory_compaction_report.merged.len(), 1);
+    assert_eq!(
+        outcome.memory_compaction_report.merged[0].primary_id,
+        stronger
+    );
+    assert_eq!(
+        outcome.memory_compaction_report.merged[0].removed_id,
+        weaker
+    );
+    let line = trace_json_line(
+        "trace compaction pair evidence",
+        TaskProfile::General,
+        5,
+        &outcome,
+    );
+    let compaction = json_object_after_field(&line, "memory_compaction").unwrap();
+    let pairs = json_array_after_field(compaction, "pairs")
+        .and_then(json_object_array_items)
+        .unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(extract_json_usize_field(compaction, "merged"), Some(1));
+    assert_eq!(pairs.len(), 1);
+    assert_eq!(
+        extract_json_usize_field(pairs[0], "primary_id"),
+        Some(stronger as usize)
+    );
+    assert_eq!(
+        extract_json_usize_field(pairs[0], "removed_id"),
+        Some(weaker as usize)
+    );
+    assert_eq!(
+        extract_json_string_field(pairs[0], "namespace"),
+        Some("semantic".to_owned())
+    );
+    assert_eq!(
+        extract_json_usize_field(pairs[0], "primary_vector_dimensions"),
+        Some(3)
+    );
+    assert_eq!(
+        extract_json_usize_field(pairs[0], "removed_vector_dimensions"),
+        Some(3)
+    );
+    assert_eq!(
+        extract_json_bool_field(pairs[0], "primary_protected"),
+        Some(false)
+    );
+    assert_eq!(
+        extract_json_bool_field(pairs[0], "removed_protected"),
+        Some(false)
+    );
+    assert!(!line.contains("old duplicate"));
+    assert!(!line.contains("[1.0,0.0,0.0]"));
+}
+
+#[test]
+fn trace_schema_gate_rejects_unsafe_compaction_pair_evidence() {
+    let policy = crate::kv_cache::MemoryCompactionPolicy {
+        similarity_threshold: 0.90,
+        max_candidates: 8,
+        max_merges: 2,
+    };
+    let mut compaction_cache = crate::kv_cache::KvFusionCache::with_limits(0.99, 4096);
+    compaction_cache.store_or_fuse(
+        "trace_compaction_pair:old duplicate",
+        vec![1.0, 0.0, 0.0],
+        0.35,
+    );
+    compaction_cache.store_or_fuse(
+        "trace_compaction_pair:strong duplicate",
+        vec![0.93, 0.37, 0.0],
+        0.90,
+    );
+    let report = compaction_cache.compact_similar(policy.clone());
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let mut outcome = engine.infer(
+        InferenceRequest::new("trace bad compaction pair evidence", TaskProfile::General),
+        &mut backend,
+    );
+    outcome.memory_compaction_policy = policy;
+    outcome.memory_compaction_report = report;
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace bad compaction pair evidence",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "memory_compaction",
+        "\"removed_protected\":false",
+        "\"removed_protected\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("must not remove a protected memory")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn scoped_json_object_extraction_keeps_duplicate_fields_separate() {
     let line = "{\"retention\":{\"before\":1,\"after\":1},\"memory_compaction\":{\"before\":3,\"after\":2,\"note\":\"keeps {quoted} braces\"}}";
     let retention = json_object_after_field(line, "retention").unwrap();

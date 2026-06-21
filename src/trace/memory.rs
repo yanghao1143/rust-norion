@@ -210,11 +210,86 @@ pub(super) fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {
                     "memory_compaction skipped state requires merged=0 removed=0 after=before, got merged={merged} removed={removed} before={before} after={after}"
                 ));
         }
+        match json_array_after_field(compaction, "pairs").and_then(json_object_array_items) {
+            Some(pairs) => {
+                if pairs.len() != merged {
+                    failures.push(format!(
+                        "memory_compaction pairs {} do not match merged {merged}",
+                        pairs.len()
+                    ));
+                }
+                for (index, pair) in pairs.iter().enumerate() {
+                    evaluate_memory_compaction_pair(&mut failures, index, pair);
+                }
+            }
+            None => failures.push("memory_compaction pairs array is missing or invalid".to_owned()),
+        }
     } else {
         failures.push("memory_compaction object is missing or invalid".to_owned());
     }
 
     failures
+}
+
+fn evaluate_memory_compaction_pair(failures: &mut Vec<String>, index: usize, pair: &str) {
+    let primary_id = extract_json_usize_field(pair, "primary_id").unwrap_or(0);
+    let removed_id = extract_json_usize_field(pair, "removed_id").unwrap_or(0);
+    let similarity = extract_json_f32_field(pair, "similarity").unwrap_or(f32::NAN);
+    let namespace = extract_json_string_field(pair, "namespace").unwrap_or_default();
+    let primary_vector_dimensions =
+        extract_json_usize_field(pair, "primary_vector_dimensions").unwrap_or(0);
+    let removed_vector_dimensions =
+        extract_json_usize_field(pair, "removed_vector_dimensions").unwrap_or(0);
+    let primary_protected = extract_json_bool_field(pair, "primary_protected");
+    let removed_protected = extract_json_bool_field(pair, "removed_protected");
+
+    if primary_id == 0 || removed_id == 0 {
+        failures.push(format!(
+            "memory_compaction pair {index} primary_id and removed_id must be non-zero"
+        ));
+    }
+    if primary_id == removed_id {
+        failures.push(format!(
+            "memory_compaction pair {index} primary_id must differ from removed_id"
+        ));
+    }
+    if !(0.10..=1.0).contains(&similarity) {
+        failures.push(format!(
+            "memory_compaction pair {index} similarity {similarity:.6} must stay within 0.10..=1.0"
+        ));
+    }
+    if !namespace_is_safe_for_compaction_evidence(&namespace) {
+        failures.push(format!(
+            "memory_compaction pair {index} namespace is empty, too broad, or leaks prompt text"
+        ));
+    }
+    if primary_vector_dimensions == 0 || removed_vector_dimensions == 0 {
+        failures.push(format!(
+            "memory_compaction pair {index} vector dimensions must be non-zero"
+        ));
+    }
+    if primary_protected.is_none() || removed_protected.is_none() {
+        failures.push(format!(
+            "memory_compaction pair {index} protected fields must be booleans"
+        ));
+    }
+    if removed_protected == Some(true) {
+        failures.push(format!(
+            "memory_compaction pair {index} must not remove a protected memory"
+        ));
+    }
+}
+
+fn namespace_is_safe_for_compaction_evidence(namespace: &str) -> bool {
+    if namespace.is_empty() || namespace.len() > 96 || namespace.contains(" :: ") {
+        return false;
+    }
+    namespace == "semantic"
+        || namespace == "gist"
+        || (namespace.starts_with("runtime_kv:")
+            && namespace
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '-' | '_')))
 }
 
 pub(super) fn evaluate_trace_drift(line: &str) -> Vec<String> {

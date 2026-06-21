@@ -238,6 +238,122 @@ pub(super) fn json_object_after_field<'a>(line: &'a str, field: &str) -> Option<
     None
 }
 
+pub(super) fn json_array_after_field<'a>(line: &'a str, field: &str) -> Option<&'a str> {
+    let value = value_after_json_field(line, field)?;
+    if !value.starts_with('[') {
+        return None;
+    }
+
+    let mut depth = 0usize;
+    let mut inner_start = None;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, ch) in value.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match ch {
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_string = true,
+            '[' => {
+                if depth == 0 {
+                    inner_start = Some(index + ch.len_utf8());
+                }
+                depth = depth.saturating_add(1);
+            }
+            ']' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return inner_start.map(|start| &value[start..index]);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+pub(super) fn json_object_array_items(mut value: &str) -> Option<Vec<&str>> {
+    let mut items = Vec::new();
+    value = value.trim_start();
+    if value.is_empty() {
+        return Some(items);
+    }
+
+    loop {
+        value = value.trim_start();
+        if !value.starts_with('{') {
+            return None;
+        }
+
+        let (item, consumed) = parse_json_object_inner(value)?;
+        items.push(item);
+        value = value[consumed..].trim_start();
+
+        if value.is_empty() {
+            return Some(items);
+        }
+        if let Some(rest) = value.strip_prefix(',') {
+            value = rest;
+        } else {
+            return None;
+        }
+    }
+}
+
+fn parse_json_object_inner(value: &str) -> Option<(&str, usize)> {
+    let mut depth = 0usize;
+    let mut inner_start = None;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, ch) in value.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match ch {
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    inner_start = Some(index + ch.len_utf8());
+                }
+                depth = depth.saturating_add(1);
+            }
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    let start = inner_start?;
+                    return Some((&value[start..index], index + ch.len_utf8()));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
 fn parse_json_string(value: &str) -> Option<(String, usize)> {
     let mut chars = value.char_indices();
     let (_, first) = chars.next()?;

@@ -227,6 +227,11 @@ fn compaction_merges_existing_near_duplicate_memories() {
     assert_eq!(report.merged.len(), 1);
     assert_eq!(report.merged[0].primary_id, stronger);
     assert_eq!(report.merged[0].removed_id, weaker);
+    assert_eq!(report.merged[0].namespace, "semantic");
+    assert_eq!(report.merged[0].primary_vector_dimensions, 3);
+    assert_eq!(report.merged[0].removed_vector_dimensions, 3);
+    assert!(!report.merged[0].primary_protected);
+    assert!(!report.merged[0].removed_protected);
     assert_eq!(report.removed, vec![weaker]);
     assert!(cache.entries().iter().any(|entry| entry.id == stronger));
     assert!(cache.entries().iter().any(|entry| entry.id == unrelated));
@@ -302,6 +307,37 @@ fn compaction_does_not_merge_different_runtime_kv_slots() {
 }
 
 #[test]
+fn compaction_evidence_uses_safe_runtime_slot_namespace() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let first = cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: prompt text must not leak",
+        vec![1.0, 0.0, 0.0],
+        0.35,
+    );
+    let stronger = cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: another private prompt",
+        vec![0.93, 0.37, 0.0],
+        0.90,
+    );
+
+    let report = cache.compact_similar(MemoryCompactionPolicy {
+        similarity_threshold: 0.90,
+        max_candidates: 16,
+        max_merges: 8,
+    });
+
+    assert_eq!(report.after, 1);
+    assert_eq!(report.merged.len(), 1);
+    assert_eq!(report.merged[0].primary_id, stronger);
+    assert_eq!(report.merged[0].removed_id, first);
+    assert_eq!(report.merged[0].namespace, "runtime_kv:l0h0:0-1");
+    assert!(!report.merged[0].namespace.contains("prompt"));
+    assert!(!report.merged[0].namespace.contains(" :: "));
+    assert_eq!(report.merged[0].primary_vector_dimensions, 3);
+    assert_eq!(report.merged[0].removed_vector_dimensions, 3);
+}
+
+#[test]
 fn compaction_preserves_protected_current_memory_ids() {
     let mut cache = KvFusionCache::with_limits(0.99, 16);
     let protected = cache.store_or_fuse("protected current memory", vec![1.0, 0.0], 0.30);
@@ -319,6 +355,11 @@ fn compaction_preserves_protected_current_memory_ids() {
     assert_eq!(report.after, 1);
     assert_eq!(report.merged[0].primary_id, protected);
     assert_eq!(report.merged[0].removed_id, duplicate);
+    assert_eq!(report.merged[0].namespace, "semantic");
+    assert_eq!(report.merged[0].primary_vector_dimensions, 2);
+    assert_eq!(report.merged[0].removed_vector_dimensions, 2);
+    assert!(report.merged[0].primary_protected);
+    assert!(!report.merged[0].removed_protected);
     assert!(cache.entries().iter().any(|entry| entry.id == protected));
     assert!(cache.entries().iter().all(|entry| entry.id != duplicate));
 }
