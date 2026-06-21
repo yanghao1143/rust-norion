@@ -25,7 +25,7 @@ pub(crate) struct ExperienceCleanupAuditCommandReport {
 pub(crate) fn run_experience_cleanup_audit(
     args: &Args,
 ) -> io::Result<ExperienceCleanupAuditCommandReport> {
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
     let sample_limit = args.experience_cleanup_audit_limit.max(1);
     let report = ExperienceCleanupAuditCommandReport {
         audit_path: args

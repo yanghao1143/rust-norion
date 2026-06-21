@@ -1,6 +1,7 @@
 use super::DiskKvStore;
 use super::format::{MAGIC, OP_PUT};
 use std::fs::{self, OpenOptions};
+use std::io::ErrorKind;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -69,6 +70,50 @@ fn open_truncates_partial_tail_record() {
 
     assert_eq!(reopened.get("memory/1").unwrap().unwrap(), b"stable");
     assert_eq!(fs::metadata(&path).unwrap().len(), clean_len);
+    cleanup(path);
+}
+
+#[test]
+fn read_only_open_missing_file_does_not_create_state() {
+    let path = temp_path("read-only-missing");
+
+    let store = DiskKvStore::open_read_only_existing(&path).unwrap();
+
+    assert!(store.is_none());
+    assert!(!path.exists());
+    cleanup(path);
+}
+
+#[test]
+fn read_only_open_preserves_partial_tail_record() {
+    let path = temp_path("read-only-partial-tail");
+    let mut store = DiskKvStore::open(&path).unwrap();
+    store.put("memory/1", b"stable").unwrap();
+    let clean_len = fs::metadata(&path).unwrap().len();
+
+    {
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(MAGIC).unwrap();
+        file.write_all(&[OP_PUT]).unwrap();
+    }
+    let dirty_len = fs::metadata(&path).unwrap().len();
+
+    let mut read_only = DiskKvStore::open_read_only_existing(&path)
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(read_only.get("memory/1").unwrap().unwrap(), b"stable");
+    assert_eq!(fs::metadata(&path).unwrap().len(), dirty_len);
+    assert!(dirty_len > clean_len);
+    let error = read_only.put("memory/2", b"blocked").unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert!(
+        !read_only
+            .delete("memory/1")
+            .unwrap_err()
+            .to_string()
+            .is_empty()
+    );
     cleanup(path);
 }
 

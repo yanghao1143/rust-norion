@@ -28,7 +28,7 @@ pub(crate) struct ExperienceHygieneQuarantineCommandReport {
 pub(crate) fn run_experience_hygiene_report(
     args: &Args,
 ) -> io::Result<ExperienceHygieneCommandReport> {
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
     Ok(ExperienceHygieneCommandReport {
         hygiene: store.hygiene_report(args.experience_hygiene_limit),
         index: store.index_report(args.experience_hygiene_limit),
@@ -38,7 +38,11 @@ pub(crate) fn run_experience_hygiene_report(
 pub(crate) fn run_experience_hygiene_quarantine(
     args: &Args,
 ) -> io::Result<ExperienceHygieneQuarantineCommandReport> {
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = if args.experience_hygiene_apply {
+        ExperienceStore::load_from_disk_kv(&args.experience_path)?
+    } else {
+        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
+    };
     let (retained_store, quarantined_store, plan) =
         store.split_hygiene_quarantine(args.experience_hygiene_limit);
     let mut report = ExperienceHygieneQuarantineCommandReport {

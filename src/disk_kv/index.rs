@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind, Seek, SeekFrom};
 use std::path::Path;
 
@@ -13,13 +13,27 @@ pub(super) struct RecordPointer {
 
 pub(super) fn scan_index(path: &Path) -> io::Result<HashMap<String, RecordPointer>> {
     let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+    scan_index_from_file(&mut file, true)
+}
+
+pub(super) fn scan_index_read_only(path: &Path) -> io::Result<HashMap<String, RecordPointer>> {
+    let mut file = OpenOptions::new().read(true).open(path)?;
+    scan_index_from_file(&mut file, false)
+}
+
+fn scan_index_from_file(
+    file: &mut File,
+    repair_partial_tail: bool,
+) -> io::Result<HashMap<String, RecordPointer>> {
     let mut index = HashMap::new();
     let mut offset = 0;
 
     loop {
         file.seek(SeekFrom::Start(offset))?;
-        let Some(record) = read_record(&mut file, offset)? else {
-            file.set_len(offset)?;
+        let Some(record) = read_record(file, offset)? else {
+            if repair_partial_tail {
+                file.set_len(offset)?;
+            }
             break;
         };
 

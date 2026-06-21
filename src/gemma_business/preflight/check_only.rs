@@ -157,7 +157,7 @@ fn experience_safety(args: &Args, state_scope: &str) -> ExperienceSafety {
         };
     }
 
-    match ExperienceStore::load_from_disk_kv(&args.experience_path) {
+    match ExperienceStore::load_from_disk_kv_read_only(&args.experience_path) {
         Ok(store) => {
             let hygiene = store.hygiene_report(args.inspect_limit);
             let quarantine = store.hygiene_quarantine_plan(args.inspect_limit);
