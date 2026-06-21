@@ -37,8 +37,10 @@ pub mod transformer;
 
 pub use adaptive_state::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
 pub use agent_team::{
-    AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
-    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,
+    AgentConflict, AgentEvolutionSignal, AgentHandoffAggregationReport, AgentHandoffContext,
+    AgentHandoffInput, AgentHandoffReview, AgentHandoffSanitizer, AgentHandoffTrustState,
+    AgentIsolationPolicy, AgentMessage, AgentMessageKind, AgentNode, AgentRole,
+    AgentTeamAggregation, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,
 };
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,

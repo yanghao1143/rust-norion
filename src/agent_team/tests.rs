@@ -201,3 +201,188 @@ fn disabled_plan_has_no_reward_notes() {
     assert!(!plan.enabled);
     assert!(plan.reward_notes().is_empty());
 }
+
+#[test]
+fn handoff_sanitizer_trusts_validated_clean_handoff() {
+    let sanitizer = AgentHandoffSanitizer::new();
+    let context = handoff_context();
+    let report = sanitizer.sanitize(
+        &context,
+        &[AgentHandoffInput::new(
+            "019ee8af-a695-7a23-99f2-fc9d8c7a7ba4",
+            AgentRole::Coder,
+            "implemented context hygiene sanitizer with focused tests",
+        )
+        .with_touched_file("src/agent_team/handoff.rs")
+        .with_validation("cargo test -q --package rust-norion agent_team")
+        .with_issue("#32")
+        .with_pr("#1")
+        .with_claimed_branch("codex/r83-memory-admission-review-packets")
+        .with_claimed_head("30c25654d")],
+    );
+
+    assert_eq!(report.trusted_handoffs, 1);
+    assert_eq!(report.needs_review_handoffs, 0);
+    assert_eq!(report.quarantined_handoffs, 0);
+    assert!(report.can_influence_main_thread());
+    assert_eq!(report.trusted_lessons().len(), 2);
+    assert!(
+        report
+            .summary()
+            .contains("preview_only=true can_influence=true")
+    );
+}
+
+#[test]
+fn handoff_sanitizer_holds_stale_or_unvalidated_handoff() {
+    let sanitizer = AgentHandoffSanitizer::new();
+    let context = handoff_context();
+    let report = sanitizer.sanitize(
+        &context,
+        &[AgentHandoffInput::new(
+            "019ee8af-da22-7d61-867d-f0d030d5921c",
+            AgentRole::Researcher,
+            "claims old roadmap facts are still current",
+        )
+        .with_stale_assumption("issue list was read before #32 existed")
+        .with_unresolved_risk("CI status still unknown")
+        .with_issue("#32")],
+    );
+
+    assert_eq!(report.trusted_handoffs, 0);
+    assert_eq!(report.needs_review_handoffs, 1);
+    assert!(!report.can_influence_main_thread());
+    assert!(
+        report
+            .rejected_claims
+            .iter()
+            .any(|claim| claim == "handoff_validation_missing")
+    );
+    assert!(
+        report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.contains("stale_assumption:"))
+    );
+    assert!(
+        report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.contains("unresolved_risk:"))
+    );
+}
+
+#[test]
+fn handoff_sanitizer_flags_current_state_conflicts() {
+    let sanitizer = AgentHandoffSanitizer::new();
+    let mut context = handoff_context();
+    context
+        .dirty_files
+        .push("src/agent_team/types.rs".to_owned());
+    let report = sanitizer.sanitize(
+        &context,
+        &[AgentHandoffInput::new(
+            "019ee8b0-05ee-7380-970e-8a684bf2b025",
+            AgentRole::Reviewer,
+            "reviewed agent team changes",
+        )
+        .with_touched_file("src\\agent_team\\types.rs")
+        .with_validation("cargo check passed")
+        .with_claimed_branch("old/context-branch")
+        .with_claimed_head("deadbeef")],
+    );
+
+    assert_eq!(report.needs_review_handoffs, 1);
+    assert!(
+        report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.contains("branch_mismatch:"))
+    );
+    assert!(
+        report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.contains("head_mismatch:"))
+    );
+    assert!(
+        report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.contains("touched_file_dirty_in_main:"))
+    );
+}
+
+#[test]
+fn handoff_sanitizer_quarantines_polluted_payload_without_leaking_raw_text() {
+    let sanitizer = AgentHandoffSanitizer::new();
+    let context = handoff_context();
+    let report = sanitizer.sanitize(
+        &context,
+        &[AgentHandoffInput::new(
+            "polluted window!",
+            AgentRole::Aggregator,
+            "raw prompt password=letmein sk-test-secret should not be retained",
+        )
+        .with_validation("cargo test passed")
+        .with_raw_payload_present(true)
+        .with_private_payload_present(true)],
+    );
+
+    assert_eq!(report.quarantined_handoffs, 1);
+    assert_eq!(report.raw_payloads_blocked, 1);
+    assert_eq!(report.private_payloads_blocked, 1);
+    assert!(report.redactions >= 2);
+    assert!(!report.can_influence_main_thread());
+    assert!(report.accepted_facts.is_empty());
+    let rendered = format!("{report:?}");
+    assert!(!rendered.contains("letmein"));
+    assert!(!rendered.contains("sk-test-secret"));
+    assert!(
+        report
+            .rejected_claims
+            .iter()
+            .any(|claim| claim == "handoff_raw_or_private_payload_blocked")
+    );
+}
+
+#[test]
+fn handoff_sanitizer_detects_duplicate_agent_claims() {
+    let sanitizer = AgentHandoffSanitizer::new();
+    let context = handoff_context();
+    let first = AgentHandoffInput::new(
+        "source-a",
+        AgentRole::Tester,
+        "validated the agent handoff sanitizer",
+    )
+    .with_touched_file("src/agent_team/handoff.rs")
+    .with_validation("cargo test passed");
+    let second = AgentHandoffInput::new(
+        "source-b",
+        AgentRole::Tester,
+        "validated the agent handoff sanitizer",
+    )
+    .with_touched_file("src/agent_team/handoff.rs")
+    .with_validation("cargo test passed");
+    let report = sanitizer.sanitize(&context, &[first, second]);
+
+    assert_eq!(report.trusted_handoffs, 1);
+    assert_eq!(report.needs_review_handoffs, 1);
+    assert_eq!(report.duplicate_claims, 1);
+    assert!(
+        report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.contains("duplicate_claim_fingerprint:"))
+    );
+}
+
+fn handoff_context() -> AgentHandoffContext {
+    AgentHandoffContext {
+        current_branch: "codex/r83-memory-admission-review-packets".to_owned(),
+        current_head: "30c25654d".to_owned(),
+        dirty_files: Vec::new(),
+        known_issue_refs: vec!["#32".to_owned()],
+        known_pr_refs: vec!["#1".to_owned()],
+    }
+}
