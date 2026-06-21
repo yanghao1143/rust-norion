@@ -2207,6 +2207,259 @@ impl SelfEvolutionOperatorApprovalLedger {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionRollbackReplayApplyDecision {
+    ReadyForOperatorApply,
+    Hold,
+}
+
+impl SelfEvolutionRollbackReplayApplyDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadyForOperatorApply => "ready_for_operator_apply",
+            Self::Hold => "hold",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SelfEvolutionRollbackReplayApplyGate;
+
+impl SelfEvolutionRollbackReplayApplyGate {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn evaluate(
+        &self,
+        rollback_gate: &SelfEvolutionRollbackReplayGateReport,
+        approval: &SelfEvolutionOperatorApprovalReport,
+    ) -> SelfEvolutionRollbackReplayApplyReport {
+        let mut blocked_reasons = Vec::new();
+
+        if rollback_gate.decision != SelfEvolutionRollbackReplayDecision::AdmitForHumanReview
+            || !rollback_gate.admitted_for_human_review
+        {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_gate_not_admitted_for_review".to_owned(),
+            );
+        }
+        if !rollback_gate.human_approval_required {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_gate_human_approval_not_required".to_owned(),
+            );
+        }
+        if rollback_gate.item_count == 0 {
+            blocked_reasons.push("self_evolution_rollback_replay_apply_gate_empty_plan".to_owned());
+        }
+        if !rollback_gate.all_replayable
+            || rollback_gate.blocked > 0
+            || rollback_gate.replayable != rollback_gate.item_count
+        {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_gate_plan_not_all_replayable".to_owned(),
+            );
+        }
+        if rollback_gate.active_candidates > 0 {
+            blocked_reasons.push(format!(
+                "self_evolution_rollback_replay_apply_gate_active_candidates={}>0",
+                rollback_gate.active_candidates
+            ));
+        }
+        if rollback_gate.item_write_allowed > 0 || rollback_gate.item_applied > 0 {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_apply_gate_item_write_or_applied".to_owned());
+        }
+        if !rollback_gate.read_only || !rollback_gate.report_only || !rollback_gate.preview_only {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_apply_gate_not_read_only_preview".to_owned());
+        }
+        if rollback_gate.write_allowed || rollback_gate.applied {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_apply_gate_write_or_applied".to_owned());
+        }
+        if !rollback_gate.plan_read_only
+            || !rollback_gate.plan_report_only
+            || !rollback_gate.plan_preview_only
+        {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_gate_plan_not_read_only_preview".to_owned(),
+            );
+        }
+        if rollback_gate.plan_write_allowed || rollback_gate.plan_applied {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_apply_gate_plan_write_or_applied".to_owned());
+        }
+
+        if approval.decision != SelfEvolutionOperatorApprovalDecision::Approved
+            || !approval.operator_approved
+        {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_operator_approval_not_approved".to_owned(),
+            );
+        }
+        if !approval.read_only || !approval.report_only || !approval.preview_only {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_operator_approval_not_read_only_preview"
+                    .to_owned(),
+            );
+        }
+        if approval.activation_write_allowed
+            || approval.active_candidate
+            || approval.write_allowed
+            || approval.applied
+        {
+            blocked_reasons.push(
+                "self_evolution_rollback_replay_apply_operator_approval_write_or_applied"
+                    .to_owned(),
+            );
+        }
+
+        push_rollback_replay_apply_ref_mismatch(
+            &mut blocked_reasons,
+            "approval_review_packet_ids",
+            &rollback_gate.review_packet.approval_review_packet_ids,
+            &approval.approved_review_packet_ids,
+        );
+        push_rollback_replay_apply_ref_mismatch(
+            &mut blocked_reasons,
+            "evidence_ids",
+            &rollback_gate.review_packet.evidence_ids,
+            &approval.approved_evidence_ids,
+        );
+        push_rollback_replay_apply_ref_mismatch(
+            &mut blocked_reasons,
+            "rollback_anchor_ids",
+            &rollback_gate.review_packet.rollback_anchor_ids,
+            &approval.approved_rollback_anchor_ids,
+        );
+        push_rollback_replay_apply_ref_mismatch(
+            &mut blocked_reasons,
+            "content_digests",
+            &rollback_gate.review_packet.content_digests,
+            &approval.approved_content_digests,
+        );
+        push_rollback_replay_apply_ref_mismatch(
+            &mut blocked_reasons,
+            "source_report_schemas",
+            &rollback_gate.review_packet.source_report_schemas,
+            &approval.approved_source_report_schemas,
+        );
+
+        let ready_for_operator_apply = blocked_reasons.is_empty();
+        let decision = if ready_for_operator_apply {
+            SelfEvolutionRollbackReplayApplyDecision::ReadyForOperatorApply
+        } else {
+            SelfEvolutionRollbackReplayApplyDecision::Hold
+        };
+        let content_digest = self_evolution_stable_digest(&format!(
+            "rollback_replay_apply;decision={};ready={};rollback_gate={};approval={};items={};review_packets={:?};evidence={:?};rollback_anchors={:?};content_digests={:?};schemas={:?};blocked={:?}",
+            decision.as_str(),
+            ready_for_operator_apply,
+            rollback_gate.content_digest,
+            approval.content_digest,
+            rollback_gate.item_count,
+            rollback_gate.review_packet.approval_review_packet_ids,
+            rollback_gate.review_packet.evidence_ids,
+            rollback_gate.review_packet.rollback_anchor_ids,
+            rollback_gate.review_packet.content_digests,
+            rollback_gate.review_packet.source_report_schemas,
+            blocked_reasons,
+        ));
+
+        SelfEvolutionRollbackReplayApplyReport {
+            decision,
+            ready_for_operator_apply,
+            explicit_apply_required: true,
+            rollback_gate_admitted_for_human_review: rollback_gate.admitted_for_human_review,
+            operator_approved: approval.operator_approved,
+            item_count: rollback_gate.item_count,
+            replayable: rollback_gate.replayable,
+            blocked: rollback_gate.blocked,
+            review_packet_count: rollback_gate.review_packet.approval_review_packet_ids.len(),
+            evidence_id_count: rollback_gate.review_packet.evidence_ids.len(),
+            rollback_anchor_count: rollback_gate.review_packet.rollback_anchor_ids.len(),
+            content_digest_count: rollback_gate.review_packet.content_digests.len(),
+            source_report_schema_count: rollback_gate.review_packet.source_report_schemas.len(),
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            activation_write_allowed: false,
+            active_candidate: false,
+            write_allowed: false,
+            applied: false,
+            blocked_reasons,
+            content_digest,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionRollbackReplayApplyReport {
+    pub decision: SelfEvolutionRollbackReplayApplyDecision,
+    pub ready_for_operator_apply: bool,
+    pub explicit_apply_required: bool,
+    pub rollback_gate_admitted_for_human_review: bool,
+    pub operator_approved: bool,
+    pub item_count: usize,
+    pub replayable: usize,
+    pub blocked: usize,
+    pub review_packet_count: usize,
+    pub evidence_id_count: usize,
+    pub rollback_anchor_count: usize,
+    pub content_digest_count: usize,
+    pub source_report_schema_count: usize,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub activation_write_allowed: bool,
+    pub active_candidate: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub blocked_reasons: Vec<String>,
+    pub content_digest: String,
+}
+
+impl SelfEvolutionRollbackReplayApplyReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_rollback_replay_apply decision={} ready_for_operator_apply={} explicit_apply_required={} rollback_gate_admitted={} operator_approved={} items={} replayable={} blocked={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} schemas={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} digest={}",
+            self.decision.as_str(),
+            self.ready_for_operator_apply,
+            self.explicit_apply_required,
+            self.rollback_gate_admitted_for_human_review,
+            self.operator_approved,
+            self.item_count,
+            self.replayable,
+            self.blocked,
+            self.review_packet_count,
+            self.evidence_id_count,
+            self.rollback_anchor_count,
+            self.content_digest_count,
+            self.source_report_schema_count,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.activation_write_allowed,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+            self.blocked_reasons.len(),
+            self.content_digest,
+        )
+    }
+
+    pub fn is_read_only_preflight(&self) -> bool {
+        self.read_only
+            && self.report_only
+            && self.preview_only
+            && !self.activation_write_allowed
+            && !self.active_candidate
+            && !self.write_allowed
+            && !self.applied
+    }
+}
+
 fn push_operator_approval_presence_reason(
     blocked_reasons: &mut Vec<String>,
     required: bool,
@@ -2225,6 +2478,19 @@ fn push_operator_approval_presence_reason(
     if approved.is_empty() {
         blocked_reasons.push(format!(
             "self_evolution_operator_approval_approved_{field}_empty"
+        ));
+    }
+}
+
+fn push_rollback_replay_apply_ref_mismatch(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    expected: &[String],
+    approved: &[String],
+) {
+    if expected.is_empty() || approved.is_empty() || expected != approved {
+        blocked_reasons.push(format!(
+            "self_evolution_rollback_replay_apply_{field}_mismatch"
         ));
     }
 }
@@ -2912,6 +3178,31 @@ mod tests {
         .with_router_threshold_preview_report(&router_preview);
 
         SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+    }
+
+    fn approved_rollback_replay_gate_and_approval() -> (
+        SelfEvolutionRollbackReplayGateReport,
+        SelfEvolutionOperatorApprovalReport,
+    ) {
+        let mut experiment_ledger = SelfEvolutionExperimentLedger::new();
+        experiment_ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        let plan = experiment_ledger.rollback_replay_plan();
+        let rollback_gate = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+        let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "maintainer-jy",
+            "approval-ticket-rollback-apply",
+            &rollback_gate.review_packet,
+            "approved for rollback replay apply preflight",
+        );
+        let approval = SelfEvolutionOperatorApprovalGate::new()
+            .evaluate(&rollback_gate.review_packet, &evidence);
+
+        assert!(rollback_gate.admitted_for_human_review);
+        assert!(approval.operator_approved);
+        (rollback_gate, approval)
     }
 
     #[test]
@@ -3712,6 +4003,117 @@ mod tests {
         assert_eq!(approval_ledger.held(), 1);
         assert_eq!(approval_ledger.write_allowed_records(), 0);
         assert_eq!(approval_ledger.applied_records(), 0);
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_apply_preflight_requires_gate_and_approval() {
+        let (rollback_gate, approval) = approved_rollback_replay_gate_and_approval();
+
+        let report =
+            SelfEvolutionRollbackReplayApplyGate::new().evaluate(&rollback_gate, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayApplyDecision::ReadyForOperatorApply
+        );
+        assert!(report.ready_for_operator_apply);
+        assert!(report.explicit_apply_required);
+        assert!(report.rollback_gate_admitted_for_human_review);
+        assert!(report.operator_approved);
+        assert_eq!(report.item_count, 1);
+        assert_eq!(report.replayable, report.item_count);
+        assert_eq!(report.blocked, 0);
+        assert_eq!(report.review_packet_count, 1);
+        assert!(report.evidence_id_count > 0);
+        assert!(report.rollback_anchor_count > 0);
+        assert!(report.content_digest_count > 0);
+        assert!(report.source_report_schema_count > 0);
+        assert!(report.blocked_reasons.is_empty());
+        assert!(report.is_read_only_preflight());
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(
+            report
+                .summary_line()
+                .contains("ready_for_operator_apply=true")
+        );
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_apply_preflight_holds_without_operator_approval() {
+        let (rollback_gate, mut approval) = approved_rollback_replay_gate_and_approval();
+        approval.decision = SelfEvolutionOperatorApprovalDecision::Hold;
+        approval.operator_approved = false;
+        approval
+            .blocked_reasons
+            .push("operator approval deliberately missing".to_owned());
+
+        let report =
+            SelfEvolutionRollbackReplayApplyGate::new().evaluate(&rollback_gate, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayApplyDecision::Hold
+        );
+        assert!(!report.ready_for_operator_apply);
+        assert!(report.is_read_only_preflight());
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_rollback_replay_apply_operator_approval_not_approved".to_owned()
+        ));
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_apply_preflight_holds_mismatched_approval_refs() {
+        let (rollback_gate, mut approval) = approved_rollback_replay_gate_and_approval();
+        approval
+            .approved_content_digests
+            .push("fnv64:unexpected-extra-digest".to_owned());
+
+        let report =
+            SelfEvolutionRollbackReplayApplyGate::new().evaluate(&rollback_gate, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayApplyDecision::Hold
+        );
+        assert!(!report.ready_for_operator_apply);
+        assert!(report.is_read_only_preflight());
+        assert!(
+            report.blocked_reasons.contains(
+                &"self_evolution_rollback_replay_apply_content_digests_mismatch".to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_apply_preflight_holds_unsafe_replay_gate() {
+        let (mut rollback_gate, approval) = approved_rollback_replay_gate_and_approval();
+        rollback_gate.write_allowed = true;
+        rollback_gate.plan_applied = true;
+
+        let report =
+            SelfEvolutionRollbackReplayApplyGate::new().evaluate(&rollback_gate, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayApplyDecision::Hold
+        );
+        assert!(!report.ready_for_operator_apply);
+        assert!(report.is_read_only_preflight());
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_rollback_replay_apply_gate_write_or_applied".to_owned())
+        );
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_rollback_replay_apply_gate_plan_write_or_applied".to_owned()
+        ));
     }
 
     #[test]

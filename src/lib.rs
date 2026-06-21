@@ -181,11 +181,12 @@ pub use self_evolution::{
     SelfEvolutionOperatorApprovalDecision, SelfEvolutionOperatorApprovalEvidence,
     SelfEvolutionOperatorApprovalGate, SelfEvolutionOperatorApprovalLedger,
     SelfEvolutionOperatorApprovalPolicy, SelfEvolutionOperatorApprovalRecord,
-    SelfEvolutionOperatorApprovalReport, SelfEvolutionRollbackReplayDecision,
-    SelfEvolutionRollbackReplayGate, SelfEvolutionRollbackReplayGateReport,
-    SelfEvolutionRollbackReplayItem, SelfEvolutionRollbackReplayPlan,
-    SelfEvolutionRollbackReplayPolicy, SelfEvolutionValidationEvidence,
-    SelfEvolutionValidationLane,
+    SelfEvolutionOperatorApprovalReport, SelfEvolutionRollbackReplayApplyDecision,
+    SelfEvolutionRollbackReplayApplyGate, SelfEvolutionRollbackReplayApplyReport,
+    SelfEvolutionRollbackReplayDecision, SelfEvolutionRollbackReplayGate,
+    SelfEvolutionRollbackReplayGateReport, SelfEvolutionRollbackReplayItem,
+    SelfEvolutionRollbackReplayPlan, SelfEvolutionRollbackReplayPolicy,
+    SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
 };
 pub use self_evolving_memory::{
     SelfEvolvingEpisodeContext, SelfEvolvingEpisodeInput, SelfEvolvingEpisodeRecord,
