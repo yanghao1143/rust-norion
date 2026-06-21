@@ -41,8 +41,9 @@ use runtime_kv::evaluate_trace_runtime_kv;
 #[cfg(test)]
 use fields::*;
 use memory::{
-    evaluate_trace_drift, evaluate_trace_kv_fusion, evaluate_trace_memory_admission,
-    evaluate_trace_memory_feedback, evaluate_trace_memory_governance,
+    evaluate_self_evolving_memory_store_schema_line, evaluate_trace_drift,
+    evaluate_trace_kv_fusion, evaluate_trace_memory_admission, evaluate_trace_memory_feedback,
+    evaluate_trace_memory_governance,
 };
 use routing::{evaluate_trace_adaptive_routing, evaluate_trace_task_hierarchy};
 use specialized::{
@@ -109,6 +110,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
         failures.extend(evaluate_self_evolution_rollback_replay_apply_schema_line(
             line,
         ));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-evolving-memory-store-v1\"") {
+        failures.extend(evaluate_self_evolving_memory_store_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-improvement-corpus-v1\"") {

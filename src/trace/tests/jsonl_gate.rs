@@ -1,4 +1,11 @@
 use super::*;
+use crate::memory_admission::MemoryAdmissionKind;
+use crate::self_evolving_memory::{
+    SelfEvolvingEpisodeInput, SelfEvolvingHeuristicInput,
+    SelfEvolvingMemoryAdmissionCandidatePreview, SelfEvolvingMemoryAdmissionPreview,
+    SelfEvolvingMemoryApproval, SelfEvolvingMemoryMaintenancePolicy, SelfEvolvingMemoryQuery,
+    SelfEvolvingMemoryStore,
+};
 
 #[test]
 fn trace_schema_jsonl_gate_checks_non_empty_records() {
@@ -607,6 +614,131 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_apply_prefl
         report
             .summary_line()
             .contains("self_evolution_rollback_replay_apply_ready=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_aggregates_self_evolving_memory_store_reports() {
+    let path = temp_path("trace-schema-self-evolving-memory-store");
+    let mut store = SelfEvolvingMemoryStore::new();
+    let approval = SelfEvolvingMemoryApproval::approved(
+        "rollback:trace:self-evolving-memory",
+        vec!["cargo-test:self-evolving-memory".to_owned()],
+    );
+    store.append_episode(
+        SelfEvolvingEpisodeInput {
+            problem: "private prompt must stay out of store trace JSONL".to_owned(),
+            solution_path: "private solution path should be digested".to_owned(),
+            outcome: "retrieval evidence stays redacted".to_owned(),
+            key_insights: vec!["do not log raw payloads".to_owned()],
+            tags: vec!["rust".to_owned(), "trace".to_owned()],
+            profile: TaskProfile::Coding,
+            quality: 0.91,
+            token_estimate: 32,
+            source_case_id: "case:self-evolving-memory-jsonl".to_owned(),
+        },
+        &approval,
+    );
+    store.append_heuristic(
+        SelfEvolvingHeuristicInput {
+            rule: "private heuristic should not appear in trace JSONL".to_owned(),
+            tags: vec!["rust".to_owned(), "trace".to_owned()],
+            profile: TaskProfile::Coding,
+            priority: 0.80,
+            confidence: 0.30,
+            source_case_id: "case:self-evolving-memory-heuristic".to_owned(),
+            updated_step: 1,
+        },
+        &approval,
+    );
+    let retrieval = store.retrieve_context(&SelfEvolvingMemoryQuery {
+        prompt: "private retrieval prompt should be reduced to digest evidence".to_owned(),
+        profile: TaskProfile::Coding,
+        tags: vec!["rust".to_owned()],
+        record_limit: 4,
+        token_budget: 96,
+    });
+    let maintenance = store.maintain(&SelfEvolvingMemoryMaintenancePolicy {
+        current_step: 20,
+        stale_after_steps: 5,
+        heuristic_decay: 0.50,
+        tool_reliability_decay: 0.95,
+        quarantine_below_confidence: 0.20,
+        merge_duplicate_episodes: false,
+    });
+    let admission = SelfEvolvingMemoryAdmissionPreview {
+        candidates: vec![
+            SelfEvolvingMemoryAdmissionCandidatePreview {
+                candidate_id: "sem_candidate_ready".to_owned(),
+                kind: MemoryAdmissionKind::RetrospectiveEpisode,
+                source_hash: "sha256:ready".to_owned(),
+                rollback_anchor_id: "rollback:ready".to_owned(),
+                validation_evidence_count: 1,
+                eligible_for_store: true,
+                blocked_reasons: Vec::new(),
+                read_only: true,
+                write_allowed: false,
+                applied: false,
+            },
+            SelfEvolvingMemoryAdmissionCandidatePreview {
+                candidate_id: "sem_candidate_blocked".to_owned(),
+                kind: MemoryAdmissionKind::ProceduralHeuristic,
+                source_hash: "sha256:blocked".to_owned(),
+                rollback_anchor_id: "rollback:blocked".to_owned(),
+                validation_evidence_count: 0,
+                eligible_for_store: false,
+                blocked_reasons: vec![
+                    "self_evolving_memory_validation_evidence_missing".to_owned(),
+                ],
+                read_only: true,
+                write_allowed: false,
+                applied: false,
+            },
+        ],
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    };
+    fs::write(
+        &path,
+        format!(
+            "{}\n{}\n{}\n",
+            retrieval.json_line(),
+            maintenance.json_line(),
+            admission.json_line()
+        ),
+    )
+    .unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 3);
+    assert_eq!(report.self_evolving_memory_store_events, 3);
+    assert_eq!(report.self_evolving_memory_store_retrieval_events, 1);
+    assert_eq!(report.self_evolving_memory_store_maintenance_events, 1);
+    assert_eq!(
+        report.self_evolving_memory_store_admission_preview_events,
+        1
+    );
+    assert_eq!(
+        report.self_evolving_memory_store_contexts,
+        retrieval.total_contexts()
+    );
+    assert_eq!(
+        report.self_evolving_memory_store_maintenance_actions,
+        maintenance.action_count()
+    );
+    assert_eq!(report.self_evolving_memory_store_admission_candidates, 2);
+    assert_eq!(report.self_evolving_memory_store_write_allowed, 0);
+    assert_eq!(report.self_evolving_memory_store_durable_write_allowed, 0);
+    assert_eq!(report.self_evolving_memory_store_applied, 0);
+    assert_eq!(report.self_evolving_memory_store_applied_to_disk, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolving_memory_store_events=3")
     );
     cleanup(path);
 }

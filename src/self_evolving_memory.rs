@@ -3,6 +3,8 @@ use crate::memory_admission::{
     MemoryAdmissionCandidate, MemoryAdmissionDecision, MemoryAdmissionKind, MemoryAdmissionPreview,
 };
 
+const SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA: &str = "rust-norion-self-evolving-memory-store-v1";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelfEvolvingMemoryApproval {
     pub operator_approved: bool,
@@ -246,6 +248,35 @@ impl SelfEvolvingMemoryRetrievalReport {
             self.redacted
         )
     }
+
+    pub fn json_line(&self) -> String {
+        let evidence_digest = stable_digest(&format!(
+            "retrieval:{}:{}:{}:{}:{}:{}:{}:{}",
+            self.requested_limit,
+            self.token_budget,
+            self.retained_tokens,
+            self.skipped_by_budget,
+            self.skipped_cross_profile,
+            self.episodes.len(),
+            self.heuristics.len(),
+            self.tool_reliability.len()
+        ));
+        format!(
+            "{{\"schema\":\"{}\",\"operation\":\"retrieval\",\"contexts\":{},\"episodes\":{},\"heuristics\":{},\"tools\":{},\"requested_limit\":{},\"token_budget\":{},\"retained_tokens\":{},\"skipped_by_budget\":{},\"skipped_cross_profile\":{},\"redacted\":{},\"report_only\":true,\"read_only\":true,\"write_allowed\":false,\"durable_write_allowed\":false,\"applied\":false,\"applied_to_disk\":false,\"evidence_digest\":\"{}\"}}",
+            SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA,
+            self.total_contexts(),
+            self.episodes.len(),
+            self.heuristics.len(),
+            self.tool_reliability.len(),
+            self.requested_limit,
+            self.token_budget,
+            self.retained_tokens,
+            self.skipped_by_budget,
+            self.skipped_cross_profile,
+            self.redacted,
+            evidence_digest
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -283,6 +314,13 @@ pub struct SelfEvolvingMemoryMaintenanceReport {
 }
 
 impl SelfEvolvingMemoryMaintenanceReport {
+    pub fn action_count(&self) -> usize {
+        self.decayed_heuristics
+            .saturating_add(self.decayed_tool_reliability)
+            .saturating_add(self.quarantined_heuristics)
+            .saturating_add(self.merged_duplicate_episodes)
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
             "self_evolving_memory_maintenance decayed_heuristics={} decayed_tool_reliability={} quarantined_heuristics={} merged_duplicate_episodes={} read_only={} durable_write_allowed={} applied_to_disk={}",
@@ -293,6 +331,32 @@ impl SelfEvolvingMemoryMaintenanceReport {
             self.read_only,
             self.durable_write_allowed,
             self.applied_to_disk
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let evidence_digest = stable_digest(&format!(
+            "maintenance:{}:{}:{}:{}:{}:{}:{}",
+            self.decayed_heuristics,
+            self.decayed_tool_reliability,
+            self.quarantined_heuristics,
+            self.merged_duplicate_episodes,
+            self.read_only,
+            self.durable_write_allowed,
+            self.applied_to_disk
+        ));
+        format!(
+            "{{\"schema\":\"{}\",\"operation\":\"maintenance\",\"maintenance_actions\":{},\"decayed_heuristics\":{},\"decayed_tool_reliability\":{},\"quarantined_heuristics\":{},\"merged_duplicate_episodes\":{},\"redacted\":true,\"report_only\":true,\"read_only\":{},\"write_allowed\":false,\"durable_write_allowed\":{},\"applied\":false,\"applied_to_disk\":{},\"evidence_digest\":\"{}\"}}",
+            SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA,
+            self.action_count(),
+            self.decayed_heuristics,
+            self.decayed_tool_reliability,
+            self.quarantined_heuristics,
+            self.merged_duplicate_episodes,
+            self.read_only,
+            self.durable_write_allowed,
+            self.applied_to_disk,
+            evidence_digest
         )
     }
 }
@@ -340,6 +404,37 @@ impl SelfEvolvingMemoryAdmissionPreview {
             self.read_only,
             self.write_allowed,
             self.applied
+        )
+    }
+
+    pub fn blocked_reasons_count(&self) -> usize {
+        self.candidates
+            .iter()
+            .map(|candidate| candidate.blocked_reasons.len())
+            .sum()
+    }
+
+    pub fn json_line(&self) -> String {
+        let evidence_digest = stable_digest(&format!(
+            "admission_preview:{}:{}:{}:{}:{}:{}",
+            self.candidates.len(),
+            self.eligible_count(),
+            self.blocked_count(),
+            self.blocked_reasons_count(),
+            self.write_allowed,
+            self.applied
+        ));
+        format!(
+            "{{\"schema\":\"{}\",\"operation\":\"admission_preview\",\"candidates\":{},\"eligible\":{},\"blocked\":{},\"blocked_reasons\":{},\"redacted\":true,\"report_only\":true,\"read_only\":{},\"write_allowed\":{},\"durable_write_allowed\":false,\"applied\":{},\"applied_to_disk\":false,\"evidence_digest\":\"{}\"}}",
+            SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA,
+            self.candidates.len(),
+            self.eligible_count(),
+            self.blocked_count(),
+            self.blocked_reasons_count(),
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+            evidence_digest
         )
     }
 }
@@ -1246,5 +1341,80 @@ mod tests {
                 .contains(&"self_evolving_memory_operator_approval_missing".to_owned())
         );
         assert!(!report.summary_line().contains("private prompt"));
+    }
+
+    #[test]
+    fn store_reports_emit_digest_only_trace_json_lines() {
+        let mut store = SelfEvolvingMemoryStore::new();
+        let approval = approval();
+        let raw_problem = "private prompt should never appear in JSONL";
+        store.append_episode(
+            episode_input(raw_problem, 0.91, &["rust", "trace"]),
+            &approval,
+        );
+        store.append_heuristic(
+            SelfEvolvingHeuristicInput {
+                rule: "private heuristic rule should be digested".to_owned(),
+                tags: vec!["rust".to_owned(), "trace".to_owned()],
+                profile: TaskProfile::Coding,
+                priority: 0.80,
+                confidence: 0.30,
+                source_case_id: "case:trace-json".to_owned(),
+                updated_step: 1,
+            },
+            &approval,
+        );
+
+        let retrieval = store.retrieve_context(&SelfEvolvingMemoryQuery {
+            prompt: "private prompt query should be tokenized only".to_owned(),
+            profile: TaskProfile::Coding,
+            tags: vec!["rust".to_owned()],
+            record_limit: 4,
+            token_budget: 96,
+        });
+        let maintenance = store.maintain(&SelfEvolvingMemoryMaintenancePolicy {
+            current_step: 20,
+            stale_after_steps: 5,
+            heuristic_decay: 0.50,
+            tool_reliability_decay: 0.95,
+            quarantine_below_confidence: 0.20,
+            merge_duplicate_episodes: false,
+        });
+        let admission = SelfEvolvingMemoryAdmissionPreview {
+            candidates: vec![SelfEvolvingMemoryAdmissionCandidatePreview {
+                candidate_id: "sem_candidate_digest_only".to_owned(),
+                kind: MemoryAdmissionKind::RetrospectiveEpisode,
+                source_hash: "sha256:source".to_owned(),
+                rollback_anchor_id: "rollback:self-evolving-memory".to_owned(),
+                validation_evidence_count: 1,
+                eligible_for_store: false,
+                blocked_reasons: vec!["self_evolving_memory_unsafe_write_or_apply_flag".to_owned()],
+                read_only: true,
+                write_allowed: false,
+                applied: false,
+            }],
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        };
+
+        for line in [
+            retrieval.json_line(),
+            maintenance.json_line(),
+            admission.json_line(),
+        ] {
+            assert!(line.contains("\"schema\":\"rust-norion-self-evolving-memory-store-v1\""));
+            assert!(line.contains("\"redacted\":true"));
+            assert!(line.contains("\"write_allowed\":false"));
+            assert!(line.contains("\"applied\":false"));
+            assert!(line.contains("\"evidence_digest\":\"fnv64:"));
+            assert!(!line.contains(raw_problem));
+            assert!(!line.contains("private heuristic rule"));
+            assert!(!line.contains("private prompt query"));
+            assert!(
+                crate::trace::evaluate_trace_schema_line(&line).is_empty(),
+                "{line}"
+            );
+        }
     }
 }

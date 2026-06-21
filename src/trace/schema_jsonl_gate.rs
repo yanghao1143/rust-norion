@@ -106,6 +106,17 @@ pub struct TraceSchemaGateReport {
     pub self_evolution_rollback_replay_apply_blocked_reasons: usize,
     pub self_evolution_rollback_replay_apply_write_allowed: usize,
     pub self_evolution_rollback_replay_apply_applied: usize,
+    pub self_evolving_memory_store_events: usize,
+    pub self_evolving_memory_store_retrieval_events: usize,
+    pub self_evolving_memory_store_maintenance_events: usize,
+    pub self_evolving_memory_store_admission_preview_events: usize,
+    pub self_evolving_memory_store_contexts: usize,
+    pub self_evolving_memory_store_maintenance_actions: usize,
+    pub self_evolving_memory_store_admission_candidates: usize,
+    pub self_evolving_memory_store_write_allowed: usize,
+    pub self_evolving_memory_store_durable_write_allowed: usize,
+    pub self_evolving_memory_store_applied: usize,
+    pub self_evolving_memory_store_applied_to_disk: usize,
     pub improvement_corpus_events: usize,
     pub improvement_corpus_episodes: usize,
     pub improvement_corpus_active_adaptation: usize,
@@ -298,7 +309,7 @@ impl TraceSchemaGateReport {
             self.kv_fusion_saved_tokens
         );
         format!(
-            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={}",
+            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={}",
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
             self.self_evolution_rollback_replay_apply_held,
@@ -314,6 +325,17 @@ impl TraceSchemaGateReport {
             self.self_evolution_rollback_replay_apply_blocked_reasons,
             self.self_evolution_rollback_replay_apply_write_allowed,
             self.self_evolution_rollback_replay_apply_applied,
+            self.self_evolving_memory_store_events,
+            self.self_evolving_memory_store_retrieval_events,
+            self.self_evolving_memory_store_maintenance_events,
+            self.self_evolving_memory_store_admission_preview_events,
+            self.self_evolving_memory_store_contexts,
+            self.self_evolving_memory_store_maintenance_actions,
+            self.self_evolving_memory_store_admission_candidates,
+            self.self_evolving_memory_store_write_allowed,
+            self.self_evolving_memory_store_durable_write_allowed,
+            self.self_evolving_memory_store_applied,
+            self.self_evolving_memory_store_applied_to_disk,
         )
     }
 }
@@ -414,6 +436,17 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_evolution_rollback_replay_apply_blocked_reasons = 0;
     let mut self_evolution_rollback_replay_apply_write_allowed = 0;
     let mut self_evolution_rollback_replay_apply_applied = 0;
+    let mut self_evolving_memory_store_events = 0;
+    let mut self_evolving_memory_store_retrieval_events = 0;
+    let mut self_evolving_memory_store_maintenance_events = 0;
+    let mut self_evolving_memory_store_admission_preview_events = 0;
+    let mut self_evolving_memory_store_contexts = 0;
+    let mut self_evolving_memory_store_maintenance_actions = 0;
+    let mut self_evolving_memory_store_admission_candidates = 0;
+    let mut self_evolving_memory_store_write_allowed = 0;
+    let mut self_evolving_memory_store_durable_write_allowed = 0;
+    let mut self_evolving_memory_store_applied = 0;
+    let mut self_evolving_memory_store_applied_to_disk = 0;
     let mut improvement_corpus_events = 0;
     let mut improvement_corpus_episodes = 0;
     let mut improvement_corpus_active_adaptation = 0;
@@ -589,6 +622,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_evolution_rollback_replay_apply_write_allowed += summary.write_allowed;
             self_evolution_rollback_replay_apply_applied += summary.applied;
         }
+        if let Some(summary) = self_evolving_memory_store_trace_gate_summary(line) {
+            self_evolving_memory_store_events += summary.events;
+            self_evolving_memory_store_retrieval_events += summary.retrieval_events;
+            self_evolving_memory_store_maintenance_events += summary.maintenance_events;
+            self_evolving_memory_store_admission_preview_events += summary.admission_preview_events;
+            self_evolving_memory_store_contexts += summary.contexts;
+            self_evolving_memory_store_maintenance_actions += summary.maintenance_actions;
+            self_evolving_memory_store_admission_candidates += summary.admission_candidates;
+            self_evolving_memory_store_write_allowed += summary.write_allowed;
+            self_evolving_memory_store_durable_write_allowed += summary.durable_write_allowed;
+            self_evolving_memory_store_applied += summary.applied;
+            self_evolving_memory_store_applied_to_disk += summary.applied_to_disk;
+        }
         if let Some(summary) = improvement_corpus_trace_gate_summary(line) {
             improvement_corpus_events += summary.events;
             improvement_corpus_episodes += summary.episodes;
@@ -757,6 +803,17 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_evolution_rollback_replay_apply_blocked_reasons,
         self_evolution_rollback_replay_apply_write_allowed,
         self_evolution_rollback_replay_apply_applied,
+        self_evolving_memory_store_events,
+        self_evolving_memory_store_retrieval_events,
+        self_evolving_memory_store_maintenance_events,
+        self_evolving_memory_store_admission_preview_events,
+        self_evolving_memory_store_contexts,
+        self_evolving_memory_store_maintenance_actions,
+        self_evolving_memory_store_admission_candidates,
+        self_evolving_memory_store_write_allowed,
+        self_evolving_memory_store_durable_write_allowed,
+        self_evolving_memory_store_applied,
+        self_evolving_memory_store_applied_to_disk,
         improvement_corpus_events,
         improvement_corpus_episodes,
         improvement_corpus_active_adaptation,
@@ -1258,6 +1315,49 @@ fn self_evolution_rollback_replay_apply_trace_gate_summary(
         applied: usize::from(
             extract_json_bool_field(line, "active_candidate").unwrap_or(false)
                 || extract_json_bool_field(line, "applied").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolvingMemoryStoreTraceGateSummary {
+    events: usize,
+    retrieval_events: usize,
+    maintenance_events: usize,
+    admission_preview_events: usize,
+    contexts: usize,
+    maintenance_actions: usize,
+    admission_candidates: usize,
+    write_allowed: usize,
+    durable_write_allowed: usize,
+    applied: usize,
+    applied_to_disk: usize,
+}
+
+fn self_evolving_memory_store_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolvingMemoryStoreTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolving-memory-store-v1\"") {
+        return None;
+    }
+
+    let operation = extract_json_string_field(line, "operation").unwrap_or_default();
+
+    Some(SelfEvolvingMemoryStoreTraceGateSummary {
+        events: 1,
+        retrieval_events: usize::from(operation == "retrieval"),
+        maintenance_events: usize::from(operation == "maintenance"),
+        admission_preview_events: usize::from(operation == "admission_preview"),
+        contexts: extract_json_usize_field(line, "contexts").unwrap_or(0),
+        maintenance_actions: extract_json_usize_field(line, "maintenance_actions").unwrap_or(0),
+        admission_candidates: extract_json_usize_field(line, "candidates").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        durable_write_allowed: usize::from(
+            extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+        applied_to_disk: usize::from(
+            extract_json_bool_field(line, "applied_to_disk").unwrap_or(false),
         ),
     })
 }

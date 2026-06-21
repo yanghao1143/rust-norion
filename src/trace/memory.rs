@@ -415,6 +415,186 @@ pub(super) fn evaluate_trace_kv_fusion(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolving-memory-store-v1\"",
+        ),
+        ("operation", "\"operation\":"),
+        ("redacted", "\"redacted\":"),
+        ("report_only", "\"report_only\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("durable_write_allowed", "\"durable_write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("applied_to_disk", "\"applied_to_disk\":"),
+        ("evidence_digest", "\"evidence_digest\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing self_evolving_memory_store field {name}"));
+        }
+    }
+
+    let operation = extract_json_string_field(line, "operation").unwrap_or_default();
+    let redacted = extract_json_bool_field(line, "redacted");
+    let report_only = extract_json_bool_field(line, "report_only");
+    let read_only = extract_json_bool_field(line, "read_only");
+    let write_allowed = extract_json_bool_field(line, "write_allowed");
+    let durable_write_allowed = extract_json_bool_field(line, "durable_write_allowed");
+    let applied = extract_json_bool_field(line, "applied");
+    let applied_to_disk = extract_json_bool_field(line, "applied_to_disk");
+    let evidence_digest = extract_json_string_field(line, "evidence_digest").unwrap_or_default();
+
+    if redacted != Some(true) {
+        failures.push("self_evolving_memory_store redacted must be true".to_owned());
+    }
+    if report_only != Some(true) {
+        failures.push("self_evolving_memory_store report_only must be true".to_owned());
+    }
+    if read_only.is_none() {
+        failures.push("self_evolving_memory_store read_only must be boolean".to_owned());
+    }
+    if write_allowed != Some(false) {
+        failures.push("self_evolving_memory_store write_allowed must be false".to_owned());
+    }
+    if durable_write_allowed != Some(false) {
+        failures.push("self_evolving_memory_store durable_write_allowed must be false".to_owned());
+    }
+    if applied != Some(false) {
+        failures.push("self_evolving_memory_store applied must be false".to_owned());
+    }
+    if applied_to_disk != Some(false) {
+        failures.push("self_evolving_memory_store applied_to_disk must be false".to_owned());
+    }
+    if !evidence_digest.starts_with("fnv64:") {
+        failures.push("self_evolving_memory_store evidence_digest must be stable fnv64".to_owned());
+    }
+    if line_contains_raw_memory_payload(line) {
+        failures.push(
+            "self_evolving_memory_store trace must not contain raw memory payloads".to_owned(),
+        );
+    }
+
+    match operation.as_str() {
+        "retrieval" => evaluate_self_evolving_memory_retrieval_trace(&mut failures, line),
+        "maintenance" => evaluate_self_evolving_memory_maintenance_trace(&mut failures, line),
+        "admission_preview" => {
+            evaluate_self_evolving_memory_admission_preview_trace(&mut failures, line)
+        }
+        "" => failures.push("self_evolving_memory_store operation is empty".to_owned()),
+        other => failures.push(format!(
+            "self_evolving_memory_store operation {other} is not supported"
+        )),
+    }
+
+    failures
+}
+
+fn evaluate_self_evolving_memory_retrieval_trace(failures: &mut Vec<String>, line: &str) {
+    let contexts = extract_json_usize_field(line, "contexts").unwrap_or(0);
+    let episodes = extract_json_usize_field(line, "episodes").unwrap_or(0);
+    let heuristics = extract_json_usize_field(line, "heuristics").unwrap_or(0);
+    let tools = extract_json_usize_field(line, "tools").unwrap_or(0);
+    let requested_limit = extract_json_usize_field(line, "requested_limit").unwrap_or(0);
+    let token_budget = extract_json_usize_field(line, "token_budget").unwrap_or(0);
+    let retained_tokens = extract_json_usize_field(line, "retained_tokens").unwrap_or(0);
+    let skipped_by_budget = extract_json_usize_field(line, "skipped_by_budget").unwrap_or(0);
+
+    if contexts != episodes.saturating_add(heuristics).saturating_add(tools) {
+        failures.push(format!(
+            "self_evolving_memory_store retrieval contexts {contexts} does not match episodes+heuristics+tools"
+        ));
+    }
+    if requested_limit == 0 {
+        failures
+            .push("self_evolving_memory_store retrieval requested_limit must be > 0".to_owned());
+    }
+    if contexts > requested_limit {
+        failures.push(format!(
+            "self_evolving_memory_store retrieval contexts {contexts} exceeds requested_limit {requested_limit}"
+        ));
+    }
+    if token_budget == 0 {
+        failures.push("self_evolving_memory_store retrieval token_budget must be > 0".to_owned());
+    }
+    if retained_tokens > token_budget {
+        failures.push(format!(
+            "self_evolving_memory_store retrieval retained_tokens {retained_tokens} exceeds token_budget {token_budget}"
+        ));
+    }
+    if skipped_by_budget > 0 && retained_tokens >= token_budget {
+        return;
+    }
+    if skipped_by_budget > 0 && contexts == 0 {
+        failures.push(
+            "self_evolving_memory_store retrieval skipped_by_budget requires retained context"
+                .to_owned(),
+        );
+    }
+}
+
+fn evaluate_self_evolving_memory_maintenance_trace(failures: &mut Vec<String>, line: &str) {
+    let actions = extract_json_usize_field(line, "maintenance_actions").unwrap_or(0);
+    let expected_actions = extract_json_usize_field(line, "decayed_heuristics")
+        .unwrap_or(0)
+        .saturating_add(extract_json_usize_field(line, "decayed_tool_reliability").unwrap_or(0))
+        .saturating_add(extract_json_usize_field(line, "quarantined_heuristics").unwrap_or(0))
+        .saturating_add(extract_json_usize_field(line, "merged_duplicate_episodes").unwrap_or(0));
+
+    if actions != expected_actions {
+        failures.push(format!(
+            "self_evolving_memory_store maintenance actions {actions} does not match component total {expected_actions}"
+        ));
+    }
+}
+
+fn evaluate_self_evolving_memory_admission_preview_trace(failures: &mut Vec<String>, line: &str) {
+    let candidates = extract_json_usize_field(line, "candidates").unwrap_or(0);
+    let eligible = extract_json_usize_field(line, "eligible").unwrap_or(0);
+    let blocked = extract_json_usize_field(line, "blocked").unwrap_or(0);
+    let blocked_reasons = extract_json_usize_field(line, "blocked_reasons").unwrap_or(0);
+    let read_only = extract_json_bool_field(line, "read_only");
+
+    if eligible.saturating_add(blocked) != candidates {
+        failures.push(format!(
+            "self_evolving_memory_store admission_preview eligible+blocked {} does not match candidates {candidates}",
+            eligible.saturating_add(blocked)
+        ));
+    }
+    if eligible > candidates {
+        failures.push(format!(
+            "self_evolving_memory_store admission_preview eligible {eligible} exceeds candidates {candidates}"
+        ));
+    }
+    if blocked > 0 && blocked_reasons == 0 {
+        failures.push(
+            "self_evolving_memory_store admission_preview blocked candidates require reasons"
+                .to_owned(),
+        );
+    }
+    if read_only != Some(true) {
+        failures
+            .push("self_evolving_memory_store admission_preview read_only must be true".to_owned());
+    }
+}
+
+fn line_contains_raw_memory_payload(line: &str) -> bool {
+    [
+        "raw_prompt",
+        "prompt_text",
+        "answer_text",
+        "private prompt",
+        "private answer",
+        "solution_path",
+        "key_insights",
+    ]
+    .iter()
+    .any(|marker| line.contains(marker))
+}
+
 pub(super) fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
 
