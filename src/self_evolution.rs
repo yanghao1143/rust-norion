@@ -1347,6 +1347,292 @@ impl SelfEvolutionRollbackReplayPlan {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionRollbackReplayDecision {
+    AdmitForHumanReview,
+    Hold,
+}
+
+impl SelfEvolutionRollbackReplayDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AdmitForHumanReview => "admit_for_human_review",
+            Self::Hold => "hold",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfEvolutionRollbackReplayPolicy {
+    pub require_non_empty_plan: bool,
+    pub require_all_items_replayable: bool,
+    pub require_rollback_anchor_ids: bool,
+    pub require_evidence_ids: bool,
+}
+
+impl Default for SelfEvolutionRollbackReplayPolicy {
+    fn default() -> Self {
+        Self {
+            require_non_empty_plan: true,
+            require_all_items_replayable: true,
+            require_rollback_anchor_ids: true,
+            require_evidence_ids: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelfEvolutionRollbackReplayGate {
+    pub policy: SelfEvolutionRollbackReplayPolicy,
+}
+
+impl Default for SelfEvolutionRollbackReplayGate {
+    fn default() -> Self {
+        Self {
+            policy: SelfEvolutionRollbackReplayPolicy::default(),
+        }
+    }
+}
+
+impl SelfEvolutionRollbackReplayGate {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_policy(mut self, policy: SelfEvolutionRollbackReplayPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn evaluate(
+        &self,
+        plan: &SelfEvolutionRollbackReplayPlan,
+    ) -> SelfEvolutionRollbackReplayGateReport {
+        let item_count = plan.item_count();
+        let replayable = plan.replayable();
+        let blocked = plan.blocked();
+        let all_replayable = plan.all_replayable();
+        let rollback_anchor_ids = plan.rollback_anchor_ids();
+        let evidence_ids = plan.evidence_ids();
+        let active_candidates = plan.active_candidates();
+        let item_write_allowed = plan.write_allowed_items();
+        let item_applied = plan.applied_items();
+        let mut blocked_reasons = Vec::new();
+
+        if self.policy.require_non_empty_plan && item_count == 0 {
+            blocked_reasons.push("self_evolution_rollback_replay_gate_empty_plan".to_owned());
+        }
+        if self.policy.require_all_items_replayable && (!all_replayable || blocked > 0) {
+            blocked_reasons.push("self_evolution_rollback_replay_gate_blocked_items".to_owned());
+        }
+        if self.policy.require_rollback_anchor_ids
+            && item_count > 0
+            && rollback_anchor_ids.is_empty()
+        {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_gate_rollback_anchor_ids_missing".to_owned());
+        }
+        if self.policy.require_evidence_ids && item_count > 0 && evidence_ids.is_empty() {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_gate_evidence_ids_missing".to_owned());
+        }
+        if active_candidates > 0 {
+            blocked_reasons.push(format!(
+                "self_evolution_rollback_replay_gate_active_candidates={active_candidates}>0"
+            ));
+        }
+        if item_write_allowed > 0 {
+            blocked_reasons.push(format!(
+                "self_evolution_rollback_replay_gate_item_write_allowed={item_write_allowed}>0"
+            ));
+        }
+        if item_applied > 0 {
+            blocked_reasons.push(format!(
+                "self_evolution_rollback_replay_gate_item_applied={item_applied}>0"
+            ));
+        }
+        if !plan.read_only {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_gate_plan_not_read_only".to_owned());
+        }
+        if !plan.report_only {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_gate_plan_not_report_only".to_owned());
+        }
+        if !plan.preview_only {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_gate_plan_not_preview_only".to_owned());
+        }
+        if plan.write_allowed {
+            blocked_reasons
+                .push("self_evolution_rollback_replay_gate_plan_write_allowed".to_owned());
+        }
+        if plan.applied {
+            blocked_reasons.push("self_evolution_rollback_replay_gate_plan_applied".to_owned());
+        }
+
+        let admitted_for_human_review = blocked_reasons.is_empty();
+        let decision = if admitted_for_human_review {
+            SelfEvolutionRollbackReplayDecision::AdmitForHumanReview
+        } else {
+            SelfEvolutionRollbackReplayDecision::Hold
+        };
+        let item_digests = plan
+            .items
+            .iter()
+            .map(|item| item.content_digest.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let content_digest = self_evolution_stable_digest(&format!(
+            "rollback_replay_gate;items={item_count};replayable={replayable};blocked={blocked};all_replayable={all_replayable};anchors={rollback_anchor_ids:?};evidence={evidence_ids:?};digests={item_digests}"
+        ));
+
+        SelfEvolutionRollbackReplayGateReport {
+            decision,
+            item_count,
+            replayable,
+            blocked,
+            all_replayable,
+            active_candidates,
+            item_write_allowed,
+            item_applied,
+            rollback_anchor_ids,
+            evidence_ids,
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            write_allowed: false,
+            applied: false,
+            plan_read_only: plan.read_only,
+            plan_report_only: plan.report_only,
+            plan_preview_only: plan.preview_only,
+            plan_write_allowed: plan.write_allowed,
+            plan_applied: plan.applied,
+            human_approval_required: true,
+            admitted_for_human_review,
+            blocked_reasons,
+            content_digest,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionRollbackReplayGateReport {
+    pub decision: SelfEvolutionRollbackReplayDecision,
+    pub item_count: usize,
+    pub replayable: usize,
+    pub blocked: usize,
+    pub all_replayable: bool,
+    pub active_candidates: usize,
+    pub item_write_allowed: usize,
+    pub item_applied: usize,
+    pub rollback_anchor_ids: Vec<String>,
+    pub evidence_ids: Vec<String>,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub plan_read_only: bool,
+    pub plan_report_only: bool,
+    pub plan_preview_only: bool,
+    pub plan_write_allowed: bool,
+    pub plan_applied: bool,
+    pub human_approval_required: bool,
+    pub admitted_for_human_review: bool,
+    pub blocked_reasons: Vec<String>,
+    pub content_digest: String,
+}
+
+impl SelfEvolutionRollbackReplayGateReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_rollback_replay_gate decision={} admitted_for_human_review={} human_approval_required={} items={} replayable={} blocked={} all_replayable={} active_candidates={} item_write_allowed={} item_applied={} rollback_anchors={} evidence_ids={} read_only={} report_only={} preview_only={} write_allowed={} applied={} plan_read_only={} plan_report_only={} plan_preview_only={} plan_write_allowed={} plan_applied={} blocked_reasons={} digest={}",
+            self.decision.as_str(),
+            self.admitted_for_human_review,
+            self.human_approval_required,
+            self.item_count,
+            self.replayable,
+            self.blocked,
+            self.all_replayable,
+            self.active_candidates,
+            self.item_write_allowed,
+            self.item_applied,
+            self.rollback_anchor_ids.len(),
+            self.evidence_ids.len(),
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+            self.plan_read_only,
+            self.plan_report_only,
+            self.plan_preview_only,
+            self.plan_write_allowed,
+            self.plan_applied,
+            self.blocked_reasons.len(),
+            self.content_digest,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let rollback_anchor_ids = self_evolution_string_array_json(&self.rollback_anchor_ids);
+        let evidence_ids = self_evolution_string_array_json(&self.evidence_ids);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+        let content_digest = self_evolution_json_escape(&self.content_digest);
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-rollback-replay-gate-v1\",\
+             \"decision\":\"{}\",\
+             \"admitted_for_human_review\":{},\
+             \"human_approval_required\":{},\
+             \"item_count\":{},\
+             \"replayable\":{},\
+             \"blocked\":{},\
+             \"all_replayable\":{},\
+             \"active_candidates\":{},\
+             \"item_write_allowed\":{},\
+             \"item_applied\":{},\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"plan_read_only\":{},\
+             \"plan_report_only\":{},\
+             \"plan_preview_only\":{},\
+             \"plan_write_allowed\":{},\
+             \"plan_applied\":{},\
+             \"rollback_anchor_ids\":{rollback_anchor_ids},\
+             \"evidence_ids\":{evidence_ids},\
+             \"blocked_reasons\":{blocked_reasons},\
+             \"content_digest\":\"{content_digest}\"\
+             }}",
+            self.decision.as_str(),
+            self.admitted_for_human_review,
+            self.human_approval_required,
+            self.item_count,
+            self.replayable,
+            self.blocked,
+            self.all_replayable,
+            self.active_candidates,
+            self.item_write_allowed,
+            self.item_applied,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+            self.plan_read_only,
+            self.plan_report_only,
+            self.plan_preview_only,
+            self.plan_write_allowed,
+            self.plan_applied,
+        )
+    }
+}
+
 fn self_evolution_f32_json(value: f32) -> String {
     if value.is_finite() {
         format!("{value:.6}")
@@ -2237,6 +2523,180 @@ mod tests {
             plan.summary_line()
                 .contains("self_evolution_rollback_replay_plan items=0")
         );
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_gate_admits_safe_plan_for_human_review() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        let rollback = ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        let plan = ledger.rollback_replay_plan();
+        let plan_before = plan.clone();
+
+        let report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+
+        assert_eq!(plan, plan_before);
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayDecision::AdmitForHumanReview
+        );
+        assert!(report.admitted_for_human_review);
+        assert!(report.human_approval_required);
+        assert!(report.read_only);
+        assert!(report.report_only);
+        assert!(report.preview_only);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(report.plan_read_only);
+        assert!(report.plan_report_only);
+        assert!(report.plan_preview_only);
+        assert!(!report.plan_write_allowed);
+        assert!(!report.plan_applied);
+        assert_eq!(report.item_count, 1);
+        assert_eq!(report.replayable, 1);
+        assert_eq!(report.blocked, 0);
+        assert!(report.all_replayable);
+        assert_eq!(report.rollback_anchor_ids, rollback.rollback_anchor_ids);
+        assert_eq!(report.evidence_ids, rollback.evidence_ids);
+        assert!(report.blocked_reasons.is_empty());
+        assert!(report.content_digest.starts_with("fnv64:"));
+        assert!(
+            report
+                .summary_line()
+                .contains("decision=admit_for_human_review")
+        );
+        assert!(
+            report
+                .json_line()
+                .contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-gate-v1\"")
+        );
+        assert!(
+            report
+                .json_line()
+                .contains("\"admitted_for_human_review\":true")
+        );
+        assert!(plan.read_only);
+        assert!(plan.report_only);
+        assert!(plan.preview_only);
+        assert!(!plan.write_allowed);
+        assert!(!plan.applied);
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_gate_holds_empty_plan() {
+        let plan = SelfEvolutionRollbackReplayPlan::new(Vec::new());
+
+        let report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+
+        assert_eq!(report.decision, SelfEvolutionRollbackReplayDecision::Hold);
+        assert!(!report.admitted_for_human_review);
+        assert!(report.human_approval_required);
+        assert_eq!(report.item_count, 0);
+        assert_eq!(report.replayable, 0);
+        assert_eq!(report.blocked, 0);
+        assert!(report.all_replayable);
+        assert!(report.rollback_anchor_ids.is_empty());
+        assert!(report.evidence_ids.is_empty());
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_rollback_replay_gate_empty_plan".to_owned())
+        );
+        assert!(report.read_only);
+        assert!(report.report_only);
+        assert!(report.preview_only);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_gate_blocks_missing_evidence_or_anchor() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        ledger.records[0].evidence_ids.clear();
+        ledger.records[0].rollback_anchor_ids.clear();
+        let plan = ledger.rollback_replay_plan();
+
+        let report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+
+        assert_eq!(report.decision, SelfEvolutionRollbackReplayDecision::Hold);
+        assert!(!report.admitted_for_human_review);
+        assert_eq!(report.item_count, 1);
+        assert_eq!(report.replayable, 0);
+        assert_eq!(report.blocked, 1);
+        assert!(!report.all_replayable);
+        assert!(report.rollback_anchor_ids.is_empty());
+        assert!(report.evidence_ids.is_empty());
+        for reason in [
+            "self_evolution_rollback_replay_gate_blocked_items",
+            "self_evolution_rollback_replay_gate_rollback_anchor_ids_missing",
+            "self_evolution_rollback_replay_gate_evidence_ids_missing",
+        ] {
+            assert!(
+                report.blocked_reasons.contains(&reason.to_owned()),
+                "missing rollback replay gate blocked reason {reason}: {:?}",
+                report.blocked_reasons
+            );
+        }
+        assert!(report.json_line().contains("\"decision\":\"hold\""));
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_gate_blocks_active_write_or_applied_state() {
+        let mut ledger = SelfEvolutionExperimentLedger::new();
+        ledger.append_admission_report(
+            "experiment-rollback",
+            &rollback_admission_report("candidate-rollback"),
+        );
+        ledger.records[0].active_candidate = true;
+        ledger.records[0].write_allowed = true;
+        ledger.records[0].applied = true;
+        let mut plan = ledger.rollback_replay_plan();
+        plan.read_only = false;
+        plan.report_only = false;
+        plan.preview_only = false;
+        plan.write_allowed = true;
+        plan.applied = true;
+
+        let report = SelfEvolutionRollbackReplayGate::new().evaluate(&plan);
+
+        assert_eq!(report.decision, SelfEvolutionRollbackReplayDecision::Hold);
+        assert!(!report.admitted_for_human_review);
+        assert_eq!(report.active_candidates, 1);
+        assert_eq!(report.item_write_allowed, 1);
+        assert_eq!(report.item_applied, 1);
+        assert!(!report.plan_read_only);
+        assert!(!report.plan_report_only);
+        assert!(!report.plan_preview_only);
+        assert!(report.plan_write_allowed);
+        assert!(report.plan_applied);
+        for reason in [
+            "self_evolution_rollback_replay_gate_blocked_items",
+            "self_evolution_rollback_replay_gate_active_candidates=1>0",
+            "self_evolution_rollback_replay_gate_item_write_allowed=1>0",
+            "self_evolution_rollback_replay_gate_item_applied=1>0",
+            "self_evolution_rollback_replay_gate_plan_not_read_only",
+            "self_evolution_rollback_replay_gate_plan_not_report_only",
+            "self_evolution_rollback_replay_gate_plan_not_preview_only",
+            "self_evolution_rollback_replay_gate_plan_write_allowed",
+            "self_evolution_rollback_replay_gate_plan_applied",
+        ] {
+            assert!(
+                report.blocked_reasons.contains(&reason.to_owned()),
+                "missing rollback replay gate blocked reason {reason}: {:?}",
+                report.blocked_reasons
+            );
+        }
+        assert!(report.read_only);
+        assert!(report.report_only);
+        assert!(report.preview_only);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
     }
 
     #[test]
