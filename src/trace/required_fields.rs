@@ -1,6 +1,7 @@
 mod auto_replay;
 mod core;
 mod evolution_ledger;
+mod genome;
 mod live_evolution;
 mod memory;
 mod retention;
@@ -21,6 +22,7 @@ pub(super) fn trace_required_fields() -> impl Iterator<Item = &'static TraceRequ
         .iter()
         .chain(memory::MEMORY_TRACE_REQUIRED_FIELDS)
         .chain(auto_replay::AUTO_REPLAY_TRACE_REQUIRED_FIELDS)
+        .chain(genome::GENOME_TRACE_REQUIRED_FIELDS)
         .chain(live_evolution::LIVE_EVOLUTION_TRACE_REQUIRED_FIELDS)
         .chain(evolution_ledger::EVOLUTION_LEDGER_TRACE_REQUIRED_FIELDS)
         .chain(retention::RETENTION_TRACE_REQUIRED_FIELDS)

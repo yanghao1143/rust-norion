@@ -17,6 +17,7 @@ pub mod kv_quant;
 pub mod local_runtime;
 pub mod process_reward;
 pub mod production_runtime;
+pub mod reasoning_genome;
 pub mod recursive_scheduler;
 pub mod reflection;
 pub mod router;
@@ -102,6 +103,10 @@ pub use production_runtime::{
     ProductionKernelConformanceGate, ProductionKernelConformanceMatrixReport,
     ProductionKernelConformanceReport, ProductionKernelContext, ProductionKernelOutput,
     ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
+};
+pub use reasoning_genome::{
+    GeneScissorsIntent, GenomeExpression, GenomeExpressionInput, MutationPlan, ReasoningGene,
+    ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,

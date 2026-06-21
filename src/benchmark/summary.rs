@@ -15,9 +15,9 @@ use crate::hardware::DeviceClass;
 use crate::hierarchy::TaskProfile;
 
 use super::{
-    BenchmarkEmbeddingEvidence, BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence,
-    BenchmarkReflectionEvidence, BenchmarkRuntimeArchitectureEvidence,
-    BenchmarkRuntimeDeviceExecutionEvidence,
+    BenchmarkEmbeddingEvidence, BenchmarkGenomeEvidence, BenchmarkLiveEvolutionEvidence,
+    BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence,
+    BenchmarkRuntimeArchitectureEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
 };
 
 #[derive(Debug, Clone)]
@@ -97,6 +97,7 @@ pub struct BenchmarkSummary {
     pub(super) evolution_ledger: EvolutionLedger,
     pub(super) reflection_evidence: BenchmarkReflectionEvidence,
     pub(super) live_evolution_evidence: BenchmarkLiveEvolutionEvidence,
+    pub(super) genome_evidence: BenchmarkGenomeEvidence,
     pub(super) memory_governance_evidence: BenchmarkMemoryGovernanceEvidence,
     pub(super) embedding_evidence: BenchmarkEmbeddingEvidence,
     pub(super) runtime_architecture_evidence: BenchmarkRuntimeArchitectureEvidence,

@@ -56,6 +56,8 @@ pub fn trace_json_line_with_case(
     let agent_team_messages = outcome.agent_team_plan.message_summaries(16);
     let agent_team_conflicts = outcome.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = outcome.agent_team_plan.evolution_summaries(8);
+    let reasoning_genome_mutation_intents = outcome.reasoning_genome.mutation_intents();
+    let reasoning_genome_proposal_ids = outcome.reasoning_genome.proposal_ids();
     let runtime_kv_stored = outcome.stored_runtime_kv_memory_ids.len();
     let runtime_kv_held = outcome
         .exported_runtime_kv_blocks
@@ -87,6 +89,7 @@ pub fn trace_json_line_with_case(
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
          \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
+         \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
@@ -256,6 +259,21 @@ pub fn trace_json_line_with_case(
         string_array_json(&agent_team_messages),
         string_array_json(&agent_team_conflicts),
         string_array_json(&agent_team_evolution),
+        json_escape(&outcome.reasoning_genome.genome_id),
+        json_escape(&outcome.reasoning_genome.stable_anchor_id),
+        outcome.reasoning_genome.expression_gene_count,
+        outcome.reasoning_genome.active_gene_count(),
+        outcome.reasoning_genome.aged_gene_count(),
+        outcome.reasoning_genome.malignant_gene_count(),
+        outcome.reasoning_genome.relabel_candidate_count(),
+        outcome.reasoning_genome.regeneration_candidate_count(),
+        outcome.reasoning_genome.scissors_proposal_count(),
+        string_array_json(&reasoning_genome_mutation_intents),
+        string_array_json(&reasoning_genome_proposal_ids),
+        outcome.reasoning_genome.read_only,
+        outcome.reasoning_genome.write_allowed,
+        outcome.reasoning_genome.applied,
+        outcome.reasoning_genome.youth_pressure,
         outcome.stream_reports.len(),
         outcome.used_memories.len(),
         option_u64_json(outcome.stored_memory_id),

@@ -8,6 +8,7 @@ mod device_contract;
 mod embedding;
 mod evolution;
 mod fields;
+mod genome;
 mod jsonl;
 mod memory;
 mod required_fields;
@@ -21,6 +22,7 @@ use admission::evaluate_self_evolution_admission_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
+use genome::evaluate_trace_reasoning_genome;
 use required_fields::trace_required_fields;
 use runtime_device::evaluate_trace_runtime_device_execution;
 use runtime_kv::evaluate_trace_runtime_kv;
@@ -77,6 +79,7 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_memory_feedback(line));
     failures.extend(evaluate_trace_memory_governance(line));
     failures.extend(evaluate_trace_drift(line));
+    failures.extend(evaluate_trace_reasoning_genome(line));
     failures.extend(evaluate_trace_auto_replay(line));
     failures.extend(evaluate_trace_live_evolution(line));
 

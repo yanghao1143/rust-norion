@@ -12,6 +12,7 @@ use crate::kv_cache::{
     MemoryUpdateReport, RetentionReport,
 };
 use crate::process_reward::ProcessRewardReport;
+use crate::reasoning_genome::GenomeExpression;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReflectionReport, RuntimeDiagnostics};
 use crate::router::{GenerationMetrics, RouteBudget};
@@ -248,6 +249,7 @@ pub struct InferenceOutcome {
     pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
+    pub reasoning_genome: GenomeExpression,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub retention_report: RetentionReport,

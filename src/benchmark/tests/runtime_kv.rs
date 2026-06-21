@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn gate_reports_missing_runtime_kv_import() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -113,6 +114,7 @@ fn gate_reports_missing_runtime_kv_import() {
     );
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -220,6 +222,7 @@ fn gate_reports_missing_runtime_kv_import_device_profile_coverage() {
         drift_severity: DriftSeverity::Stable,
     };
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![base.clone()],
         ..BenchmarkSummary::default()
     };
@@ -236,6 +239,7 @@ fn gate_reports_missing_runtime_kv_import_device_profile_coverage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![
             base.clone(),
             BenchmarkCaseResult {
@@ -255,6 +259,7 @@ fn gate_reports_missing_runtime_kv_import_device_profile_coverage() {
 #[test]
 fn gate_reports_missing_runtime_kv_storage() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -354,6 +359,7 @@ fn gate_reports_missing_runtime_kv_storage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -459,6 +465,7 @@ fn gate_reports_missing_runtime_kv_stored_device_profile_coverage() {
         drift_severity: DriftSeverity::Stable,
     };
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![base.clone()],
         ..BenchmarkSummary::default()
     };
@@ -475,6 +482,7 @@ fn gate_reports_missing_runtime_kv_stored_device_profile_coverage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![
             base.clone(),
             BenchmarkCaseResult {
@@ -494,6 +502,7 @@ fn gate_reports_missing_runtime_kv_stored_device_profile_coverage() {
 #[test]
 fn gate_reports_missing_runtime_kv_hold_evidence() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -604,6 +613,7 @@ fn gate_reports_missing_runtime_kv_hold_evidence() {
     );
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![BenchmarkCaseResult {
             runtime_kv_stored: 0,
             drift_severity: DriftSeverity::Watch,
@@ -704,6 +714,7 @@ fn gate_reports_missing_runtime_kv_hold_device_profile_coverage() {
         drift_severity: DriftSeverity::Watch,
     };
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![base.clone()],
         ..BenchmarkSummary::default()
     };
@@ -720,6 +731,7 @@ fn gate_reports_missing_runtime_kv_hold_device_profile_coverage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         results: vec![
             base.clone(),
             BenchmarkCaseResult {

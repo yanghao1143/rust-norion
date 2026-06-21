@@ -3,6 +3,7 @@ use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
 use crate::process_reward::{ProcessRewardInput, RewardAction};
+use crate::reasoning_genome::{GenomeExpressionInput, ReasoningGenome};
 use crate::recursive_scheduler::RecursiveScheduler;
 use crate::reflection::DraftToken;
 use crate::router::RoutingContext;
@@ -310,6 +311,26 @@ impl NoironEngine {
             let feedback_note = process_reward_feedback_note(&process_reward, reward_metrics);
             process_reward.notes.push(feedback_note);
         }
+        let runtime_kv_stored_count = stored_runtime_kv_memory_ids.len();
+        let runtime_kv_hold =
+            exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
+        let reasoning_genome =
+            ReasoningGenome::default_for_profile(request.profile).express(GenomeExpressionInput {
+                profile: request.profile,
+                quality: report.quality,
+                process_reward: process_reward.total,
+                contradiction_count: report.contradictions.len(),
+                critical_reflection_issue_count: report.critical_issue_count(),
+                revision_action_count: report.revision_actions.len(),
+                used_memories: used_memories.len(),
+                memory_feedback_updates: memory_feedback.total_updates(),
+                route_attention_fraction: route_budget.attention_fraction,
+                agent_team_collision_free: agent_team_plan.collision_free(),
+                toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
+                drift_memory_write_allowed: drift_report.allow_memory_write,
+                drift_rollback: drift_report.rollback_adaptive,
+                runtime_kv_hold,
+            });
 
         let router_threshold_after = self.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
@@ -420,6 +441,7 @@ impl NoironEngine {
             stored_runtime_kv_memory_ids,
             drift_report,
             process_reward,
+            reasoning_genome,
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
             retention_report,

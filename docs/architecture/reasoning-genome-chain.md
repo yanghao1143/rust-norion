@@ -50,8 +50,17 @@ Gene Scissors is the controlled editor for the Reasoning Genome Chain. It is
 allowed to propose edits, but it is not allowed to bypass validation or mutate
 private runtime state directly.
 
+The software analogy for "keeping the DNA young" is not biological immortality.
+In rust-norion it means keeping reasoning strategies fresh: aged genes are
+relabelled with their current purpose, contaminated genes are quarantined
+before they can be reused, and replacements regenerate from stable anchors or
+high-fitness sibling genes after validation.
+
 Supported edit intents:
 
+- `relabel`: refresh the gene label, purpose, and tags when a useful gene has
+  aged, drifted in meaning, or lost enough metadata that the engine no longer
+  knows what it is for.
 - `cut`: remove or disable a low-fitness gene from a profile-specific chain.
 - `splice`: insert a validated gene from an experiment, replay run, or clean
   operator-approved proposal.
@@ -62,10 +71,108 @@ Supported edit intents:
   force the result through dry-run gates before admission.
 - `rollback`: restore the previous stable genome when a new chain regresses
   quality, latency, safety, or memory hygiene.
+- `regenerate`: rebuild a young replacement gene from a stable rollback anchor,
+  high-fitness siblings, and clean replay evidence after a malignant gene has
+  been quarantined.
 
 Every durable edit must carry a `MutationPlan` with the changed gene ids,
 source evidence ids, expected phenotype, validation commands, rollback target,
 and admission state. Preview mode must be read-only.
+
+## Aging, Malignancy, and Regeneration
+
+An aged gene is not automatically bad. It may still be useful but stale: its
+label can be wrong, its purpose can be too broad, or its fitness can have
+fallen because the task profile changed. Aged genes should first produce a
+read-only `relabel` plan that refreshes metadata and reminds the engine what
+the gene is for.
+
+A malignant gene is treated as contaminated strategy, not as something to
+repair in place. Malignancy can be triggered by repeated drift, unsafe memory
+admission, raw prompt leakage risk, high contradiction pressure, benchmark
+regression, or repeated compiler/test failure. The safe sequence is:
+
+1. detect the malformed behavior with bounded evidence
+2. quarantine the gene so it cannot influence expression
+3. cut or disable the contaminated strategy only after a rollback anchor exists
+4. regenerate a replacement from stable anchors and validated high-fitness
+   sibling genes
+5. admit the regenerated gene only after trace, tests, benchmark, drift, and
+   operator approval gates pass
+
+The "youth pressure" metric tracks how strongly a genome needs refresh. It
+should rise when quality, process reward, memory hygiene, reflection, or drift
+evidence worsens. It should fall only when validated relabel, quarantine,
+rollback, or regeneration evidence proves the chain is healthy again.
+
+## Dual-Chain Storage
+
+DNA double-strand inspiration maps to two software chains, not to biological
+simulation:
+
+- `express_chain`: active, trace-visible genes that can influence routing,
+  hierarchy, memory retrieval, reflection, Toolsmith, Agent Team, or budget
+  posture for the current task profile.
+- `memory_chain`: latent, disk-backed evidence that explains where a gene came
+  from: stable anchor id, source experience ids, KV/gist memory ids, fitness
+  summaries, validation gates, rejection reasons, and rollback links.
+
+The express chain is small and fast enough to project during inference. The
+memory chain is larger and append-only, so it can preserve provenance without
+loading raw private prompts, raw `.ndkv` payloads, or copied third-party
+internals. A future admitted mutation must update both chains atomically:
+expression metadata for runtime use, and memory-chain evidence for audit and
+rollback.
+
+## Splicing and Variant Repair
+
+`dna_splicer` should treat long context and memory as `GeneSegment` records:
+token range, position anchors, source hash, profile, tenant/session scope,
+semantic gist, KV residency hint, fitness score, and validation status.
+Segments can be classified as:
+
+- `exon`: useful segment allowed into expression or KV prefill.
+- `intron`: redundant or low-value segment kept only as cold evidence or
+  omitted from expensive attention.
+- `variant`: malformed, drifting, privacy-risk, or schema-invalid segment that
+  must be isolated before reuse.
+
+`MutDetector` should report insertion, deletion, truncation, stale-label,
+drift, privacy, KV-shape, and schema variants as read-only findings.
+`MutFixer` should not write directly. It should produce `MutationPlan`
+proposals such as re-slice with more overlap, relabel an aged gene, quarantine
+a malignant segment, restore an attention sink, regenerate from a stable
+anchor, or roll back to the last admitted chain.
+
+## Reference Mapping
+
+Public projects and papers are research references, not code sources. The
+project should keep a clean-room boundary: copy no third-party implementation
+details unless license review and attribution are explicit.
+
+- Bio-inspired references:
+  - Evo/Evo2: long DNA sequence modeling and multi-scale context inspire the
+    express/memory-chain split and long-range gene expression.
+  - SpliceBERT and SpliceTransformer: splice/variant-effect ideas inspire
+    `dna_splicer`, `MutDetector`, and local edit impact scoring.
+  - AlphaGenome: variant scoring inspires read-only mutation impact previews;
+    model/API terms require non-commercial caution.
+  - GeneFormer: hierarchy and perturbation ideas inspire networked gene
+    fitness and task-context expression.
+  - TrinityDNA: paper-level multi-scale genome modeling reference only; do not
+    assume reusable code.
+- Long-context and KV references:
+  - CEPE and StreamingLLM are the safest engineering references for parallel
+    context chunks, attention sinks, sliding windows, and segment-local KV.
+  - RAPID, Omni-DNA/SEQPACK, and ChunkRAG-style work should be used as
+    algorithmic inspiration unless license and official code status are
+    independently cleared.
+- Rust runtime and gateway references:
+  - Candle, mistral.rs, FastLLM, and Axum/OpenAI-compatible gateway projects
+    inform runtime traits, pipeline stages, prompt/KV cache metadata,
+    telemetry, and tenant isolation.
+  - Migration should be by behavior specification and tests: no direct source
+    copying, no third-party weight dependency in the core path.
 
 ## Safety Gates
 
@@ -115,6 +222,8 @@ and admission state. Preview mode must be read-only.
    explicit operator approval.
 7. Add task-specific genomes for English, Chinese, Rust coding, long-context,
    and local-tool workflows.
+8. Add aging relabel, malignant quarantine/cut, regeneration, and youth-pressure
+   gates for long-running genomes.
 
 ## Non-Goals
 

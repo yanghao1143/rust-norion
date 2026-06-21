@@ -64,6 +64,19 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"gate_passed\":"));
     assert!(line.contains("\"agent_team\":"));
     assert!(line.contains("\"collision_free\":"));
+    assert!(line.contains("\"reasoning_genome\":"));
+    assert!(line.contains("\"genome_id\":\"genome:coding:v1\""));
+    assert!(line.contains("\"stable_anchor_id\":\"genome:coding:stable\""));
+    assert!(line.contains("\"gene_count\":"));
+    assert!(line.contains("\"active_genes\":"));
+    assert!(line.contains("\"aged_genes\":"));
+    assert!(line.contains("\"malignant_genes\":"));
+    assert!(line.contains("\"relabel_candidates\":"));
+    assert!(line.contains("\"regeneration_candidates\":"));
+    assert!(line.contains("\"gene_scissors_proposals\":"));
+    assert!(line.contains("\"mutation_intents\":"));
+    assert!(line.contains("\"proposal_ids\":"));
+    assert!(line.contains("\"youth_pressure\":"));
     assert!(line.contains("\"drift\":"));
     assert!(line.contains("\"process_reward\":"));
     assert!(line.contains("\"auto_replay\":"));
@@ -187,6 +200,61 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"max_merges\":"));
     assert!(line.contains("\"memory_compaction\":"));
     assert!(line.ends_with('}'));
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line("trace genome write gate", TaskProfile::Coding, 5, &outcome),
+        "reasoning_genome",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_applied_preview() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome applied gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome applied gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"mutation_applied\":false",
+        "\"mutation_applied\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome mutation_applied")),
+        "{failures:?}"
+    );
 }
 
 #[test]

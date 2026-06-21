@@ -1,6 +1,7 @@
 use super::super::{
-    BenchmarkEmbeddingEvidence, BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence,
-    BenchmarkReflectionEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
+    BenchmarkEmbeddingEvidence, BenchmarkGenomeEvidence, BenchmarkLiveEvolutionEvidence,
+    BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence,
+    BenchmarkRuntimeDeviceExecutionEvidence,
 };
 use super::BenchmarkSummary;
 
@@ -11,6 +12,31 @@ impl BenchmarkSummary {
 
     pub fn live_evolution_evidence(&self) -> BenchmarkLiveEvolutionEvidence {
         self.live_evolution_evidence.clone()
+    }
+
+    pub fn genome_evidence(&self) -> BenchmarkGenomeEvidence {
+        self.genome_evidence.clone()
+    }
+
+    pub fn reasoning_genome_expression_cases(&self) -> usize {
+        self.genome_evidence.expression_cases
+    }
+
+    pub fn reasoning_genome_expression_device_profiles(&self) -> usize {
+        self.genome_evidence.expression_device_profiles()
+    }
+
+    pub fn gene_scissors_proposal_cases(&self) -> usize {
+        self.genome_evidence.gene_scissors_proposal_cases
+    }
+
+    pub fn gene_scissors_proposal_device_profiles(&self) -> usize {
+        self.genome_evidence
+            .gene_scissors_proposal_device_profiles()
+    }
+
+    pub fn total_reasoning_genome_failures(&self) -> usize {
+        self.genome_evidence.failures.len()
     }
 
     pub fn memory_governance_evidence(&self) -> BenchmarkMemoryGovernanceEvidence {

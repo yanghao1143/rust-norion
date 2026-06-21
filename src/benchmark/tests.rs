@@ -11,6 +11,8 @@ mod coverage;
 mod embedding;
 #[path = "tests/evolution_ledger.rs"]
 mod evolution_ledger;
+#[path = "tests/genome.rs"]
+mod genome;
 #[path = "tests/live_evolution.rs"]
 mod live_evolution;
 #[path = "tests/live_memory_feedback.rs"]

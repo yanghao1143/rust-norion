@@ -5,6 +5,7 @@ mod cases;
 mod display;
 mod embedding_evidence;
 mod gate;
+mod genome_evidence;
 mod kv_quant;
 mod live_evidence;
 mod memory_evidence;
@@ -19,6 +20,7 @@ use cases::long_context_benchmark_prompt;
 pub use cases::{BenchmarkCase, default_benchmark_cases};
 pub use embedding_evidence::BenchmarkEmbeddingEvidence;
 pub use gate::{BenchmarkGate, BenchmarkGateReport};
+pub use genome_evidence::BenchmarkGenomeEvidence;
 pub use kv_quant::{
     KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
     KvQuantBenchmarkSummary,

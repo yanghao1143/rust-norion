@@ -101,6 +101,7 @@ fn gate_accepts_memory_governance_activity_evidence() {
         DeviceClass::CpuOnly,
     );
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence {
             cases: 2,
             retention_activity_cases: 1,
@@ -192,6 +193,7 @@ fn gate_reports_missing_memory_governance_coverage() {
 #[test]
 fn gate_reports_memory_governance_failures() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence {
             cases: 1,
             failures: vec!["cpu:bad retention stale_after must be > 0".to_owned()],

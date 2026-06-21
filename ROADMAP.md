@@ -223,10 +223,12 @@ The north star is now explicitly scoped around five core requirements:
     inference, and fitness comes from process reward, compiler/test/benchmark
     evidence, reflection diagnostics, latency, memory usefulness, and drift.
     Gene Scissors is the controlled editor for this genome. It can propose
-    cutting weak genes, quarantining contaminated genes, splicing validated
-    genes, or rolling back low-fitness changes, but every durable edit must
-    pass dry-run evidence, trace/schema gates, benchmark floors, rollback caps,
-    and human/operator approval before it can mutate persisted adaptive state.
+    relabelling aged genes so their current purpose is explicit, cutting weak
+    genes, quarantining malignant genes, regenerating young replacement genes
+    from stable anchors, splicing validated genes, or rolling back low-fitness
+    changes, but every durable edit must pass dry-run evidence, trace/schema
+    gates, benchmark floors, rollback caps, and human/operator approval before
+    it can mutate persisted adaptive state.
 
 ## Target Module Fusion / 目标模块融合
 
@@ -285,6 +287,23 @@ modules, not external product dependencies:
   Gene Scissors can only edit the genome through auditable proposals, dry-run
   traces, process-reward fitness, Rust compiler/tests/benchmarks, drift gates,
   and rollback ledgers, so self-evolution remains reviewable and reversible.
+  Aged genes should first produce relabel plans that refresh label, purpose,
+  and tags. Malignant genes should be quarantined before cut/regeneration, and
+  regenerated genes must come from stable anchors or high-fitness siblings
+  rather than from raw private prompts.
+- DNA-inspired splicing and segment repair:
+  The next genome layer should add an express-chain / memory-chain split:
+  active genes stay small and trace-visible, while disk-backed memory-chain
+  evidence keeps source experience ids, KV/gist ids, stable anchors, fitness,
+  validation gates, and rollback links. A future `dna_splicer` should classify
+  `GeneSegment` records as exon, intron, or variant; `MutDetector` should
+  report stale labels, drift, privacy, schema, truncation, insertion/deletion,
+  and KV-shape variants; `MutFixer` should emit read-only mutation plans for
+  relabel, quarantine, repair, regenerate, or rollback. Public references such
+  as Evo/Evo2, SpliceBERT, SpliceTransformer, AlphaGenome, GeneFormer, CEPE,
+  StreamingLLM, Candle, mistral.rs, and Rust AI gateways guide behavior
+  specifications only. Code from projects with unclear or incompatible terms
+  stays out of the core implementation unless independently reviewed.
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated

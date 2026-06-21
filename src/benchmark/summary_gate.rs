@@ -3,6 +3,7 @@ mod basic;
 mod device_drift;
 mod evolution_live;
 mod evolution_replay;
+mod genome;
 mod memory;
 mod runtime;
 
@@ -20,6 +21,7 @@ impl BenchmarkSummary {
         evolution_live::evaluate(self, gate, &mut failures);
         evolution_replay::evaluate(self, gate, &mut failures);
         runtime::evaluate(self, gate, &mut failures);
+        genome::evaluate(self, gate, &mut failures);
         memory::evaluate(self, gate, &mut failures);
         device_drift::evaluate(self, gate, &mut failures);
 

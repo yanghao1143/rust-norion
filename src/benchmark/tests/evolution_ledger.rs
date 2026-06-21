@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn gate_reports_missing_evolution_ledger_coverage() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -200,6 +201,7 @@ fn gate_reports_missing_evolution_ledger_coverage() {
     }
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
@@ -454,6 +456,7 @@ fn gate_reports_missing_evolution_ledger_coverage() {
 #[test]
 fn gate_reports_evolution_ledger_drift_rollback_failures() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
