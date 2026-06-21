@@ -254,10 +254,13 @@ impl SelfEvolutionAdmissionEvidence {
         report: &KvFusionPolicyObservationDryRunReport,
     ) -> Self {
         self.record_adaptive_preview_safety(AdaptivePreviewSafety {
-            read_only: true,
+            read_only: report.reward_preview_source_read_only,
             report_only: true,
             preview_only: report.preview_only,
-            write_allowed: report.policy_write_allowed,
+            write_allowed: report.policy_write_allowed
+                || report.reward_preview_source_memory_store_write_allowed
+                || report.reward_preview_memory_store_write_allowed
+                || report.reward_preview_kv_cache_write_allowed,
             applied: report.policy_observation_applied,
         });
         let ready = report.can_use_policy_observation_preview();
@@ -271,10 +274,14 @@ impl SelfEvolutionAdmissionEvidence {
             "adaptive-preview:kv-fusion-policy-observation:{candidate}:ready-{ready}"
         ));
         self.review_packet.push_content_digest(self_evolution_stable_digest(&format!(
-            "candidate={};kv_fusion_policy_observation_ready={ready};source_count={};preview_only={};write_allowed={};applied={}",
+            "candidate={};kv_fusion_policy_observation_ready={ready};source_count={};source_read_only={};source_memory_store_write_allowed={};preview_only={};memory_store_write_allowed={};kv_cache_write_allowed={};policy_write_allowed={};applied={}",
             self.candidate_id,
             self.adaptive_preview_source_count,
+            report.reward_preview_source_read_only,
+            report.reward_preview_source_memory_store_write_allowed,
             report.preview_only,
+            report.reward_preview_memory_store_write_allowed,
+            report.reward_preview_kv_cache_write_allowed,
             report.policy_write_allowed,
             report.policy_observation_applied
         )));
@@ -805,8 +812,26 @@ fn kv_fusion_policy_observation_preview_blocked_reasons(
     report: &KvFusionPolicyObservationDryRunReport,
 ) -> Vec<String> {
     let mut reasons = Vec::new();
+    if !report.reward_preview_source_read_only {
+        reasons.push("self_evolution_admission_kv_fusion_preview_source_not_read_only".to_owned());
+    }
+    if report.reward_preview_source_memory_store_write_allowed {
+        reasons.push(
+            "self_evolution_admission_kv_fusion_preview_source_memory_store_write_allowed"
+                .to_owned(),
+        );
+    }
     if !report.preview_only {
         reasons.push("self_evolution_admission_kv_fusion_preview_not_preview_only".to_owned());
+    }
+    if report.reward_preview_memory_store_write_allowed {
+        reasons.push(
+            "self_evolution_admission_kv_fusion_preview_memory_store_write_allowed".to_owned(),
+        );
+    }
+    if report.reward_preview_kv_cache_write_allowed {
+        reasons
+            .push("self_evolution_admission_kv_fusion_preview_kv_cache_write_allowed".to_owned());
     }
     if report.policy_write_allowed {
         reasons.push("self_evolution_admission_kv_fusion_preview_write_allowed".to_owned());
@@ -1327,10 +1352,10 @@ mod tests {
         assert!(!evidence.hierarchy_adjustment_preview_ready);
         assert!(!evidence.kv_fusion_policy_observation_preview_ready);
         assert_eq!(evidence.adaptive_preview_source_count, 2);
-        assert!(evidence.adaptive_preview_read_only);
+        assert!(!evidence.adaptive_preview_read_only);
         assert!(evidence.adaptive_preview_report_only);
         assert!(evidence.adaptive_preview_preview_only);
-        assert!(!evidence.adaptive_preview_write_allowed);
+        assert!(evidence.adaptive_preview_write_allowed);
         assert!(!evidence.adaptive_preview_applied);
         assert!(
             evidence
@@ -1346,6 +1371,18 @@ mod tests {
                 .adaptive_preview_blocked_reasons
                 .contains(&"self_evolution_admission_kv_fusion_preview_not_ready".to_owned())
         );
+        assert!(
+            evidence
+                .adaptive_preview_blocked_reasons
+                .iter()
+                .any(|reason| {
+                    reason == "self_evolution_admission_kv_fusion_preview_source_not_read_only"
+                })
+        );
+        assert!(evidence.adaptive_preview_blocked_reasons.iter().any(|reason| {
+            reason
+                == "self_evolution_admission_kv_fusion_preview_source_memory_store_write_allowed"
+        }));
         assert!(evidence.adaptive_preview_blocked_reasons.iter().any(|reason| {
             reason
                 == "self_evolution_admission_kv_fusion_preview_blocked=recall_attribution_not_read_only"
@@ -1355,6 +1392,8 @@ mod tests {
 
         assert!(!report.admitted_for_human_review);
         assert!(!report.adaptive_preview_evidence_present);
+        assert!(!report.adaptive_preview_read_only);
+        assert!(report.adaptive_preview_write_allowed);
         assert!(
             report
                 .blocked_reasons

@@ -267,39 +267,34 @@ fn evaluate_adaptive_preview(
         failures.push("self_evolution_admission adaptive_preview object is missing".to_owned());
         return;
     };
-    require_bool(
+    let read_only = require_bool_value(
         failures,
         adaptive_preview,
         "read_only",
-        true,
         "self_evolution_admission adaptive_preview",
     );
-    require_bool(
+    let report_only = require_bool_value(
         failures,
         adaptive_preview,
         "report_only",
-        true,
         "self_evolution_admission adaptive_preview",
     );
-    require_bool(
+    let preview_only = require_bool_value(
         failures,
         adaptive_preview,
         "preview_only",
-        true,
         "self_evolution_admission adaptive_preview",
     );
-    require_bool(
+    let write_allowed = require_bool_value(
         failures,
         adaptive_preview,
         "write_allowed",
-        false,
         "self_evolution_admission adaptive_preview",
     );
-    require_bool(
+    let applied = require_bool_value(
         failures,
         adaptive_preview,
         "applied",
-        false,
         "self_evolution_admission adaptive_preview",
     );
 
@@ -315,6 +310,38 @@ fn evaluate_adaptive_preview(
             "self_evolution_admission admitted packet requires adaptive preview evidence"
                 .to_owned(),
         );
+    }
+    if admitted_for_human_review == Some(true) {
+        if read_only != Some(true) {
+            failures.push(
+                "self_evolution_admission admitted packet requires adaptive_preview read_only=true"
+                    .to_owned(),
+            );
+        }
+        if report_only != Some(true) {
+            failures.push(
+                "self_evolution_admission admitted packet requires adaptive_preview report_only=true"
+                    .to_owned(),
+            );
+        }
+        if preview_only != Some(true) {
+            failures.push(
+                "self_evolution_admission admitted packet requires adaptive_preview preview_only=true"
+                    .to_owned(),
+            );
+        }
+        if write_allowed != Some(false) {
+            failures.push(
+                "self_evolution_admission admitted packet requires adaptive_preview write_allowed=false"
+                    .to_owned(),
+            );
+        }
+        if applied != Some(false) {
+            failures.push(
+                "self_evolution_admission admitted packet requires adaptive_preview applied=false"
+                    .to_owned(),
+            );
+        }
     }
 }
 
@@ -366,6 +393,21 @@ fn require_bool(
             "{context} {field}={actual} does not match required {expected}"
         )),
         None => failures.push(format!("{context} {field} is missing")),
+    }
+}
+
+fn require_bool_value(
+    failures: &mut Vec<String>,
+    object: &str,
+    field: &str,
+    context: &str,
+) -> Option<bool> {
+    match extract_json_bool_field(object, field) {
+        Some(value) => Some(value),
+        None => {
+            failures.push(format!("{context} {field} is missing"));
+            None
+        }
     }
 }
 

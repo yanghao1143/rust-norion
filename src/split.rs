@@ -67,6 +67,10 @@ pub mod bridge {
         pub policy_observation_ready: bool,
         pub policy_observation_applied: bool,
         pub policy_write_allowed: bool,
+        pub reward_preview_source_read_only: bool,
+        pub reward_preview_source_memory_store_write_allowed: bool,
+        pub reward_preview_memory_store_write_allowed: bool,
+        pub reward_preview_kv_cache_write_allowed: bool,
         pub reward: f32,
         pub previous_similarity_threshold: f32,
         pub preview_similarity_threshold: f32,
@@ -197,16 +201,21 @@ pub mod bridge {
                 && self.policy_observation_ready
                 && !self.policy_observation_applied
                 && !self.policy_write_allowed
+                && self.reward_preview_source_read_only
+                && !self.reward_preview_source_memory_store_write_allowed
+                && !self.reward_preview_memory_store_write_allowed
+                && !self.reward_preview_kv_cache_write_allowed
                 && self.threshold_within_bounds
                 && self.blocked_reasons.is_empty()
         }
 
         pub fn summary_line(&self) -> String {
             format!(
-                "kv_fusion_policy_observation_dry_run preview_only={} ready={} applied={} reward={:.3} previous_threshold={:.3} preview_threshold={:.3} changed={} blocked_reasons={}",
+                "kv_fusion_policy_observation_dry_run preview_only={} ready={} applied={} source_read_only={} reward={:.3} previous_threshold={:.3} preview_threshold={:.3} changed={} blocked_reasons={}",
                 self.preview_only,
                 self.policy_observation_ready,
                 self.policy_observation_applied,
+                self.reward_preview_source_read_only,
                 self.reward,
                 self.previous_similarity_threshold,
                 self.preview_similarity_threshold,
@@ -254,6 +263,10 @@ pub mod bridge {
                 && threshold_within_reward_observation_bounds(preview_similarity_threshold);
         let telemetry = kv_fusion_policy_observation_dry_run_telemetry(
             policy_observation_ready,
+            preview.source_read_only,
+            preview.source_memory_store_write_allowed,
+            preview.memory_store_write_allowed,
+            preview.kv_cache_write_allowed,
             preview.reward,
             previous_similarity_threshold,
             preview_similarity_threshold,
@@ -267,6 +280,11 @@ pub mod bridge {
             policy_observation_ready,
             policy_observation_applied: false,
             policy_write_allowed: false,
+            reward_preview_source_read_only: preview.source_read_only,
+            reward_preview_source_memory_store_write_allowed: preview
+                .source_memory_store_write_allowed,
+            reward_preview_memory_store_write_allowed: preview.memory_store_write_allowed,
+            reward_preview_kv_cache_write_allowed: preview.kv_cache_write_allowed,
             reward: preview.reward,
             previous_similarity_threshold,
             preview_similarity_threshold,
@@ -343,6 +361,10 @@ pub mod bridge {
     #[allow(clippy::too_many_arguments)]
     fn kv_fusion_policy_observation_dry_run_telemetry(
         policy_observation_ready: bool,
+        reward_preview_source_read_only: bool,
+        reward_preview_source_memory_store_write_allowed: bool,
+        reward_preview_memory_store_write_allowed: bool,
+        reward_preview_kv_cache_write_allowed: bool,
         reward: f32,
         previous_similarity_threshold: f32,
         preview_similarity_threshold: f32,
@@ -355,6 +377,18 @@ pub mod bridge {
             "kv_fusion_policy_observation_dry_run_preview_only=true".to_owned(),
             "kv_fusion_policy_observation_dry_run_policy_write_allowed=false".to_owned(),
             "kv_fusion_policy_observation_dry_run_applied=false".to_owned(),
+            format!(
+                "kv_fusion_policy_observation_dry_run_reward_preview_source_read_only={reward_preview_source_read_only}"
+            ),
+            format!(
+                "kv_fusion_policy_observation_dry_run_reward_preview_source_memory_store_write_allowed={reward_preview_source_memory_store_write_allowed}"
+            ),
+            format!(
+                "kv_fusion_policy_observation_dry_run_reward_preview_memory_store_write_allowed={reward_preview_memory_store_write_allowed}"
+            ),
+            format!(
+                "kv_fusion_policy_observation_dry_run_reward_preview_kv_cache_write_allowed={reward_preview_kv_cache_write_allowed}"
+            ),
             format!("kv_fusion_policy_observation_dry_run_ready={policy_observation_ready}"),
             format!("kv_fusion_policy_observation_dry_run_reward={reward:.3}"),
             format!(
@@ -610,6 +644,10 @@ mod tests {
         assert!(dry_run.policy_observation_ready);
         assert!(!dry_run.policy_observation_applied);
         assert!(!dry_run.policy_write_allowed);
+        assert!(dry_run.reward_preview_source_read_only);
+        assert!(!dry_run.reward_preview_source_memory_store_write_allowed);
+        assert!(!dry_run.reward_preview_memory_store_write_allowed);
+        assert!(!dry_run.reward_preview_kv_cache_write_allowed);
         assert!(dry_run.can_use_policy_observation_preview());
         assert_eq!(dry_run.reward, 0.24);
         assert_eq!(dry_run.previous_similarity_threshold, 0.92);
@@ -660,6 +698,10 @@ mod tests {
         assert!(!dry_run.policy_observation_ready);
         assert!(!dry_run.policy_observation_applied);
         assert!(!dry_run.policy_write_allowed);
+        assert!(!dry_run.reward_preview_source_read_only);
+        assert!(dry_run.reward_preview_source_memory_store_write_allowed);
+        assert!(!dry_run.reward_preview_memory_store_write_allowed);
+        assert!(!dry_run.reward_preview_kv_cache_write_allowed);
         assert!(!dry_run.can_use_policy_observation_preview());
         assert_eq!(dry_run.reward, 0.0);
         assert_eq!(dry_run.previous_similarity_threshold, 0.92);
@@ -682,6 +724,9 @@ mod tests {
                 .iter()
                 .any(|line| line == "kv_fusion_policy_observation_dry_run_ready=false")
         );
+        assert!(dry_run.telemetry.iter().any(|line| {
+            line == "kv_fusion_policy_observation_dry_run_reward_preview_source_read_only=false"
+        }));
     }
 
     #[test]

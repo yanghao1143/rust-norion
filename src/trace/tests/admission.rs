@@ -112,6 +112,61 @@ fn self_evolution_admission_trace_append_is_gate_consumable() {
 }
 
 #[test]
+fn self_evolution_admission_trace_schema_accepts_blocked_unsafe_adaptive_preview() {
+    let recall_report = crate::split::agent::AgentRecallOutcomeAttributionReport {
+        attributions: vec![crate::split::agent::AgentRecallOutcomeAttribution {
+            task_id: "runtime-recall".to_owned(),
+            record_id: "runtime_kv:l0h0:0-8".to_owned(),
+            source: "runtime_kv".to_owned(),
+            action: crate::split::agent::AgentRecallOutcomeAttributionAction::Penalize,
+            amount: 0.32,
+            reason_codes: vec!["execution_failed".to_owned()],
+        }],
+        reinforced_count: 0,
+        penalized_count: 1,
+        skipped_rejected_recall_count: 0,
+        skipped_missing_outcome_task_ids: Vec::new(),
+        read_only: false,
+        memory_store_write_allowed: true,
+        telemetry: Vec::new(),
+    };
+    let reward_preview =
+        crate::split::bridge::recall_outcome_attribution_to_kv_fusion_reward_preview(
+            &recall_report,
+        );
+    let kv_preview = crate::split::bridge::kv_fusion_reward_policy_observation_dry_run(
+        &reward_preview,
+        crate::split::core::ReinforcedKvFusionPolicy::new(0.92, 64),
+    );
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        "trace-blocked-unsafe-kv-preview",
+        EvolutionLedger {
+            replay_rust_check_items: 1,
+            replay_rust_check_passed: 1,
+            replay_rust_check_failed: 0,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_kv_fusion_policy_observation_preview_report(&kv_preview);
+    let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+    assert!(!report.admitted_for_human_review);
+    assert!(!report.adaptive_preview_read_only);
+    assert!(report.adaptive_preview_write_allowed);
+
+    let line = report.json_line();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"read_only\":false"));
+    assert!(line.contains("\"write_allowed\":true"));
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
 fn self_evolution_admission_trace_schema_rejects_write_and_block_mismatch() {
     let line = admitted_self_evolution_admission_line()
         .replacen(
@@ -136,6 +191,24 @@ fn self_evolution_admission_trace_schema_rejects_write_and_block_mismatch() {
         failures
             .iter()
             .any(|failure| failure.contains("requires blocked reasons")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn self_evolution_admission_trace_schema_rejects_admitted_unsafe_adaptive_preview() {
+    let line = replace_in_trace_object(
+        &admitted_self_evolution_admission_line(),
+        "adaptive_preview",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("requires adaptive_preview write_allowed=false")),
         "{failures:?}"
     );
 }
