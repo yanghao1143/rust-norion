@@ -971,6 +971,37 @@ fn operator_health_snapshot_covers_approval_and_rollback_gates() {
     cleanup(path);
 }
 
+#[test]
+fn operator_health_snapshot_reports_failed_trace_gate_without_leaking_failures() {
+    let path = temp_path("trace-schema-operator-health-failed-gate");
+    fs::write(&path, "{\"schema\":\"rust-norion-trace-v1\"}\n").unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    let snapshot = report.operator_health_snapshot();
+    let json = snapshot.json_line();
+
+    assert!(!report.passed);
+    assert_eq!(snapshot.checked_lines, 1);
+    assert_eq!(snapshot.failure_count, report.failures.len());
+    assert!(snapshot.failure_count > 0);
+
+    let trace_gate = snapshot.section("trace_gate").unwrap();
+    assert!(trace_gate.data_present);
+    assert!(trace_gate.review_required);
+    assert!(trace_gate.blocked);
+    assert_eq!(trace_gate.status(), "blocked");
+    assert_eq!(
+        trace_gate.metric("failure_count"),
+        Some(report.failures.len())
+    );
+
+    assert!(json.contains("\"failure_count\":"));
+    assert!(json.contains("\"status\":\"blocked\""));
+    assert!(!json.contains("missing trace field"));
+    assert!(!json.contains("prompt_preview"));
+    cleanup(path);
+}
+
 fn self_evolution_experiment_passing_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {
     let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
         NoironRouter::new().state(),
