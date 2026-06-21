@@ -4,9 +4,9 @@ use std::path::Path;
 
 use super::evaluate_trace_schema_line;
 use super::fields::{
-    extract_json_bool_field, extract_json_f32_field, extract_json_string_array_field,
-    extract_json_string_field, extract_json_usize_field, extract_last_json_string_array_field,
-    json_escape, json_object_after_field, trace_note_bool,
+    extract_json_bool_field, extract_json_f32_field, extract_json_nullable_u64_field,
+    extract_json_string_array_field, extract_json_string_field, extract_json_usize_field,
+    extract_last_json_string_array_field, json_escape, json_object_after_field, trace_note_bool,
 };
 
 pub const OPERATOR_HEALTH_SCHEMA: &str = "rust-norion-operator-health-v1";
@@ -83,6 +83,7 @@ pub struct OperatorHealthSnapshot {
     pub passed: bool,
     pub checked_lines: usize,
     pub failure_count: usize,
+    pub trace_ids: Vec<u64>,
     pub sections: Vec<OperatorHealthSection>,
 }
 
@@ -99,11 +100,13 @@ impl OperatorHealthSnapshot {
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            "{{\"schema\":\"{}\",\"passed\":{},\"checked_lines\":{},\"failure_count\":{},\"sections\":[{}]}}",
+            "{{\"schema\":\"{}\",\"passed\":{},\"checked_lines\":{},\"failure_count\":{},\"trace_id_count\":{},\"trace_ids\":{},\"sections\":[{}]}}",
             json_escape(self.schema),
             self.passed,
             self.checked_lines,
             self.failure_count,
+            self.trace_ids.len(),
+            u64_array_json(&self.trace_ids),
             sections
         )
     }
@@ -113,6 +116,7 @@ impl OperatorHealthSnapshot {
 pub struct TraceSchemaGateReport {
     pub passed: bool,
     pub checked_lines: usize,
+    pub trace_experience_ids: Vec<u64>,
     pub rust_check_events: usize,
     pub rust_check_passed: usize,
     pub rust_check_failed: usize,
@@ -528,6 +532,7 @@ impl TraceSchemaGateReport {
             vec![
                 OperatorHealthMetric::new("checked_lines", self.checked_lines),
                 OperatorHealthMetric::new("failure_count", self.failures.len()),
+                OperatorHealthMetric::new("trace_id_count", self.trace_experience_ids.len()),
                 OperatorHealthMetric::new("runtime_error_events", self.runtime_error_events),
                 OperatorHealthMetric::new("runtime_timeout_events", self.runtime_timeout_events),
             ],
@@ -924,6 +929,7 @@ impl TraceSchemaGateReport {
             passed: self.passed,
             checked_lines: self.checked_lines,
             failure_count: self.failures.len(),
+            trace_ids: self.trace_experience_ids.clone(),
             sections,
         }
     }
@@ -953,9 +959,19 @@ fn operator_health_section_json(section: &OperatorHealthSection) -> String {
     )
 }
 
+fn u64_array_json(values: &[u64]) -> String {
+    let values = values
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
+}
+
 pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSchemaGateReport> {
     let content = fs::read_to_string(path)?;
     let mut checked_lines = 0;
+    let mut trace_experience_ids = Vec::new();
     let mut rust_check_events = 0;
     let mut rust_check_passed = 0;
     let mut rust_check_failed = 0;
@@ -1171,6 +1187,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         }
 
         checked_lines += 1;
+        if let Some(experience_id) = extract_json_nullable_u64_field(line, "experience_id") {
+            trace_experience_ids.push(experience_id);
+        }
         if let Some(summary) = rust_check_trace_gate_summary(line) {
             rust_check_events += summary.events;
             rust_check_passed += summary.passed;
@@ -1432,6 +1451,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     Ok(TraceSchemaGateReport {
         passed: failures.is_empty(),
         checked_lines,
+        trace_experience_ids,
         rust_check_events,
         rust_check_passed,
         rust_check_failed,

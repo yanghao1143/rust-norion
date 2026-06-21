@@ -854,11 +854,16 @@ fn trace_schema_jsonl_gate_exports_redacted_operator_health_snapshot() {
     assert_eq!(snapshot.schema, OPERATOR_HEALTH_SCHEMA);
     assert_eq!(snapshot.checked_lines, 1);
     assert_eq!(snapshot.failure_count, 0);
+    assert_eq!(snapshot.trace_ids, report.trace_experience_ids);
     assert!(snapshot.passed);
 
     let trace_gate = snapshot.section("trace_gate").unwrap();
     assert_eq!(trace_gate.status(), "ready");
     assert_eq!(trace_gate.metric("checked_lines"), Some(1));
+    assert_eq!(
+        trace_gate.metric("trace_id_count"),
+        Some(snapshot.trace_ids.len())
+    );
 
     let memory = snapshot.section("memory").unwrap();
     assert!(memory.data_present);
@@ -897,6 +902,8 @@ fn trace_schema_jsonl_gate_exports_redacted_operator_health_snapshot() {
     assert_eq!(approval.status(), "missing");
 
     assert!(json.contains("\"schema\":\"rust-norion-operator-health-v1\""));
+    assert!(json.contains("\"trace_id_count\":"));
+    assert!(json.contains("\"trace_ids\":["));
     assert!(json.contains("\"name\":\"memory\""));
     assert!(json.contains("\"name\":\"genome\""));
     assert!(json.contains("\"name\":\"routing\""));
@@ -983,6 +990,7 @@ fn operator_health_snapshot_reports_failed_trace_gate_without_leaking_failures()
     assert!(!report.passed);
     assert_eq!(snapshot.checked_lines, 1);
     assert_eq!(snapshot.failure_count, report.failures.len());
+    assert!(snapshot.trace_ids.is_empty());
     assert!(snapshot.failure_count > 0);
 
     let trace_gate = snapshot.section("trace_gate").unwrap();
@@ -994,8 +1002,10 @@ fn operator_health_snapshot_reports_failed_trace_gate_without_leaking_failures()
         trace_gate.metric("failure_count"),
         Some(report.failures.len())
     );
+    assert_eq!(trace_gate.metric("trace_id_count"), Some(0));
 
     assert!(json.contains("\"failure_count\":"));
+    assert!(json.contains("\"trace_id_count\":0"));
     assert!(json.contains("\"status\":\"blocked\""));
     assert!(!json.contains("missing trace field"));
     assert!(!json.contains("prompt_preview"));
