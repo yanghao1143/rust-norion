@@ -2,16 +2,17 @@
 
 Status: R94 baseline for read-only self-evolution writer-gate consolidation.
 
-The unified writer gate is a shared evidence and decision layer for three
+The unified writer gate is a shared evidence and decision layer for four
 durable-write domains:
 
 - disk-backed memory admission
 - Reasoning Genome / Gene Scissors edits
 - self-evolution experiment-ledger promotion
+- self-goal / evolution-goal queue append packets
 
 It does not apply writes. It normalizes candidate evidence so the project can
-review memory, genome, and experiment-ledger write requests through one policy
-surface before any future apply issue is opened.
+review memory, genome, experiment-ledger, and goal-queue write requests through
+one policy surface before any future apply issue is opened.
 
 ## Default Policy
 
@@ -39,6 +40,7 @@ The baseline adapters are:
 - `UnifiedWriterGateCandidate::memory_admission_preview`
 - `UnifiedWriterGateCandidate::genome_transaction_journal`
 - `UnifiedWriterGateCandidate::experiment_promotion_preflight`
+- `UnifiedWriterGateCandidate::self_goal_queue_preview`
 
 Each adapter reduces its source to ids, counts, stable digests, source schemas,
 boolean gate evidence, and read-only/write/applied flags. Raw prompts, answers,
@@ -67,7 +69,7 @@ binding.
 schema gate aggregates:
 
 - event and record counts
-- memory/genome/experiment-ledger record counts
+- memory/genome/experiment-ledger/evolution-goal-queue record counts
 - ready/held/rejected/preview-only record counts
 - reason-code count
 - explicit-apply-required count

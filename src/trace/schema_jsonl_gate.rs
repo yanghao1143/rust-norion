@@ -420,6 +420,7 @@ pub struct TraceSchemaGateReport {
     pub unified_writer_gate_memory_records: usize,
     pub unified_writer_gate_genome_records: usize,
     pub unified_writer_gate_experiment_ledger_records: usize,
+    pub unified_writer_gate_evolution_goal_queue_records: usize,
     pub unified_writer_gate_ready_records: usize,
     pub unified_writer_gate_held_records: usize,
     pub unified_writer_gate_rejected_records: usize,
@@ -689,7 +690,7 @@ impl TraceSchemaGateReport {
             self.kv_fusion_saved_tokens
         );
         format!(
-            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={}",
+            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={}",
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
             self.self_evolution_rollback_replay_apply_held,
@@ -734,6 +735,7 @@ impl TraceSchemaGateReport {
             self.unified_writer_gate_memory_records,
             self.unified_writer_gate_genome_records,
             self.unified_writer_gate_experiment_ledger_records,
+            self.unified_writer_gate_evolution_goal_queue_records,
             self.unified_writer_gate_ready_records,
             self.unified_writer_gate_held_records,
             self.unified_writer_gate_rejected_records,
@@ -1359,6 +1361,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut unified_writer_gate_memory_records = 0;
     let mut unified_writer_gate_genome_records = 0;
     let mut unified_writer_gate_experiment_ledger_records = 0;
+    let mut unified_writer_gate_evolution_goal_queue_records = 0;
     let mut unified_writer_gate_ready_records = 0;
     let mut unified_writer_gate_held_records = 0;
     let mut unified_writer_gate_rejected_records = 0;
@@ -1633,6 +1636,8 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             unified_writer_gate_memory_records += summary.memory_records;
             unified_writer_gate_genome_records += summary.genome_records;
             unified_writer_gate_experiment_ledger_records += summary.experiment_ledger_records;
+            unified_writer_gate_evolution_goal_queue_records +=
+                summary.evolution_goal_queue_records;
             unified_writer_gate_ready_records += summary.ready_records;
             unified_writer_gate_held_records += summary.held_records;
             unified_writer_gate_rejected_records += summary.rejected_records;
@@ -1896,6 +1901,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         unified_writer_gate_memory_records,
         unified_writer_gate_genome_records,
         unified_writer_gate_experiment_ledger_records,
+        unified_writer_gate_evolution_goal_queue_records,
         unified_writer_gate_ready_records,
         unified_writer_gate_held_records,
         unified_writer_gate_rejected_records,
@@ -2041,6 +2047,7 @@ struct UnifiedWriterGateTraceGateSummary {
     memory_records: usize,
     genome_records: usize,
     experiment_ledger_records: usize,
+    evolution_goal_queue_records: usize,
     ready_records: usize,
     held_records: usize,
     rejected_records: usize,
@@ -2064,6 +2071,11 @@ fn unified_writer_gate_trace_gate_summary(line: &str) -> Option<UnifiedWriterGat
         genome_records: extract_json_usize_field(line, "genome_records").unwrap_or(0),
         experiment_ledger_records: extract_json_usize_field(line, "experiment_ledger_records")
             .unwrap_or(0),
+        evolution_goal_queue_records: extract_json_usize_field(
+            line,
+            "evolution_goal_queue_records",
+        )
+        .unwrap_or(0),
         ready_records: extract_json_usize_field(line, "ready_records").unwrap_or(0),
         held_records: extract_json_usize_field(line, "held_records").unwrap_or(0),
         rejected_records: extract_json_usize_field(line, "rejected_records").unwrap_or(0),

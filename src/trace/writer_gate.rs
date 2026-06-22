@@ -20,6 +20,10 @@ pub(super) fn evaluate_unified_writer_gate_schema_line(line: &str) -> Vec<String
             "experiment_ledger_records",
             "\"experiment_ledger_records\":",
         ),
+        (
+            "evolution_goal_queue_records",
+            "\"evolution_goal_queue_records\":",
+        ),
         ("ready_records", "\"ready_records\":"),
         ("held_records", "\"held_records\":"),
         ("rejected_records", "\"rejected_records\":"),
@@ -77,6 +81,8 @@ pub(super) fn evaluate_unified_writer_gate_schema_line(line: &str) -> Vec<String
     let genome_records = extract_json_usize_field(line, "genome_records").unwrap_or(0);
     let experiment_ledger_records =
         extract_json_usize_field(line, "experiment_ledger_records").unwrap_or(0);
+    let evolution_goal_queue_records =
+        extract_json_usize_field(line, "evolution_goal_queue_records").unwrap_or(0);
     let ready_records = extract_json_usize_field(line, "ready_records").unwrap_or(0);
     let held_records = extract_json_usize_field(line, "held_records").unwrap_or(0);
     let rejected_records = extract_json_usize_field(line, "rejected_records").unwrap_or(0);
@@ -89,6 +95,7 @@ pub(super) fn evaluate_unified_writer_gate_schema_line(line: &str) -> Vec<String
     if memory_records
         .saturating_add(genome_records)
         .saturating_add(experiment_ledger_records)
+        .saturating_add(evolution_goal_queue_records)
         != records
     {
         failures.push("unified_writer_gate domain record counts do not match records".to_owned());
