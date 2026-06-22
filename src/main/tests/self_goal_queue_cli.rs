@@ -62,10 +62,70 @@ fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
         ["success_gate_passed"]
     );
     assert!(!report.run_plan.active);
+    assert!(report.completion_preview.ready);
+    assert_eq!(report.completion_preview.completed_count, 1);
+    assert_eq!(report.completion_preview.retained_count, 0);
+    assert_eq!(
+        report.completion_writer_gate.preview_only_records,
+        1,
+        "{}",
+        report.completion_writer_gate.summary_line()
+    );
     assert!(summary.contains("self_goal_queue_run decisions=1 active=none passed=1"));
+    assert!(summary.contains("self_goal_queue_completion ready=true completed=1 retained=0"));
     assert!(summary.contains("self_goal_queue_run_evolution_goal_decision_v1"));
     assert!(summary.contains("status=passed"));
     assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
+}
+
+#[test]
+fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
+    let dir = temp_asset_dir("self-goal-queue-cli-completion");
+    fs::create_dir_all(&dir).unwrap();
+    let store_path = dir.join("queue.ndkv");
+    let trace_path = dir.join("completion-trace.jsonl");
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-store".to_owned(),
+        store_path.display().to_string(),
+        "--self-goal-queue-store-apply".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=cargo_check;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=focused_tests;passed=true;items=3;failures=0".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=trace_schema_gate;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=operator_approval;passed=true;approval=true".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+    ]);
+
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let store_write = report.store_write.as_ref().expect("store write report");
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+    let scope = TenantScope::new("local", "default", "interactive");
+    let key = scope.scoped_key(TenantResourceLane::EvolutionGoalQueue, "pursuit");
+    let store = EvolutionGoalQueueDiskStore::open(&store_path).unwrap();
+    let read = store.read_queue(&scope, key.as_str()).unwrap();
+    let summary = report.summary_lines().join("\n");
+    let trace = fs::read_to_string(&trace_path).unwrap();
+
+    assert!(report.completion_preview.ready);
+    assert_eq!(report.completion_preview.completed_count, 1);
+    assert_eq!(report.completion_preview.retained_count, 0);
+    assert_eq!(report.completion_writer_gate.ready_records, 1);
+    assert!(store_write.applied, "{:?}", store_write.reason_codes);
+    assert!(read.found);
+    assert!(read.decoded);
+    assert_eq!(read.queue.as_ref().unwrap().goals.len(), 0);
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(summary.contains("self_goal_queue_completion ready=true completed=1 retained=0"));
+    assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
+    assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
+    assert!(!trace.contains("R97 English/Chinese/Rust coding service"));
+
+    fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
