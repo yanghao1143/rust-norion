@@ -7,6 +7,7 @@
 \usepackage{amsmath}
 \usepackage{microtype}
 \usepackage{xcolor}
+\usepackage{array}
 
 \hypersetup{
   colorlinks=true,
@@ -19,7 +20,10 @@
 A DNA Gene-Chain Architecture in Rust}
 
 \author{
-  rust-norion Project\\
+  Hao Yang YangHao\\
+  Independent Researcher\\
+  \texttt{2499510083@qq.com}\\
+  \url{https://claude.chiddns.com}\\
   Code: \url{https://github.com/yanghao1143/rust-norion}\\
   Draft technical report, June 2026
 }
@@ -54,6 +58,17 @@ into measurable engineering behavior.
 
 \noindent\textbf{Keywords:} large language models, inference control, local AI,
 long context, KV cache, self-evolution, bio-inspired architecture, Rust.
+
+\section*{Artifact Availability}
+
+The project code is publicly available at
+\url{https://github.com/yanghao1143/rust-norion}. This draft describes the
+\texttt{codex-runtime-device-abi} development branch as of June 2026. For an
+external arXiv submission, the authors should create a stable release tag or
+archived commit snapshot and ensure that the repository license statement
+matches the intended reuse policy at submission time. The current draft is
+written as a compact 6--8 page systems-style technical report; exact page count
+depends on the final TeX engine and reference formatting.
 
 \section{Introduction}
 
@@ -98,6 +113,28 @@ This report makes three contributions:
   architecture improves long-context efficiency, KV reuse, mutation isolation,
   and safe self-improvement without claiming production runtime performance.
 \end{enumerate}
+
+\section{Scope and Terminology}
+
+Several terms in \texttt{rust-norion} are project-specific and should be read
+as control-plane mechanisms rather than biological simulation claims.
+\textbf{Noiron} denotes the local inference control loop around a model
+runtime. \textbf{FHT-DKE} denotes the project's hierarchical routing and
+disk-backed knowledge execution target: adaptive attention routing, sparse
+context selection, KV exchange, and tiered persistent memory are planned and
+validated through explicit Rust structures before they are delegated to a
+runtime. \textbf{Reasoning genome} denotes persistent strategy state for
+retrieval, routing, reflection, safety, and tool use. \textbf{Gene scissors}
+denotes reversible edit plans for that strategy state. These mechanisms do not
+change neural weights directly.
+
+The architecture therefore sits between a model-serving runtime and an
+application. It can be evaluated even before a production model kernel exists,
+because many failure modes are control-layer failures: context pollution,
+private-data retention, stale memory, unstable thresholds, invalid KV shape,
+unsafe tool policy, and unreviewed self-modification. This is why the current
+Rust implementation emphasizes deterministic previews, trace schemas, writer
+gates, rollback anchors, and focused benchmarks.
 
 \section{Background and Motivation}
 
@@ -151,6 +188,26 @@ shape, token uncertainty, and trace requirements. The point is not to make the
 prototype kernel outperform mature runtimes; the point is to keep the
 control-layer logic portable across runtimes.
 
+\begin{figure}[t]
+\centering
+\fbox{\begin{minipage}{0.94\linewidth}
+\small
+\textbf{Input and memory evidence}
+$\rightarrow$ splicing and mutation detection
+$\rightarrow$ express-chain projection
+$\rightarrow$ adaptive routing and hierarchy planning
+$\rightarrow$ model runtime request
+$\rightarrow$ reflection and process reward
+$\rightarrow$ preview-only memory/genome/self-goal proposal
+$\rightarrow$ writer gate
+$\rightarrow$ explicit apply or rollback.
+\end{minipage}}
+\caption{High-level closed loop. The runtime performs model execution; the
+control plane governs what context is expressed, what memory is fused, what
+state is persisted, and which proposed changes are blocked or admitted.}
+\label{fig:closed-loop}
+\end{figure}
+
 \subsection{Reasoning Genome}
 
 The reasoning genome is a structured representation of inference control state.
@@ -178,6 +235,32 @@ format-invalid, harmful, stale, private, or behaviorally regressive. ``Repair''
 means a validated replacement or isolation plan, not uncontrolled model
 rewriting.
 
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{p{0.24\linewidth}p{0.31\linewidth}p{0.32\linewidth}}
+\toprule
+Biological inspiration & Software mapping & Engineering purpose \\
+\midrule
+Expressed sequence & \texttt{express\_chain} & Small active strategy
+surface for routing, memory retrieval, reflection, and tool posture. \\
+Non-coding or latent sequence & \texttt{memory\_chain} & Provenance,
+validation, source digests, rollback anchors, and cold reusable evidence. \\
+Splicing & Splicer and intron filter & Remove low-value context before it
+enters expensive attention or KV prefill. \\
+Variant or mutation & Mutation detector & Isolate malformed, stale, private,
+conflicting, or low-fitness segments. \\
+Repair and regeneration & Gene scissors plan & Relabel, quarantine, cut,
+splice, regenerate, or roll back only through preview and validation gates. \\
+Inheritance & Genome ledger and session state & Carry validated strategies
+across runs while preserving lineage and rollback ability. \\
+\bottomrule
+\end{tabular}
+\caption{DNA-inspired concepts are used as engineering metaphors with explicit
+control-plane behavior.}
+\label{tab:mapping}
+\end{table}
+
 \subsection{Disk-Backed KV and Memory Tiers}
 
 \texttt{rust-norion} uses disk-backed memory plans and ledger-style write gates
@@ -190,6 +273,22 @@ review packets, and read-only/write/applied flags.
 The design goal is to make local long-context behavior practical on constrained
 hardware. Rather than caching every token forever, the control layer can prefer
 high-fitness memory, demote cold state, and keep write admission explicit.
+
+\subsection{Trace Surface and Evidence Hygiene}
+
+Every adaptive system needs a trace surface that is useful for debugging but
+safe for persistence. \texttt{rust-norion} treats traces as evidence packets,
+not as raw transcript archives. Trace records should therefore contain schema
+versions, stable ids, counters, decisions, redaction digests, budget summaries,
+rollback anchors, and reason codes. They should not contain secrets, raw
+private prompts, hidden chain-of-thought text, raw model weights, private
+datasets, copied third-party source, or unreviewed executable payloads.
+
+This choice is central to the self-evolution story. A system cannot safely
+learn from prior runs if the learning substrate becomes a privacy sink. The
+project's trace schema gates are designed to reject suspicious durable evidence
+before it is used for memory admission, genome edits, experiment promotion, or
+self-goal queue planning.
 
 \section{Adaptive Routing and Hierarchy}
 
@@ -209,6 +308,25 @@ Reflection provides another feedback channel. Draft quality, structured issues,
 revision actions, and process reward can update future routing and memory
 admission. The target is test-time adaptation: improve how the model is used
 without assuming that every interaction triggers training.
+
+\subsection{Task-Scoped Adaptation}
+
+The control layer keeps task profiles separate because a useful strategy for
+one mode can be harmful in another. Rust coding tasks should elevate compiler,
+test, benchmark, and clean-room evidence. Chinese-language interaction can
+prefer bilingual summaries, language-mode continuity, and culturally stable
+response style. Long-document tasks can prefer recursive scheduling,
+hierarchical gist records, and segment-local repair. General reasoning can
+prefer uncertainty, reflection diagnostics, and contradiction pressure. The
+profile boundary prevents one successful local heuristic from overwriting the
+global behavior of the engine.
+
+This task-scoped design also gives the biological metaphor a measurable
+interpretation. A ``phenotype'' is the observable behavior of a profile under a
+benchmark or trace replay: latency, context budget, memory hit rate, reflection
+issues, compiler success, or repair outcome. A ``fitness'' score is not a vague
+preference; it is a weighted control-plane metric that can be checked before a
+gene is promoted.
 
 \section{Self-Evolution Governance}
 
@@ -256,6 +374,18 @@ executor must apply the plan explicitly.
 This design lets the system reason about its next work without giving it a
 blank check to mutate durable project state.
 
+\subsection{Why Autonomous Goals Remain Gated}
+
+Autonomous goal generation is useful only if it stays bounded. In this
+architecture, a self-goal is a candidate control-plane improvement, not an
+instruction to rewrite arbitrary files. The candidate must pass proposal,
+admission, queue preview, writer-gate preflight, and apply-plan checks. Each
+stage reduces the risk of runaway behavior: stale queue digests are rejected,
+duplicate goals are held, incomplete validation evidence blocks admission,
+source records marked as already applied are rejected, and explicit operator
+approval is required before durable queue mutation. This lets the engine plan
+future evolution while preserving human ownership of irreversible changes.
+
 \section{Implementation Status}
 
 The public code is available at
@@ -274,6 +404,17 @@ runtimes on kernel throughput. The current deterministic runtime is valuable
 because it makes governance behavior testable and reproducible. Production
 kernel integration remains a runtime-boundary problem.
 
+The implementation is deliberately shaped as small Rust modules rather than a
+single monolithic agent. Examples include \texttt{router.rs} for adaptive route
+planning, \texttt{hierarchy.rs} for task-aware hierarchy weights,
+\texttt{memory\_admission.rs} and \texttt{kv\_cache.rs} for KV governance,
+\texttt{reasoning\_genome.rs} for genome records and gene-scissors transactions,
+\texttt{writer\_gate.rs} for shared durable-write evaluation,
+\texttt{self\_goal\_proposal.rs} for bounded self-goal planning, and
+\texttt{trace.rs} for schema-gated evidence. These modules are exported through
+\texttt{src/lib.rs} so examples, benches, and future services can exercise the
+control plane without depending on private internals.
+
 \begin{table}[t]
 \centering
 \small
@@ -291,6 +432,35 @@ Self-goals & Proposal, admission, preview, apply plan & No autonomous append exe
 \end{tabular}
 \caption{Summary of the rust-norion prototype layers.}
 \end{table}
+
+\section{Reproducibility and arXiv Readiness}
+
+An arXiv-facing version of this report should make the artifact easy to inspect
+and difficult to misunderstand. The recommended release process is:
+
+\begin{enumerate}[leftmargin=*]
+  \item Create a stable Git tag for the exact code snapshot discussed in the
+  report and include that tag in the artifact section.
+  \item Keep the TeX source self-contained. arXiv's TeX guidance recommends
+  preparing the source package carefully and checking the generated PDF before
+  final submission \cite{arxivtex}.
+  \item Include a short command list for local verification, such as
+  \texttt{cargo fmt --all -- --check}, focused \texttt{cargo test} invocations
+  for routing, genome, writer-gate, and self-goal modules, and
+  \texttt{cargo check}.
+  \item Publish only benchmark numbers that have a reproducible script,
+  baseline, after-change result, and rollback/failure interpretation.
+  \item State the license boundary clearly. If the project moves to a
+  permissive open core, the paper and repository must be updated together so
+  readers do not confuse future policy with the current controlling license.
+\end{enumerate}
+
+The likely arXiv subject fit is computer science infrastructure or language
+model systems, with \texttt{cs.CL} or \texttt{cs.AI} as possible categories
+depending on the final emphasis. A pure position paper is weaker than a
+systems-style technical report with code, traces, and small reproducible
+experiments. The first public version should therefore prioritize a credible
+architecture claim and executable evidence over broad performance claims.
 
 \section{Evaluation Plan}
 
@@ -321,6 +491,28 @@ together. A self-evolution claim should not be accepted if it only shows that a
 loop ran; it should show measurable control-plane movement, validation success,
 and rollback safety.
 
+\subsection{Minimum Demonstration Suite}
+
+The first public demonstration can be intentionally small:
+
+\begin{itemize}[leftmargin=*]
+  \item a splicing demo that marks exon, intron, and variant segments and shows
+  a context-compression ratio;
+  \item a mutation-repair demo that detects stale labels, invalid metadata,
+  missing source hashes, private markers, or KV-shape errors and emits a
+  read-only repair plan;
+  \item a memory admission demo that shows why a useful segment is accepted,
+  held, or rejected before it can enter disk-backed KV;
+  \item a self-goal demo that proposes one next improvement, admits it only
+  under complete evidence, and stops at a digest-only apply plan;
+  \item a rollback demo that proves an admitted control-plane change has a
+  stable previous state.
+\end{itemize}
+
+This suite is modest, but it is enough to make the core claim testable: the
+system can govern long-context memory and self-evolution as structured,
+auditable control state.
+
 \section{Open Source Strategy}
 
 The project is best positioned as a small, distinctive research/engineering
@@ -334,6 +526,27 @@ basic control-layer primitives, while enterprise-specific multi-tenancy,
 advanced audit suites, private deployment support, and specialized evolution
 operators can remain commercial add-ons. Until a formal license transition is
 approved, the repository's existing license remains controlling.
+
+\section{Threats to Validity}
+
+The main technical risk is that control-plane metrics become proxies for actual
+task quality. A lower context budget is not valuable if answer quality drops. A
+higher cache hit rate is not valuable if stale memory is reused. A repair plan
+is not valuable if it silently hides important evidence. Future experiments
+must therefore pair efficiency measurements with correctness, safety, and
+human-review signals.
+
+The second risk is overfitting to the deterministic prototype runtime. The
+control layer should keep deterministic tests because they are excellent for
+regression gates, but the same policies must later be tested against stronger
+runtime backends with realistic tokenizer behavior, KV layout, latency, and
+failure modes.
+
+The third risk is terminology drift. Biological language is useful for naming
+structured control problems, but it can mislead readers if it implies biological
+fidelity. The report therefore treats DNA, splicing, mutation, repair, and
+rejuvenation as disciplined software analogies. The project succeeds only if
+those analogies produce measurable control behavior.
 
 \section{Limitations}
 
@@ -370,15 +583,25 @@ Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention Is All You Need.
 \bibitem{streamingllm}
 Guangxuan Xiao, Yuandong Tian, Beidi Chen, Song Han, and Mike Lewis. Efficient
 Streaming Language Models with Attention Sinks. arXiv:2309.17453, 2023.
+\url{https://arxiv.org/abs/2309.17453}.
 
 \bibitem{cepe}
 Howard Yen, Tianyu Gao, and Danqi Chen. Long-Context Language Modeling with
 Parallel Context Encoding. arXiv:2402.16617, 2024.
+\url{https://arxiv.org/abs/2402.16617}.
 
 \bibitem{evo}
-Eric Nguyen, Michael Poli, Matthew G. Durrant, Brian Kang, Dhruva Katrekar, and
-collaborators. Sequence modeling and design from molecular to genome scale with
-Evo. \textit{Science}, 2024.
+Eric Nguyen et al. Sequence modeling and design from molecular to genome scale
+with Evo. \textit{Science}, 2024.
+\url{https://www.science.org/doi/abs/10.1126/science.ado9336}.
+
+\bibitem{evo-code}
+Arc Institute and collaborators. Evo: biological foundation modeling from
+molecular to genome scale. \url{https://github.com/evo-design/evo}, 2024--2026.
+
+\bibitem{arxivtex}
+arXiv. Submit TeX/LaTeX. arXiv help documentation, accessed June 2026.
+\url{https://info.arxiv.org/help/submit_tex.html}.
 
 \bibitem{rustnorion}
 yanghao1143 and contributors. rust-norion: DNA-inspired inference control layer
