@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::disk_kv::DiskKvStore;
 use crate::evolution_goal::EvolutionGoalQueue;
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
+use crate::self_goal_proposal::SelfGoalQueueAppendExecutionReport;
 use crate::tenant_scope::{
     TenantAccessKind, TenantIsolationGate, TenantIsolationReport, TenantResourceLane, TenantScope,
     TenantScopedKey, tenant_scoped_get, tenant_scoped_put,
@@ -12,6 +13,8 @@ use crate::tenant_scope::{
 pub const EVOLUTION_GOAL_QUEUE_STORE_SCHEMA_VERSION: &str = "evolution_goal_queue_store_v1";
 pub const EVOLUTION_GOAL_QUEUE_STORE_APPROVAL_SCHEMA_VERSION: &str =
     "evolution_goal_queue_store_approval_v1";
+pub const EVOLUTION_GOAL_QUEUE_STORE_WRITE_TRACE_SCHEMA: &str =
+    "rust-norion-evolution-goal-queue-store-write-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EvolutionGoalQueueStorePolicy {
@@ -182,6 +185,31 @@ impl EvolutionGoalQueueStoreWriteReport {
             self.isolation.audit_event.decision.as_str(),
         )
     }
+
+    pub fn json_line(&self) -> String {
+        let approval_digest = self
+            .approval_attestation_digest
+            .as_deref()
+            .unwrap_or("none");
+        format!(
+            "{{\"schema\":\"{}\",\"store_schema\":\"{}\",\"decision\":\"{}\",\"reason_code_count\":{},\"key_digest\":\"{}\",\"queue_digest\":\"{}\",\"rollback_anchor_digest\":\"{}\",\"approval_attestation_digest\":\"{}\",\"tenant_isolation_allowed\":{},\"isolation_decision\":\"{}\",\"durable_write_allowed\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"summary\":\"{}\"}}",
+            json_escape(EVOLUTION_GOAL_QUEUE_STORE_WRITE_TRACE_SCHEMA),
+            json_escape(self.schema_version),
+            json_escape(self.decision.as_str()),
+            self.reason_codes.len(),
+            json_escape(&self.key_digest),
+            json_escape(&self.queue_digest),
+            json_escape(&self.rollback_anchor_digest),
+            json_escape(approval_digest),
+            self.isolation.allowed,
+            json_escape(self.isolation.audit_event.decision.as_str()),
+            self.durable_write_allowed,
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+            json_escape(&self.summary_line())
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -342,6 +370,88 @@ impl EvolutionGoalQueueDiskStore {
         })
     }
 
+    pub fn write_append_execution_result(
+        &mut self,
+        actor_scope: &TenantScope,
+        key: &TenantScopedKey,
+        append_report: &SelfGoalQueueAppendExecutionReport,
+        approval: Option<&EvolutionGoalQueueStoreApproval>,
+    ) -> io::Result<EvolutionGoalQueueStoreWriteReport> {
+        let key_digest = key.key_digest();
+        let isolation =
+            TenantIsolationGate::new().check_key_access(actor_scope, key, TenantAccessKind::Write);
+        let queue_digest = append_report
+            .resulting_queue_digest
+            .clone()
+            .unwrap_or_else(|| stable_redaction_digest(["queue-store-missing-resulting-digest"]));
+        let approval_attestation_digest =
+            approval.map(|approval| approval.approval_attestation_digest.clone());
+        let mut reason_codes = Vec::new();
+
+        if !append_report.passed() {
+            reason_codes.push("queue_store_append_execution_not_passed".to_owned());
+        }
+        if append_report.durable_write_allowed {
+            reason_codes.push("queue_store_append_execution_claimed_durable_write".to_owned());
+        }
+        let Some(resulting_queue) = append_report.resulting_queue.as_ref() else {
+            reason_codes.push("queue_store_append_execution_resulting_queue_missing".to_owned());
+            return Ok(EvolutionGoalQueueStoreWriteReport {
+                schema_version: EVOLUTION_GOAL_QUEUE_STORE_SCHEMA_VERSION,
+                decision: EvolutionGoalQueueStoreWriteDecision::Rejected,
+                policy: self.policy,
+                isolation,
+                reason_codes,
+                key_digest,
+                queue_digest,
+                rollback_anchor_digest: append_report.rollback_anchor_digest.clone(),
+                approval_attestation_digest,
+                durable_write_allowed: false,
+                read_only: true,
+                write_allowed: false,
+                applied: false,
+            });
+        };
+
+        let computed_queue_digest = resulting_queue.redaction_digest();
+        if queue_digest != computed_queue_digest {
+            reason_codes.push("queue_store_append_execution_resulting_digest_mismatch".to_owned());
+        }
+
+        if !reason_codes.is_empty() {
+            let rejected = reason_codes
+                .iter()
+                .any(|reason| queue_store_rejection_reason(reason));
+            return Ok(EvolutionGoalQueueStoreWriteReport {
+                schema_version: EVOLUTION_GOAL_QUEUE_STORE_SCHEMA_VERSION,
+                decision: if rejected {
+                    EvolutionGoalQueueStoreWriteDecision::Rejected
+                } else {
+                    EvolutionGoalQueueStoreWriteDecision::Hold
+                },
+                policy: self.policy,
+                isolation,
+                reason_codes,
+                key_digest,
+                queue_digest: computed_queue_digest,
+                rollback_anchor_digest: append_report.rollback_anchor_digest.clone(),
+                approval_attestation_digest,
+                durable_write_allowed: false,
+                read_only: true,
+                write_allowed: false,
+                applied: false,
+            });
+        }
+
+        self.write_queue(
+            actor_scope,
+            key,
+            resulting_queue,
+            &append_report.rollback_anchor_digest,
+            approval,
+        )
+    }
+
     pub fn read_queue(
         &self,
         actor_scope: &TenantScope,
@@ -440,6 +550,10 @@ fn queue_store_rejection_reason(reason: &str) -> bool {
     matches!(
         reason,
         "queue_store_wrong_lane"
+            | "queue_store_append_execution_not_passed"
+            | "queue_store_append_execution_claimed_durable_write"
+            | "queue_store_append_execution_resulting_queue_missing"
+            | "queue_store_append_execution_resulting_digest_mismatch"
             | "queue_store_tenant_isolation_rejected"
             | "queue_store_queue_not_preview_only"
             | "queue_store_rollback_anchor_not_redacted"
@@ -495,6 +609,22 @@ fn safe_text(value: String) -> String {
     } else {
         value.trim().to_owned()
     }
+}
+
+fn json_escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push(' '),
+            ch => out.push(ch),
+        }
+    }
+    out
 }
 
 #[cfg(test)]

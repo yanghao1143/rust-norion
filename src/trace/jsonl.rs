@@ -31,7 +31,9 @@ pub use improvement_corpus::{
 pub use memory_residency::{append_memory_residency_trace_jsonl, memory_residency_trace_json_line};
 pub use rust_check::{append_rust_check_trace_jsonl, rust_check_trace_json_line};
 pub use self_goal::{
+    append_evolution_goal_queue_store_write_trace_jsonl,
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
+    evolution_goal_queue_store_write_trace_json_line,
     self_goal_queue_append_execution_trace_json_line, self_goal_queue_apply_trace_json_line,
 };
 pub use writer::{append_trace_jsonl, append_trace_jsonl_with_case};
