@@ -2447,6 +2447,370 @@ impl SelfEvolutionOperatorApprovalLedger {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionPromotionPreflightDecision {
+    ReadyForExplicitPromotion,
+    Hold,
+}
+
+impl SelfEvolutionPromotionPreflightDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadyForExplicitPromotion => "ready_for_explicit_promotion",
+            Self::Hold => "hold",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SelfEvolutionPromotionPreflightGate;
+
+impl SelfEvolutionPromotionPreflightGate {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn evaluate(
+        &self,
+        admission: &SelfEvolutionAdmissionReport,
+        experiment: &SelfEvolutionExperimentRecord,
+        approval: &SelfEvolutionOperatorApprovalReport,
+    ) -> SelfEvolutionPromotionPreflightReport {
+        let mut blocked_reasons = Vec::new();
+
+        if !admission.policy_valid {
+            blocked_reasons.push("self_evolution_promotion_preflight_policy_invalid".to_owned());
+        }
+        if !admission.admitted_for_human_review || !admission.human_approval_required {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_admission_not_admitted".to_owned());
+        }
+        if !admission.read_only || !admission.report_only || !admission.preview_only {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_admission_not_read_only_preview".to_owned(),
+            );
+        }
+        if !admission.rust_validation_passed {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_rust_validation_failed".to_owned());
+        }
+        if !admission.validation_passed {
+            blocked_reasons.push("self_evolution_promotion_preflight_validation_failed".to_owned());
+        }
+        if !admission.benchmark_gate_passed {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_benchmark_gate_failed".to_owned());
+        }
+        if !admission.rollback_budget_clean {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_rollback_budget_dirty".to_owned());
+        }
+        if !admission.adaptive_preview_evidence_present {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_adaptive_preview_missing".to_owned());
+        }
+        if admission.adaptive_preview_write_allowed
+            || admission.adaptive_preview_applied
+            || admission.mutation_write_allowed
+            || admission.memory_store_write_allowed
+            || admission.ndkv_write_allowed
+            || admission.model_weight_write_allowed
+            || admission.git_write_allowed
+        {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_admission_write_or_applied".to_owned());
+        }
+        if !admission.blocked_reasons.is_empty() {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_admission_blocked_reasons_present".to_owned(),
+            );
+        }
+
+        if experiment.candidate_id != admission.candidate_id {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_experiment_candidate_mismatch".to_owned(),
+            );
+        }
+        if experiment.decision != SelfEvolutionExperimentDecision::AdmitForHumanReview {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_experiment_not_admitted".to_owned());
+        }
+        if !experiment.human_approval_required {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_experiment_human_approval_not_required"
+                    .to_owned(),
+            );
+        }
+        if experiment.repeated_experiment {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_experiment_repeated".to_owned());
+        }
+        if experiment.conflicting_evidence {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_experiment_conflicting_evidence".to_owned(),
+            );
+        }
+        if experiment.rollback_required || experiment.rollback_replayable {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_experiment_rollback_required".to_owned());
+        }
+        if !experiment.read_only || !experiment.report_only || !experiment.preview_only {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_experiment_not_read_only_preview".to_owned(),
+            );
+        }
+        if experiment.active_candidate || experiment.write_allowed || experiment.applied {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_experiment_write_or_applied".to_owned());
+        }
+        if experiment.evidence_ids.is_empty() {
+            blocked_reasons
+                .push("self_evolution_promotion_preflight_experiment_evidence_missing".to_owned());
+        }
+        if experiment.rollback_anchor_ids.is_empty() {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_experiment_rollback_anchor_missing".to_owned(),
+            );
+        }
+
+        if approval.decision != SelfEvolutionOperatorApprovalDecision::Approved
+            || !approval.operator_approved
+        {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_operator_approval_not_approved".to_owned(),
+            );
+        }
+        if !approval.read_only || !approval.report_only || !approval.preview_only {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_operator_approval_not_read_only_preview"
+                    .to_owned(),
+            );
+        }
+        if approval.activation_write_allowed
+            || approval.active_candidate
+            || approval.write_allowed
+            || approval.applied
+        {
+            blocked_reasons.push(
+                "self_evolution_promotion_preflight_operator_approval_write_or_applied".to_owned(),
+            );
+        }
+
+        push_promotion_preflight_ref_mismatch(
+            &mut blocked_reasons,
+            "approval_review_packet_ids",
+            &admission.review_packet.approval_review_packet_ids,
+            &approval.approved_review_packet_ids,
+        );
+        push_promotion_preflight_ref_mismatch(
+            &mut blocked_reasons,
+            "evidence_ids",
+            &admission.review_packet.evidence_ids,
+            &approval.approved_evidence_ids,
+        );
+        push_promotion_preflight_ref_mismatch(
+            &mut blocked_reasons,
+            "rollback_anchor_ids",
+            &admission.review_packet.rollback_anchor_ids,
+            &approval.approved_rollback_anchor_ids,
+        );
+        push_promotion_preflight_ref_mismatch(
+            &mut blocked_reasons,
+            "content_digests",
+            &admission.review_packet.content_digests,
+            &approval.approved_content_digests,
+        );
+        push_promotion_preflight_ref_mismatch(
+            &mut blocked_reasons,
+            "source_report_schemas",
+            &admission.review_packet.source_report_schemas,
+            &approval.approved_source_report_schemas,
+        );
+
+        let ready_for_explicit_promotion = blocked_reasons.is_empty();
+        let decision = if ready_for_explicit_promotion {
+            SelfEvolutionPromotionPreflightDecision::ReadyForExplicitPromotion
+        } else {
+            SelfEvolutionPromotionPreflightDecision::Hold
+        };
+        let content_digest = self_evolution_stable_digest(&format!(
+            "promotion_preflight;candidate={};decision={};ready={};admission_admitted={};experiment={};approval={};review_packets={:?};evidence={:?};rollback_anchors={:?};content_digests={:?};schemas={:?};blocked={:?}",
+            admission.candidate_id,
+            decision.as_str(),
+            ready_for_explicit_promotion,
+            admission.admitted_for_human_review,
+            experiment.content_digest,
+            approval.content_digest,
+            admission.review_packet.approval_review_packet_ids,
+            admission.review_packet.evidence_ids,
+            admission.review_packet.rollback_anchor_ids,
+            admission.review_packet.content_digests,
+            admission.review_packet.source_report_schemas,
+            blocked_reasons,
+        ));
+
+        SelfEvolutionPromotionPreflightReport {
+            decision,
+            ready_for_explicit_promotion,
+            explicit_promotion_required: true,
+            candidate_id: admission.candidate_id.clone(),
+            admission_admitted_for_human_review: admission.admitted_for_human_review,
+            experiment_admitted_for_human_review: experiment.decision
+                == SelfEvolutionExperimentDecision::AdmitForHumanReview,
+            operator_approved: approval.operator_approved,
+            rust_validation_passed: admission.rust_validation_passed,
+            validation_passed: admission.validation_passed,
+            benchmark_gate_passed: admission.benchmark_gate_passed,
+            adaptive_preview_evidence_present: admission.adaptive_preview_evidence_present,
+            review_packet_count: admission.review_packet.approval_review_packet_ids.len(),
+            evidence_id_count: admission.review_packet.evidence_ids.len(),
+            rollback_anchor_count: admission.review_packet.rollback_anchor_ids.len(),
+            content_digest_count: admission.review_packet.content_digests.len(),
+            source_report_schema_count: admission.review_packet.source_report_schemas.len(),
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            activation_write_allowed: false,
+            active_candidate: false,
+            write_allowed: false,
+            applied: false,
+            blocked_reasons,
+            content_digest,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionPromotionPreflightReport {
+    pub decision: SelfEvolutionPromotionPreflightDecision,
+    pub ready_for_explicit_promotion: bool,
+    pub explicit_promotion_required: bool,
+    pub candidate_id: String,
+    pub admission_admitted_for_human_review: bool,
+    pub experiment_admitted_for_human_review: bool,
+    pub operator_approved: bool,
+    pub rust_validation_passed: bool,
+    pub validation_passed: bool,
+    pub benchmark_gate_passed: bool,
+    pub adaptive_preview_evidence_present: bool,
+    pub review_packet_count: usize,
+    pub evidence_id_count: usize,
+    pub rollback_anchor_count: usize,
+    pub content_digest_count: usize,
+    pub source_report_schema_count: usize,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub activation_write_allowed: bool,
+    pub active_candidate: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub blocked_reasons: Vec<String>,
+    pub content_digest: String,
+}
+
+impl SelfEvolutionPromotionPreflightReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_promotion_preflight decision={} ready_for_explicit_promotion={} explicit_promotion_required={} candidate={} admission_admitted={} experiment_admitted={} operator_approved={} rust_validation_passed={} validation_passed={} benchmark_gate_passed={} adaptive_preview_evidence={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} source_report_schemas={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} digest={}",
+            self.decision.as_str(),
+            self.ready_for_explicit_promotion,
+            self.explicit_promotion_required,
+            self.candidate_id,
+            self.admission_admitted_for_human_review,
+            self.experiment_admitted_for_human_review,
+            self.operator_approved,
+            self.rust_validation_passed,
+            self.validation_passed,
+            self.benchmark_gate_passed,
+            self.adaptive_preview_evidence_present,
+            self.review_packet_count,
+            self.evidence_id_count,
+            self.rollback_anchor_count,
+            self.content_digest_count,
+            self.source_report_schema_count,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.activation_write_allowed,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+            self.blocked_reasons.len(),
+            self.content_digest,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let candidate_id = self_evolution_json_escape(&self.candidate_id);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+        let content_digest = self_evolution_json_escape(&self.content_digest);
+
+        format!(
+            "{{\
+             \"schema\":\"rust-norion-self-evolution-promotion-preflight-v1\",\
+             \"decision\":\"{}\",\
+             \"ready_for_explicit_promotion\":{},\
+             \"explicit_promotion_required\":{},\
+             \"candidate_id\":\"{candidate_id}\",\
+             \"admission_admitted_for_human_review\":{},\
+             \"experiment_admitted_for_human_review\":{},\
+             \"operator_approved\":{},\
+             \"rust_validation_passed\":{},\
+             \"validation_passed\":{},\
+             \"benchmark_gate_passed\":{},\
+             \"adaptive_preview_evidence_present\":{},\
+             \"review_packet_count\":{},\
+             \"evidence_id_count\":{},\
+             \"rollback_anchor_count\":{},\
+             \"content_digest_count\":{},\
+             \"source_report_schema_count\":{},\
+             \"read_only\":{},\
+             \"report_only\":{},\
+             \"preview_only\":{},\
+             \"activation_write_allowed\":{},\
+             \"active_candidate\":{},\
+             \"write_allowed\":{},\
+             \"applied\":{},\
+             \"blocked_reasons\":{blocked_reasons},\
+             \"content_digest\":\"{content_digest}\"\
+             }}",
+            self.decision.as_str(),
+            self.ready_for_explicit_promotion,
+            self.explicit_promotion_required,
+            self.admission_admitted_for_human_review,
+            self.experiment_admitted_for_human_review,
+            self.operator_approved,
+            self.rust_validation_passed,
+            self.validation_passed,
+            self.benchmark_gate_passed,
+            self.adaptive_preview_evidence_present,
+            self.review_packet_count,
+            self.evidence_id_count,
+            self.rollback_anchor_count,
+            self.content_digest_count,
+            self.source_report_schema_count,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.activation_write_allowed,
+            self.active_candidate,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+
+    pub fn is_read_only_preflight(&self) -> bool {
+        self.read_only
+            && self.report_only
+            && self.preview_only
+            && !self.activation_write_allowed
+            && !self.active_candidate
+            && !self.write_allowed
+            && !self.applied
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfEvolutionRollbackReplayApplyDecision {
     ReadyForOperatorApply,
     Hold,
@@ -2789,6 +3153,19 @@ fn push_rollback_replay_apply_ref_mismatch(
     if expected.is_empty() || approved.is_empty() || expected != approved {
         blocked_reasons.push(format!(
             "self_evolution_rollback_replay_apply_{field}_mismatch"
+        ));
+    }
+}
+
+fn push_promotion_preflight_ref_mismatch(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    expected: &[String],
+    approved: &[String],
+) {
+    if expected.is_empty() || approved.is_empty() || expected != approved {
+        blocked_reasons.push(format!(
+            "self_evolution_promotion_preflight_{field}_mismatch"
         ));
     }
 }
@@ -3501,6 +3878,35 @@ mod tests {
         assert!(rollback_gate.admitted_for_human_review);
         assert!(approval.operator_approved);
         (rollback_gate, approval)
+    }
+
+    fn approved_promotion_preflight_inputs(
+        candidate_id: &str,
+    ) -> (
+        SelfEvolutionAdmissionReport,
+        SelfEvolutionExperimentRecord,
+        SelfEvolutionOperatorApprovalReport,
+    ) {
+        let admission = passing_admission_report(candidate_id);
+        let mut experiment_ledger = SelfEvolutionExperimentLedger::new();
+        let experiment =
+            experiment_ledger.append_admission_report("promotion-experiment", &admission);
+        let approval_evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "maintainer-jy",
+            "approval-ticket-promotion",
+            &admission.review_packet,
+            "approved admission packet for promotion preflight",
+        );
+        let approval = SelfEvolutionOperatorApprovalGate::new()
+            .evaluate(&admission.review_packet, &approval_evidence);
+
+        assert!(admission.admitted_for_human_review);
+        assert_eq!(
+            experiment.decision,
+            SelfEvolutionExperimentDecision::AdmitForHumanReview
+        );
+        assert!(approval.operator_approved);
+        (admission, experiment, approval)
     }
 
     #[test]
@@ -4301,6 +4707,124 @@ mod tests {
         assert_eq!(approval_ledger.held(), 1);
         assert_eq!(approval_ledger.write_allowed_records(), 0);
         assert_eq!(approval_ledger.applied_records(), 0);
+    }
+
+    #[test]
+    fn self_evolution_promotion_preflight_requires_admission_experiment_and_operator_approval() {
+        let (admission, experiment, approval) =
+            approved_promotion_preflight_inputs("candidate-promotion");
+
+        let report =
+            SelfEvolutionPromotionPreflightGate::new().evaluate(&admission, &experiment, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionPromotionPreflightDecision::ReadyForExplicitPromotion
+        );
+        assert!(report.ready_for_explicit_promotion);
+        assert!(report.explicit_promotion_required);
+        assert!(report.admission_admitted_for_human_review);
+        assert!(report.experiment_admitted_for_human_review);
+        assert!(report.operator_approved);
+        assert!(report.rust_validation_passed);
+        assert!(report.validation_passed);
+        assert!(report.benchmark_gate_passed);
+        assert!(report.adaptive_preview_evidence_present);
+        assert!(report.review_packet_count > 0);
+        assert!(report.evidence_id_count > 0);
+        assert!(report.rollback_anchor_count > 0);
+        assert!(report.content_digest_count > 0);
+        assert!(report.source_report_schema_count > 0);
+        assert!(report.blocked_reasons.is_empty());
+        assert!(report.is_read_only_preflight());
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(report.content_digest.starts_with("fnv64:"));
+        assert!(
+            report
+                .summary_line()
+                .contains("ready_for_explicit_promotion=true")
+        );
+        assert!(
+            report
+                .json_line()
+                .contains("\"schema\":\"rust-norion-self-evolution-promotion-preflight-v1\"")
+        );
+        assert!(report.json_line().contains("\"write_allowed\":false"));
+        assert!(!report.json_line().contains("maintainer-jy"));
+        assert!(!report.json_line().contains("approval-ticket-promotion"));
+        assert!(
+            !report
+                .json_line()
+                .contains("approved admission packet for promotion preflight")
+        );
+    }
+
+    #[test]
+    fn self_evolution_promotion_preflight_holds_without_operator_approval_or_matching_refs() {
+        let (admission, experiment, mut approval) =
+            approved_promotion_preflight_inputs("candidate-promotion-hold");
+        approval.decision = SelfEvolutionOperatorApprovalDecision::Hold;
+        approval.operator_approved = false;
+        approval
+            .approved_evidence_ids
+            .push("evidence:unexpected-promotion-ref".to_owned());
+
+        let report =
+            SelfEvolutionPromotionPreflightGate::new().evaluate(&admission, &experiment, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionPromotionPreflightDecision::Hold
+        );
+        assert!(!report.ready_for_explicit_promotion);
+        assert!(report.is_read_only_preflight());
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_promotion_preflight_operator_approval_not_approved".to_owned()
+        ));
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_promotion_preflight_evidence_ids_mismatch".to_owned())
+        );
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+    }
+
+    #[test]
+    fn self_evolution_promotion_preflight_holds_unsafe_experiment_record() {
+        let (admission, mut experiment, approval) =
+            approved_promotion_preflight_inputs("candidate-promotion-unsafe");
+        experiment.active_candidate = true;
+        experiment.write_allowed = true;
+        experiment.applied = true;
+        experiment.read_only = false;
+        experiment.report_only = false;
+        experiment.preview_only = false;
+
+        let report =
+            SelfEvolutionPromotionPreflightGate::new().evaluate(&admission, &experiment, &approval);
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionPromotionPreflightDecision::Hold
+        );
+        assert!(!report.ready_for_explicit_promotion);
+        assert!(report.is_read_only_preflight());
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_promotion_preflight_experiment_not_read_only_preview".to_owned()
+        ));
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_promotion_preflight_experiment_write_or_applied".to_owned()
+        ));
+        assert!(!report.activation_write_allowed);
+        assert!(!report.active_candidate);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
     }
 
     #[test]
