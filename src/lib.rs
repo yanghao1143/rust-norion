@@ -353,8 +353,8 @@ pub use trace::{
     append_self_evolution_promotion_preflight_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
-    append_self_evolution_rollback_replay_trace_jsonl, append_trace_jsonl,
-    append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
+    append_self_evolution_rollback_replay_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
+    append_trace_jsonl, append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
     business_contract_trace_json_line, evaluate_trace_schema_jsonl, evaluate_trace_schema_line,
     improvement_corpus_trace_json_line, rust_check_trace_json_line,
     self_evolution_admission_trace_json_line, self_evolution_experiment_trace_json_line,
@@ -362,8 +362,8 @@ pub use trace::{
     self_evolution_promotion_preflight_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
-    self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
-    unified_writer_gate_trace_json_line,
+    self_evolution_rollback_replay_trace_json_line, self_goal_queue_apply_trace_json_line,
+    trace_json_line, trace_json_line_with_case, unified_writer_gate_trace_json_line,
 };
 pub use transformer::{
     AttentionKind, TransformerLayerPlan, TransformerPlanCounts, TransformerPlanner,

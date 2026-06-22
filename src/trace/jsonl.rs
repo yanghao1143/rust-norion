@@ -5,6 +5,7 @@ mod improvement_corpus;
 mod json;
 mod memory_residency;
 mod rust_check;
+mod self_goal;
 mod summary;
 mod writer;
 mod writer_gate;
@@ -29,6 +30,9 @@ pub use improvement_corpus::{
 };
 pub use memory_residency::{append_memory_residency_trace_jsonl, memory_residency_trace_json_line};
 pub use rust_check::{append_rust_check_trace_jsonl, rust_check_trace_json_line};
+pub use self_goal::{
+    append_self_goal_queue_apply_trace_jsonl, self_goal_queue_apply_trace_json_line,
+};
 pub use writer::{append_trace_jsonl, append_trace_jsonl_with_case};
 pub use writer_gate::{
     append_unified_writer_gate_trace_jsonl, unified_writer_gate_trace_json_line,
