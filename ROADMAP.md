@@ -470,7 +470,8 @@ genome aging/rejuvenation benchmark simulation baseline, #72 gene purpose
 relabel validator baseline, #73 reversible Gene Scissors transaction journal
 baseline, #79 pursuit-goal queue baseline, and #74 thinking-phase gene-chain
 scheduler baseline, plus #75 multilingual coding eval, #76 memory
-consolidation, and #78 local research deployment guardrail baselines.
+consolidation, #78 local research deployment guardrail, and R94 unified
+writer-gate consolidation baselines.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -495,7 +496,9 @@ consolidation, and #78 local research deployment guardrail baselines.
   English/Chinese/Rust coding evaluation profile baseline, and #76 adds the
   preview-only memory consolidation/forgetting worker baseline. #78 adds the
   deterministic local research deployment profile and resource-guard baseline.
-  The default queue now advances to R94 as the next bounded preview goal with
+  R94 adds the unified writer-gate consolidation baseline across memory,
+  genome, and experiment-ledger write domains. The default queue now advances
+  to R95 reference backlog verification as the next bounded preview goal with
   explicit success, stop, budget, rollback, approval, and conflict-isolation
   gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
@@ -507,7 +510,9 @@ consolidation, and #78 local research deployment guardrail baselines.
   tombstone, cross-tenant merge rejection, and before/after metric evidence.
   #78 now provides deterministic non-commercial local deployment profiles,
   resource/backpressure guards, disabled durable-write defaults, and operator
-  health evidence. Continue with R94 writer gate consolidation next.
+  health evidence. R94 now provides the shared read-only writer-gate evidence
+  layer and trace-schema counters. Continue with R95 reference fact/license
+  verification next.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -545,9 +550,9 @@ consolidation, and #78 local research deployment guardrail baselines.
 - #79 `[Evolution] Add pursuit goal queue and stop gates` is now the completed
   baseline for ordered pursuit goals. It adds deterministic `EvolutionGoal`
   records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
-  for #74/#75/#76/#78/R94, budget and rollback stops, approval holds, and
-  conflict isolation between failed and later goals. With #74, #75, #76, and
-  #78 now completed, the live default queue begins at R94.
+  for #74/#75/#76/#78/R94/R95, budget and rollback stops, approval holds, and
+  conflict isolation between failed and later goals. With #74, #75, #76, #78,
+  and R94 now completed, the live default queue begins at R95.
 - #74 `[Runtime] Add thinking-phase gene-chain execution scheduler` is now the
   completed baseline for deterministic planning, memory recall, genome
   expression, route selection, answer synthesis, verification, and reflection
@@ -577,6 +582,14 @@ consolidation, and #78 local research deployment guardrail baselines.
   experiment-ledger writes by default, operator health evidence, and policy
   documentation in
   [`docs/governance/local-research-deployment-profiles.md`](docs/governance/local-research-deployment-profiles.md).
+- R94 `self-evolution writer gate consolidation` is now the completed baseline
+  for a shared read-only `UnifiedWriterGate` over memory admission, Gene
+  Scissors transaction journals, and self-evolution promotion preflight
+  reports. It emits count/digest-only `rust-norion-unified-writer-gate-v1`
+  JSONL evidence, rejects unsafe write/applied/active sources, and keeps
+  `ready_for_explicit_apply` out of normal trace-schema passage until a later
+  scoped apply issue exists. Policy is documented in
+  [`docs/governance/unified-writer-gate.md`](docs/governance/unified-writer-gate.md).
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open from
@@ -586,8 +599,8 @@ consolidation, and #78 local research deployment guardrail baselines.
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
   Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #75, #76,
-  #77, #78, and #79 as completed or landing baselines in this branch; R94 is
-  the next active pursuit goal for writer gate consolidation.
+  #77, #78, #79, and R94 as completed or landing baselines in this branch; R95
+  is the next active pursuit goal for reference fact/license verification.
 
 ## Version Plan / 版本计划
 
@@ -846,7 +859,7 @@ consolidation, and #78 local research deployment guardrail baselines.
   the deterministic genome rejuvenation simulation baseline, #72 is the purpose
   ontology / relabel validator baseline, and #73 is the reversible Gene
   Scissors transaction journal baseline. #79 is the completed pursuit-goal
-  scheduler baseline with default #74/#75/#76/#78/R94 queue records, success,
+  scheduler baseline with default #74/#75/#76/#78/R94/R95 queue records, success,
   stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
   completed thinking-phase scheduler baseline with deterministic phase
   contracts, digest-only segment and route traces, budget exhaustion reporting,
@@ -858,8 +871,10 @@ consolidation, and #78 local research deployment guardrail baselines.
   plans, cross-tenant isolation, rollback anchors, before/after metrics, and
   trace-gated JSONL. #78 is the completed local research deployment guardrail
   baseline with deterministic CPU/GPU/low-memory/benchmark profiles, resource
-  guards, disabled write defaults, and operator-health evidence. The live
-  default pursuit queue now starts at R94.)
+  guards, disabled write defaults, and operator-health evidence. R94 is the
+  completed unified writer-gate baseline with shared memory/genome/
+  experiment-ledger evidence, deny-by-default policy, and trace-gated JSONL.
+  The live default pursuit queue now starts at R95.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -957,6 +972,11 @@ consolidation, and #78 local research deployment guardrail baselines.
   default Noiron pursuit goals, and isolation between failed and later goals.
   Policy is documented in
   [`docs/governance/evolution-goal-queue.md`](docs/governance/evolution-goal-queue.md).
+- R94 `self-evolution writer gate consolidation`: completed baseline for
+  shared `UnifiedWriterGate` evaluation across memory admission, Gene Scissors
+  journals, and self-evolution promotion preflight reports, with deny-by-default
+  policy and count/digest-only trace evidence. Policy is documented in
+  [`docs/governance/unified-writer-gate.md`](docs/governance/unified-writer-gate.md).
 
 ## R8x/R9x Milestone Backlog / R8x/R9x 里程碑候选
 
@@ -1009,9 +1029,10 @@ consolidation, and #78 local research deployment guardrail baselines.
   bounded self-evolution objectives, runs one active goal at a time, stops on
   success/budget/rollback/approval-hold conditions, and requires
   maintainer/operator approval before durable mutation.
-- R94 / #77/#6/#20: self-evolution writer gate consolidation. Unify memory,
-  genome, and experiment-ledger writer gates so all durable writes remain
-  preview/read-only until validation, rollback, privacy/license, and
+- R94 / #77/#6/#20 completed baseline: self-evolution writer gate
+  consolidation. Unifies memory, genome, and experiment-ledger writer-gate
+  evidence through `UnifiedWriterGate` so durable writes remain preview/read-only
+  until validation, rollback, privacy/license, trace/benchmark, exact refs, and
   maintainer/operator approval requirements pass.
 - R95 / #63/#64/#65: reference backlog verification. Fact-check and
   license-review DNA-inspired, chunk/KV, and Rust inference references before

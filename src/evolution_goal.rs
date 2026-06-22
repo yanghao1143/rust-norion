@@ -599,18 +599,17 @@ impl EvolutionGoalQueue {
 pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
     vec![EvolutionGoal::new(
         10,
-        "R94 self-evolution writer gate consolidation",
+        "R95 reference backlog verification and license review",
         EvolutionGoalSuccessGate::new([
             EvolutionGoalEvidenceKind::CargoCheck,
             EvolutionGoalEvidenceKind::FocusedTests,
             EvolutionGoalEvidenceKind::TraceSchemaGate,
-            EvolutionGoalEvidenceKind::ExperimentLedger,
             EvolutionGoalEvidenceKind::OperatorApproval,
         ]),
         [
-            "roadmap:R94",
-            "issues:#77,#6,#20",
-            "pursuit:writer-gate-consolidation",
+            "roadmap:R95",
+            "issues:#63,#64,#65",
+            "pursuit:reference-backlog-verification",
         ],
     )]
 }
@@ -1013,11 +1012,11 @@ mod tests {
     }
 
     #[test]
-    fn default_noiron_pursuit_goal_queue_advances_to_writer_gate_consolidation() {
+    fn default_noiron_pursuit_goal_queue_advances_to_reference_backlog_verification() {
         let queue = default_noiron_pursuit_goal_queue();
 
         assert_eq!(queue.goals.len(), 1);
-        assert!(queue.goals[0].objective.contains("R94"));
+        assert!(queue.goals[0].objective.contains("R95"));
 
         let report = queue.evaluate(&[]);
 

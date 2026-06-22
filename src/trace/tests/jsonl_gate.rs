@@ -7,6 +7,10 @@ use crate::self_evolving_memory::{
     SelfEvolvingMemoryApproval, SelfEvolvingMemoryMaintenancePolicy, SelfEvolvingMemoryQuery,
     SelfEvolvingMemoryStore,
 };
+use crate::{
+    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDomain,
+    UnifiedWriterGatePolicy, UnifiedWriterGateWriteScope,
+};
 
 #[test]
 fn trace_schema_jsonl_gate_checks_non_empty_records() {
@@ -996,6 +1000,75 @@ fn trace_schema_jsonl_gate_aggregates_memory_residency_plans() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_aggregates_unified_writer_gate_reports() {
+    let path = temp_path("trace-schema-unified-writer-gate");
+    let preview_report = UnifiedWriterGate::new().evaluate([unified_writer_gate_ready_candidate(
+        UnifiedWriterGateDomain::Memory,
+        "memory:ready-for-preview",
+    )]);
+    let held_report = UnifiedWriterGate::new().evaluate([UnifiedWriterGateCandidate::new(
+        UnifiedWriterGateDomain::Genome,
+        "genome:held-for-evidence",
+        [UnifiedWriterGateWriteScope::Genome],
+    )
+    .with_evidence(false, false, false, true, true)
+    .with_operator_approval(false, false)]);
+
+    append_unified_writer_gate_trace_jsonl(&path, &preview_report).unwrap();
+    append_unified_writer_gate_trace_jsonl(&path, &held_report).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 2);
+    assert_eq!(report.unified_writer_gate_events, 2);
+    assert_eq!(report.unified_writer_gate_records, 2);
+    assert_eq!(report.unified_writer_gate_memory_records, 1);
+    assert_eq!(report.unified_writer_gate_genome_records, 1);
+    assert_eq!(report.unified_writer_gate_experiment_ledger_records, 0);
+    assert_eq!(report.unified_writer_gate_ready_records, 0);
+    assert_eq!(report.unified_writer_gate_preview_only_records, 1);
+    assert_eq!(report.unified_writer_gate_held_records, 1);
+    assert_eq!(report.unified_writer_gate_rejected_records, 0);
+    assert_eq!(report.unified_writer_gate_write_allowed, 0);
+    assert_eq!(report.unified_writer_gate_durable_write_allowed, 0);
+    assert_eq!(report.unified_writer_gate_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("unified_writer_gate_events=2")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_unified_writer_gate_ready_write_enabled() {
+    let report = UnifiedWriterGate::new()
+        .with_policy(UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        })
+        .evaluate([unified_writer_gate_ready_candidate(
+            UnifiedWriterGateDomain::ExperimentLedger,
+            "experiment:ready",
+        )]);
+    let failures = evaluate_trace_schema_line(&report.json_line());
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("ready_records require a separate explicit apply")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("durable_write_allowed=true expected false")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_jsonl_gate_exports_redacted_operator_health_snapshot() {
     let path = temp_path("trace-schema-operator-health");
     let mut engine = NoironEngine::new();
@@ -1348,6 +1421,28 @@ fn self_evolution_experiment_rollback_report(candidate_id: &str) -> SelfEvolutio
     .with_router_threshold_preview_report(&router_preview);
 
     SelfEvolutionAdmissionGate::new().evaluate(&evidence)
+}
+
+fn unified_writer_gate_ready_candidate(
+    domain: UnifiedWriterGateDomain,
+    candidate_id: &str,
+) -> UnifiedWriterGateCandidate {
+    let scope = match domain {
+        UnifiedWriterGateDomain::Memory => UnifiedWriterGateWriteScope::DurableMemory,
+        UnifiedWriterGateDomain::Genome => UnifiedWriterGateWriteScope::Genome,
+        UnifiedWriterGateDomain::ExperimentLedger => UnifiedWriterGateWriteScope::ExperimentLedger,
+    };
+
+    UnifiedWriterGateCandidate::new(domain, candidate_id, [scope])
+        .with_refs(
+            vec!["review:trace".to_owned()],
+            vec!["evidence:trace".to_owned()],
+            vec!["rollback:trace".to_owned()],
+            vec!["digest:trace".to_owned()],
+            vec!["schema:trace".to_owned()],
+        )
+        .with_evidence(true, true, true, true, true)
+        .with_operator_approval(true, true)
 }
 
 fn trace_milli(value: f32) -> usize {

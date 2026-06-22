@@ -76,7 +76,8 @@ New fixtures must follow these rules:
 ## Queue Role
 
 #75 is a completed baseline once the corpus, scorer, evidence packets, docs,
-and focused tests pass. The default Noiron pursuit queue then advances to #76
-memory consolidation, followed by #78 deployment guardrails and R94 writer gate
-consolidation. Later goals remain isolated until the active goal reaches its
-success gate, clean stop condition, rollback state, or approval hold.
+and focused tests pass. The default Noiron pursuit queue then advances through
+#76 memory consolidation, #78 deployment guardrails, and R94 writer gate
+consolidation before R95 reference fact/license verification. Later goals remain
+isolated until the active goal reaches its success gate, clean stop condition,
+rollback state, or approval hold.
