@@ -11,6 +11,9 @@ mod args;
 #[path = "tests/benchmark_state.rs"]
 mod benchmark_state;
 
+#[path = "tests/coding_service_eval_cli.rs"]
+mod coding_service_eval_cli;
+
 #[path = "tests/device_config.rs"]
 mod device_config;
 

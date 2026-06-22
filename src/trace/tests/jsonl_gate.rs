@@ -52,6 +52,40 @@ fn trace_schema_jsonl_gate_checks_non_empty_records() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_aggregates_coding_service_eval_runner_feed() {
+    let path = temp_path("trace-schema-coding-service-eval-runner");
+    let report = crate::default_coding_service_eval_runner_report();
+    let line = crate::coding_service_eval_runner_trace_json_line(&report);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let trace_report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(trace_report.checked_lines, 1);
+    assert_eq!(trace_report.coding_service_eval_events, 1);
+    assert_eq!(trace_report.coding_service_eval_runner_events, 1);
+    assert_eq!(trace_report.coding_service_eval_readiness_events, 0);
+    assert_eq!(trace_report.coding_service_eval_passed, 1);
+    assert_eq!(trace_report.coding_service_eval_requests, 5);
+    assert_eq!(trace_report.coding_service_eval_completed, 5);
+    assert_eq!(trace_report.coding_service_eval_evidence_packets, 5);
+    assert_eq!(trace_report.coding_service_eval_rust_validation_checked, 2);
+    assert_eq!(trace_report.coding_service_eval_compile_checked, 2);
+    assert_eq!(trace_report.coding_service_eval_unit_test_checked, 2);
+    assert_eq!(trace_report.coding_service_eval_write_allowed, 0);
+    assert_eq!(trace_report.coding_service_eval_applied, 0);
+    assert!(
+        trace_report
+            .summary_line()
+            .contains("coding_service_eval_runner_events=1")
+    );
+    assert!(!line.contains("\"messages\""));
+    assert!(!line.contains("\"evidence_packets\""));
+    assert!(!line.contains("\"run_records\""));
+    cleanup(path);
+}
+
+#[test]
 fn trace_schema_jsonl_gate_aggregates_memory_admission_and_kv_fusion() {
     let path = temp_path("trace-schema-memory-admission");
     let mut engine = NoironEngine::new();

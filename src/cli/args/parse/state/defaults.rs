@@ -36,6 +36,8 @@ impl ParseState {
             self_goal_queue_key: "pursuit".to_owned(),
             self_goal_queue_operator: "operator:local".to_owned(),
             self_goal_queue_ticket: "ticket:self-goal-queue-cli".to_owned(),
+            coding_service_eval_readiness: false,
+            coding_service_eval_runner: false,
             experience_hygiene: false,
             experience_hygiene_limit: 20,
             experience_hygiene_quarantine: false,

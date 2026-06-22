@@ -1,5 +1,6 @@
 mod admission;
 mod business;
+mod coding_service_eval;
 mod core;
 mod improvement_corpus;
 mod json;
@@ -24,6 +25,11 @@ pub use admission::{
     self_evolution_rollback_replay_trace_json_line,
 };
 pub use business::{append_business_contract_trace_jsonl, business_contract_trace_json_line};
+pub use coding_service_eval::{
+    append_coding_service_eval_readiness_trace_jsonl,
+    append_coding_service_eval_runner_trace_jsonl, coding_service_eval_readiness_trace_json_line,
+    coding_service_eval_runner_trace_json_line,
+};
 pub use core::{trace_json_line, trace_json_line_with_case};
 pub use improvement_corpus::{
     append_improvement_corpus_trace_jsonl, improvement_corpus_trace_json_line,

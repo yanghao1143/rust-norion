@@ -1,5 +1,6 @@
 pub(crate) mod args;
 pub(crate) mod benchmark;
+pub(crate) mod coding_service_eval;
 pub(crate) mod device;
 pub(crate) mod display;
 pub(crate) mod experience_audit;
