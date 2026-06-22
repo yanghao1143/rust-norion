@@ -1,8 +1,8 @@
 use super::*;
 use rust_norion::{
     EvolutionGoalQueue, EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval,
-    EvolutionGoalQueueStorePolicy, SelfGoalAdmissionDecision, TenantResourceLane, TenantScope,
-    stable_redaction_digest,
+    EvolutionGoalQueueStorePolicy, EvolutionGoalStatus, SelfGoalAdmissionDecision,
+    TenantResourceLane, TenantScope, stable_redaction_digest,
 };
 use std::fs;
 
@@ -14,6 +14,10 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
 
     assert_eq!(report.current_goal_count, 1);
     assert!(!report.current_queue_loaded_from_store);
+    assert_eq!(report.queue_run.decisions.len(), 1);
+    assert!(report.queue_run.active_goal_id.is_some());
+    assert!(report.run_plan.active);
+    assert_eq!(report.run_plan.required_evidence.len(), 4);
     assert_eq!(report.admission.preview_admissible_count, 0);
     assert_eq!(report.queue_preview.append_preview_count, 0);
     assert!(!report.apply.explicit_apply_required);
@@ -23,6 +27,45 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
     assert!(summary.contains("redaction-digest:"));
     assert!(!summary.contains("English/Chinese/Rust coding service"));
     assert!(!summary.contains("local model can persist useful experience"));
+}
+
+#[test]
+fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=cargo_check;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=focused_tests;passed=true;items=3;failures=0".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=trace_schema_gate;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=operator_approval;passed=true;approval=true".to_owned(),
+    ]);
+
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let summary = report.summary_lines().join("\n");
+
+    assert_eq!(report.evidence.packet_count, 4);
+    assert_eq!(report.evidence.valid_packet_count, 4);
+    assert_eq!(report.evidence.invalid_packet_count, 0);
+    assert_eq!(report.evidence.run_count, 1);
+    assert_eq!(report.evidence.approval_count, 1);
+    assert_eq!(report.queue_run.passed_count, 1);
+    assert!(report.queue_run.active_goal_id.is_none());
+    assert_eq!(
+        report.queue_run.decisions[0].status,
+        EvolutionGoalStatus::Passed
+    );
+    assert_eq!(
+        report.queue_run.decisions[0].reason_codes,
+        ["success_gate_passed"]
+    );
+    assert!(!report.run_plan.active);
+    assert!(summary.contains("self_goal_queue_run decisions=1 active=none passed=1"));
+    assert!(summary.contains("self_goal_queue_run_evolution_goal_decision_v1"));
+    assert!(summary.contains("status=passed"));
+    assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
 }
 
 #[test]
