@@ -662,6 +662,456 @@ Set-Content -Encoding ASCII -LiteralPath $report -Value (@{
             )
         }
     }
+    self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1 = @{
+        target_count = 2
+        request_count = 2
+        approval_request_item_count = 2
+        approval_decision_item_count = 2
+        review_packet_item_count = 2
+        ready_review_packet_count = 2
+        pending_approval_count = 2
+        blocked_count = 0
+        first_review_packet_item_id = "self-improve-r392-helper-contract"
+        approval_review_packet_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_usefulness_report_v1 = @{
+        target_count = 2
+        projected_report_count = 2
+        accepted_memory_admission_count = 0
+        quarantined_candidate_count = 2
+        review_packet_item_count = 2
+        useful_reflection_item_count = 2
+        pending_operator_approval_count = 2
+        blocked_count = 0
+        wasted_compute_guard_count = 2
+        adapter_safe_count = 2
+        first_reflection_item_id = "self-improve-r392-helper-contract"
+        reflection_usefulness_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_dedupe_cluster_report_v1 = @{
+        target_count = 2
+        useful_reflection_item_count = 2
+        reflection_cluster_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        wasted_compute_guard_count = 2
+        pending_operator_approval_count = 2
+        adapter_safe_count = 2
+        first_cluster_id = "memory-reflection-dedupe:selfimprovehelpercontract:fnv1a64-0000000000001111"
+        reflection_dedupe_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_plan_report_v1 = @{
+        target_count = 2
+        reflection_cluster_count = 1
+        plan_item_count = 1
+        ready_reuse_plan_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        first_plan_item_id = "memory-reflection-dedupe:selfimprovehelpercontract:fnv1a64-0000000000001111"
+        reflection_reuse_plan_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_preflight_report_v1 = @{
+        target_count = 2
+        plan_item_count = 1
+        ready_reuse_plan_count = 1
+        preflight_item_count = 1
+        preflight_passed_item_count = 1
+        blocked_item_count = 0
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_preflight_item_id = "memory-reflection-dedupe:selfimprovehelpercontract:fnv1a64-0000000000001111"
+        reuse_preflight_passed = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        preflight_item_count = 1
+        lookup_preview_item_count = 1
+        ready_lookup_preview_count = 1
+        blocked_item_count = 0
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_lookup_key = "memory-reflection-reuse-lookup:memoryreflectiondedupe:fnv1a64-0000000000002222"
+        lookup_preview_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        preflight_item_count = 1
+        lookup_preview_item_count = 1
+        ready_lookup_preview_count = 1
+        approval_request_item_count = 1
+        ready_approval_request_count = 1
+        requested_lookup_approval_count = 1
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_approval_request_id = "memory-reflection-reuse-lookup-approval:memoryreflectiondedupe:fnv1a64-0000000000003333"
+        lookup_approval_request_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        preflight_item_count = 1
+        lookup_preview_item_count = 1
+        ready_lookup_preview_count = 1
+        approval_request_item_count = 1
+        ready_approval_request_count = 1
+        approval_decision_preview_item_count = 1
+        ready_approval_decision_preview_count = 1
+        approved_lookup_execution_count = 0
+        pending_approval_count = 1
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_approval_decision_preview_id = "memory-reflection-reuse-lookup-approval-decision-preview:memoryreflectiondedupe:fnv1a64-0000000000004444"
+        lookup_approval_decision_preview_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        preflight_item_count = 1
+        lookup_preview_item_count = 1
+        ready_lookup_preview_count = 1
+        approval_request_item_count = 1
+        ready_approval_request_count = 1
+        approval_decision_preview_item_count = 1
+        ready_approval_decision_preview_count = 1
+        token_intake_preview_item_count = 1
+        ready_token_intake_preview_count = 1
+        pending_operator_token_count = 1
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_token_intake_preview_id = "memory-reflection-reuse-lookup-approval-token-intake-preview:memoryreflectiondedupe:fnv1a64-0000000000005555"
+        lookup_approval_token_intake_preview_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        preflight_item_count = 1
+        lookup_preview_item_count = 1
+        ready_lookup_preview_count = 1
+        approval_request_item_count = 1
+        ready_approval_request_count = 1
+        approval_decision_preview_item_count = 1
+        ready_approval_decision_preview_count = 1
+        token_intake_preview_item_count = 1
+        ready_token_intake_preview_count = 1
+        token_intake_decision_preview_item_count = 1
+        ready_token_intake_decision_preview_count = 1
+        pending_operator_token_count = 1
+        approved_lookup_execution_count = 0
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_token_intake_decision_preview_id = "memory-reflection-reuse-lookup-approval-token-intake-decision-preview:memoryreflectiondedupe:fnv1a64-0000000000006666"
+        lookup_approval_token_intake_decision_preview_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        token_intake_decision_preview_item_count = 1
+        ready_token_intake_decision_preview_count = 1
+        token_decision_record_preview_item_count = 1
+        ready_token_decision_record_preview_count = 1
+        pending_operator_token_count = 1
+        approved_lookup_execution_count = 0
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_token_decision_record_preview_id = "memory-reflection-reuse-lookup-approval-token-decision-record-preview:memoryreflectiondedupe:fnv1a64-0000000000007777"
+        lookup_approval_token_decision_record_preview_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        token_decision_record_preview_item_count = 1
+        ready_token_decision_record_preview_count = 1
+        token_decision_record_request_item_count = 1
+        ready_token_decision_record_request_count = 1
+        requested_token_decision_record_count = 1
+        pending_operator_token_count = 1
+        approved_lookup_execution_count = 0
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_token_decision_record_request_id = "memory-reflection-reuse-lookup-approval-token-decision-record-request:memoryreflectiondedupe:fnv1a64-0000000000008888"
+        lookup_approval_token_decision_record_request_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        token_decision_record_request_item_count = 1
+        ready_token_decision_record_request_count = 1
+        token_decision_record_review_packet_item_count = 1
+        ready_token_decision_record_review_packet_count = 1
+        requested_token_decision_record_count = 1
+        pending_operator_token_count = 1
+        approved_lookup_execution_count = 0
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_token_decision_record_review_packet_id = "memory-reflection-reuse-lookup-approval-token-decision-record-review-packet:memoryreflectiondedupe:fnv1a64-0000000000009999"
+        lookup_approval_token_decision_record_review_packet_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1 = @{
+        read_only = $true
+        report_only = $true
+        candidate_only = $true
+        target_count = 2
+        token_decision_record_review_packet_item_count = 1
+        ready_token_decision_record_review_packet_count = 1
+        token_decision_record_review_packet_decision_preview_item_count = 1
+        ready_token_decision_record_review_packet_decision_preview_count = 1
+        requested_token_decision_record_count = 1
+        pending_operator_token_count = 1
+        approved_lookup_execution_count = 0
+        blocked_item_count = 0
+        approval_token_present_count = 1
+        rejection_token_present_count = 1
+        duplicate_cluster_count = 1
+        duplicate_reflection_item_count = 1
+        projected_saved_reflection_count = 1
+        projected_model_call_skip_count = 1
+        first_token_decision_record_review_packet_decision_preview_id = "memory-reflection-reuse-lookup-approval-token-decision-record-review-packet-decision-preview:memoryreflectiondedupe:fnv1a64-000000000000aaaa"
+        lookup_approval_token_decision_record_review_packet_decision_preview_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        model_call_skip_authorized = $false
+        reflection_reuse_execution_authorized = $false
+        memory_lookup_performed = $false
+        lookup_hit_assumed = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
+    self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1 = @{
+        target_count = 2
+        review_packet_item_count = 2
+        useful_reflection_item_count = 2
+        intake_item_count = 2
+        ready_intake_count = 2
+        pending_operator_token_count = 2
+        blocked_count = 0
+        approval_token_present_count = 2
+        rejection_token_present_count = 2
+        first_intake_item_id = "self-improve-r392-helper-contract"
+        approval_token_intake_ready = $true
+        explicit_operator_approval_required = $true
+        validation_required = $true
+        rollback_required = $true
+        commit_allowed = $false
+        admission_write_authorized = $false
+        failure_reasons = @()
+        auto_apply = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
     remote_chain = @{
         remote_runtime = @{
             probed = $false
@@ -709,6 +1159,52 @@ $reportProposalFirstMissing = @($reportStatus.report.self_improve_proposal_actio
 if ($reportProposalFirstMissing.Count -ne 2 -or $reportProposalFirstMissing[0] -ne "accepted_memory_admission" -or $reportProposalFirstMissing[1] -ne "evidence_backed_business_improvement") {
     throw "report self-improve proposal action assignment missing requirements were not exposed"
 }
+if ($reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_source -ne "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1" -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal commit approval review packet was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_usefulness_source -ne "self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_useful_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection usefulness was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_source -ne "self_improve_proposal_memory_reflection_dedupe_cluster_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_useful_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_reflection_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_wasted_compute_guard_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_adapter_safe_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_dedupe_cluster_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection dedupe cluster was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_source -ne "self_improve_proposal_memory_reflection_reuse_plan_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_duplicate_cluster_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_duplicate_reflection_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_projected_saved_reflection_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_plan_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse plan was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_source -ne "self_improve_proposal_memory_reflection_reuse_preflight_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_plan_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_passed_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_blocked_item_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_passed -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_preflight_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse preflight was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_blocked_item_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_preview_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup preview was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_lookup_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready_lookup_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_requested_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval request was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_lookup_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_lookup_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approval_request_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_approval_request_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approved_lookup_execution_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_pending_approval_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval decision preview was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_lookup_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_lookup_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_request_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_approval_request_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_decision_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_approval_decision_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_pending_operator_token_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval token intake preview was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_preflight_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_lookup_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_lookup_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_request_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_approval_request_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_decision_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_approval_decision_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_token_intake_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_token_intake_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_pending_operator_token_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approved_lookup_execution_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval token intake decision preview was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_target_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_token_intake_decision_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready_token_intake_decision_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_pending_operator_token_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_approved_lookup_execution_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval token decision record preview was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_target_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_token_decision_record_preview_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready_token_decision_record_preview_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_requested_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_pending_operator_token_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_approved_lookup_execution_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_projected_model_call_skip_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval token decision record request was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_target_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_token_decision_record_request_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready_token_decision_record_request_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_item_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_requested_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_pending_operator_token_count -ne 1 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_approved_lookup_execution_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_first_item -ne "memory-reflection-reuse-lookup-approval-token-decision-record-review-packet:memoryreflectiondedupe:fnv1a64-0000000000009999" -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_validation_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_rollback_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_admission_write_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_model_call_skip_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_execution_authorized -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_memory_lookup_performed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_lookup_hit_assumed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_read_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_candidate_only -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_auto_apply -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval token decision record review packet was not exposed"
+}
+$reviewPacketDecisionPreview = $reportStatus.report
+if ($reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_source -ne "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1" -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_target_count -ne 2 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_token_decision_record_review_packet_item_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready_token_decision_record_review_packet_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_item_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_requested_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_pending_operator_token_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_approved_lookup_execution_count -ne 0 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_blocked_count -ne 0 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_approval_token_present_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_rejection_token_present_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_duplicate_cluster_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_duplicate_reflection_item_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_projected_saved_reflection_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_projected_model_call_skip_count -ne 1 -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_first_item -ne "memory-reflection-reuse-lookup-approval-token-decision-record-review-packet-decision-preview:memoryreflectiondedupe:fnv1a64-000000000000aaaa" -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_explicit_operator_approval_required -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_validation_required -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_rollback_required -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_commit_allowed -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_admission_write_authorized -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_model_call_skip_authorized -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_execution_authorized -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_memory_lookup_performed -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_lookup_hit_assumed -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_read_only -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_only -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_candidate_only -ne $true -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_auto_apply -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_memory_store_write_allowed -ne $false -or $reviewPacketDecisionPreview.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory reflection reuse lookup approval token decision record review packet decision preview was not exposed"
+}
+if ($reportStatus.report.self_improve_proposal_memory_approval_token_intake_source -ne "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_approval_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal memory approval token intake preview was not exposed"
+}
 if ($reportStatus.next_round_decision.display_state -ne "blocked-operator-attention" -or $reportStatus.next_round_decision.operator_attention_blocked -ne $true -or $reportStatus.next_round_decision.reason_code -ne "report_gate_failed_operator_attention_required") {
     throw "failed report gate did not surface blocked next-round decision"
 }
@@ -737,6 +1233,51 @@ if ($reportHuman -notmatch "remote_runtime_probed=False" -or $reportHuman -notma
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_acceptance_summary_v1: source=self_improve_proposal_acceptance_summary_v1" -or $reportHuman -notmatch "advisory_only=2" -or $reportHuman -notmatch "convert_advisory_to_business_evidence=True" -or $reportHuman -notmatch "repair_unvalidated_or_unaccepted=False" -or $reportHuman -notmatch "requires_validation_and_memory_admission=True" -or $reportHuman -notmatch "action_required=True" -or $reportHuman -notmatch "primary_action=convert_advisory_to_evidence_backed_business_improvement" -or $reportHuman -notmatch "actions=convert_advisory_to_evidence_backed_business_improvement,require_checked_passed_validation_and_accepted_memory_admission" -or $reportHuman -notmatch "action_plan_requires_validation_and_memory_admission=True" -or $reportHuman -notmatch "action_assignment_targets=2" -or $reportHuman -notmatch "action_assignment_first_target=self-improve-r392-helper-contract" -or $reportHuman -notmatch "action_assignment_first_missing=accepted_memory_admission,evidence_backed_business_improvement") {
     throw "human status did not summarize self-improve proposal prompt guidance"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1" -or $reportHuman -notmatch "review_packet_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending=2" -or $reportHuman -notmatch "approval_review_packet_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve approval review packet"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportHuman -notmatch "useful=2" -or $reportHuman -notmatch "pending_operator_approval=2" -or $reportHuman -notmatch "wasted_compute_guard=2" -or $reportHuman -notmatch "adapter_safe=2" -or $reportHuman -notmatch "reflection_usefulness_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection usefulness"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_dedupe_cluster_report_v1: source=self_improve_proposal_memory_reflection_dedupe_cluster_report_v1" -or $reportHuman -notmatch "clusters=1" -or $reportHuman -notmatch "duplicate_clusters=1" -or $reportHuman -notmatch "duplicate_reflections=1" -or $reportHuman -notmatch "wasted_compute_guard=2" -or $reportHuman -notmatch "adapter_safe=2" -or $reportHuman -notmatch "reflection_dedupe_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection dedupe cluster"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_plan_report_v1: source=self_improve_proposal_memory_reflection_reuse_plan_report_v1" -or $reportHuman -notmatch "plan_items=1" -or $reportHuman -notmatch "ready=1" -or $reportHuman -notmatch "duplicate_clusters=1" -or $reportHuman -notmatch "duplicate_reflections=1" -or $reportHuman -notmatch "projected_saved_reflections=1" -or $reportHuman -notmatch "reflection_reuse_plan_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse plan"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_preflight_report_v1: source=self_improve_proposal_memory_reflection_reuse_preflight_report_v1" -or $reportHuman -notmatch "preflight_items=1" -or $reportHuman -notmatch "passed=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "reuse_preflight_passed=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse preflight"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1" -or $reportHuman -notmatch "lookup_items=1" -or $reportHuman -notmatch "ready=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_preview_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup preview"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1" -or $reportHuman -notmatch "approval_requests=1" -or $reportHuman -notmatch "ready_requests=1" -or $reportHuman -notmatch "requested=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_approval_request_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval request"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1" -or $reportHuman -notmatch "decision_previews=1" -or $reportHuman -notmatch "ready_decision_previews=1" -or $reportHuman -notmatch "approved_lookup_executions=0" -or $reportHuman -notmatch "pending=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_approval_decision_preview_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval decision preview"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1" -or $reportHuman -notmatch "token_intake_previews=1" -or $reportHuman -notmatch "ready_token_intake_previews=1" -or $reportHuman -notmatch "pending_operator_tokens=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_approval_token_intake_preview_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval token intake preview"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1" -or $reportHuman -notmatch "token_intake_decision_previews=1" -or $reportHuman -notmatch "ready_token_intake_decision_previews=1" -or $reportHuman -notmatch "approved_lookup_executions=0" -or $reportHuman -notmatch "pending_operator_tokens=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_approval_token_intake_decision_preview_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval token intake decision preview"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1" -or $reportHuman -notmatch "token_decision_record_previews=1" -or $reportHuman -notmatch "ready_token_decision_record_previews=1" -or $reportHuman -notmatch "approved_lookup_executions=0" -or $reportHuman -notmatch "pending_operator_tokens=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_approval_token_decision_record_preview_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval token decision record preview"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1" -or $reportHuman -notmatch "token_decision_record_requests=1" -or $reportHuman -notmatch "ready_token_decision_record_requests=1" -or $reportHuman -notmatch "requested_token_decision_records=1" -or $reportHuman -notmatch "approved_lookup_executions=0" -or $reportHuman -notmatch "pending_operator_tokens=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "projected_model_call_skips=1" -or $reportHuman -notmatch "lookup_approval_token_decision_record_request_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval token decision record request"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1" -or $reportHuman -notmatch "token_decision_record_review_packets=1" -or $reportHuman -notmatch "ready_token_decision_record_review_packets=1" -or $reportHuman -notmatch "requested_token_decision_records=1" -or $reportHuman -notmatch "approved_lookup_executions=0" -or $reportHuman -notmatch "pending_operator_tokens=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "lookup_approval_token_decision_record_review_packet_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "validation_required=True" -or $reportHuman -notmatch "rollback_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "admission_write_authorized=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "auto_apply=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval token decision record review packet"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1: source=self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1" -or $reportHuman -notmatch "review_packet_decision_previews=1" -or $reportHuman -notmatch "ready_review_packet_decision_previews=1" -or $reportHuman -notmatch "requested_token_decision_records=1" -or $reportHuman -notmatch "approved_lookup_executions=0" -or $reportHuman -notmatch "pending_operator_tokens=1" -or $reportHuman -notmatch "blocked=0" -or $reportHuman -notmatch "lookup_approval_token_decision_record_review_packet_decision_preview_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "validation_required=True" -or $reportHuman -notmatch "rollback_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "admission_write_authorized=False" -or $reportHuman -notmatch "model_call_skip_authorized=False" -or $reportHuman -notmatch "reflection_reuse_execution_authorized=False" -or $reportHuman -notmatch "memory_lookup_performed=False" -or $reportHuman -notmatch "lookup_hit_assumed=False" -or $reportHuman -notmatch "read_only=True" -or $reportHuman -notmatch "report_only=True" -or $reportHuman -notmatch "candidate_only=True" -or $reportHuman -notmatch "auto_apply=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve memory reflection reuse lookup approval token decision record review packet decision preview"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1" -or $reportHuman -notmatch "intake_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending_operator_tokens=2" -or $reportHuman -notmatch "approval_tokens=2" -or $reportHuman -notmatch "rejection_tokens=2" -or $reportHuman -notmatch "approval_token_intake_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve approval token intake preview"
 }
 if ($reportHuman -notmatch "next_round_decision: schema=next_round_decision_evidence_v1 display_state=blocked-operator-attention") {
     throw "human status did not summarize blocked next-round decision"

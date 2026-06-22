@@ -6,6 +6,7 @@ use super::contract::{
     validate_runtime_response_contract,
 };
 use super::kv_import::runtime_kv_blocks_from_context;
+use super::kv_safety::{RuntimeKvSafetyReport, sanitize_runtime_kv_blocks};
 use super::types::{ModelRuntime, RuntimeError, RuntimeRequest, RuntimeResponse, RuntimeToken};
 
 #[derive(Debug, Clone)]
@@ -140,34 +141,39 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
         let runtime = override_runtime.as_mut().unwrap_or(&mut self.runtime);
         let runtime_metadata = runtime.metadata();
         let runtime_architecture = runtime.architecture();
-        let import_blocks =
-            runtime_kv_blocks_from_context(&context, &runtime_metadata, runtime_architecture);
-        let imported_kv_blocks = if runtime_metadata.supports_kv_import && !import_blocks.is_empty()
-        {
-            match runtime.import_kv(&import_blocks) {
-                Ok(count) => count,
-                Err(error) => {
-                    self.last_error = Some(error.clone());
-                    return InferenceDraft::new(
-                        format!("Runtime backend error: {}", error.message()),
-                        vec![ReasoningStep::new(
-                            "runtime_kv_import_error",
-                            error.message(),
-                            0.0,
-                        )],
-                    );
+        let import_report = sanitize_runtime_kv_blocks(
+            runtime_kv_blocks_from_context(&context, &runtime_metadata, runtime_architecture),
+            &runtime_metadata,
+            runtime_architecture,
+            true,
+            "imported_kv_blocks",
+        );
+        let imported_kv_blocks =
+            if runtime_metadata.supports_kv_import && !import_report.accepted.is_empty() {
+                match runtime.import_kv(&import_report.accepted) {
+                    Ok(count) => count,
+                    Err(error) => {
+                        self.last_error = Some(error.clone());
+                        return InferenceDraft::new(
+                            format!("Runtime backend error: {}", error.message()),
+                            vec![ReasoningStep::new(
+                                "runtime_kv_import_error",
+                                error.message(),
+                                0.0,
+                            )],
+                        );
+                    }
                 }
-            }
-        } else {
-            0
-        };
+            } else {
+                0
+            };
         let request = RuntimeRequest::from_context(
             &context,
             self.generation_max_tokens.unwrap_or(self.max_tokens),
             runtime_metadata.clone(),
             runtime_architecture,
         )
-        .with_imported_kv_blocks(import_blocks);
+        .with_imported_kv_blocks(import_report.accepted.clone());
 
         let result = if let Some(on_token) = on_token.as_mut() {
             runtime.generate_stream(request, &mut |token| {
@@ -189,6 +195,7 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
                 runtime_metadata,
                 runtime_architecture,
                 imported_kv_blocks,
+                import_report,
                 forwarded_endpoint.as_deref(),
             ),
             Err(error) => {
@@ -224,6 +231,7 @@ impl<R> RuntimeBackend<R> {
         runtime_metadata: super::RuntimeMetadata,
         runtime_architecture: crate::runtime_manifest::TransformerRuntimeArchitecture,
         imported_kv_blocks: usize,
+        import_report: RuntimeKvSafetyReport,
         forwarded_endpoint: Option<&str>,
     ) -> InferenceDraft
     where
@@ -260,6 +268,7 @@ impl<R> RuntimeBackend<R> {
                 0.78,
             ));
         }
+        push_kv_safety_trace(&mut trace, "runtime_kv_import_safety", &import_report);
         if let Some(endpoint) = forwarded_endpoint {
             trace.push(ReasoningStep::new(
                 "runtime_endpoint_override",
@@ -277,15 +286,33 @@ impl<R> RuntimeBackend<R> {
         let exported_kv_blocks =
             if runtime_metadata.supports_kv_export && runtime_contract_violations.is_empty() {
                 match self.runtime.export_kv() {
-                    Ok(blocks) if !blocks.is_empty() => {
-                        trace.push(ReasoningStep::new(
-                            "runtime_kv_export",
-                            format!("exported {} KV blocks", blocks.len()),
-                            0.74,
-                        ));
-                        blocks
+                    Ok(blocks) => {
+                        let export_report = sanitize_runtime_kv_blocks(
+                            blocks,
+                            &runtime_metadata,
+                            runtime_architecture,
+                            false,
+                            "exported_kv_blocks",
+                        );
+                        let accepted = export_report.accepted;
+                        if !accepted.is_empty() {
+                            trace.push(ReasoningStep::new(
+                                "runtime_kv_export",
+                                format!("exported {} KV blocks", accepted.len()),
+                                0.74,
+                            ));
+                        }
+                        push_kv_safety_trace(
+                            &mut trace,
+                            "runtime_kv_export_safety",
+                            &RuntimeKvSafetyReport {
+                                accepted: Vec::new(),
+                                rejected: export_report.rejected,
+                                truncated: export_report.truncated,
+                            },
+                        );
+                        accepted
                     }
-                    Ok(_) => Vec::new(),
                     Err(error) => {
                         trace.push(ReasoningStep::new(
                             "runtime_kv_export_error",
@@ -337,4 +364,31 @@ fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {
         format!("generated {} tokens", tokens.len()),
         confidence,
     )]
+}
+
+fn push_kv_safety_trace(
+    trace: &mut Vec<ReasoningStep>,
+    label: &str,
+    report: &RuntimeKvSafetyReport,
+) {
+    if report.rejected_count() == 0 {
+        return;
+    }
+
+    let mut reasons = report.rejected.clone();
+    if report.truncated > 0 {
+        reasons.push(format!(
+            "truncated {} blocks above runtime limit",
+            report.truncated
+        ));
+    }
+    trace.push(ReasoningStep::new(
+        label,
+        format!(
+            "rejected {} unsafe KV blocks: {}",
+            report.rejected_count(),
+            reasons.join("; ")
+        ),
+        0.18,
+    ));
 }

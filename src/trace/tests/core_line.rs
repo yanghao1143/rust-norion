@@ -22,6 +22,28 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"issue_codes\":"));
     assert!(line.contains("\"revision_passes\":"));
     assert!(line.contains("\"route\":"));
+    assert!(line.contains("\"adaptive_routing\":"));
+    assert!(line.contains("\"include\":"));
+    assert!(line.contains("\"compress\":"));
+    assert!(line.contains("\"defer\":"));
+    assert!(line.contains("\"skip\":"));
+    assert!(line.contains("\"input_tokens\":"));
+    assert!(line.contains("\"retained_tokens\":"));
+    assert!(line.contains("\"saved_tokens\":"));
+    assert!(line.contains("\"selected_routes\":"));
+    assert!(line.contains("\"score_summaries\":"));
+    assert!(line.contains("\"task_hierarchy\":"));
+    assert!(line.contains("\"mode\":\"rust_coding\""));
+    assert!(line.contains("\"hierarchy_depth\":"));
+    assert!(line.contains("\"route_fanout\":"));
+    assert!(line.contains("\"route_pressure\":"));
+    assert!(line.contains("\"compute_reduction\":"));
+    assert!(line.contains("\"selected_lanes\":"));
+    assert!(line.contains("\"memory_lanes\":"));
+    assert!(line.contains("\"mutation_records\":"));
+    assert!(line.contains("\"mutation_summaries\":"));
+    assert!(line.contains("\"rollback_anchor_id\":\"task_hierarchy:"));
+    assert!(line.contains("\"runtime_applied\":true"));
     assert!(line.contains("\"runtime_tokens\":"));
     assert!(line.contains("\"embedding\":{"));
     assert!(line.contains("\"query_source\":\"fallback\""));
@@ -47,6 +69,11 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"device_profile\":"));
     assert!(line.contains("\"primary_lane\":"));
     assert!(line.contains("\"runtime_device_contract\":"));
+    assert!(line.contains("\"runtime_budget\":"));
+    assert!(line.contains("\"selected_device\":"));
+    assert!(line.contains("\"quantization_profile\":"));
+    assert!(line.contains("\"fallback_reason\":"));
+    assert!(line.contains("\"fail_closed_cpu_stub\":"));
     assert!(line.contains("\"adapter_hints\":"));
     assert!(line.contains("\"local_kv_token_budget\":"));
     assert!(line.contains("\"global_kv_token_budget\":"));
@@ -64,6 +91,49 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"gate_passed\":"));
     assert!(line.contains("\"agent_team\":"));
     assert!(line.contains("\"collision_free\":"));
+    assert!(line.contains("\"aggregation\":"));
+    assert!(line.contains("\"budget_scope\":"));
+    assert!(line.contains("\"main_thread_writer\":"));
+    assert!(line.contains("\"reasoning_genome\":"));
+    assert!(line.contains("\"genome_id\":\"genome:coding:v1\""));
+    assert!(line.contains("\"stable_anchor_id\":\"genome:coding:stable\""));
+    assert!(line.contains("\"gene_count\":"));
+    assert!(line.contains("\"active_genes\":"));
+    assert!(line.contains("\"aged_genes\":"));
+    assert!(line.contains("\"malignant_genes\":"));
+    assert!(line.contains("\"relabel_candidates\":"));
+    assert!(line.contains("\"regeneration_candidates\":"));
+    assert!(line.contains("\"gene_scissors_proposals\":"));
+    assert!(line.contains("\"repair_payloads\":"));
+    assert!(line.contains("\"regeneration_payloads\":"));
+    assert!(line.contains("\"mutation_intents\":"));
+    assert!(line.contains("\"proposal_ids\":"));
+    assert!(line.contains("\"youth_pressure\":"));
+    assert!(line.contains("\"lifecycle_records\":"));
+    assert!(line.contains("\"lifecycle_actions\":"));
+    assert!(line.contains("\"lifecycle_summaries\":"));
+    assert!(line.contains("\"lifecycle_tombstone_candidates\":"));
+    assert!(line.contains("\"lifecycle_pending_validations\":"));
+    assert!(line.contains("\"lifecycle_source_evidence\":"));
+    assert!(line.contains("\"splice_segments\":"));
+    assert!(line.contains("\"splice_exons\":"));
+    assert!(line.contains("\"splice_introns\":"));
+    assert!(line.contains("\"splice_variants\":"));
+    assert!(line.contains("\"splice_retained\":"));
+    assert!(line.contains("\"splice_skipped\":"));
+    assert!(line.contains("\"splice_quarantined\":"));
+    assert!(line.contains("\"splice_repair_candidates\":"));
+    assert!(line.contains("\"splice_dispositions\":"));
+    assert!(line.contains("\"splice_reason_summaries\":"));
+    assert!(line.contains("\"splice_lifecycle_records\":"));
+    assert!(line.contains("\"splice_lifecycle_states\":"));
+    assert!(line.contains("\"splice_lifecycle_summaries\":"));
+    assert!(line.contains("\"splice_findings\":"));
+    assert!(line.contains("\"splice_finding_kinds\":"));
+    assert!(line.contains("\"splice_mutation_intents\":"));
+    assert!(line.contains("\"splice_proposals\":"));
+    assert!(line.contains("\"splice_proposal_ids\":"));
+    assert!(line.contains("\"splice_read_only\":"));
     assert!(line.contains("\"drift\":"));
     assert!(line.contains("\"process_reward\":"));
     assert!(line.contains("\"auto_replay\":"));
@@ -181,12 +251,283 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"feedback_missing\":"));
     assert!(line.contains("\"feedback_strength_delta\":"));
     assert!(line.contains("\"feedback_update_summaries\":"));
+    assert!(line.contains("\"memory_admission\":"));
+    assert!(line.contains("\"blocked\":"));
+    assert!(line.contains("\"admitted\":"));
+    assert!(line.contains("\"candidate_summaries\":"));
+    assert!(line.contains("\"review_packets\":"));
+    assert!(line.contains("\"review_packet_summaries\":"));
+    assert!(line.contains("\"ledger_records\":"));
+    assert!(line.contains("\"ledger_authorized\":"));
+    assert!(line.contains("\"ledger_applied\":"));
+    assert!(line.contains("\"ledger_preview_only\":"));
+    assert!(line.contains("\"ledger_held\":"));
+    assert!(line.contains("\"ledger_rejected\":"));
+    assert!(line.contains("\"ledger_duplicate\":"));
+    assert!(line.contains("\"ledger_decayed\":"));
+    assert!(line.contains("\"ledger_merged\":"));
+    assert!(line.contains("\"ledger_rollback\":"));
+    assert!(line.contains("\"ledger_summaries\":"));
+    assert!(line.contains("\"kv_fusion\":"));
+    assert!(line.contains("\"approval_blocked\":"));
+    assert!(line.contains("\"average_score\":"));
+    assert!(line.contains("\"score_summaries\":"));
+    assert!(line.contains("\"read_only\":true"));
+    assert!(line.contains("\"write_allowed\":false"));
     assert!(line.contains("\"stale_after\":"));
     assert!(line.contains("\"decay_rate\":"));
     assert!(line.contains("\"similarity_threshold\":"));
     assert!(line.contains("\"max_merges\":"));
     assert!(line.contains("\"memory_compaction\":"));
     assert!(line.ends_with('}'));
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line("trace genome write gate", TaskProfile::Coding, 5, &outcome),
+        "reasoning_genome",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_applied_preview() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome applied gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome applied gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"mutation_applied\":false",
+        "\"mutation_applied\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome mutation_applied")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_malignant_genome_without_regeneration_payload() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome repair payload gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome repair payload gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"malignant_genes\":0",
+        "\"malignant_genes\":1",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("regeneration_payloads")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_splice_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome splice write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome splice write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"splice_write_allowed\":false",
+        "\"splice_write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome splice_write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_genome_splice_disposition_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome splice disposition gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = increment_trace_object_usize(
+        &trace_json_line(
+            "trace genome splice disposition gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "splice_retained",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("disposition counts")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_raw_payload_markers_in_splice_reasons() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace genome splice sanitized reasons", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace genome splice sanitized reasons",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "reasoning_genome",
+        "\"splice_reason_summaries\":[",
+        "\"splice_reason_summaries\":[\"label=private prompt\",",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("splice_reason_summaries")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_missing_splice_lifecycle_for_findings() {
+    let line = replace_trace_object_usize(
+        &replace_trace_object_usize(
+            &rollback_trace_line(),
+            "reasoning_genome",
+            "splice_findings",
+            1,
+        ),
+        "reasoning_genome",
+        "splice_lifecycle_records",
+        0,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("lifecycle records")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_write_enabled_splice_lifecycle_summary() {
+    let line = replace_in_trace_object(
+        &rollback_trace_line(),
+        "reasoning_genome",
+        "write_allowed=false applied=false",
+        "write_allowed=true applied=false",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("splice_lifecycle_summaries")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_agent_team_writer_drift() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace agent team coordination", TaskProfile::Coding),
+        &mut backend,
+    );
+    assert!(outcome.agent_team_plan.enabled);
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace agent team coordination",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "agent_team",
+        "\"main_thread_writer\":\"main_thread\"",
+        "\"main_thread_writer\":\"reviewer\"",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("main_thread_writer")),
+        "{failures:?}"
+    );
 }
 
 #[test]
@@ -227,6 +568,124 @@ fn trace_schema_gate_accepts_generated_trace_line() {
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = increment_trace_object_usize(
+        &trace_json_line(
+            "trace adaptive routing mismatch",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "include",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("adaptive_routing decisions")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace adaptive routing write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("adaptive_routing write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_task_hierarchy_mutation_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = increment_trace_object_usize(
+        &trace_json_line(
+            "trace task hierarchy mismatch",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "task_hierarchy",
+        "mutation_records",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy mutation_summaries")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_task_hierarchy_state_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace task hierarchy write gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "task_hierarchy",
+        "\"state_write_allowed\":false",
+        "\"state_write_allowed\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy state_write_allowed")),
+        "{failures:?}"
+    );
 }
 
 #[test]

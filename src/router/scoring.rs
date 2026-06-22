@@ -68,8 +68,11 @@ pub(super) fn routing_score(entropy: f32, context: RoutingContext) -> f32 {
     let hardware_pressure_discount = context.hardware_pressure.clamp(0.0, 1.0) * 0.16;
     let constrained_device_discount = (0.5 - compute_headroom).max(0.0) * 0.10;
     let accelerator_bonus = (compute_headroom - 0.5).max(0.0) * 0.12;
+    let hierarchy_bias = context.hierarchy.global * 0.05
+        + context.hierarchy.local * 0.03
+        + context.hierarchy.convolution * 0.04;
 
-    (entropy * 0.72 + task_pressure + context_pressure + accelerator_bonus
+    (entropy * 0.72 + task_pressure + context_pressure + accelerator_bonus + hierarchy_bias
         - cache_discount
         - latency_discount
         - hardware_pressure_discount

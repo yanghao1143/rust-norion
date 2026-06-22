@@ -38,6 +38,17 @@ impl ExperienceStore {
 
     pub fn load_from_disk_kv(path: impl AsRef<Path>) -> io::Result<Self> {
         let store = DiskKvStore::open(path)?;
+        Self::load_from_store(&store)
+    }
+
+    pub fn load_from_disk_kv_read_only(path: impl AsRef<Path>) -> io::Result<Self> {
+        let Some(store) = DiskKvStore::open_read_only_existing(path)? else {
+            return Ok(Self::new());
+        };
+        Self::load_from_store(&store)
+    }
+
+    fn load_from_store(store: &DiskKvStore) -> io::Result<Self> {
         let mut out = Self::new();
 
         for key in store.keys_with_prefix("experience/") {

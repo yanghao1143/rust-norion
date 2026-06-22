@@ -18,7 +18,11 @@ pub(super) fn handle_experience_repair(
     request: ModelServiceExperienceRepairRequest,
 ) -> std::io::Result<()> {
     let limit = request.limit.unwrap_or(args.experience_repair_limit).max(1);
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = if request.apply {
+        ExperienceStore::load_from_disk_kv(&args.experience_path)?
+    } else {
+        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
+    };
     let (repaired_store, plan) = store.repaired_legacy_metadata_store(limit);
     let mut backup_path = None;
     let mut applied = false;

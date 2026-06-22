@@ -56,6 +56,36 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_kv_fusion_cases) = gate.min_kv_fusion_cases {
+        let observed = summary.kv_fusion_cases();
+        if observed < min_kv_fusion_cases {
+            failures.push(format!(
+                "kv_fusion_cases {} below minimum {}",
+                observed, min_kv_fusion_cases
+            ));
+        }
+    }
+
+    if let Some(min_kv_fusion_candidates) = gate.min_kv_fusion_candidates {
+        let observed = summary.total_kv_fusion_candidates();
+        if observed < min_kv_fusion_candidates {
+            failures.push(format!(
+                "kv_fusion_candidates {} below minimum {}",
+                observed, min_kv_fusion_candidates
+            ));
+        }
+    }
+
+    if let Some(min_kv_fusion_saved_tokens) = gate.min_kv_fusion_saved_tokens {
+        let observed = summary.total_kv_fusion_saved_tokens();
+        if observed < min_kv_fusion_saved_tokens {
+            failures.push(format!(
+                "kv_fusion_saved_tokens {} below minimum {}",
+                observed, min_kv_fusion_saved_tokens
+            ));
+        }
+    }
+
     if let Some(min_memory_retention_activity_cases) = gate.min_memory_retention_activity_cases {
         let observed = summary.memory_governance_evidence.retention_activity_cases;
         if observed < min_memory_retention_activity_cases {
@@ -72,6 +102,58 @@ pub(super) fn evaluate(
             failures.push(format!(
                 "memory_compaction_activity_cases {} below minimum {}",
                 observed, min_memory_compaction_activity_cases
+            ));
+        }
+    }
+
+    if let Some(min_memory_storage_benchmark_samples) = gate.min_memory_storage_benchmark_samples {
+        let observed = summary.memory_storage_benchmark_samples();
+        if observed < min_memory_storage_benchmark_samples {
+            failures.push(format!(
+                "memory_storage_benchmark_samples {} below minimum {}",
+                observed, min_memory_storage_benchmark_samples
+            ));
+        }
+    }
+
+    if let Some(min_memory_storage_removed_entries) = gate.min_memory_storage_removed_entries {
+        let observed = summary.total_memory_storage_entries_removed();
+        if observed < min_memory_storage_removed_entries {
+            failures.push(format!(
+                "memory_storage_removed_entries {} below minimum {}",
+                observed, min_memory_storage_removed_entries
+            ));
+        }
+    }
+
+    if let Some(min_memory_retrieval_latency_samples) = gate.min_memory_retrieval_latency_samples {
+        let observed = summary.memory_retrieval_latency_samples();
+        if observed < min_memory_retrieval_latency_samples {
+            failures.push(format!(
+                "memory_retrieval_latency_samples {} below minimum {}",
+                observed, min_memory_retrieval_latency_samples
+            ));
+        }
+    }
+
+    if let Some(max_memory_retrieval_latency_avg_ms) = gate.max_memory_retrieval_latency_avg_ms {
+        let observed = summary.average_memory_retrieval_latency_ms();
+        if observed > max_memory_retrieval_latency_avg_ms {
+            failures.push(format!(
+                "memory_retrieval_latency_avg_ms {} above maximum {}",
+                observed, max_memory_retrieval_latency_avg_ms
+            ));
+        }
+    }
+
+    if let Some(min_memory_retained_usefulness_abs_delta_milli) =
+        gate.min_memory_retained_usefulness_abs_delta_milli
+    {
+        let observed = summary.memory_retained_usefulness_abs_delta_milli();
+        if observed < min_memory_retained_usefulness_abs_delta_milli {
+            failures.push(format!(
+                "memory_retained_usefulness_abs_delta_milli {} below minimum {}",
+                observed, min_memory_retained_usefulness_abs_delta_milli
             ));
         }
     }

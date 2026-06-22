@@ -34,6 +34,7 @@ impl InferenceBackend for HeuristicBackend {
         let transformer_counts = context.transformer_plan.counts();
         let toolsmith_summary = context.toolsmith_plan.summary();
         let agent_team_summary = context.agent_team_plan.summary();
+        let agent_team_aggregation = context.agent_team_plan.aggregation.summary();
         let agent_team_messages = if context.agent_team_plan.messages.is_empty() {
             "none".to_owned()
         } else {
@@ -77,7 +78,8 @@ impl InferenceBackend for HeuristicBackend {
              Hardware plan: {}. \
              Transformer plan: template {}, {} global, {} local, {} convolution layers. \
              Toolsmith plan: {toolsmith_summary}. Tool blueprints: {toolsmith_blueprints}. \
-             Agent team: {agent_team_summary}. Team messages: {agent_team_messages}.",
+             Agent team: {agent_team_summary}. Team aggregation: {agent_team_aggregation}. \
+             Team messages: {agent_team_messages}.",
             compact(context.prompt, 120),
             context.route_budget.attention_fraction * 100.0,
             context.route_budget.fast_tokens,

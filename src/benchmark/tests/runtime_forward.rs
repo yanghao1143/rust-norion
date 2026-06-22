@@ -3,8 +3,11 @@ use super::*;
 #[test]
 fn gate_reports_missing_runtime_forward_and_kv_export() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -110,8 +113,11 @@ fn gate_reports_missing_runtime_forward_and_kv_export() {
     );
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -222,6 +228,8 @@ fn gate_reports_missing_runtime_kv_export_device_profile_coverage() {
         drift_severity: DriftSeverity::Stable,
     };
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![base.clone()],
         ..BenchmarkSummary::default()
     };
@@ -238,6 +246,8 @@ fn gate_reports_missing_runtime_kv_export_device_profile_coverage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![
             base.clone(),
             BenchmarkCaseResult {
@@ -257,8 +267,11 @@ fn gate_reports_missing_runtime_kv_export_device_profile_coverage() {
 #[test]
 fn gate_reports_missing_runtime_forward_diagnostics() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -359,8 +372,11 @@ fn gate_reports_missing_runtime_forward_diagnostics() {
     );
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -399,8 +415,11 @@ fn gate_reports_missing_runtime_forward_diagnostics() {
 #[test]
 fn gate_reports_missing_runtime_transformer_layer_modes() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -527,8 +546,11 @@ fn gate_reports_missing_runtime_transformer_layer_modes() {
     );
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -579,8 +601,11 @@ fn gate_reports_missing_runtime_transformer_layer_modes() {
 #[test]
 fn gate_reports_missing_runtime_uncertainty_signal() {
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -699,8 +724,11 @@ fn gate_reports_missing_runtime_uncertainty_signal() {
     );
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         reflection_evidence: BenchmarkReflectionEvidence::default(),
         live_evolution_evidence: BenchmarkLiveEvolutionEvidence::default(),
+        routing_evidence: BenchmarkRoutingEvidence::default(),
         memory_governance_evidence: BenchmarkMemoryGovernanceEvidence::default(),
         embedding_evidence: BenchmarkEmbeddingEvidence::default(),
 
@@ -759,6 +787,8 @@ fn gate_reports_missing_runtime_uncertainty_signal() {
 fn gate_reports_missing_runtime_uncertainty_device_profile_coverage() {
     let base = runtime_uncertainty_result(DeviceClass::CpuOnly);
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![base.clone()],
         ..BenchmarkSummary::default()
     };
@@ -776,6 +806,8 @@ fn gate_reports_missing_runtime_uncertainty_device_profile_coverage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![
             base.clone(),
             BenchmarkCaseResult {
@@ -811,6 +843,8 @@ fn gate_reports_missing_runtime_uncertainty_token_device_profile_coverage() {
     };
     let token_backed = runtime_uncertainty_result(DeviceClass::IntegratedGpu);
     let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![signal_only.clone(), token_backed.clone()],
         ..BenchmarkSummary::default()
     };
@@ -840,6 +874,8 @@ fn gate_reports_missing_runtime_uncertainty_token_device_profile_coverage() {
     }));
 
     let passing = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
         results: vec![
             BenchmarkCaseResult {
                 runtime_uncertainty_token_count: 2,

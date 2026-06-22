@@ -1,15 +1,24 @@
 use std::path::PathBuf;
 
 pub fn infer_hf_cache_from_local_snapshot(model_id: &str) -> Option<PathBuf> {
-    let path = PathBuf::from(model_id);
-    path.ancestors()
-        .find(|ancestor| {
-            ancestor
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| name.eq_ignore_ascii_case("hub"))
-                .unwrap_or(false)
-        })
-        .and_then(|hub| hub.parent())
-        .map(PathBuf::from)
+    let separator = if model_id.contains('\\') { "\\" } else { "/" };
+    let normalized = model_id.replace('\\', "/");
+    let segments = normalized.split('/').collect::<Vec<_>>();
+    let hub_index = segments
+        .iter()
+        .position(|segment| segment.eq_ignore_ascii_case("hub"))?;
+
+    let root_segments = &segments[..hub_index];
+    if root_segments.is_empty() {
+        return None;
+    }
+
+    let root = root_segments.join(separator);
+    if root.is_empty() && normalized.starts_with('/') {
+        Some(PathBuf::from("/"))
+    } else if root.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(root))
+    }
 }

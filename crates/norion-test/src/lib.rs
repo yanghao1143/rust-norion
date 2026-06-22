@@ -1787,6 +1787,25 @@ impl LegacyLedgerReplayPlan {
                 "adapter_fixture_contract_report_v1".to_owned(),
                 "current_runner_compatibility_report_v1".to_owned(),
                 "feedback_self_improve_report_v1".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_preflight_report_v1".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1"
+                    .to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1"
+                    .to_owned(),
                 "self_evolution_continuity_report_v1".to_owned(),
                 "self_evolution_regression_report_v1".to_owned(),
                 "self_evolution_unattended_prerequisites_report_v1".to_owned(),
@@ -5581,6 +5600,1191 @@ impl SelfImproveProposalActionAssignmentPlan {
                 "ndkv_write",
                 "runtime_side_effect_execution",
                 "promotion_action_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfImproveProposalMemoryReflectionReusePlanReportPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub report_schema_name: String,
+    pub consumer_surface: String,
+    pub eval_entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub produced_report_fields: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_report_only: bool,
+    pub require_candidate_only: bool,
+    pub require_write_disabled: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl SelfImproveProposalMemoryReflectionReusePlanReportPlan {
+    pub fn memory_reflection_reuse_plan(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            report_schema_name:
+                "self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned(),
+            consumer_surface:
+                "evolution_loop_report_only_self_improve_memory_reflection_reuse_plan".to_owned(),
+            eval_entrypoints: vec![
+                "SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster"
+                    .to_owned(),
+                "SelfImproveProposalMemoryReflectionReusePlanItem::from_dedupe_cluster_item"
+                    .to_owned(),
+                "SelfImproveProposalArtifact::memory_reflection_reuse_plan".to_owned(),
+                "option_memory_reflection_reuse_plan_report_json".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "SelfImproveProposalMemoryReflectionDedupeClusterReport".to_owned(),
+                "SelfImproveProposalMemoryReflectionDedupeClusterItem".to_owned(),
+                "target_count".to_owned(),
+                "reflection_cluster_count".to_owned(),
+                "duplicate_cluster_count".to_owned(),
+                "duplicate_reflection_item_count".to_owned(),
+                "approval_review_packet_ids".to_owned(),
+                "evidence_ids".to_owned(),
+                "dedupe_recommendation".to_owned(),
+                "report_only".to_owned(),
+                "candidate_only".to_owned(),
+            ],
+            produced_outputs: vec![
+                "SelfImproveProposalMemoryReflectionReusePlanReport".to_owned(),
+                "SelfImproveProposalMemoryReflectionReusePlanItem".to_owned(),
+                "self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned(),
+            ],
+            produced_report_fields: vec![
+                "self_improve_proposal.memory_reflection_reuse_plan.read_only".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.report_only".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.candidate_only".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.target_count".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.reflection_cluster_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item_count".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.ready_reuse_plan_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.duplicate_cluster_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.duplicate_reflection_item_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.projected_saved_reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.first_plan_item_id".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.reflection_reuse_plan_ready"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.explicit_operator_approval_required"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.validation_required"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.rollback_required".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.commit_allowed".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.admission_write_authorized"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.auto_apply".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.memory_store_write_allowed"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.ndkv_write_allowed".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.failure_reasons".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_items".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.side_effects".to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.cluster_id"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.representative_proposal_id"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_proposal_ids"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.approval_review_packet_ids"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.evidence_ids"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.projected_saved_reflection_count"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reuse_plan_ready"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.planned_reuse_action"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.dedupe_recommendation"
+                    .to_owned(),
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.blocked_reasons"
+                    .to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "old_thread_read".to_owned(),
+                "old_window_read".to_owned(),
+                "raw_old_window_payload".to_owned(),
+                "chat_transcript_read".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "report_directory_scan".to_owned(),
+                "http_sse".to_owned(),
+                "process_spawn".to_owned(),
+                "validation_command_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "runner_state".to_owned(),
+                "remote_mac_call".to_owned(),
+                "model_download".to_owned(),
+                "model_call".to_owned(),
+                "helper_prose_parse".to_owned(),
+                "chat_stream".to_owned(),
+                "prompt_parse".to_owned(),
+                "prompt_skip_execution".to_owned(),
+                "live_write".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_admission_write".to_owned(),
+                "ndkv_write".to_owned(),
+                "approval_token_consumption".to_owned(),
+                "reuse_action_execution".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_report_only: true,
+            require_candidate_only: true,
+            require_write_disabled: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-eval\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn may_block_current_runner(&self) -> bool {
+        false
+    }
+
+    pub fn may_execute_reuse_action(&self) -> bool {
+        false
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.eval_entrypoints
+            .iter()
+            .any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs
+            .iter()
+            .any(|produced| produced == output)
+    }
+
+    pub fn produces_report_field(&self, field: &str) -> bool {
+        self.produced_report_fields
+            .iter()
+            .any(|produced| produced == field)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn stays_pure_data_boundary(&self) -> bool {
+        self.report_schema_name == "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+            && self.consumer_surface
+                == "evolution_loop_report_only_self_improve_memory_reflection_reuse_plan"
+            && self.require_read_only
+            && self.require_report_only
+            && self.require_candidate_only
+            && self.require_write_disabled
+            && self.exposes_entrypoint(
+                "SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster",
+            )
+            && self.exposes_entrypoint("SelfImproveProposalArtifact::memory_reflection_reuse_plan")
+            && self.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterReport")
+            && self.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterItem")
+            && !self.allows_input("EvolutionLoopRunner")
+            && !self.allows_input("MemoryStore")
+            && !self.allows_input("NdkvStore")
+            && !self.allows_input("ModelClient")
+            && !self.allows_input("PromptExecutor")
+            && !self.allows_input("ApprovalTokenConsumer")
+            && self.produces_output("SelfImproveProposalMemoryReflectionReusePlanReport")
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.reflection_reuse_plan_ready",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.projected_saved_reflection_count",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.plan_item.planned_reuse_action",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.commit_allowed",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.admission_write_authorized",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.memory_store_write_allowed",
+            )
+            && self.produces_report_field(
+                "self_improve_proposal.memory_reflection_reuse_plan.ndkv_write_allowed",
+            )
+            && [
+                "jsonl_io",
+                "file_io",
+                "report_directory_scan",
+                "http_sse",
+                "process_spawn",
+                "validation_command_spawn",
+                "daemon_control",
+                "runner_state",
+                "remote_mac_call",
+                "model_download",
+                "model_call",
+                "helper_prose_parse",
+                "chat_stream",
+                "prompt_parse",
+                "prompt_skip_execution",
+                "live_write",
+                "memory_store_write",
+                "memory_admission_write",
+                "ndkv_write",
+                "approval_token_consumption",
+                "reuse_action_execution",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryRecallSidecarContractPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub context_surface_name: String,
+    pub wave_surface_name: String,
+    pub dry_run_evidence_surface_name: String,
+    pub entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_sidecar_only: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl AgentMemoryRecallSidecarContractPlan {
+    pub fn memory_recall_sidecar(name: impl Into<String>, stage: AdapterAcceptanceStage) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            context_surface_name: "agent_memory_recall_context".to_owned(),
+            wave_surface_name: "agent_wave_memory_recall".to_owned(),
+            dry_run_evidence_surface_name: "agent_memory_recall_dry_run_evidence".to_owned(),
+            entrypoints: vec![
+                "MemoryRecallContextPlanner::plan_for_task".to_owned(),
+                "MemoryRecallContextPlanner::plan_from_records".to_owned(),
+                "MemoryRecallContextPlanner::plan_from_dry_run_evidence".to_owned(),
+                "AgentWaveMemoryRecallPlanner::plan_dispatch".to_owned(),
+                "MemoryRecallContext::summary_line".to_owned(),
+                "AgentWaveMemoryRecallPlan::summary_line".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "AgentTask".to_owned(),
+                "AgentCycleDispatch".to_owned(),
+                "MemoryRecallPolicy".to_owned(),
+                "MemoryPort::recall".to_owned(),
+                "MemoryRecord".to_owned(),
+                "MemoryRecallDryRunEvidence".to_owned(),
+                "role".to_owned(),
+                "lane".to_owned(),
+                "objective".to_owned(),
+            ],
+            produced_outputs: vec![
+                "MemoryRecallContext".to_owned(),
+                "MemoryRecallDecision".to_owned(),
+                "MemoryRecallItem".to_owned(),
+                "MemoryRecallDryRunEvidence".to_owned(),
+                "AgentWaveMemoryRecallPlan".to_owned(),
+                "agent_memory_recall_context".to_owned(),
+                "agent_wave_memory_recall".to_owned(),
+                "agent_memory_recall_dry_run_evidence".to_owned(),
+            ],
+            required_fields: vec![
+                "memory_recall_policy.limit_per_task".to_owned(),
+                "memory_recall_policy.max_context_records_per_task".to_owned(),
+                "memory_recall_policy.max_summary_chars".to_owned(),
+                "memory_recall_context.task_id".to_owned(),
+                "memory_recall_context.query".to_owned(),
+                "memory_recall_context.requested_limit".to_owned(),
+                "memory_recall_context.returned_records".to_owned(),
+                "memory_recall_context.read_only".to_owned(),
+                "memory_recall_context.decisions".to_owned(),
+                "memory_recall_context.failure".to_owned(),
+                "memory_recall_context.telemetry".to_owned(),
+                "memory_recall_decision.kind".to_owned(),
+                "memory_recall_decision.reasons".to_owned(),
+                "memory_recall_item.id".to_owned(),
+                "memory_recall_item.source".to_owned(),
+                "memory_recall_item.summary".to_owned(),
+                "memory_recall_dry_run_evidence.read_only".to_owned(),
+                "memory_recall_dry_run_evidence.memory_store_write_allowed".to_owned(),
+                "memory_recall_dry_run_evidence.kv_prefetch_apply_allowed".to_owned(),
+                "memory_recall_dry_run_evidence.reason_codes".to_owned(),
+                "memory_recall_dry_run_evidence.detail_codes".to_owned(),
+                "agent_memory_recall_context.read_only".to_owned(),
+                "agent_memory_recall_context.reason_codes".to_owned(),
+                "agent_memory_recall_context.detail_codes".to_owned(),
+                "agent_wave_memory_recall.read_only".to_owned(),
+                "agent_memory_recall_dry_run_evidence.safe".to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "MemoryPort::propose_note".to_owned(),
+                "memory_note_submit".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_promotion_commit".to_owned(),
+                "ndkv_write".to_owned(),
+                "kv_prefetch_apply".to_owned(),
+                "model_call".to_owned(),
+                "prompt_execution".to_owned(),
+                "prompt_injection".to_owned(),
+                "task_dispatch".to_owned(),
+                "engine_run_task".to_owned(),
+                "process_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "http_sse".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_sidecar_only: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-agent\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.entrypoints.iter().any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs.iter().any(|item| item == output)
+    }
+
+    pub fn requires_field(&self, field: &str) -> bool {
+        self.required_fields
+            .iter()
+            .any(|required| required == field)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn may_write_memory(&self) -> bool {
+        false
+    }
+
+    pub fn may_dispatch_tasks(&self) -> bool {
+        false
+    }
+
+    pub fn may_inject_prompt_context(&self) -> bool {
+        false
+    }
+
+    pub fn stays_read_only_sidecar_boundary(&self) -> bool {
+        self.context_surface_name == "agent_memory_recall_context"
+            && self.wave_surface_name == "agent_wave_memory_recall"
+            && self.dry_run_evidence_surface_name == "agent_memory_recall_dry_run_evidence"
+            && self.require_read_only
+            && self.require_sidecar_only
+            && self.exposes_entrypoint("MemoryRecallContextPlanner::plan_for_task")
+            && self.exposes_entrypoint("MemoryRecallContextPlanner::plan_from_dry_run_evidence")
+            && self.exposes_entrypoint("AgentWaveMemoryRecallPlanner::plan_dispatch")
+            && self.allows_input("MemoryPort::recall")
+            && self.allows_input("MemoryRecallDryRunEvidence")
+            && !self.allows_input("EnginePort")
+            && !self.allows_input("ToolBuildPort")
+            && self.produces_output("MemoryRecallContext")
+            && self.produces_output("AgentWaveMemoryRecallPlan")
+            && self.requires_field("memory_recall_context.read_only")
+            && self.requires_field("memory_recall_dry_run_evidence.memory_store_write_allowed")
+            && self.requires_field("memory_recall_dry_run_evidence.kv_prefetch_apply_allowed")
+            && self.requires_field("agent_memory_recall_dry_run_evidence.safe")
+            && [
+                "MemoryPort::propose_note",
+                "memory_store_write",
+                "memory_promotion_commit",
+                "ndkv_write",
+                "kv_prefetch_apply",
+                "model_call",
+                "prompt_execution",
+                "prompt_injection",
+                "task_dispatch",
+                "engine_run_task",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryReuseDryRunSummaryContractPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub summary_surface_name: String,
+    pub entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_dry_run_only: bool,
+    pub require_write_disabled: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl MemoryReuseDryRunSummaryContractPlan {
+    pub fn memory_reuse_dry_run_summary(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            summary_surface_name: "memory_reuse_dry_run".to_owned(),
+            entrypoints: vec![
+                "DefaultMemoryReusePlanner::plan_from_candidates".to_owned(),
+                "DefaultMemoryReusePlanner::plan_from_long_term".to_owned(),
+                "MemoryReusePlan::dry_run_summary".to_owned(),
+                "MemoryReusePlan::summary_line".to_owned(),
+                "DefaultMemoryReusePlanner::descriptor".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "ContextCandidate".to_owned(),
+                "MemoryRequestContext".to_owned(),
+                "LongTermMemory".to_owned(),
+                "LongTermQuery".to_owned(),
+                "ContextInjectionGate".to_owned(),
+                "KvSwap::plan_prefetch".to_owned(),
+                "kv_metadata".to_owned(),
+            ],
+            produced_outputs: vec![
+                "MemoryReusePlan".to_owned(),
+                "MemoryReuseDryRunSummary".to_owned(),
+                "memory_reuse_dry_run".to_owned(),
+            ],
+            required_fields: vec![
+                "memory_reuse_plan.read_only".to_owned(),
+                "memory_reuse_plan.candidate_count".to_owned(),
+                "memory_reuse_plan.long_term_matches".to_owned(),
+                "memory_reuse_plan.context_plan".to_owned(),
+                "memory_reuse_plan.requested_kv_ids".to_owned(),
+                "memory_reuse_plan.kv_prefetch_plan".to_owned(),
+                "memory_reuse_dry_run.read_only".to_owned(),
+                "memory_reuse_dry_run.candidate_count".to_owned(),
+                "memory_reuse_dry_run.long_term_match_count".to_owned(),
+                "memory_reuse_dry_run.context_decision_count".to_owned(),
+                "memory_reuse_dry_run.accepted_context_count".to_owned(),
+                "memory_reuse_dry_run.rejected_context_count".to_owned(),
+                "memory_reuse_dry_run.used_tokens".to_owned(),
+                "memory_reuse_dry_run.requested_kv_count".to_owned(),
+                "memory_reuse_dry_run.kv_promote_count".to_owned(),
+                "memory_reuse_dry_run.kv_missing_count".to_owned(),
+                "memory_reuse_dry_run.kv_already_hot_count".to_owned(),
+                "memory_reuse_dry_run.kv_duplicate_count".to_owned(),
+                "memory_reuse_dry_run.kv_backend_available".to_owned(),
+                "memory_reuse_dry_run.memory_store_write_allowed".to_owned(),
+                "memory_reuse_dry_run.kv_prefetch_apply_allowed".to_owned(),
+                "memory_reuse_dry_run.reason_codes".to_owned(),
+                "memory_reuse_dry_run.detail_codes".to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "long_term_memory_write".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_promotion_commit".to_owned(),
+                "kv_prefetch_apply".to_owned(),
+                "kv_swap_mutation".to_owned(),
+                "ndkv_write".to_owned(),
+                "model_call".to_owned(),
+                "prompt_execution".to_owned(),
+                "process_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "http_sse".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_dry_run_only: true,
+            require_write_disabled: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-memory\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.entrypoints.iter().any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs.iter().any(|item| item == output)
+    }
+
+    pub fn requires_field(&self, field: &str) -> bool {
+        self.required_fields
+            .iter()
+            .any(|required| required == field)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn may_write_memory(&self) -> bool {
+        false
+    }
+
+    pub fn may_apply_kv_prefetch(&self) -> bool {
+        false
+    }
+
+    pub fn stays_read_only_dry_run_boundary(&self) -> bool {
+        self.summary_surface_name == "memory_reuse_dry_run"
+            && self.require_read_only
+            && self.require_dry_run_only
+            && self.require_write_disabled
+            && self.exposes_entrypoint("DefaultMemoryReusePlanner::plan_from_candidates")
+            && self.exposes_entrypoint("MemoryReusePlan::dry_run_summary")
+            && self.exposes_entrypoint("MemoryReusePlan::summary_line")
+            && self.allows_input("ContextCandidate")
+            && self.allows_input("MemoryRequestContext")
+            && self.allows_input("KvSwap::plan_prefetch")
+            && !self.allows_input("KvSwap::apply_prefetch")
+            && !self.allows_input("LongTermMemoryWriter")
+            && !self.allows_input("MemoryStoreWriter")
+            && self.produces_output("MemoryReusePlan")
+            && self.produces_output("MemoryReuseDryRunSummary")
+            && self.requires_field("memory_reuse_dry_run.read_only")
+            && self.requires_field("memory_reuse_dry_run.memory_store_write_allowed")
+            && self.requires_field("memory_reuse_dry_run.kv_prefetch_apply_allowed")
+            && self.requires_field("memory_reuse_dry_run.reason_codes")
+            && [
+                "long_term_memory_write",
+                "memory_store_write",
+                "memory_promotion_commit",
+                "kv_prefetch_apply",
+                "kv_swap_mutation",
+                "ndkv_write",
+                "model_call",
+                "prompt_execution",
+                "process_spawn",
+                "daemon_control",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryReuseExecutionPreflightReportContractPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub report_surface_name: String,
+    pub prepared_surface_name: String,
+    pub entrypoints: Vec<String>,
+    pub allowed_inputs: Vec<String>,
+    pub produced_outputs: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub required_false_flags: Vec<String>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only: bool,
+    pub require_report_only: bool,
+    pub require_clean_report_before_execution: bool,
+    pub require_repair_first_on_block: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl AgentMemoryReuseExecutionPreflightReportContractPlan {
+    pub fn memory_reuse_execution_preflight(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            report_surface_name: "agent_memory_reuse_execution_preflight".to_owned(),
+            prepared_surface_name: "agent_closed_loop_prepared_memory_reuse_preflight".to_owned(),
+            entrypoints: vec![
+                "AgentMemoryReuseExecutionPreflightPlanner::plan_for_dispatch".to_owned(),
+                "AgentMemoryReuseExecutionPreflightReport::summary_line".to_owned(),
+                "AgentMemoryReuseExecutionPreflightReport::reason_codes".to_owned(),
+                "AgentMemoryReuseExecutionPreflightReport::is_clean".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflightPlanner::plan".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflight::can_enter_execution".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflight::requires_repair_first".to_owned(),
+            ],
+            allowed_inputs: vec![
+                "AgentCycleDispatch".to_owned(),
+                "AgentTask".to_owned(),
+                "AgentWaveMemoryRecallPlan".to_owned(),
+                "MemoryRecallContext".to_owned(),
+                "MemoryRecallDryRunEvidence".to_owned(),
+                "AgentMemoryReuseExecutionPreflightPolicy".to_owned(),
+                "read_only_recall_context".to_owned(),
+                "dry_run_summary_evidence".to_owned(),
+            ],
+            produced_outputs: vec![
+                "AgentMemoryReuseExecutionPreflightReport".to_owned(),
+                "AgentClosedLoopPreparedMemoryReusePreflight".to_owned(),
+                "agent_memory_reuse_execution_preflight".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight".to_owned(),
+            ],
+            required_fields: vec![
+                "agent_memory_reuse_execution_preflight.task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.missing_recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.unexpected_recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.failed_recall_task_ids".to_owned(),
+                "agent_memory_reuse_execution_preflight.dry_run_evidence_sources".to_owned(),
+                "agent_memory_reuse_execution_preflight.unsafe_dry_run_sources".to_owned(),
+                "agent_memory_reuse_execution_preflight.read_only".to_owned(),
+                "agent_memory_reuse_execution_preflight.memory_reuse_ready".to_owned(),
+                "agent_memory_reuse_execution_preflight.can_enter_execution".to_owned(),
+                "agent_memory_reuse_execution_preflight.requires_repair_first".to_owned(),
+                "agent_memory_reuse_execution_preflight.prompt_injection_allowed".to_owned(),
+                "agent_memory_reuse_execution_preflight.engine_port_touched".to_owned(),
+                "agent_memory_reuse_execution_preflight.memory_store_write_allowed".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed".to_owned(),
+                "agent_memory_reuse_execution_preflight.accepted_recall_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.rejected_recall_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.dry_run_evidence_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_requested_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_promote_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_missing_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_already_hot_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_duplicate_count".to_owned(),
+                "agent_memory_reuse_execution_preflight.blocked_reasons".to_owned(),
+                "agent_memory_reuse_execution_preflight.reason_codes".to_owned(),
+                "agent_memory_reuse_execution_preflight.telemetry".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.preflight".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.skipped_reasons".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.can_enter_execution".to_owned(),
+                "agent_closed_loop_prepared_memory_reuse_preflight.requires_repair_first"
+                    .to_owned(),
+            ],
+            required_false_flags: vec![
+                "agent_memory_reuse_execution_preflight.prompt_injection_allowed=false".to_owned(),
+                "agent_memory_reuse_execution_preflight.engine_port_touched=false".to_owned(),
+                "agent_memory_reuse_execution_preflight.memory_store_write_allowed=false"
+                    .to_owned(),
+                "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed=false".to_owned(),
+            ],
+            forbidden_capabilities: vec![
+                "EnginePort::run_task".to_owned(),
+                "engine_run_task".to_owned(),
+                "MemoryPort::propose_note".to_owned(),
+                "memory_note_submit".to_owned(),
+                "memory_store_write".to_owned(),
+                "memory_promotion_commit".to_owned(),
+                "kv_prefetch_apply".to_owned(),
+                "kv_swap_mutation".to_owned(),
+                "ndkv_write".to_owned(),
+                "model_call".to_owned(),
+                "prompt_execution".to_owned(),
+                "prompt_injection".to_owned(),
+                "task_dispatch".to_owned(),
+                "process_spawn".to_owned(),
+                "daemon_control".to_owned(),
+                "jsonl_io".to_owned(),
+                "file_io".to_owned(),
+                "http_sse".to_owned(),
+                "runtime_side_effect_execution".to_owned(),
+            ],
+            require_read_only: true,
+            require_report_only: true,
+            require_clean_report_before_execution: true,
+            require_repair_first_on_block: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-agent\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn exposes_entrypoint(&self, entrypoint: &str) -> bool {
+        self.entrypoints.iter().any(|exposed| exposed == entrypoint)
+    }
+
+    pub fn allows_input(&self, input: &str) -> bool {
+        self.allowed_inputs.iter().any(|allowed| allowed == input)
+    }
+
+    pub fn produces_output(&self, output: &str) -> bool {
+        self.produced_outputs.iter().any(|item| item == output)
+    }
+
+    pub fn requires_field(&self, field: &str) -> bool {
+        self.required_fields
+            .iter()
+            .any(|required| required == field)
+    }
+
+    pub fn requires_false_flag(&self, flag: &str) -> bool {
+        self.required_false_flags
+            .iter()
+            .any(|required| required == flag)
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn may_touch_engine_port(&self) -> bool {
+        false
+    }
+
+    pub fn may_write_memory(&self) -> bool {
+        false
+    }
+
+    pub fn may_apply_kv_prefetch(&self) -> bool {
+        false
+    }
+
+    pub fn may_dispatch_tasks(&self) -> bool {
+        false
+    }
+
+    pub fn may_inject_prompt_context(&self) -> bool {
+        false
+    }
+
+    pub fn stays_report_only_execution_preflight_boundary(&self) -> bool {
+        self.report_surface_name == "agent_memory_reuse_execution_preflight"
+            && self.prepared_surface_name == "agent_closed_loop_prepared_memory_reuse_preflight"
+            && self.require_read_only
+            && self.require_report_only
+            && self.require_clean_report_before_execution
+            && self.require_repair_first_on_block
+            && self
+                .exposes_entrypoint("AgentMemoryReuseExecutionPreflightPlanner::plan_for_dispatch")
+            && self.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::is_clean")
+            && self.exposes_entrypoint("AgentClosedLoopPreparedMemoryReusePreflightPlanner::plan")
+            && self.allows_input("AgentCycleDispatch")
+            && self.allows_input("AgentWaveMemoryRecallPlan")
+            && self.allows_input("MemoryRecallDryRunEvidence")
+            && !self.allows_input("EnginePort")
+            && !self.allows_input("MemoryStoreWriter")
+            && self.produces_output("AgentMemoryReuseExecutionPreflightReport")
+            && self.produces_output("AgentClosedLoopPreparedMemoryReusePreflight")
+            && self.requires_field("agent_memory_reuse_execution_preflight.read_only")
+            && self.requires_field("agent_memory_reuse_execution_preflight.can_enter_execution")
+            && self.requires_field("agent_memory_reuse_execution_preflight.requires_repair_first")
+            && self.requires_field("agent_memory_reuse_execution_preflight.reason_codes")
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.prompt_injection_allowed=false",
+            )
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.engine_port_touched=false",
+            )
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.memory_store_write_allowed=false",
+            )
+            && self.requires_false_flag(
+                "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed=false",
+            )
+            && [
+                "EnginePort::run_task",
+                "MemoryPort::propose_note",
+                "memory_store_write",
+                "kv_prefetch_apply",
+                "ndkv_write",
+                "prompt_injection",
+                "task_dispatch",
+                "runtime_side_effect_execution",
+            ]
+            .iter()
+            .all(|capability| self.forbids_capability(capability))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolExtensionContractRow {
+    pub operation: String,
+    pub owning_crate: String,
+    pub permission_inputs: Vec<String>,
+    pub side_effects: Vec<String>,
+    pub read_only_preview: String,
+    pub evidence_row: String,
+    pub repair_first_behavior: String,
+    pub gpl_clean_required: bool,
+    pub deny_by_default: bool,
+}
+
+impl ToolExtensionContractRow {
+    fn new(
+        operation: impl Into<String>,
+        owning_crate: impl Into<String>,
+        permission_inputs: Vec<&str>,
+        side_effects: Vec<&str>,
+        read_only_preview: impl Into<String>,
+        evidence_row: impl Into<String>,
+        repair_first_behavior: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation: operation.into(),
+            owning_crate: owning_crate.into(),
+            permission_inputs: permission_inputs
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+            side_effects: side_effects
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+            read_only_preview: read_only_preview.into(),
+            evidence_row: evidence_row.into(),
+            repair_first_behavior: repair_first_behavior.into(),
+            gpl_clean_required: true,
+            deny_by_default: true,
+        }
+    }
+
+    pub fn requires_permission_input(&self, input: &str) -> bool {
+        self.permission_inputs
+            .iter()
+            .any(|permission| permission == input)
+    }
+
+    pub fn declares_side_effect(&self, side_effect: &str) -> bool {
+        self.side_effects
+            .iter()
+            .any(|declared| declared == side_effect)
+    }
+
+    pub fn has_read_only_preview(&self) -> bool {
+        !self.read_only_preview.is_empty()
+    }
+
+    pub fn has_evidence_row(&self) -> bool {
+        !self.evidence_row.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NorionToolExtensionContractMatrixPlan {
+    pub name: String,
+    pub stage: AdapterAcceptanceStage,
+    pub matrix_doc_path: String,
+    pub rows: Vec<ToolExtensionContractRow>,
+    pub forbidden_capabilities: Vec<String>,
+    pub require_read_only_preview_before_execution: bool,
+    pub require_capability_manifest_for_extensions: bool,
+    pub require_gpl_clean_implementation: bool,
+    pub preserves_legacy_runner: bool,
+    pub verification_plan: VerificationPlan,
+}
+
+impl NorionToolExtensionContractMatrixPlan {
+    pub fn clean_room_tool_extension_matrix(
+        name: impl Into<String>,
+        stage: AdapterAcceptanceStage,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            stage,
+            matrix_doc_path: "docs/architecture/external-agent-baselines.md".to_owned(),
+            rows: vec![
+                ToolExtensionContractRow::new(
+                    "file_read",
+                    "crates/norion-service",
+                    vec!["workspace_root", "path_allowlist", "read_intent"],
+                    vec!["filesystem_read"],
+                    "file_read_manifest_preview",
+                    "tool_contract.file_read.evidence",
+                    "repair_first_when_path_outside_workspace",
+                ),
+                ToolExtensionContractRow::new(
+                    "file_edit",
+                    "crates/norion-service",
+                    vec![
+                        "workspace_root",
+                        "path_allowlist",
+                        "diff_intent",
+                        "review_gate",
+                    ],
+                    vec!["filesystem_write"],
+                    "file_edit_diff_preview",
+                    "tool_contract.file_edit.evidence",
+                    "repair_first_when_diff_unreviewed",
+                ),
+                ToolExtensionContractRow::new(
+                    "shell",
+                    "crates/norion-service",
+                    vec!["command_allowlist", "cwd", "timeout", "side_effect_class"],
+                    vec!["process_spawn"],
+                    "shell_command_dry_run_preview",
+                    "tool_contract.shell.evidence",
+                    "repair_first_when_command_not_allowlisted",
+                ),
+                ToolExtensionContractRow::new(
+                    "powershell",
+                    "crates/norion-service",
+                    vec![
+                        "command_allowlist",
+                        "cwd",
+                        "timeout",
+                        "windows_safety_class",
+                    ],
+                    vec!["process_spawn"],
+                    "powershell_command_dry_run_preview",
+                    "tool_contract.powershell.evidence",
+                    "repair_first_when_command_crosses_shell_boundary",
+                ),
+                ToolExtensionContractRow::new(
+                    "search",
+                    "crates/norion-service",
+                    vec!["query", "scope", "result_limit"],
+                    vec!["filesystem_read"],
+                    "search_scope_preview",
+                    "tool_contract.search.evidence",
+                    "repair_first_when_scope_unbounded",
+                ),
+                ToolExtensionContractRow::new(
+                    "web",
+                    "crates/norion-service",
+                    vec!["url_or_query", "network_policy", "citation_required"],
+                    vec!["network_read"],
+                    "web_request_preview",
+                    "tool_contract.web.evidence",
+                    "repair_first_when_source_untrusted",
+                ),
+                ToolExtensionContractRow::new(
+                    "mcp",
+                    "crates/norion-service",
+                    vec!["server_id", "tool_name", "capability_manifest"],
+                    vec!["external_tool_call"],
+                    "mcp_capability_preview",
+                    "tool_contract.mcp.evidence",
+                    "repair_first_when_manifest_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "openapi",
+                    "crates/norion-service",
+                    vec!["spec_uri", "operation_id", "auth_policy"],
+                    vec!["network_read", "network_write"],
+                    "openapi_operation_preview",
+                    "tool_contract.openapi.evidence",
+                    "repair_first_when_operation_unclassified",
+                ),
+                ToolExtensionContractRow::new(
+                    "task",
+                    "crates/norion-agent",
+                    vec!["task_id", "role", "budget", "dependencies"],
+                    vec!["agent_task_dispatch"],
+                    "task_dispatch_preview",
+                    "tool_contract.task.evidence",
+                    "repair_first_when_dependencies_unclosed",
+                ),
+                ToolExtensionContractRow::new(
+                    "agent_team",
+                    "crates/norion-agent",
+                    vec!["roles", "budget_limit", "message_limit", "conflict_policy"],
+                    vec!["agent_team_message"],
+                    "agent_team_plan_preview",
+                    "tool_contract.agent_team.evidence",
+                    "repair_first_when_conflicts_unresolved",
+                ),
+                ToolExtensionContractRow::new(
+                    "monitor_background",
+                    "crates/norion-service",
+                    vec!["monitor_id", "interval", "stop_policy"],
+                    vec!["background_task"],
+                    "monitor_schedule_preview",
+                    "tool_contract.monitor_background.evidence",
+                    "repair_first_when_stop_policy_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "config",
+                    "crates/norion-service",
+                    vec!["config_scope", "redaction_policy", "precedence"],
+                    vec!["configuration_read", "configuration_write"],
+                    "config_change_preview",
+                    "tool_contract.config.evidence",
+                    "repair_first_when_redaction_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "hook",
+                    "crates/norion-service",
+                    vec!["hook_name", "trigger", "capability_manifest"],
+                    vec!["hook_execution"],
+                    "hook_manifest_preview",
+                    "tool_contract.hook.evidence",
+                    "repair_first_when_hook_capabilities_unknown",
+                ),
+                ToolExtensionContractRow::new(
+                    "plugin",
+                    "crates/norion-service",
+                    vec!["plugin_id", "capability_manifest", "license_evidence"],
+                    vec!["plugin_execution"],
+                    "plugin_manifest_preview",
+                    "tool_contract.plugin.evidence",
+                    "repair_first_when_license_or_capability_missing",
+                ),
+                ToolExtensionContractRow::new(
+                    "bridge",
+                    "crates/norion-service",
+                    vec!["bridge_id", "remote_boundary", "capability_manifest"],
+                    vec!["remote_session"],
+                    "bridge_session_preview",
+                    "tool_contract.bridge.evidence",
+                    "repair_first_when_remote_boundary_unreviewed",
+                ),
+                ToolExtensionContractRow::new(
+                    "worktree",
+                    "crates/norion-service",
+                    vec!["repo_root", "branch_policy", "cleanup_policy"],
+                    vec!["git_worktree_write"],
+                    "worktree_plan_preview",
+                    "tool_contract.worktree.evidence",
+                    "repair_first_when_cleanup_policy_missing",
+                ),
+            ],
+            forbidden_capabilities: vec![
+                "copy_gpl_code".to_owned(),
+                "copy_gpl_prompts".to_owned(),
+                "copy_gpl_docs".to_owned(),
+                "vendor_external_source".to_owned(),
+                "execute_without_preview".to_owned(),
+                "extension_without_capability_manifest".to_owned(),
+                "tool_without_permission_inputs".to_owned(),
+                "memory_write_without_admission".to_owned(),
+                "ndkv_write".to_owned(),
+                "commercial_license_exception".to_owned(),
+            ],
+            require_read_only_preview_before_execution: true,
+            require_capability_manifest_for_extensions: true,
+            require_gpl_clean_implementation: true,
+            preserves_legacy_runner: true,
+            verification_plan: VerificationPlan::cargo_test_manifest(
+                r".\crates\norion-test\Cargo.toml",
+            ),
+        }
+    }
+
+    pub fn row_for(&self, operation: &str) -> Option<&ToolExtensionContractRow> {
+        self.rows.iter().find(|row| row.operation == operation)
+    }
+
+    pub fn has_operation(&self, operation: &str) -> bool {
+        self.row_for(operation).is_some()
+    }
+
+    pub fn forbids_capability(&self, capability: &str) -> bool {
+        self.forbidden_capabilities
+            .iter()
+            .any(|forbidden| forbidden == capability)
+    }
+
+    pub fn all_rows_have_read_only_preview(&self) -> bool {
+        self.rows
+            .iter()
+            .all(ToolExtensionContractRow::has_read_only_preview)
+    }
+
+    pub fn all_rows_have_evidence(&self) -> bool {
+        self.rows
+            .iter()
+            .all(ToolExtensionContractRow::has_evidence_row)
+    }
+
+    pub fn all_rows_deny_by_default(&self) -> bool {
+        self.rows.iter().all(|row| row.deny_by_default)
+    }
+
+    pub fn all_rows_require_gpl_clean_implementation(&self) -> bool {
+        self.rows.iter().all(|row| row.gpl_clean_required)
+    }
+
+    pub fn stays_clean_room_tool_boundary(&self) -> bool {
+        self.matrix_doc_path == "docs/architecture/external-agent-baselines.md"
+            && self.rows.len() == 16
+            && self.require_read_only_preview_before_execution
+            && self.require_capability_manifest_for_extensions
+            && self.require_gpl_clean_implementation
+            && self.all_rows_have_read_only_preview()
+            && self.all_rows_have_evidence()
+            && self.all_rows_deny_by_default()
+            && self.all_rows_require_gpl_clean_implementation()
+            && [
+                "file_read",
+                "file_edit",
+                "shell",
+                "powershell",
+                "search",
+                "web",
+                "mcp",
+                "openapi",
+                "task",
+                "agent_team",
+                "monitor_background",
+                "config",
+                "hook",
+                "plugin",
+                "bridge",
+                "worktree",
+            ]
+            .iter()
+            .all(|operation| self.has_operation(operation))
+            && [
+                "copy_gpl_code",
+                "copy_gpl_prompts",
+                "copy_gpl_docs",
+                "vendor_external_source",
+                "execute_without_preview",
+                "extension_without_capability_manifest",
+                "tool_without_permission_inputs",
+                "memory_write_without_admission",
+                "ndkv_write",
+                "commercial_license_exception",
             ]
             .iter()
             .all(|capability| self.forbids_capability(capability))
@@ -9618,6 +10822,51 @@ mod tests {
                 .contains(&"feedback_self_improve_report_v1".to_owned())
         );
         assert!(
+            plan.optional_additive_reports.contains(
+                &"self_improve_proposal_memory_reflection_reuse_plan_report_v1".to_owned()
+            )
+        );
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_preflight_report_v1".to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1".to_owned()
+        ));
+        assert!(
+            plan.optional_additive_reports.contains(
+                &"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1"
+                    .to_owned()
+            )
+        );
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1"
+                .to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1"
+                .to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1"
+                .to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1"
+                .to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1"
+                .to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1"
+                .to_owned()
+        ));
+        assert!(plan.optional_additive_reports.contains(
+            &"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1"
+                .to_owned()
+        ));
+        assert!(
             plan.optional_additive_reports
                 .contains(&"self_evolution_continuity_report_v1".to_owned())
         );
@@ -11936,6 +13185,535 @@ mod tests {
             r"cargo test --manifest-path .\crates\norion-eval\Cargo.toml"
         );
         assert!(report.stays_pure_data_boundary());
+    }
+
+    #[test]
+    fn self_improve_proposal_memory_reflection_reuse_plan_report_tracks_r87_contract() {
+        let report =
+            SelfImproveProposalMemoryReflectionReusePlanReportPlan::memory_reflection_reuse_plan(
+                "memory-reflection-reuse-plan-report",
+                AdapterAcceptanceStage::ReportOnly,
+            );
+        let enforced =
+            SelfImproveProposalMemoryReflectionReusePlanReportPlan::memory_reflection_reuse_plan(
+                "memory-reflection-reuse-plan-enforced",
+                AdapterAcceptanceStage::Enforced,
+            );
+
+        assert_eq!(
+            enforced.report_schema_name,
+            "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+        );
+        assert_eq!(
+            enforced.consumer_surface,
+            "evolution_loop_report_only_self_improve_memory_reflection_reuse_plan"
+        );
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_report_only);
+        assert!(enforced.require_candidate_only);
+        assert!(enforced.require_write_disabled);
+        assert!(enforced.exposes_entrypoint(
+            "SelfImproveProposalMemoryReflectionReusePlanReport::from_dedupe_cluster"
+        ));
+        assert!(enforced.exposes_entrypoint(
+            "SelfImproveProposalMemoryReflectionReusePlanItem::from_dedupe_cluster_item"
+        ));
+        assert!(
+            enforced
+                .exposes_entrypoint("SelfImproveProposalArtifact::memory_reflection_reuse_plan")
+        );
+        assert!(enforced.exposes_entrypoint("option_memory_reflection_reuse_plan_report_json"));
+        assert!(enforced.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterReport"));
+        assert!(enforced.allows_input("SelfImproveProposalMemoryReflectionDedupeClusterItem"));
+        assert!(enforced.allows_input("dedupe_recommendation"));
+        assert!(enforced.allows_input("approval_review_packet_ids"));
+        assert!(enforced.allows_input("evidence_ids"));
+        assert!(!enforced.allows_input("EvolutionLoopRunner"));
+        assert!(!enforced.allows_input("MemoryStore"));
+        assert!(!enforced.allows_input("NdkvStore"));
+        assert!(!enforced.allows_input("ModelClient"));
+        assert!(!enforced.allows_input("PromptExecutor"));
+        assert!(!enforced.allows_input("ApprovalTokenConsumer"));
+        assert!(enforced.produces_output("SelfImproveProposalMemoryReflectionReusePlanReport"));
+        assert!(enforced.produces_output("SelfImproveProposalMemoryReflectionReusePlanItem"));
+        assert!(
+            enforced
+                .produces_output("self_improve_proposal_memory_reflection_reuse_plan_report_v1")
+        );
+        for field in [
+            "self_improve_proposal.memory_reflection_reuse_plan.read_only",
+            "self_improve_proposal.memory_reflection_reuse_plan.report_only",
+            "self_improve_proposal.memory_reflection_reuse_plan.candidate_only",
+            "self_improve_proposal.memory_reflection_reuse_plan.target_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.reflection_cluster_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.ready_reuse_plan_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.duplicate_cluster_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.duplicate_reflection_item_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.projected_saved_reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.reflection_reuse_plan_ready",
+            "self_improve_proposal.memory_reflection_reuse_plan.explicit_operator_approval_required",
+            "self_improve_proposal.memory_reflection_reuse_plan.validation_required",
+            "self_improve_proposal.memory_reflection_reuse_plan.rollback_required",
+            "self_improve_proposal.memory_reflection_reuse_plan.commit_allowed",
+            "self_improve_proposal.memory_reflection_reuse_plan.admission_write_authorized",
+            "self_improve_proposal.memory_reflection_reuse_plan.auto_apply",
+            "self_improve_proposal.memory_reflection_reuse_plan.memory_store_write_allowed",
+            "self_improve_proposal.memory_reflection_reuse_plan.ndkv_write_allowed",
+            "self_improve_proposal.memory_reflection_reuse_plan.failure_reasons",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_items",
+            "self_improve_proposal.memory_reflection_reuse_plan.side_effects",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.cluster_id",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.representative_proposal_id",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_proposal_ids",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.approval_review_packet_ids",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.evidence_ids",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.duplicate_reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.projected_saved_reflection_count",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.reuse_plan_ready",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.planned_reuse_action",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.dedupe_recommendation",
+            "self_improve_proposal.memory_reflection_reuse_plan.plan_item.blocked_reasons",
+        ] {
+            assert!(
+                enforced.produces_report_field(field),
+                "missing R87 report field {field}"
+            );
+        }
+        for forbidden in [
+            "old_thread_read",
+            "old_window_read",
+            "raw_old_window_payload",
+            "chat_transcript_read",
+            "jsonl_io",
+            "file_io",
+            "report_directory_scan",
+            "http_sse",
+            "process_spawn",
+            "validation_command_spawn",
+            "daemon_control",
+            "runner_state",
+            "remote_mac_call",
+            "model_download",
+            "model_call",
+            "helper_prose_parse",
+            "chat_stream",
+            "prompt_parse",
+            "prompt_skip_execution",
+            "live_write",
+            "memory_store_write",
+            "memory_admission_write",
+            "ndkv_write",
+            "approval_token_consumption",
+            "reuse_action_execution",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_pure_data_boundary());
+        assert!(!report.may_block_current_runner());
+        assert!(!enforced.may_block_current_runner());
+        assert!(!report.may_execute_reuse_action());
+        assert!(!enforced.may_execute_reuse_action());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-eval\Cargo.toml"
+        );
+        assert!(report.stays_pure_data_boundary());
+    }
+
+    #[test]
+    fn agent_memory_recall_sidecar_contract_is_read_only() {
+        let report = AgentMemoryRecallSidecarContractPlan::memory_recall_sidecar(
+            "agent-memory-recall-sidecar-report",
+            AdapterAcceptanceStage::ReportOnly,
+        );
+        let enforced = AgentMemoryRecallSidecarContractPlan::memory_recall_sidecar(
+            "agent-memory-recall-sidecar-enforced",
+            AdapterAcceptanceStage::Enforced,
+        );
+
+        assert_eq!(enforced.context_surface_name, "agent_memory_recall_context");
+        assert_eq!(enforced.wave_surface_name, "agent_wave_memory_recall");
+        assert_eq!(
+            enforced.dry_run_evidence_surface_name,
+            "agent_memory_recall_dry_run_evidence"
+        );
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_sidecar_only);
+        assert!(enforced.exposes_entrypoint("MemoryRecallContextPlanner::plan_for_task"));
+        assert!(enforced.exposes_entrypoint("MemoryRecallContextPlanner::plan_from_records"));
+        assert!(
+            enforced.exposes_entrypoint("MemoryRecallContextPlanner::plan_from_dry_run_evidence")
+        );
+        assert!(enforced.exposes_entrypoint("AgentWaveMemoryRecallPlanner::plan_dispatch"));
+        assert!(enforced.allows_input("MemoryPort::recall"));
+        assert!(enforced.allows_input("MemoryRecallDryRunEvidence"));
+        assert!(!enforced.allows_input("EnginePort"));
+        assert!(!enforced.allows_input("ToolBuildPort"));
+        assert!(enforced.produces_output("MemoryRecallContext"));
+        assert!(enforced.produces_output("MemoryRecallDryRunEvidence"));
+        assert!(enforced.produces_output("AgentWaveMemoryRecallPlan"));
+        assert!(enforced.requires_field("memory_recall_context.read_only"));
+        assert!(
+            enforced.requires_field("memory_recall_dry_run_evidence.memory_store_write_allowed")
+        );
+        assert!(
+            enforced.requires_field("memory_recall_dry_run_evidence.kv_prefetch_apply_allowed")
+        );
+        assert!(enforced.requires_field("agent_memory_recall_dry_run_evidence.safe"));
+        for forbidden in [
+            "MemoryPort::propose_note",
+            "memory_store_write",
+            "memory_promotion_commit",
+            "ndkv_write",
+            "kv_prefetch_apply",
+            "model_call",
+            "prompt_execution",
+            "prompt_injection",
+            "task_dispatch",
+            "engine_run_task",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden memory recall capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_read_only_sidecar_boundary());
+        assert!(!report.may_write_memory());
+        assert!(!report.may_dispatch_tasks());
+        assert!(!report.may_inject_prompt_context());
+        assert!(!enforced.may_write_memory());
+        assert!(!enforced.may_dispatch_tasks());
+        assert!(!enforced.may_inject_prompt_context());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-agent\Cargo.toml"
+        );
+        assert!(report.stays_read_only_sidecar_boundary());
+    }
+
+    #[test]
+    fn memory_reuse_dry_run_summary_contract_disables_writes_and_apply() {
+        let report = MemoryReuseDryRunSummaryContractPlan::memory_reuse_dry_run_summary(
+            "memory-reuse-dry-run-summary-report",
+            AdapterAcceptanceStage::ReportOnly,
+        );
+        let enforced = MemoryReuseDryRunSummaryContractPlan::memory_reuse_dry_run_summary(
+            "memory-reuse-dry-run-summary-enforced",
+            AdapterAcceptanceStage::Enforced,
+        );
+
+        assert_eq!(enforced.summary_surface_name, "memory_reuse_dry_run");
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_dry_run_only);
+        assert!(enforced.require_write_disabled);
+        assert!(enforced.exposes_entrypoint("DefaultMemoryReusePlanner::plan_from_candidates"));
+        assert!(enforced.exposes_entrypoint("DefaultMemoryReusePlanner::plan_from_long_term"));
+        assert!(enforced.exposes_entrypoint("MemoryReusePlan::dry_run_summary"));
+        assert!(enforced.exposes_entrypoint("MemoryReusePlan::summary_line"));
+        assert!(enforced.allows_input("ContextCandidate"));
+        assert!(enforced.allows_input("MemoryRequestContext"));
+        assert!(enforced.allows_input("KvSwap::plan_prefetch"));
+        assert!(!enforced.allows_input("KvSwap::apply_prefetch"));
+        assert!(!enforced.allows_input("LongTermMemoryWriter"));
+        assert!(!enforced.allows_input("MemoryStoreWriter"));
+        assert!(enforced.produces_output("MemoryReusePlan"));
+        assert!(enforced.produces_output("MemoryReuseDryRunSummary"));
+        assert!(enforced.produces_output("memory_reuse_dry_run"));
+        for field in [
+            "memory_reuse_plan.read_only",
+            "memory_reuse_plan.kv_prefetch_plan",
+            "memory_reuse_dry_run.read_only",
+            "memory_reuse_dry_run.accepted_context_count",
+            "memory_reuse_dry_run.rejected_context_count",
+            "memory_reuse_dry_run.requested_kv_count",
+            "memory_reuse_dry_run.kv_promote_count",
+            "memory_reuse_dry_run.kv_missing_count",
+            "memory_reuse_dry_run.memory_store_write_allowed",
+            "memory_reuse_dry_run.kv_prefetch_apply_allowed",
+            "memory_reuse_dry_run.reason_codes",
+            "memory_reuse_dry_run.detail_codes",
+        ] {
+            assert!(
+                enforced.requires_field(field),
+                "missing memory reuse dry-run field {field}"
+            );
+        }
+        for forbidden in [
+            "long_term_memory_write",
+            "memory_store_write",
+            "memory_promotion_commit",
+            "kv_prefetch_apply",
+            "kv_swap_mutation",
+            "ndkv_write",
+            "model_call",
+            "prompt_execution",
+            "process_spawn",
+            "daemon_control",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden dry-run capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_read_only_dry_run_boundary());
+        assert!(!report.may_write_memory());
+        assert!(!report.may_apply_kv_prefetch());
+        assert!(!enforced.may_write_memory());
+        assert!(!enforced.may_apply_kv_prefetch());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-memory\Cargo.toml"
+        );
+        assert!(report.stays_read_only_dry_run_boundary());
+    }
+
+    #[test]
+    fn agent_memory_reuse_execution_preflight_contract_gates_execution_without_side_effects() {
+        let report =
+            AgentMemoryReuseExecutionPreflightReportContractPlan::memory_reuse_execution_preflight(
+                "memory-reuse-execution-preflight-report",
+                AdapterAcceptanceStage::ReportOnly,
+            );
+        let enforced =
+            AgentMemoryReuseExecutionPreflightReportContractPlan::memory_reuse_execution_preflight(
+                "memory-reuse-execution-preflight-enforced",
+                AdapterAcceptanceStage::Enforced,
+            );
+
+        assert_eq!(
+            enforced.report_surface_name,
+            "agent_memory_reuse_execution_preflight"
+        );
+        assert_eq!(
+            enforced.prepared_surface_name,
+            "agent_closed_loop_prepared_memory_reuse_preflight"
+        );
+        assert!(enforced.require_read_only);
+        assert!(enforced.require_report_only);
+        assert!(enforced.require_clean_report_before_execution);
+        assert!(enforced.require_repair_first_on_block);
+        assert!(
+            enforced
+                .exposes_entrypoint("AgentMemoryReuseExecutionPreflightPlanner::plan_for_dispatch")
+        );
+        assert!(enforced.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::is_clean"));
+        assert!(
+            enforced.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::summary_line")
+        );
+        assert!(
+            enforced.exposes_entrypoint("AgentMemoryReuseExecutionPreflightReport::reason_codes")
+        );
+        assert!(
+            enforced.exposes_entrypoint("AgentClosedLoopPreparedMemoryReusePreflightPlanner::plan")
+        );
+        assert!(enforced.exposes_entrypoint(
+            "AgentClosedLoopPreparedMemoryReusePreflight::can_enter_execution"
+        ));
+        assert!(enforced.allows_input("AgentCycleDispatch"));
+        assert!(enforced.allows_input("AgentTask"));
+        assert!(enforced.allows_input("AgentWaveMemoryRecallPlan"));
+        assert!(enforced.allows_input("MemoryRecallDryRunEvidence"));
+        assert!(enforced.allows_input("AgentMemoryReuseExecutionPreflightPolicy"));
+        assert!(!enforced.allows_input("EnginePort"));
+        assert!(!enforced.allows_input("MemoryStoreWriter"));
+        assert!(enforced.produces_output("AgentMemoryReuseExecutionPreflightReport"));
+        assert!(enforced.produces_output("AgentClosedLoopPreparedMemoryReusePreflight"));
+        for field in [
+            "agent_memory_reuse_execution_preflight.task_ids",
+            "agent_memory_reuse_execution_preflight.recall_task_ids",
+            "agent_memory_reuse_execution_preflight.dry_run_evidence_sources",
+            "agent_memory_reuse_execution_preflight.read_only",
+            "agent_memory_reuse_execution_preflight.memory_reuse_ready",
+            "agent_memory_reuse_execution_preflight.can_enter_execution",
+            "agent_memory_reuse_execution_preflight.requires_repair_first",
+            "agent_memory_reuse_execution_preflight.prompt_injection_allowed",
+            "agent_memory_reuse_execution_preflight.engine_port_touched",
+            "agent_memory_reuse_execution_preflight.memory_store_write_allowed",
+            "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed",
+            "agent_memory_reuse_execution_preflight.accepted_recall_count",
+            "agent_memory_reuse_execution_preflight.rejected_recall_count",
+            "agent_memory_reuse_execution_preflight.dry_run_evidence_count",
+            "agent_memory_reuse_execution_preflight.kv_requested_count",
+            "agent_memory_reuse_execution_preflight.kv_promote_count",
+            "agent_memory_reuse_execution_preflight.kv_missing_count",
+            "agent_memory_reuse_execution_preflight.blocked_reasons",
+            "agent_memory_reuse_execution_preflight.reason_codes",
+            "agent_memory_reuse_execution_preflight.telemetry",
+            "agent_closed_loop_prepared_memory_reuse_preflight.preflight",
+            "agent_closed_loop_prepared_memory_reuse_preflight.skipped_reasons",
+            "agent_closed_loop_prepared_memory_reuse_preflight.can_enter_execution",
+            "agent_closed_loop_prepared_memory_reuse_preflight.requires_repair_first",
+        ] {
+            assert!(
+                enforced.requires_field(field),
+                "missing memory reuse execution preflight field {field}"
+            );
+        }
+        for flag in [
+            "agent_memory_reuse_execution_preflight.prompt_injection_allowed=false",
+            "agent_memory_reuse_execution_preflight.engine_port_touched=false",
+            "agent_memory_reuse_execution_preflight.memory_store_write_allowed=false",
+            "agent_memory_reuse_execution_preflight.kv_prefetch_apply_allowed=false",
+        ] {
+            assert!(
+                enforced.requires_false_flag(flag),
+                "missing memory reuse execution preflight false flag {flag}"
+            );
+        }
+        for forbidden in [
+            "EnginePort::run_task",
+            "engine_run_task",
+            "MemoryPort::propose_note",
+            "memory_store_write",
+            "memory_promotion_commit",
+            "kv_prefetch_apply",
+            "kv_swap_mutation",
+            "ndkv_write",
+            "model_call",
+            "prompt_execution",
+            "prompt_injection",
+            "task_dispatch",
+            "process_spawn",
+            "daemon_control",
+            "runtime_side_effect_execution",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden memory reuse execution preflight capability {forbidden}"
+            );
+        }
+        assert!(enforced.stays_report_only_execution_preflight_boundary());
+        assert!(!report.may_touch_engine_port());
+        assert!(!report.may_write_memory());
+        assert!(!report.may_apply_kv_prefetch());
+        assert!(!report.may_dispatch_tasks());
+        assert!(!report.may_inject_prompt_context());
+        assert!(!enforced.may_touch_engine_port());
+        assert!(!enforced.may_write_memory());
+        assert!(!enforced.may_apply_kv_prefetch());
+        assert!(!enforced.may_dispatch_tasks());
+        assert!(!enforced.may_inject_prompt_context());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-agent\Cargo.toml"
+        );
+        assert!(report.stays_report_only_execution_preflight_boundary());
+    }
+
+    #[test]
+    fn tool_extension_contract_matrix_keeps_external_baselines_clean_room() {
+        let report = NorionToolExtensionContractMatrixPlan::clean_room_tool_extension_matrix(
+            "tool-extension-matrix-report",
+            AdapterAcceptanceStage::ReportOnly,
+        );
+        let enforced = NorionToolExtensionContractMatrixPlan::clean_room_tool_extension_matrix(
+            "tool-extension-matrix-enforced",
+            AdapterAcceptanceStage::Enforced,
+        );
+
+        assert_eq!(
+            enforced.matrix_doc_path,
+            "docs/architecture/external-agent-baselines.md"
+        );
+        assert_eq!(enforced.rows.len(), 16);
+        for operation in [
+            "file_read",
+            "file_edit",
+            "shell",
+            "powershell",
+            "search",
+            "web",
+            "mcp",
+            "openapi",
+            "task",
+            "agent_team",
+            "monitor_background",
+            "config",
+            "hook",
+            "plugin",
+            "bridge",
+            "worktree",
+        ] {
+            assert!(
+                enforced.has_operation(operation),
+                "missing tool matrix row {operation}"
+            );
+        }
+
+        let file_edit = enforced.row_for("file_edit").expect("file edit row");
+        assert_eq!(file_edit.owning_crate, "crates/norion-service");
+        assert!(file_edit.requires_permission_input("diff_intent"));
+        assert!(file_edit.requires_permission_input("review_gate"));
+        assert!(file_edit.declares_side_effect("filesystem_write"));
+        assert_eq!(file_edit.read_only_preview, "file_edit_diff_preview");
+        assert_eq!(
+            file_edit.repair_first_behavior,
+            "repair_first_when_diff_unreviewed"
+        );
+
+        let shell = enforced.row_for("shell").expect("shell row");
+        assert!(shell.requires_permission_input("command_allowlist"));
+        assert!(shell.requires_permission_input("side_effect_class"));
+        assert!(shell.declares_side_effect("process_spawn"));
+        assert_eq!(shell.read_only_preview, "shell_command_dry_run_preview");
+
+        let mcp = enforced.row_for("mcp").expect("mcp row");
+        assert!(mcp.requires_permission_input("capability_manifest"));
+        assert!(mcp.declares_side_effect("external_tool_call"));
+        assert_eq!(mcp.read_only_preview, "mcp_capability_preview");
+
+        let plugin = enforced.row_for("plugin").expect("plugin row");
+        assert!(plugin.requires_permission_input("license_evidence"));
+        assert!(plugin.requires_permission_input("capability_manifest"));
+        assert!(plugin.declares_side_effect("plugin_execution"));
+
+        let bridge = enforced.row_for("bridge").expect("bridge row");
+        assert!(bridge.requires_permission_input("remote_boundary"));
+        assert!(bridge.declares_side_effect("remote_session"));
+
+        for forbidden in [
+            "copy_gpl_code",
+            "copy_gpl_prompts",
+            "copy_gpl_docs",
+            "vendor_external_source",
+            "execute_without_preview",
+            "extension_without_capability_manifest",
+            "tool_without_permission_inputs",
+            "memory_write_without_admission",
+            "ndkv_write",
+            "commercial_license_exception",
+        ] {
+            assert!(
+                enforced.forbids_capability(forbidden),
+                "missing forbidden tool matrix capability {forbidden}"
+            );
+        }
+        assert!(enforced.require_read_only_preview_before_execution);
+        assert!(enforced.require_capability_manifest_for_extensions);
+        assert!(enforced.require_gpl_clean_implementation);
+        assert!(enforced.all_rows_have_read_only_preview());
+        assert!(enforced.all_rows_have_evidence());
+        assert!(enforced.all_rows_deny_by_default());
+        assert!(enforced.all_rows_require_gpl_clean_implementation());
+        assert!(enforced.stays_clean_room_tool_boundary());
+        assert!(report.stays_clean_room_tool_boundary());
+        assert!(enforced.preserves_legacy_runner);
+        assert_eq!(
+            enforced.verification_plan.commands[0].display_line(),
+            r"cargo test --manifest-path .\crates\norion-test\Cargo.toml"
+        );
     }
 
     #[test]

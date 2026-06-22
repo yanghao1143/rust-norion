@@ -1,6 +1,130 @@
 use super::*;
 
 #[test]
+fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
+    let asset_dir = temp_asset_dir("self-evolution-admission-benchmark");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let trace_path = asset_dir.join("benchmark.jsonl");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+
+    let summary = run_benchmark(&mut engine, &mut backend, &trace_path).unwrap();
+    let gate_report = rust_norion::BenchmarkGateReport {
+        passed: true,
+        failures: Vec::new(),
+    };
+    let report = benchmark_self_evolution_admission_report(
+        "benchmark:test",
+        &engine,
+        &summary,
+        &gate_report,
+        TaskProfile::General,
+    );
+
+    assert!(summary.len() > 0);
+    assert_eq!(report.candidate_id, "benchmark:test");
+    assert!(report.read_only);
+    assert!(report.report_only);
+    assert!(report.preview_only);
+    assert!(report.benchmark_gate_passed);
+    assert!(report.adaptive_preview_evidence_present);
+    assert!(report.router_threshold_preview_ready);
+    assert!(report.hierarchy_adjustment_preview_ready);
+    assert!(!report.kv_fusion_policy_observation_preview_ready);
+    assert_eq!(report.adaptive_preview_source_count, 2);
+    assert!(report.adaptive_preview_read_only);
+    assert!(report.adaptive_preview_report_only);
+    assert!(report.adaptive_preview_preview_only);
+    assert!(!report.adaptive_preview_write_allowed);
+    assert!(!report.adaptive_preview_applied);
+    assert!(!report.memory_store_write_allowed);
+    assert!(!report.ndkv_write_allowed);
+    assert!(!report.model_weight_write_allowed);
+    assert!(!report.git_write_allowed);
+    assert!(report.summary_line().contains("self_evolution_admission"));
+    let json_line = report.json_line();
+    assert!(json_line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\""));
+    assert!(json_line.contains("\"candidate_id\":\"benchmark:test\""));
+    assert!(json_line.contains("\"read_only\":true"));
+    assert!(json_line.contains("\"report_only\":true"));
+    assert!(json_line.contains("\"preview_only\":true"));
+    assert!(json_line.contains("\"review_packet\":{"));
+    assert!(
+        json_line.contains("\"approval_review_packet_ids\":[\"approval-review:benchmark:test\"]")
+    );
+    assert!(json_line.contains("\"approval_tokens_included\":false"));
+    assert!(json_line.contains("\"evidence_count\":4"));
+    assert!(json_line.contains("\"benchmark_gate\":{\"passed\":true"));
+    assert!(json_line.contains("\"adaptive_preview\":{\"evidence_present\":true"));
+    assert!(json_line.contains("\"source_count\":2"));
+    assert!(json_line.contains("\"kv_fusion_policy_observation_ready\":false"));
+    assert!(json_line.contains(
+        "\"writes\":{\"mutation_allowed\":false,\"memory_store_allowed\":false,\"ndkv_allowed\":false,\"model_weight_allowed\":false,\"git_allowed\":false}"
+    ));
+    assert!(json_line.contains("\"blocked_reasons\":[]"));
+    assert!(
+        report
+            .telemetry
+            .iter()
+            .any(|line| { line == "self_evolution_admission_adaptive_preview_source_count=2" })
+    );
+    assert!(
+        report
+            .telemetry
+            .iter()
+            .any(|line| line == "self_evolution_admission_review_packet_evidence_ids=4")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn benchmark_dispatch_appends_self_evolution_admission_trace_packet() {
+    let asset_dir = temp_asset_dir("benchmark-dispatch-admission-trace");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace_path = asset_dir.join("benchmark.jsonl");
+    let args = Args::parse(vec![
+        "--benchmark".to_owned(),
+        trace_path.display().to_string(),
+        "--benchmark-gate".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+    ]);
+
+    dispatch::run(args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(
+        trace_report.checked_lines,
+        default_benchmark_cases().len() + 1
+    );
+    assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(
+        trace_report.self_evolution_admission_admitted
+            + trace_report.self_evolution_admission_blocked,
+        1
+    );
+    assert_eq!(trace_report.self_evolution_admission_review_packets, 1);
+    assert!(trace_report.self_evolution_admission_evidence_ids >= 3);
+    assert_eq!(
+        trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn benchmark_all_devices_runs_every_explicit_profile() {
     let asset_dir = temp_asset_dir("all-device-benchmark");
     fs::create_dir_all(&asset_dir).unwrap();

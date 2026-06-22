@@ -1,0 +1,43 @@
+name: Research spike
+description: Evaluate papers, repositories, or designs before implementation.
+title: "[Research] "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Research question
+      description: What decision should this research unblock?
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources to evaluate
+      description: Papers, repositories, docs, benchmarks, or prior issues.
+      placeholder: |
+        - source:
+          license:
+          clean-room posture:
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Expected output
+      description: What artifact should be produced?
+      placeholder: "Design note, migration map, ADR, benchmark plan..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: clean_room
+    attributes:
+      label: Clean-room guardrails
+      options:
+        - label: GPL/AGPL/commercial sources will not be copied into rust-norion.
+          required: true
+        - label: Any implementation recommendation will be restated in rust-norion terms.
+          required: true
+        - label: License/provenance notes will be included in the output.
+          required: true

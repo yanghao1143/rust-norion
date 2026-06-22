@@ -212,7 +212,7 @@ pub(crate) fn experience_hygiene_health_status(args: &Args) -> ExperienceHygiene
         }
     }
 
-    match ExperienceStore::load_from_disk_kv(&args.experience_path) {
+    match ExperienceStore::load_from_disk_kv_read_only(&args.experience_path) {
         Ok(store) => {
             let report = store.hygiene_report(1);
             let repair = ExperienceHygieneRepairHealthStatus::from_plan(

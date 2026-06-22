@@ -53,7 +53,8 @@ pub use adapter::{
 pub use attention::{
     AttentionCandidate, AttentionCandidateBatchSummary, AttentionCandidateSummary,
     AttentionDecision, AttentionDecisionSummary, AttentionPolicy, AttentionSelectionReadinessStage,
-    AttentionSelectionReadinessSummary, ThresholdAttentionPolicy, ThresholdAttentionPolicySummary,
+    AttentionSelectionReadinessSummary, ThresholdAttentionAdjustmentAction,
+    ThresholdAttentionAdjustmentReport, ThresholdAttentionPolicy, ThresholdAttentionPolicySummary,
 };
 pub use diagnostics::{
     DeviceExecutionSource, DiagnosticsPressureBand, EmbeddingCallDiagnostics, EmbeddingDiagnostics,
@@ -138,8 +139,10 @@ pub use planning::{
     RuntimePlanningReadinessSummary, RuntimePlanningSummary,
 };
 pub use profile::{
-    HierarchyWeightFocus, HierarchyWeights, HierarchyWeightsSummary, ProfileHierarchyObservations,
-    ProfileHierarchyWeights, ProfileHierarchyWeightsSummary, TaskProfile,
+    HierarchyAdjustmentFeedback, HierarchyAdjustmentFeedbackSummary, HierarchyWeightFocus,
+    HierarchyWeights, HierarchyWeightsSummary, ProfileHierarchyObservations,
+    ProfileHierarchyWeights, ProfileHierarchyWeightsSummary, TaskAwareHierarchyAdjustmentPolicy,
+    TaskAwareHierarchyAdjustmentReport, TaskProfile,
 };
 pub use quant::{
     KvQuantizationPlan, QuantizationError, QuantizedKvBlock, QuantizedKvPayloadSummary,

@@ -9,3 +9,5 @@ noiron-memory.tsv
 *.log
 *.tmp
 state/
+!src/**/state/
+!src/**/state/*.rs

@@ -82,6 +82,51 @@ impl InferenceBackend for TimeoutErrorBackend {
     }
 }
 
+#[derive(Debug, Clone)]
+struct OrchestrationTraceBackend;
+
+impl InferenceBackend for OrchestrationTraceBackend {
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        Some(vec![0.9, 0.2, 0.1])
+    }
+
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "Rust Noiron orchestration audit routes Rust coding context through disk-backed KV memory, adaptive routing, reasoning genome splicing, runtime KV evidence, model adapter execution, reflection validation, and approval gated memory admission. The trace keeps context as digest counts and stage summaries while durable memory, genome, and experiment ledgers remain approval gated.",
+            vec![
+                ReasoningStep::new(
+                    "route",
+                    "selected adaptive routing candidates from context counters and memory hits",
+                    0.91,
+                ),
+                ReasoningStep::new(
+                    "runtime_adapter",
+                    "generated with local deterministic adapter and exported bounded KV evidence",
+                    0.89,
+                ),
+                ReasoningStep::new(
+                    "genome_splice",
+                    "previewed reasoning genome segments behind read-only scissors gates",
+                    0.88,
+                ),
+                ReasoningStep::new(
+                    "memory_admission",
+                    "kept durable memory ledger records preview-only until approval",
+                    0.90,
+                ),
+            ],
+        )
+        .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+            0,
+            0,
+            0,
+            3,
+            vec![0.1, 0.2, 0.3],
+            vec![0.3, 0.2, 0.1],
+        )])
+    }
+}
+
 #[test]
 fn inference_records_runtime_error_notes_for_inspection() {
     let mut engine = NoironEngine::new();
@@ -108,6 +153,91 @@ fn inference_records_runtime_error_notes_for_inspection() {
             .iter()
             .any(|note| note.starts_with("runtime_error:"))
     );
+}
+
+#[test]
+fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
+    let mut engine = NoironEngine::new();
+    engine
+        .cache
+        .store_or_fuse("seed orchestration memory", vec![0.9, 0.2, 0.1], 0.92);
+    let mut backend = OrchestrationTraceBackend;
+    let prompt =
+        "Rust Noiron orchestration audit with runtime KV genome memory gates private-sentinel-4397";
+
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let trace = outcome.orchestration_trace();
+
+    for stage in [
+        "context",
+        "memory_retrieval",
+        "routing",
+        "model_adapter",
+        "reflection_validation",
+        "reasoning_genome",
+        "memory_admission",
+        "evolution_ledger",
+        "retention_compaction",
+    ] {
+        assert!(trace.has_stage(stage), "missing stage {stage}");
+    }
+    assert_eq!(
+        trace.stage("model_adapter").unwrap().status,
+        NoironOrchestrationStageStatus::Completed
+    );
+    assert!(trace.route.adaptive_candidates > 0);
+    assert!(trace.route.decision_count_matches);
+    assert!(trace.route.token_accounting_matches);
+    assert!(trace.route.anchors_retained);
+    assert!(trace.kv.used_memories > 0);
+    assert_eq!(trace.kv.exported_runtime_kv_blocks, 1);
+    assert!(trace.genome.splice_segments > 0);
+    assert!(trace.genome.expression_gene_count > 0);
+    assert!(trace.gates.memory_admission_read_only_preview);
+    assert!(trace.gates.genome_expression_read_only_preview);
+    assert!(trace.gates.genome_splice_read_only_preview);
+    assert_eq!(trace.gates.durable_memory_ledger_applied, 0);
+    assert_eq!(trace.gates.unauthorized_durable_memory_writes, 0);
+    assert!(trace.all_writes_gated());
+    assert!(trace.summary_line().contains("writes_gated=true"));
+
+    let rendered = format!("{trace:?}");
+    assert!(!rendered.contains("private-sentinel-4397"));
+    assert!(!rendered.contains(&outcome.answer));
+    assert!(!rendered.contains(&outcome.raw_answer));
+}
+
+#[test]
+fn orchestration_trace_isolates_runtime_failure_with_rollback_record() {
+    let mut engine = NoironEngine::new();
+    let mut backend = TimeoutErrorBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new("bounded runtime error audit", TaskProfile::Coding),
+        &mut backend,
+    );
+    let trace = outcome.orchestration_trace();
+
+    let model_stage = trace.stage("model_adapter").unwrap();
+    assert_eq!(model_stage.status, NoironOrchestrationStageStatus::Failed);
+    assert!(model_stage.rollback_records.iter().any(|record| {
+        record.starts_with("runtime_error:")
+            && record.contains("timeout=true")
+            && record.contains("message_chars=")
+    }));
+    assert!(trace.has_actionable_rollback_record());
+    assert_eq!(trace.gates.durable_memory_ledger_applied, 0);
+    assert!(trace.all_writes_gated());
+    assert_eq!(
+        trace.stage("memory_admission").unwrap().status,
+        NoironOrchestrationStageStatus::PreviewOnly
+    );
+
+    let rendered = format!("{trace:?}");
+    assert!(!rendered.contains("runtime command mistralrs timed out after 1000 ms"));
 }
 
 #[test]

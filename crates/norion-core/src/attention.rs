@@ -2,6 +2,7 @@ use crate::experiment::ExperimentSwitches;
 use crate::profile::TaskProfile;
 use crate::router::{
     RouteLayer, RouteLayerCounts, RoutingContext, RoutingDecision, RoutingFeedback,
+    RoutingFeedbackSummary,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -956,6 +957,29 @@ pub struct ThresholdAttentionPolicySummary {
     pub long_document_threshold: f32,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThresholdAttentionAdjustmentReport {
+    pub profile: TaskProfile,
+    pub feedback: RoutingFeedbackSummary,
+    pub previous_threshold: f32,
+    pub adjusted_threshold: f32,
+    pub threshold_delta: f32,
+    pub min_threshold: f32,
+    pub max_threshold: f32,
+    pub action: ThresholdAttentionAdjustmentAction,
+    pub can_commit: bool,
+    pub requires_repair_first: bool,
+    pub reason_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThresholdAttentionAdjustmentAction {
+    LowerThresholdForQualityRepair,
+    RaiseThresholdForComputeSavings,
+    KeepThreshold,
+    RepairThresholdAdjustment,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThresholdAttentionPolicyAction {
     UseThresholdPolicy,
@@ -969,6 +993,143 @@ impl ThresholdAttentionPolicyAction {
 
     pub fn should_repair(self) -> bool {
         matches!(self, Self::RepairThresholdPolicy)
+    }
+}
+
+impl ThresholdAttentionAdjustmentAction {
+    pub fn can_commit(self) -> bool {
+        !matches!(self, Self::RepairThresholdAdjustment)
+    }
+
+    pub fn should_repair(self) -> bool {
+        matches!(self, Self::RepairThresholdAdjustment)
+    }
+
+    pub fn changes_threshold(self) -> bool {
+        matches!(
+            self,
+            Self::LowerThresholdForQualityRepair | Self::RaiseThresholdForComputeSavings
+        )
+    }
+}
+
+impl ThresholdAttentionAdjustmentReport {
+    pub fn threshold_changed(&self) -> bool {
+        !float_close(self.previous_threshold, self.adjusted_threshold)
+    }
+
+    pub fn threshold_lowered(&self) -> bool {
+        self.adjusted_threshold < self.previous_threshold && self.threshold_changed()
+    }
+
+    pub fn threshold_raised(&self) -> bool {
+        self.adjusted_threshold > self.previous_threshold && self.threshold_changed()
+    }
+
+    pub fn expected_to_restore_quality(&self) -> bool {
+        self.can_commit
+            && self.threshold_lowered()
+            && matches!(
+                self.action,
+                ThresholdAttentionAdjustmentAction::LowerThresholdForQualityRepair
+            )
+    }
+
+    pub fn expected_to_reduce_attention_compute(&self) -> bool {
+        self.can_commit
+            && self.threshold_raised()
+            && matches!(
+                self.action,
+                ThresholdAttentionAdjustmentAction::RaiseThresholdForComputeSavings
+            )
+    }
+
+    pub fn threshold_bounds_are_valid(&self) -> bool {
+        self.min_threshold.is_finite()
+            && self.max_threshold.is_finite()
+            && self.min_threshold <= self.max_threshold
+            && self.previous_threshold.is_finite()
+            && self.adjusted_threshold.is_finite()
+            && self.previous_threshold >= self.min_threshold
+            && self.previous_threshold <= self.max_threshold
+            && self.adjusted_threshold >= self.min_threshold
+            && self.adjusted_threshold <= self.max_threshold
+    }
+
+    pub fn threshold_delta_matches_thresholds(&self) -> bool {
+        self.threshold_delta.is_finite()
+            && float_close(
+                self.threshold_delta,
+                self.adjusted_threshold - self.previous_threshold,
+            )
+    }
+
+    pub fn action_matches_delta(&self) -> bool {
+        match self.action {
+            ThresholdAttentionAdjustmentAction::LowerThresholdForQualityRepair => {
+                self.threshold_lowered()
+            }
+            ThresholdAttentionAdjustmentAction::RaiseThresholdForComputeSavings => {
+                self.threshold_raised()
+            }
+            ThresholdAttentionAdjustmentAction::KeepThreshold => !self.threshold_changed(),
+            ThresholdAttentionAdjustmentAction::RepairThresholdAdjustment => {
+                self.requires_repair_first
+            }
+        }
+    }
+
+    pub fn threshold_adjustment_signal_component_count(&self) -> usize {
+        usize::from(self.feedback.has_feedback_signal_components())
+            + usize::from(self.threshold_changed())
+            + usize::from(self.expected_to_restore_quality())
+            + usize::from(self.expected_to_reduce_attention_compute())
+            + usize::from(self.threshold_bounds_are_valid())
+    }
+
+    pub fn has_threshold_adjustment_signal_components(&self) -> bool {
+        self.threshold_adjustment_signal_component_count() > 0
+    }
+
+    pub fn threshold_adjustment_blocker_component_count(&self) -> usize {
+        usize::from(!self.feedback.can_use_routing_feedback())
+            + usize::from(!self.threshold_bounds_are_valid())
+            + usize::from(!self.threshold_delta_matches_thresholds())
+            + usize::from(!self.action_matches_delta())
+            + usize::from(self.action.should_repair() && !self.requires_repair_first)
+            + usize::from(self.can_commit != self.action.can_commit())
+    }
+
+    pub fn has_threshold_adjustment_blockers(&self) -> bool {
+        self.threshold_adjustment_blocker_component_count() > 0
+    }
+
+    pub fn threshold_adjustment_accounting_is_consistent(&self) -> bool {
+        let expected_signal_count = usize::from(self.feedback.has_feedback_signal_components())
+            .saturating_add(usize::from(self.threshold_changed()))
+            .saturating_add(usize::from(self.expected_to_restore_quality()))
+            .saturating_add(usize::from(self.expected_to_reduce_attention_compute()))
+            .saturating_add(usize::from(self.threshold_bounds_are_valid()));
+        let expected_blocker_count = usize::from(!self.feedback.can_use_routing_feedback())
+            .saturating_add(usize::from(!self.threshold_bounds_are_valid()))
+            .saturating_add(usize::from(!self.threshold_delta_matches_thresholds()))
+            .saturating_add(usize::from(!self.action_matches_delta()))
+            .saturating_add(usize::from(
+                self.action.should_repair() && !self.requires_repair_first,
+            ))
+            .saturating_add(usize::from(self.can_commit != self.action.can_commit()));
+
+        self.threshold_adjustment_signal_component_count() == expected_signal_count
+            && self.threshold_adjustment_blocker_component_count() == expected_blocker_count
+    }
+
+    pub fn threshold_adjustment_is_clean(&self) -> bool {
+        !self.has_threshold_adjustment_blockers()
+            && self.threshold_adjustment_accounting_is_consistent()
+    }
+
+    pub fn can_commit_threshold_adjustment(&self) -> bool {
+        self.can_commit && self.threshold_adjustment_is_clean()
     }
 }
 
@@ -1171,6 +1332,96 @@ impl ThresholdAttentionPolicy {
             self.base_threshold
         }
     }
+
+    pub fn preview_adjustment(
+        &self,
+        feedback: RoutingFeedback,
+    ) -> ThresholdAttentionAdjustmentReport {
+        let feedback_summary = feedback.feedback_summary();
+        let policy_summary = self.policy_summary();
+        let previous_threshold = self.threshold_for(feedback.profile);
+        let mut target_threshold = previous_threshold;
+        let mut reason_codes = Vec::new();
+
+        let feedback_is_clean = feedback_summary.can_use_routing_feedback();
+        let policy_is_clean = policy_summary.can_use_threshold_policy();
+
+        if !feedback_is_clean {
+            reason_codes.push("attention_threshold_feedback_requires_repair".to_owned());
+        }
+
+        if !policy_is_clean {
+            reason_codes.push("attention_threshold_policy_requires_repair".to_owned());
+        }
+
+        if feedback_is_clean && policy_is_clean {
+            let contradiction_pressure = (feedback.contradiction_count as f32 * 0.02).min(0.10);
+
+            if feedback.quality < 0.60 {
+                target_threshold -=
+                    self.learning_rate * (0.60 - feedback.quality) + contradiction_pressure;
+            } else if feedback.quality > 0.84 && feedback.perplexity <= 8.0 {
+                target_threshold += self.learning_rate * (feedback.quality - 0.84);
+            }
+        }
+
+        let adjusted_threshold = target_threshold.clamp(self.min_threshold, self.max_threshold);
+        let threshold_delta = adjusted_threshold - previous_threshold;
+        let action = if !feedback_is_clean || !policy_is_clean {
+            ThresholdAttentionAdjustmentAction::RepairThresholdAdjustment
+        } else if adjusted_threshold < previous_threshold {
+            ThresholdAttentionAdjustmentAction::LowerThresholdForQualityRepair
+        } else if adjusted_threshold > previous_threshold {
+            ThresholdAttentionAdjustmentAction::RaiseThresholdForComputeSavings
+        } else {
+            ThresholdAttentionAdjustmentAction::KeepThreshold
+        };
+        let requires_repair_first = action.should_repair();
+        let can_commit = action.can_commit();
+
+        if action == ThresholdAttentionAdjustmentAction::LowerThresholdForQualityRepair {
+            reason_codes.push("attention_threshold_lowered_for_quality_repair".to_owned());
+        } else if action == ThresholdAttentionAdjustmentAction::RaiseThresholdForComputeSavings {
+            reason_codes.push("attention_threshold_raised_for_compute_savings".to_owned());
+        } else if action == ThresholdAttentionAdjustmentAction::KeepThreshold {
+            reason_codes.push("attention_threshold_kept".to_owned());
+        }
+
+        if feedback_is_clean
+            && policy_is_clean
+            && !float_close(target_threshold, adjusted_threshold)
+        {
+            reason_codes.push("attention_threshold_adjustment_clamped".to_owned());
+        }
+
+        ThresholdAttentionAdjustmentReport {
+            profile: feedback.profile,
+            feedback: feedback_summary,
+            previous_threshold,
+            adjusted_threshold,
+            threshold_delta,
+            min_threshold: self.min_threshold,
+            max_threshold: self.max_threshold,
+            action,
+            can_commit,
+            requires_repair_first,
+            reason_codes,
+        }
+    }
+
+    pub fn observe_with_report(
+        &mut self,
+        feedback: RoutingFeedback,
+    ) -> ThresholdAttentionAdjustmentReport {
+        let report = self.preview_adjustment(feedback);
+
+        if report.can_commit_threshold_adjustment() {
+            self.thresholds
+                .set(report.profile, report.adjusted_threshold);
+        }
+
+        report
+    }
 }
 
 impl Default for ThresholdAttentionPolicy {
@@ -1228,19 +1479,7 @@ impl AttentionPolicy for ThresholdAttentionPolicy {
     }
 
     fn observe(&mut self, feedback: RoutingFeedback) {
-        let mut threshold = self.threshold_for(feedback.profile);
-        let contradiction_pressure = (feedback.contradiction_count as f32 * 0.02).min(0.10);
-
-        if feedback.quality < 0.60 {
-            threshold -= self.learning_rate * (0.60 - feedback.quality) + contradiction_pressure;
-        } else if feedback.quality > 0.84 && feedback.perplexity <= 8.0 {
-            threshold += self.learning_rate * (feedback.quality - 0.84);
-        }
-
-        self.thresholds.set(
-            feedback.profile,
-            threshold.clamp(self.min_threshold, self.max_threshold),
-        );
+        self.observe_with_report(feedback);
     }
 }
 
@@ -2104,6 +2343,151 @@ mod tests {
         );
         assert!(after.threshold_policy_action().can_use());
         assert!(!after.threshold_policy_action().should_repair());
+    }
+
+    #[test]
+    fn threshold_policy_preview_reports_quality_repair_adjustment() {
+        let mut policy = ThresholdAttentionPolicy::default();
+        let coding_before = policy.threshold_for(TaskProfile::Coding);
+        let feedback = RoutingFeedback {
+            profile: TaskProfile::Coding,
+            quality: 0.30,
+            perplexity: 32.0,
+            contradiction_count: 2,
+        };
+
+        let preview = policy.preview_adjustment(feedback);
+
+        assert_eq!(preview.profile, TaskProfile::Coding);
+        assert_eq!(preview.feedback, feedback.feedback_summary());
+        assert_eq!(preview.previous_threshold, coding_before);
+        assert!((preview.adjusted_threshold - 0.489).abs() < 0.0001);
+        assert!((preview.threshold_delta + 0.061).abs() < 0.0001);
+        assert_eq!(
+            preview.action,
+            ThresholdAttentionAdjustmentAction::LowerThresholdForQualityRepair
+        );
+        assert!(preview.action.can_commit());
+        assert!(preview.action.changes_threshold());
+        assert!(!preview.action.should_repair());
+        assert!(preview.can_commit);
+        assert!(!preview.requires_repair_first);
+        assert!(preview.threshold_changed());
+        assert!(preview.threshold_lowered());
+        assert!(!preview.threshold_raised());
+        assert!(preview.expected_to_restore_quality());
+        assert!(!preview.expected_to_reduce_attention_compute());
+        assert!(preview.threshold_bounds_are_valid());
+        assert!(preview.threshold_delta_matches_thresholds());
+        assert!(preview.action_matches_delta());
+        assert_eq!(preview.threshold_adjustment_signal_component_count(), 4);
+        assert_eq!(preview.threshold_adjustment_blocker_component_count(), 0);
+        assert!(preview.has_threshold_adjustment_signal_components());
+        assert!(!preview.has_threshold_adjustment_blockers());
+        assert!(preview.threshold_adjustment_accounting_is_consistent());
+        assert!(preview.threshold_adjustment_is_clean());
+        assert!(preview.can_commit_threshold_adjustment());
+        assert_eq!(
+            preview.reason_codes,
+            vec!["attention_threshold_lowered_for_quality_repair"]
+        );
+        assert_eq!(policy.threshold_for(TaskProfile::Coding), coding_before);
+
+        let committed = policy.observe_with_report(feedback);
+
+        assert_eq!(committed, preview);
+        assert_eq!(
+            policy.threshold_for(TaskProfile::Coding),
+            preview.adjusted_threshold
+        );
+    }
+
+    #[test]
+    fn threshold_policy_preview_reports_compute_saving_adjustment() {
+        let policy = ThresholdAttentionPolicy::default();
+        let writing_before = policy.threshold_for(TaskProfile::Writing);
+        let feedback = RoutingFeedback {
+            profile: TaskProfile::Writing,
+            quality: 0.95,
+            perplexity: 4.0,
+            contradiction_count: 0,
+        };
+
+        let report = policy.preview_adjustment(feedback);
+
+        assert_eq!(
+            report.action,
+            ThresholdAttentionAdjustmentAction::RaiseThresholdForComputeSavings
+        );
+        assert!(report.action.can_commit());
+        assert!(report.action.changes_threshold());
+        assert!(report.can_commit);
+        assert!(!report.requires_repair_first);
+        assert_eq!(report.previous_threshold, writing_before);
+        assert!(report.adjusted_threshold > writing_before);
+        assert!((report.adjusted_threshold - 0.5577).abs() < 0.0001);
+        assert!((report.threshold_delta - 0.0077).abs() < 0.0001);
+        assert!(report.threshold_changed());
+        assert!(!report.threshold_lowered());
+        assert!(report.threshold_raised());
+        assert!(!report.expected_to_restore_quality());
+        assert!(report.expected_to_reduce_attention_compute());
+        assert!(report.threshold_bounds_are_valid());
+        assert!(report.threshold_delta_matches_thresholds());
+        assert!(report.action_matches_delta());
+        assert_eq!(report.threshold_adjustment_signal_component_count(), 4);
+        assert_eq!(report.threshold_adjustment_blocker_component_count(), 0);
+        assert!(report.threshold_adjustment_is_clean());
+        assert!(report.can_commit_threshold_adjustment());
+        assert_eq!(
+            report.reason_codes,
+            vec!["attention_threshold_raised_for_compute_savings"]
+        );
+    }
+
+    #[test]
+    fn threshold_policy_rejects_invalid_adjustment_feedback_without_mutating() {
+        let mut policy = ThresholdAttentionPolicy::default();
+        let general_before = policy.threshold_for(TaskProfile::General);
+        let feedback = RoutingFeedback {
+            profile: TaskProfile::General,
+            quality: f32::NAN,
+            perplexity: -1.0,
+            contradiction_count: 0,
+        };
+
+        let report = policy.observe_with_report(feedback);
+
+        assert_eq!(
+            report.action,
+            ThresholdAttentionAdjustmentAction::RepairThresholdAdjustment
+        );
+        assert!(!report.action.can_commit());
+        assert!(!report.action.changes_threshold());
+        assert!(report.action.should_repair());
+        assert!(!report.can_commit);
+        assert!(report.requires_repair_first);
+        assert_eq!(report.previous_threshold, general_before);
+        assert_eq!(report.adjusted_threshold, general_before);
+        assert_eq!(report.threshold_delta, 0.0);
+        assert!(!report.threshold_changed());
+        assert!(!report.expected_to_restore_quality());
+        assert!(!report.expected_to_reduce_attention_compute());
+        assert!(report.threshold_bounds_are_valid());
+        assert!(report.threshold_delta_matches_thresholds());
+        assert!(report.action_matches_delta());
+        assert_eq!(report.threshold_adjustment_signal_component_count(), 1);
+        assert_eq!(report.threshold_adjustment_blocker_component_count(), 1);
+        assert!(report.has_threshold_adjustment_signal_components());
+        assert!(report.has_threshold_adjustment_blockers());
+        assert!(report.threshold_adjustment_accounting_is_consistent());
+        assert!(!report.threshold_adjustment_is_clean());
+        assert!(!report.can_commit_threshold_adjustment());
+        assert_eq!(
+            report.reason_codes,
+            vec!["attention_threshold_feedback_requires_repair"]
+        );
+        assert_eq!(policy.threshold_for(TaskProfile::General), general_before);
     }
 
     #[test]

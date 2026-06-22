@@ -1,8 +1,13 @@
 use super::cache::KvFusionCache;
 use super::model::MemoryEntry;
 use super::ops::{fuse_vector, merge_key};
+use crate::gist_memory::GistRecord;
 
 impl KvFusionCache {
+    pub fn store_gist_memory(&mut self, record: &GistRecord, vector: Vec<f32>) -> u64 {
+        self.store_or_fuse(record.gist_memory_key(), vector, record.importance)
+    }
+
     pub fn store_or_fuse(
         &mut self,
         key: impl Into<String>,

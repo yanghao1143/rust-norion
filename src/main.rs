@@ -34,8 +34,8 @@ mod path_utils;
 pub(crate) use cli::args::Args;
 #[cfg(test)]
 use cli::benchmark::{
-    run_benchmark, run_benchmark_for_args, run_production_benchmark_all_devices,
-    run_production_kernel_conformance_all_devices,
+    benchmark_self_evolution_admission_report, run_benchmark, run_benchmark_for_args,
+    run_production_benchmark_all_devices, run_production_kernel_conformance_all_devices,
 };
 pub(crate) use cli::display::{option_bool_display, option_path_display, option_u64_display};
 #[cfg(test)]

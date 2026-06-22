@@ -718,6 +718,9 @@ impl KvFusionPolicy for ReinforcedKvFusionPolicy {
     }
 
     fn observe_reward(&mut self, reward: f32) {
+        if !reward.is_finite() {
+            return;
+        }
         let reward = reward.clamp(-1.0, 1.0);
         self.similarity_threshold = (self.similarity_threshold - reward * 0.02).clamp(0.75, 0.99);
     }
@@ -2262,5 +2265,32 @@ mod tests {
         assert!(commit.has_primary_failure_summary());
         assert!(commit.failure_batch_shape_is_clean());
         assert!(commit.commit_decision_accounting_is_consistent());
+    }
+
+    #[test]
+    fn reinforced_fusion_observe_reward_keeps_threshold_finite_and_bounded() {
+        let mut policy = ReinforcedKvFusionPolicy::default();
+        let original_threshold = policy.similarity_threshold;
+
+        policy.observe_reward(f32::NAN);
+        assert_eq!(policy.similarity_threshold, original_threshold);
+        policy.observe_reward(f32::INFINITY);
+        assert_eq!(policy.similarity_threshold, original_threshold);
+        policy.observe_reward(f32::NEG_INFINITY);
+        assert_eq!(policy.similarity_threshold, original_threshold);
+
+        for _ in 0..100 {
+            policy.observe_reward(10.0);
+        }
+        assert!(policy.similarity_threshold.is_finite());
+        assert!(policy.similarity_threshold >= 0.75);
+        assert!(policy.similarity_threshold <= 0.99);
+
+        for _ in 0..100 {
+            policy.observe_reward(-10.0);
+        }
+        assert!(policy.similarity_threshold.is_finite());
+        assert!(policy.similarity_threshold >= 0.75);
+        assert!(policy.similarity_threshold <= 0.99);
     }
 }

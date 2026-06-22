@@ -26,6 +26,26 @@ impl AgentBudget {
         self.tokens == 0 && self.steps == 0 && self.messages == 0
     }
 
+    pub const fn has_depleted_dimension(self) -> bool {
+        self.tokens == 0 || self.steps == 0 || self.messages == 0
+    }
+
+    pub const fn token_depleted(self) -> bool {
+        self.tokens == 0
+    }
+
+    pub const fn step_depleted(self) -> bool {
+        self.steps == 0
+    }
+
+    pub const fn message_depleted(self) -> bool {
+        self.messages == 0
+    }
+
+    pub const fn is_partially_depleted(self) -> bool {
+        self.has_depleted_dimension() && !self.is_zero()
+    }
+
     pub fn fits(self, cost: Self) -> bool {
         self.tokens >= cost.tokens && self.steps >= cost.steps && self.messages >= cost.messages
     }
@@ -104,10 +124,15 @@ pub struct BudgetLedger {
 pub struct BudgetLedgerSummary {
     pub roles: usize,
     pub zero_budget_roles: usize,
+    pub partially_depleted_roles: usize,
+    pub token_depleted_roles: usize,
+    pub step_depleted_roles: usize,
+    pub message_depleted_roles: usize,
     pub total_tokens: u32,
     pub total_steps: u32,
     pub total_messages: u32,
     pub depleted_roles: Vec<AgentRole>,
+    pub dimension_depleted_roles: Vec<AgentRole>,
     pub telemetry: Vec<String>,
 }
 
@@ -138,19 +163,28 @@ pub struct BudgetLedgerDashboard {
     pub total_records: usize,
     pub roles: usize,
     pub zero_budget_roles: usize,
+    pub partially_depleted_roles: usize,
+    pub token_depleted_roles: usize,
+    pub step_depleted_roles: usize,
+    pub message_depleted_roles: usize,
     pub depleted_records: usize,
+    pub partial_depletion_records: usize,
     pub total_tokens: u32,
     pub total_steps: u32,
     pub total_messages: u32,
     pub zero_budget_role_rate: f32,
+    pub partial_depletion_role_rate: f32,
     pub depleted_record_rate: f32,
+    pub partial_depletion_record_rate: f32,
     pub telemetry: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BudgetLedgerHealthPolicy {
     pub maximum_zero_budget_roles: usize,
+    pub maximum_partially_depleted_roles: usize,
     pub maximum_depleted_records: usize,
+    pub maximum_partial_depletion_records: usize,
     pub minimum_total_tokens: u32,
     pub minimum_total_steps: u32,
     pub minimum_total_messages: u32,
@@ -160,7 +194,9 @@ impl Default for BudgetLedgerHealthPolicy {
     fn default() -> Self {
         Self {
             maximum_zero_budget_roles: 0,
+            maximum_partially_depleted_roles: 0,
             maximum_depleted_records: 0,
+            maximum_partial_depletion_records: 0,
             minimum_total_tokens: 1,
             minimum_total_steps: 1,
             minimum_total_messages: 1,
@@ -225,15 +261,35 @@ impl BudgetLedgerSummary {
     pub fn from_snapshot(snapshot: &BTreeMap<AgentRole, AgentBudget>) -> Self {
         let roles = snapshot.len();
         let mut zero_budget_roles = 0;
+        let mut partially_depleted_roles = 0;
+        let mut token_depleted_roles = 0;
+        let mut step_depleted_roles = 0;
+        let mut message_depleted_roles = 0;
         let mut total_tokens = 0;
         let mut total_steps = 0;
         let mut total_messages = 0;
         let mut depleted_roles = Vec::new();
+        let mut dimension_depleted_roles = Vec::new();
 
         for (role, budget) in snapshot {
             if budget.is_zero() {
                 zero_budget_roles += 1;
                 depleted_roles.push(role.clone());
+            }
+            if budget.is_partially_depleted() {
+                partially_depleted_roles += 1;
+            }
+            if budget.token_depleted() {
+                token_depleted_roles += 1;
+            }
+            if budget.step_depleted() {
+                step_depleted_roles += 1;
+            }
+            if budget.message_depleted() {
+                message_depleted_roles += 1;
+            }
+            if budget.has_depleted_dimension() {
+                dimension_depleted_roles.push(role.clone());
             }
             total_tokens += budget.tokens;
             total_steps += budget.steps;
@@ -243,6 +299,10 @@ impl BudgetLedgerSummary {
         let telemetry = budget_ledger_summary_telemetry(
             roles,
             zero_budget_roles,
+            partially_depleted_roles,
+            token_depleted_roles,
+            step_depleted_roles,
+            message_depleted_roles,
             total_tokens,
             total_steps,
             total_messages,
@@ -251,10 +311,15 @@ impl BudgetLedgerSummary {
         Self {
             roles,
             zero_budget_roles,
+            partially_depleted_roles,
+            token_depleted_roles,
+            step_depleted_roles,
+            message_depleted_roles,
             total_tokens,
             total_steps,
             total_messages,
             depleted_roles,
+            dimension_depleted_roles,
             telemetry,
         }
     }
@@ -306,9 +371,29 @@ impl BudgetLedgerDashboard {
             .iter()
             .map(|summary| summary.zero_budget_roles)
             .sum::<usize>();
+        let partially_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.partially_depleted_roles)
+            .sum::<usize>();
+        let token_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.token_depleted_roles)
+            .sum::<usize>();
+        let step_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.step_depleted_roles)
+            .sum::<usize>();
+        let message_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.message_depleted_roles)
+            .sum::<usize>();
         let depleted_records = summaries
             .iter()
             .filter(|summary| summary.zero_budget_roles > 0)
+            .count();
+        let partial_depletion_records = summaries
+            .iter()
+            .filter(|summary| summary.partially_depleted_roles > 0)
             .count();
         let total_tokens = summaries
             .iter()
@@ -323,29 +408,45 @@ impl BudgetLedgerDashboard {
             .map(|summary| summary.total_messages)
             .sum::<u32>();
         let zero_budget_role_rate = rate(zero_budget_roles, roles);
+        let partial_depletion_role_rate = rate(partially_depleted_roles, roles);
         let depleted_record_rate = rate(depleted_records, total_records);
+        let partial_depletion_record_rate = rate(partial_depletion_records, total_records);
         let telemetry = budget_ledger_dashboard_telemetry(
             total_records,
             roles,
             zero_budget_roles,
+            partially_depleted_roles,
+            token_depleted_roles,
+            step_depleted_roles,
+            message_depleted_roles,
             depleted_records,
+            partial_depletion_records,
             total_tokens,
             total_steps,
             total_messages,
             zero_budget_role_rate,
+            partial_depletion_role_rate,
             depleted_record_rate,
+            partial_depletion_record_rate,
         );
 
         Self {
             total_records,
             roles,
             zero_budget_roles,
+            partially_depleted_roles,
+            token_depleted_roles,
+            step_depleted_roles,
+            message_depleted_roles,
             depleted_records,
+            partial_depletion_records,
             total_tokens,
             total_steps,
             total_messages,
             zero_budget_role_rate,
+            partial_depletion_role_rate,
             depleted_record_rate,
+            partial_depletion_record_rate,
             telemetry,
         }
     }
@@ -378,10 +479,24 @@ impl BudgetLedgerHealth {
             ));
         }
 
+        if dashboard.partially_depleted_roles > policy.maximum_partially_depleted_roles {
+            repair_reasons.push(format!(
+                "budget_ledger_partially_depleted_roles={}>{}",
+                dashboard.partially_depleted_roles, policy.maximum_partially_depleted_roles
+            ));
+        }
+
         if dashboard.depleted_records > policy.maximum_depleted_records {
             repair_reasons.push(format!(
                 "budget_ledger_depleted_records={}>{}",
                 dashboard.depleted_records, policy.maximum_depleted_records
+            ));
+        }
+
+        if dashboard.partial_depletion_records > policy.maximum_partial_depletion_records {
+            repair_reasons.push(format!(
+                "budget_ledger_partial_depletion_records={}>{}",
+                dashboard.partial_depletion_records, policy.maximum_partial_depletion_records
             ));
         }
 
@@ -576,7 +691,8 @@ impl BudgetLedgerHistoryGate {
                 .map(|reason| format!("budget_ledger_history:{reason}"))
                 .collect::<Vec<_>>(),
         );
-        let current_requires_repair = ledger_summary.zero_budget_roles > 0;
+        let current_requires_repair =
+            ledger_summary.zero_budget_roles > 0 || ledger_summary.partially_depleted_roles > 0;
         let requires_repair_first =
             current_requires_repair || budget_health.requires_repair_first();
         let has_dispatch_budget = ledger_summary.roles > 0
@@ -585,8 +701,10 @@ impl BudgetLedgerHistoryGate {
             && ledger_summary.total_messages > 0;
         let can_dispatch_tasks =
             has_dispatch_budget && budget_health.allows_service_advance() && !requires_repair_first;
-        let can_promote_side_effects =
-            can_dispatch_tasks && ledger_summary.zero_budget_roles == 0 && reasons.is_empty();
+        let can_promote_side_effects = can_dispatch_tasks
+            && ledger_summary.zero_budget_roles == 0
+            && ledger_summary.partially_depleted_roles == 0
+            && reasons.is_empty();
         let repair_tasks = budget_ledger_history_gate_repair_tasks(requires_repair_first, &reasons);
         let telemetry = budget_ledger_history_gate_telemetry(
             can_dispatch_tasks,
@@ -614,6 +732,10 @@ impl BudgetLedgerHistoryGate {
 fn budget_ledger_summary_telemetry(
     roles: usize,
     zero_budget_roles: usize,
+    partially_depleted_roles: usize,
+    token_depleted_roles: usize,
+    step_depleted_roles: usize,
+    message_depleted_roles: usize,
     total_tokens: u32,
     total_steps: u32,
     total_messages: u32,
@@ -622,6 +744,10 @@ fn budget_ledger_summary_telemetry(
         "agent_budget_ledger_summary=true".to_owned(),
         format!("agent_budget_ledger_summary_roles={roles}"),
         format!("agent_budget_ledger_summary_zero_budget_roles={zero_budget_roles}"),
+        format!("agent_budget_ledger_summary_partially_depleted_roles={partially_depleted_roles}"),
+        format!("agent_budget_ledger_summary_token_depleted_roles={token_depleted_roles}"),
+        format!("agent_budget_ledger_summary_step_depleted_roles={step_depleted_roles}"),
+        format!("agent_budget_ledger_summary_message_depleted_roles={message_depleted_roles}"),
         format!("agent_budget_ledger_summary_total_tokens={total_tokens}"),
         format!("agent_budget_ledger_summary_total_steps={total_steps}"),
         format!("agent_budget_ledger_summary_total_messages={total_messages}"),
@@ -633,24 +759,46 @@ fn budget_ledger_dashboard_telemetry(
     total_records: usize,
     roles: usize,
     zero_budget_roles: usize,
+    partially_depleted_roles: usize,
+    token_depleted_roles: usize,
+    step_depleted_roles: usize,
+    message_depleted_roles: usize,
     depleted_records: usize,
+    partial_depletion_records: usize,
     total_tokens: u32,
     total_steps: u32,
     total_messages: u32,
     zero_budget_role_rate: f32,
+    partial_depletion_role_rate: f32,
     depleted_record_rate: f32,
+    partial_depletion_record_rate: f32,
 ) -> Vec<String> {
     vec![
         "agent_budget_ledger_dashboard=true".to_owned(),
         format!("agent_budget_ledger_dashboard_records={total_records}"),
         format!("agent_budget_ledger_dashboard_roles={roles}"),
         format!("agent_budget_ledger_dashboard_zero_budget_roles={zero_budget_roles}"),
+        format!(
+            "agent_budget_ledger_dashboard_partially_depleted_roles={partially_depleted_roles}"
+        ),
+        format!("agent_budget_ledger_dashboard_token_depleted_roles={token_depleted_roles}"),
+        format!("agent_budget_ledger_dashboard_step_depleted_roles={step_depleted_roles}"),
+        format!("agent_budget_ledger_dashboard_message_depleted_roles={message_depleted_roles}"),
         format!("agent_budget_ledger_dashboard_depleted_records={depleted_records}"),
+        format!(
+            "agent_budget_ledger_dashboard_partial_depletion_records={partial_depletion_records}"
+        ),
         format!("agent_budget_ledger_dashboard_total_tokens={total_tokens}"),
         format!("agent_budget_ledger_dashboard_total_steps={total_steps}"),
         format!("agent_budget_ledger_dashboard_total_messages={total_messages}"),
         format!("agent_budget_ledger_dashboard_zero_budget_role_rate={zero_budget_role_rate:.3}"),
+        format!(
+            "agent_budget_ledger_dashboard_partial_depletion_role_rate={partial_depletion_role_rate:.3}"
+        ),
         format!("agent_budget_ledger_dashboard_depleted_record_rate={depleted_record_rate:.3}"),
+        format!(
+            "agent_budget_ledger_dashboard_partial_depletion_record_rate={partial_depletion_record_rate:.3}"
+        ),
     ]
 }
 
@@ -673,6 +821,22 @@ fn budget_ledger_history_record_telemetry(
             dashboard.zero_budget_roles
         ),
         format!(
+            "agent_budget_ledger_history_record_partially_depleted_roles={}",
+            dashboard.partially_depleted_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_record_token_depleted_roles={}",
+            dashboard.token_depleted_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_record_step_depleted_roles={}",
+            dashboard.step_depleted_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_record_message_depleted_roles={}",
+            dashboard.message_depleted_roles
+        ),
+        format!(
             "agent_budget_ledger_history_record_total_tokens={}",
             dashboard.total_tokens
         ),
@@ -692,6 +856,12 @@ fn budget_ledger_gate_reasons(summary: &BudgetLedgerSummary) -> Vec<String> {
         reasons.push(format!(
             "budget_ledger_zero_budget_roles={}",
             summary.zero_budget_roles
+        ));
+    }
+    if summary.partially_depleted_roles > 0 {
+        reasons.push(format!(
+            "budget_ledger_partially_depleted_roles={}",
+            summary.partially_depleted_roles
         ));
     }
     reasons
@@ -745,6 +915,22 @@ fn budget_ledger_history_gate_telemetry(
         format!(
             "agent_budget_ledger_history_gate_zero_budget_roles={}",
             summary.zero_budget_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_gate_partially_depleted_roles={}",
+            summary.partially_depleted_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_gate_token_depleted_roles={}",
+            summary.token_depleted_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_gate_step_depleted_roles={}",
+            summary.step_depleted_roles
+        ),
+        format!(
+            "agent_budget_ledger_history_gate_message_depleted_roles={}",
+            summary.message_depleted_roles
         ),
         format!(
             "agent_budget_ledger_history_gate_total_tokens={}",
@@ -928,11 +1114,20 @@ mod tests {
         assert_eq!(record.records(), 1);
         assert_eq!(record.appended_summary.roles, 2);
         assert_eq!(record.appended_summary.zero_budget_roles, 0);
+        assert_eq!(record.appended_summary.partially_depleted_roles, 0);
+        assert_eq!(record.appended_summary.token_depleted_roles, 0);
+        assert_eq!(record.appended_summary.step_depleted_roles, 0);
+        assert_eq!(record.appended_summary.message_depleted_roles, 0);
         assert_eq!(record.dashboard.total_tokens, 15);
         assert_eq!(record.dashboard.total_steps, 3);
         assert_eq!(record.dashboard.total_messages, 3);
         assert_eq!(record.dashboard.zero_budget_roles, 0);
+        assert_eq!(record.dashboard.partially_depleted_roles, 0);
+        assert_eq!(record.dashboard.token_depleted_roles, 0);
+        assert_eq!(record.dashboard.step_depleted_roles, 0);
+        assert_eq!(record.dashboard.message_depleted_roles, 0);
         assert_eq!(record.dashboard.depleted_records, 0);
+        assert_eq!(record.dashboard.partial_depletion_records, 0);
         assert_eq!(record.health.status, BudgetLedgerHealthStatus::Stable);
         assert!(record.health.is_stable());
         assert!(record.allows_service_advance());
@@ -950,19 +1145,29 @@ mod tests {
         let clean = BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 0,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 0,
+            step_depleted_roles: 0,
+            message_depleted_roles: 0,
             total_tokens: 10,
             total_steps: 1,
             total_messages: 1,
             depleted_roles: Vec::new(),
+            dimension_depleted_roles: Vec::new(),
             telemetry: Vec::new(),
         };
         let depleted = BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let history = BudgetLedgerSummaryHistory::from_summaries(vec![clean]);
@@ -976,8 +1181,14 @@ mod tests {
         assert_eq!(record.records(), 2);
         assert_eq!(record.dashboard.roles, 2);
         assert_eq!(record.dashboard.zero_budget_roles, 1);
+        assert_eq!(record.dashboard.partially_depleted_roles, 0);
+        assert_eq!(record.dashboard.token_depleted_roles, 1);
+        assert_eq!(record.dashboard.step_depleted_roles, 1);
+        assert_eq!(record.dashboard.message_depleted_roles, 1);
         assert_eq!(record.dashboard.depleted_records, 1);
+        assert_eq!(record.dashboard.partial_depletion_records, 0);
         assert_eq!(record.dashboard.zero_budget_role_rate, 0.5);
+        assert_eq!(record.dashboard.partial_depletion_role_rate, 0.0);
         assert_eq!(record.health.status, BudgetLedgerHealthStatus::Repair);
         assert!(!record.health.is_stable());
         assert!(!record.allows_service_advance());
@@ -994,6 +1205,90 @@ mod tests {
                 .telemetry
                 .iter()
                 .any(|line| { line == "agent_budget_ledger_history_record_status=repair" })
+        );
+    }
+
+    #[test]
+    fn partial_budget_depletion_repairs_partially_depleted_roles() {
+        let ledger = BudgetLedger::new()
+            .with_budget(AgentRole::Coder, AgentBudget::new(10, 0, 1))
+            .with_budget(AgentRole::Reviewer, AgentBudget::new(5, 1, 1));
+
+        let record = BudgetLedgerSummaryHistoryRecorder::new().record_ledger_with_health(
+            BudgetLedgerSummaryHistory::new(),
+            &ledger,
+            BudgetLedgerHealthPolicy::default(),
+        );
+
+        assert_eq!(record.appended_summary.zero_budget_roles, 0);
+        assert_eq!(record.appended_summary.partially_depleted_roles, 1);
+        assert_eq!(record.appended_summary.token_depleted_roles, 0);
+        assert_eq!(record.appended_summary.step_depleted_roles, 1);
+        assert_eq!(record.appended_summary.message_depleted_roles, 0);
+        assert_eq!(
+            record.appended_summary.depleted_roles,
+            Vec::<AgentRole>::new()
+        );
+        assert_eq!(
+            record.appended_summary.dimension_depleted_roles,
+            vec![AgentRole::Coder]
+        );
+        assert_eq!(record.dashboard.zero_budget_roles, 0);
+        assert_eq!(record.dashboard.partially_depleted_roles, 1);
+        assert_eq!(record.dashboard.token_depleted_roles, 0);
+        assert_eq!(record.dashboard.step_depleted_roles, 1);
+        assert_eq!(record.dashboard.message_depleted_roles, 0);
+        assert_eq!(record.dashboard.depleted_records, 0);
+        assert_eq!(record.dashboard.partial_depletion_records, 1);
+        assert_eq!(record.dashboard.partial_depletion_role_rate, 0.5);
+        assert_eq!(record.health.status, BudgetLedgerHealthStatus::Repair);
+        assert_eq!(
+            record.health.reasons,
+            vec![
+                "budget_ledger_partially_depleted_roles=1>0",
+                "budget_ledger_partial_depletion_records=1>0",
+            ]
+        );
+        assert!(record.telemetry.iter().any(|line| {
+            line == "agent_budget_ledger_history_record_partially_depleted_roles=1"
+        }));
+    }
+
+    #[test]
+    fn partial_budget_depletion_classifies_each_budget_axis() {
+        let ledger = BudgetLedger::new()
+            .with_budget(AgentRole::Coder, AgentBudget::new(0, 1, 1))
+            .with_budget(AgentRole::Reviewer, AgentBudget::new(1, 0, 1))
+            .with_budget(AgentRole::Tester, AgentBudget::new(1, 1, 0))
+            .with_budget(AgentRole::Reflector, AgentBudget::zero());
+
+        let summary = ledger.summary();
+
+        assert_eq!(summary.roles, 4);
+        assert_eq!(summary.zero_budget_roles, 1);
+        assert_eq!(summary.partially_depleted_roles, 3);
+        assert_eq!(summary.token_depleted_roles, 2);
+        assert_eq!(summary.step_depleted_roles, 2);
+        assert_eq!(summary.message_depleted_roles, 2);
+        assert_eq!(summary.depleted_roles, vec![AgentRole::Reflector]);
+        assert_eq!(summary.dimension_depleted_roles.len(), 4);
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_budget_ledger_summary_token_depleted_roles=2" })
+        );
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_budget_ledger_summary_step_depleted_roles=2" })
+        );
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_budget_ledger_summary_message_depleted_roles=2" })
         );
     }
 
@@ -1030,10 +1325,15 @@ mod tests {
         let clean = BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 0,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 0,
+            step_depleted_roles: 0,
+            message_depleted_roles: 0,
             total_tokens: 10,
             total_steps: 1,
             total_messages: 1,
             depleted_roles: Vec::new(),
+            dimension_depleted_roles: Vec::new(),
             telemetry: Vec::new(),
         };
         let ledger = BudgetLedger::new().with_budget(AgentRole::Tester, AgentBudget::new(0, 0, 0));
@@ -1084,14 +1384,77 @@ mod tests {
     }
 
     #[test]
+    fn partial_budget_depletion_gate_repairs_current_partially_depleted_roles() {
+        let clean = BudgetLedgerSummary {
+            roles: 1,
+            zero_budget_roles: 0,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 0,
+            step_depleted_roles: 0,
+            message_depleted_roles: 0,
+            total_tokens: 10,
+            total_steps: 1,
+            total_messages: 1,
+            depleted_roles: Vec::new(),
+            dimension_depleted_roles: Vec::new(),
+            telemetry: Vec::new(),
+        };
+        let ledger = BudgetLedger::new()
+            .with_budget(AgentRole::Coder, AgentBudget::new(8, 0, 2))
+            .with_budget(AgentRole::Reviewer, AgentBudget::new(4, 1, 1));
+        let history_record = BudgetLedgerSummaryHistoryRecorder::new().record_ledger_with_health(
+            BudgetLedgerSummaryHistory::from_summaries(vec![clean]),
+            &ledger,
+            BudgetLedgerHealthPolicy::default(),
+        );
+
+        let gate = BudgetLedgerHistoryGate::new().gate(&ledger, &history_record);
+
+        assert!(!gate.can_dispatch_tasks);
+        assert!(!gate.can_promote_side_effects);
+        assert!(!gate.is_dispatchable());
+        assert!(!gate.is_side_effect_safe());
+        assert!(gate.requires_repair_first);
+        assert_eq!(
+            gate.reasons,
+            vec![
+                "budget_ledger_partially_depleted_roles=1",
+                "budget_ledger_history:budget_ledger_partially_depleted_roles=1>0",
+                "budget_ledger_history:budget_ledger_partial_depletion_records=1>0",
+            ]
+        );
+        assert_eq!(
+            gate.repair_tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "budget-ledger-repair-0",
+                "budget-ledger-repair-1",
+                "budget-ledger-repair-2"
+            ]
+        );
+        assert!(
+            gate.telemetry.iter().any(|line| {
+                line == "agent_budget_ledger_history_gate_partially_depleted_roles=1"
+            })
+        );
+    }
+
+    #[test]
     fn budget_ledger_history_gate_repairs_dirty_history_before_dispatch() {
         let depleted = BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let ledger = BudgetLedger::new()

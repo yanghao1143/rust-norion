@@ -4200,6 +4200,247 @@ System-error replacements:
   daemon/model start-stop, SSH, download, model-cache warming, Forge/Web Lab
   start, prompt/stream/model call, live memory mutation, or `.ndkv` write was
   performed.
+- R83 main-window memory admission commit-approval review packet on
+  2026-06-20: added the report-only human review packet that sits after R81
+  pending commit-approval decisions. The new
+  `SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport` exposes
+  stable approval/rejection tokens, operator checklist items, content digests,
+  idempotency keys, evidence ids, experiment ids, rollback anchors, and
+  per-item packet ids so a human can approve or reject memory-admission commits
+  without granting automatic write authority. `tools/evolution-loop` now emits
+  additive top-level
+  `self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1`,
+  includes prompt context
+  `self_improve_memory_admission_commit_approval_review_packet=...`, and
+  exposes status `-JsonStatus` fields plus a human-readable status line. The
+  report remains candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `memory_store_write_allowed=false`, and
+  `ndkv_write_allowed=false`. The slice also filters the stale
+  `No specific small next change grounded in the same evidence` helper echo so
+  it no longer reopens already closed self-improve work, and marks the
+  test-only `prompt_context_text` wrapper as test-only to avoid future report
+  build warning noise. Verification passed: focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r83-tool-focused-self-improve-v3` with `29 passed`,
+  focused `cargo test -q --manifest-path crates\norion-eval\Cargo.toml
+  commit_approval --target-dir target\r83-eval-focused-approval-v3` with `1
+  passed`, full `cargo test -q --manifest-path crates\norion-eval\Cargo.toml
+  --target-dir target\r83-eval-full-final` with `385 passed`, full `cargo
+  test -q --manifest-path tools\evolution-loop\Cargo.toml --target-dir
+  target\r83-tool-full-final` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r83-commit-approval-review-packet.json` from
+  the daemon ledger showed `425` rounds, `414/425` successes, action closure
+  `targets=8 closed=8 open=0`, approval decision
+  `approval_decision_items=8 recorded=8 approved=0 pending=8 blocked=0
+  commit_approval_decision_ready=true`, and review packet
+  `review_packet_items=8 ready=8 pending=8 blocked=0
+  approval_review_packet_ready=true explicit_operator_approval_required=true
+  validation_required=true rollback_required=true commit_allowed=false
+  admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the first review item includes approval/rejection tokens,
+  checklist entries, content digest, idempotency key, evidence ids, experiment
+  id, and rollback anchors. No daemon/model start-stop, SSH, download,
+  model-cache warming, Forge/Web Lab start, prompt/stream/model call, live
+  memory mutation, or `.ndkv` write was performed.
+- R84 main-window memory reflection usefulness report on 2026-06-20: added the
+  report-only reflection/usefulness layer after R83 approval review packets.
+  The new `SelfImproveProposalMemoryReflectionUsefulnessReport` combines
+  acceptance summary, action closure, and approval-review packet evidence to
+  classify memory candidates as accepted/quarantined/blocked, expose pending
+  operator approval, count useful reflection items, count wasted-compute guards,
+  and confirm adapter safety without granting any write authority.
+  `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_reflection_usefulness_report_v1`, adds prompt
+  context `self_improve_memory_reflection_usefulness=...`, emits
+  `next_self_improve_should_review_memory_reflection_usefulness:true` when the
+  report is ready, and exposes the same data through status `-JsonStatus` and
+  human-readable status output. This remains candidate-only/report-only with
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Verification passed: focused `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml memory_admission --target-dir
+  target\r84-eval-focused-memory` with `2 passed`, focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r84-tool-focused-self-improve` with `29 passed`, focused
+  report/prompt tests with `1 passed` each, full `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml --target-dir target\r84-eval-full` with `385
+  passed`, full `cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+  --target-dir target\r84-tool-full` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r84-memory-reflection-usefulness.json` from
+  the daemon ledger showed `427` rounds, `416/427` successes, action closure
+  `targets=8 closed=8 open=0`, approval review packet
+  `review_packet_items=8 ready=8 pending=8 blocked=0`, and reflection
+  usefulness `useful=8 pending_operator_approval=8 blocked=0
+  wasted_compute_guard=8 adapter_safe=8 reflection_usefulness_ready=true
+  commit_allowed=false admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the first reflection item is ready, pending operator
+  approval, closed-action-confirmed, adapter-safe/no-write, has content digest,
+  idempotency key, approval-review packet id, and usefulness evidence ids. No
+  daemon/model start-stop, SSH, download, model-cache warming, Forge/Web Lab
+  start, prompt/stream/model call, live memory mutation, or `.ndkv` write was
+  performed.
+- R85 main-window operator approval token intake preview on 2026-06-20: added
+  the next report-only layer after R83/R84 that lines up approval-review packet
+  tokens with confirmed reflection usefulness evidence. The new
+  `SelfImproveProposalMemoryAdmissionOperatorApprovalTokenIntakePreviewReport`
+  exposes ready intake counts, pending operator token counts, approval/rejection
+  token presence, first item ids, digest/idempotency continuity, usefulness
+  evidence ids, validation/rollback requirements, and blocked reasons. It is a
+  preview for the future explicit approval-token consumer only; it does not
+  parse human approval text, grant commit authority, mutate memory, or write
+  `.ndkv`. `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1`,
+  adds prompt context
+  `self_improve_memory_admission_operator_approval_token_intake_preview=...`,
+  emits
+  `next_self_improve_should_preview_operator_approval_token_intake:true` when
+  the preview is ready, and exposes the same data through status `-JsonStatus`
+  and human-readable status output. The report remains candidate-only/report-only
+  with `commit_allowed=false`, `admission_write_authorized=false`,
+  `auto_apply=false`, `memory_store_write_allowed=false`, and
+  `ndkv_write_allowed=false`. Verification passed: focused `cargo test -q
+  --manifest-path crates\norion-eval\Cargo.toml memory_admission --target-dir
+  target\r85-eval-focused-memory` with `2 passed`, focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r85-tool-focused-self-improve` with `29 passed`,
+  focused report/prompt tests with `1 passed` each, full `cargo test -q
+  --manifest-path crates\norion-eval\Cargo.toml --target-dir
+  target\r85-eval-full` with `385 passed`, full `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml --target-dir
+  target\r85-tool-full` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r85-approval-token-intake-preview.json` from
+  the daemon ledger showed `430` rounds, `419/430` successes, approval review
+  packet `review_packet_items=8 ready=8 pending=8 blocked=0`, reflection
+  usefulness `useful=8 pending_operator_approval=8 blocked=0`, and token
+  intake preview `intake_items=8 ready=8 pending_operator_tokens=8
+  approval_tokens=8 rejection_tokens=8 blocked=0
+  approval_token_intake_ready=true commit_allowed=false
+  admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON and
+  status checks confirmed the first intake item is ready, contains approval and
+  rejection tokens, and keeps `write_authorized=false`. No daemon/model
+  start-stop, SSH, download, model-cache warming, Forge/Web Lab start,
+  prompt/stream/model call, live memory mutation, or `.ndkv` write was
+  performed.
+- R86 main-window memory reflection dedupe cluster report on 2026-06-20: added
+  a report-only clustering layer after R84 reflection usefulness and before R85
+  approval-token intake preview. The new
+  `SelfImproveProposalMemoryReflectionDedupeClusterReport` groups useful,
+  closed-action, adapter-safe reflection items by stable proposal family and
+  reuse/safety status, exposes cluster counts, duplicate cluster counts,
+  duplicate reflection item counts, first cluster id, pending operator approval
+  counts, wasted-compute guard counts, and adapter-safe counts. The report is a
+  reuse hint only: it does not call a model, parse approval tokens, grant commit
+  authority, mutate memory, or write `.ndkv`. `tools/evolution-loop` now emits
+  additive top-level
+  `self_improve_proposal_memory_reflection_dedupe_cluster_report_v1`, adds
+  prompt context `self_improve_memory_reflection_dedupe_cluster=...`, emits
+  `next_self_improve_should_avoid_duplicate_reflection_clusters:true` only when
+  duplicate clusters exist, and exposes the same data through status
+  `-JsonStatus` and human-readable status output. The report remains
+  candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `auto_apply=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Verification passed: focused `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml memory_admission --target-dir
+  target\r86-eval-focused-memory` with `2 passed`, focused `cargo test -q
+  --manifest-path tools\evolution-loop\Cargo.toml self_improve_proposal
+  --target-dir target\r86-tool-focused-self-improve` with `29 passed`, focused
+  report/prompt tests with `1 passed` each, full `cargo test -q --manifest-path
+  crates\norion-eval\Cargo.toml --target-dir target\r86-eval-full` with `385
+  passed`, full `cargo test -q --manifest-path tools\evolution-loop\Cargo.toml
+  --target-dir target\r86-tool-full` with `414 passed`, status script parse
+  `status-parse-ok`, and `tools\evolution-loop\test-evolution-loop-status.ps1`
+  with `evolution_loop_status_selftest=PASS`. A report-only refresh to
+  `target\evolution\daemon\report-r86-memory-reflection-dedupe-cluster.json`
+  from the local ledger showed `9` rounds, `7/9` successes, no projected
+  self-improve candidates, and dedupe cluster
+  `clusters=0 duplicate_clusters=0 reflection_dedupe_ready=false
+  commit_allowed=false admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the new report's write-safety flags remain false.
+- R87 main-window memory reflection reuse plan report on 2026-06-20: added the
+  next report-only layer after R86 dedupe clusters. The new
+  `SelfImproveProposalMemoryReflectionReusePlanReport` converts dedupe cluster
+  evidence into explicit reuse-plan items with representative proposal ids,
+  duplicate proposal ids, approval-review packet ids, evidence ids, planned
+  reuse actions, duplicate reflection counts, and projected saved reflection
+  counts. This is a planning surface only: it does not execute prompt skipping,
+  call a model, consume approval tokens, grant commit authority, mutate memory,
+  or write `.ndkv`. `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_reflection_reuse_plan_report_v1`, adds prompt
+  context `self_improve_memory_reflection_reuse_plan=...`, emits
+  `next_self_improve_should_reuse_memory_reflection_plan:true` only when the
+  projected saved reflection count is positive, and exposes the same data
+  through status `-JsonStatus` and human-readable status output. The report
+  remains candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `auto_apply=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Validation passed with focused R87 tests, full `crates/norion-eval` tests
+  (`385` passed), full `tools/evolution-loop` tests (`414` passed),
+  PowerShell status parse plus `evolution_loop_status_selftest=PASS`, and
+  `git diff --check`. A report-only refresh to
+  `target\evolution\daemon\report-r87-memory-reflection-reuse-plan.json` from
+  the local ledger showed the new report with `targets=0 clusters=0
+  plan_items=0 ready=0 projected_saved_reflections=0
+  reflection_reuse_plan_ready=false commit_allowed=false
+  admission_write_authorized=false auto_apply=false
+  memory_store_write_allowed=false ndkv_write_allowed=false`. Direct JSON
+  checks confirmed the reuse-plan report remains read-only, report-only,
+  candidate-only, and write-disabled.
+- R88 main-window memory reflection reuse preflight report on 2026-06-20: added
+  a report-only gate after R87 reuse plans. The new
+  `SelfImproveProposalMemoryReflectionReusePreflightReport` requires every
+  reuse-plan item to be ready and requires positive projected savings before it
+  marks reuse preflight as passed. It separates "this duplicate reflection looks
+  worth reusing" from any execution authority: `model_call_skip_authorized=false`
+  and `reflection_reuse_execution_authorized=false` even when preflight passes.
+  `tools/evolution-loop` now emits additive top-level
+  `self_improve_proposal_memory_reflection_reuse_preflight_report_v1`, adds
+  prompt context `self_improve_memory_reflection_reuse_preflight=...`, and emits
+  `next_self_improve_should_request_memory_reflection_reuse_preflight_approval:true`
+  only when preflight passed and projected model-call skips are positive. The
+  report remains candidate-only/report-only with `commit_allowed=false`,
+  `admission_write_authorized=false`, `auto_apply=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+  Validation passed with focused R88 tests, full `crates/norion-eval` tests
+  (`385` passed), full `tools/evolution-loop` tests (`414` passed),
+  PowerShell status parse plus `evolution_loop_status_selftest=PASS`, and
+  `git diff --check`. A report-only refresh to
+  `target\evolution\daemon\report-r88-memory-reflection-reuse-preflight.json`
+  from the local ledger showed `targets=0 plan_items=0 preflight_items=0
+  passed=0 projected_model_call_skips=0 reuse_preflight_passed=false
+  commit_allowed=false admission_write_authorized=false
+  model_call_skip_authorized=false reflection_reuse_execution_authorized=false
+  auto_apply=false memory_store_write_allowed=false ndkv_write_allowed=false`.
+  Direct JSON checks confirmed the preflight report remains read-only,
+  report-only, candidate-only, write-disabled, and execution-disabled.
+- R88 parallel-window integration on 2026-06-20: merged three clean worker
+  outputs into the main branch after the main-window preflight commit. Worker A
+  added a `norion-test` contract surface for
+  `self_improve_proposal_memory_reflection_reuse_plan_report_v1` and marked both
+  the reuse-plan and reuse-preflight reports as optional additive legacy replay
+  surfaces. Worker B added `.github/workflows/pr-validation.yml`, a read-only PR
+  workflow for formatting and locked tests on `crates/norion-eval` plus the
+  standalone `tools/evolution-loop`, with an artifact guard for `.ndkv`, model
+  weight, log, and `target/` files. Worker D added
+  `docs/architecture/external-agent-baselines.md`, a clean-room note that keeps
+  `fortunto2/rust-code` in the MIT-compatible idea bucket and
+  `Kuberwastaken/claurst` in the GPL-only architecture-inspiration bucket. Local
+  validation passed with `cargo fmt --manifest-path crates\norion-test\Cargo.toml`,
+  `cargo fmt --package norion-eval --check`, `cargo fmt --manifest-path
+  tools\evolution-loop\Cargo.toml --check`, focused `norion-test` contract and
+  replay tests, full `norion-test` (`104` passed), locked `norion-eval` (`385`
+  passed), locked `tools/evolution-loop` (`414` passed), `git diff --check`, and
+  the tracked-artifact guard.
 - External baseline intake on 2026-06-20: `fortunto2/rust-code` and
   `Kuberwastaken/claurst` both resolve on GitHub. Shallow clones were kept
   under `target/external-intake` for inspection only. `rust-code` is an MIT
@@ -4207,6 +4448,153 @@ System-error replacements:
   attribution. `claurst` declares GPL-3.0 at the root and in `src-rust`, so it
   must not be copied directly into rust-norion unless the project explicitly
   accepts GPL-3.0 obligations; for now it is architecture inspiration only.
+- R89 memory reflection reuse lookup preview on 2026-06-20: added the
+  report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1`
+  surface after the R88 reuse preflight. The preview derives deterministic
+  future lookup keys from preflight items, but it does not perform a memory
+  lookup, assume a lookup hit, skip model calls, authorize reflection reuse
+  execution, write memory, or write `.ndkv`. Validation passed with focused
+  `norion-eval` memory tests, focused `tools/evolution-loop` self-improve,
+  report, and prompt tests, focused `norion-test` legacy replay optional-schema
+  coverage, `tools/evolution-loop/test-evolution-loop-status.ps1`, full
+  `norion-eval` (`385` passed), full `tools/evolution-loop` (`414` passed),
+  full `norion-test` (`104` passed), cargo fmt checks, and a generated report
+  JSON safety check confirming `read_only=true`, `report_only=true`,
+  `candidate_only=true`, `commit_allowed=false`,
+  `admission_write_authorized=false`, `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R90 memory reflection reuse lookup approval request on 2026-06-20: added the
+  report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1`
+  layer after the R89 lookup preview. The request records deterministic
+  approval/rejection tokens, idempotency keys, rollback anchors, and operator
+  checklist evidence for future review, but it does not consume approval
+  tokens, perform memory lookup, assume a lookup hit, skip model calls,
+  authorize reflection reuse execution, write memory, or write `.ndkv`. The
+  implementation remains Norion-owned and clean-room safe: no external code was
+  copied, and the GPL-only `claurst` baseline remains architecture inspiration
+  only. Focused validation passed for `norion-eval` memory admission,
+  `tools/evolution-loop` self-improve/report/prompt, `norion-test` optional
+  replay schema coverage, and `tools/evolution-loop/test-evolution-loop-status.ps1`.
+  The R90 status surface preserves `read_only=true`, `report_only=true`,
+  `candidate_only=true`, `commit_allowed=false`,
+  `admission_write_authorized=false`, `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R91 memory reflection reuse lookup approval decision preview on 2026-06-20:
+  added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1`
+  layer after the R90 lookup approval request. The preview records whether
+  lookup reuse is ready for an explicit operator decision and keeps
+  `approved_lookup_execution_count=0` until a later approved execution path
+  exists. It does not consume approval or rejection tokens, perform memory
+  lookup, assume a lookup hit, skip model calls, authorize reflection reuse
+  execution, write memory, or write `.ndkv`. The status, report JSON, prompt,
+  and legacy replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R92 memory reflection reuse lookup approval token intake preview on
+  2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1`
+  layer after the R91 lookup approval decision preview. The preview carries
+  approval/rejection token intake metadata for operator review while keeping
+  lookup execution unapproved. It does not consume tokens, perform memory
+  lookup, assume a lookup hit, skip model calls, authorize reflection reuse
+  execution, write memory, or write `.ndkv`. The report JSON, prompt, status,
+  and legacy replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R93 memory reflection reuse lookup approval token intake decision preview on
+  2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1`
+  layer after the R92 token intake preview. The preview records whether every
+  token-intake preview is ready for an explicit operator approval/rejection
+  token decision while keeping `approved_lookup_execution_count=0`. It does
+  not consume tokens, perform memory lookup, assume a lookup hit, skip model
+  calls, authorize reflection reuse execution, write memory, or write `.ndkv`.
+  The report JSON, prompt, status, and legacy replay surfaces remain
+  optional/candidate-only and preserve `read_only=true`, `report_only=true`,
+  `candidate_only=true`, `commit_allowed=false`,
+  `admission_write_authorized=false`, `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R94 memory reflection reuse lookup approval token decision record preview on
+  2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1`
+  layer after the R93 token-intake decision preview. The preview records that
+  approval/rejection tokens are ready to be recorded as an explicit operator
+  token decision, but it does not select or consume either token and keeps
+  `approved_lookup_execution_count=0`. It does not perform memory lookup,
+  assume a lookup hit, skip model calls, authorize reflection reuse execution,
+  write memory, or write `.ndkv`. The report JSON, prompt, status, and legacy
+  replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R95 memory reflection reuse lookup approval token decision record request on
+  2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1`
+  layer after the R94 token decision record preview. The request records the
+  decision-record request envelope for future operator review, but it does not
+  select, record, or consume approval/rejection tokens and keeps
+  `approved_lookup_execution_count=0`. It does not perform memory lookup,
+  assume a lookup hit, skip model calls, authorize reflection reuse execution,
+  write memory, or write `.ndkv`. The report JSON, prompt, status, and legacy
+  replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R96 memory reflection reuse lookup approval token decision record review
+  packet on 2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1`
+  layer after the R95 token decision record request. The review packet lets an
+  operator inspect a ready token decision-record request, but it does not
+  select, record, or consume approval/rejection tokens and keeps
+  `approved_lookup_execution_count=0`. It does not perform memory lookup,
+  assume a lookup hit, skip model calls, authorize reflection reuse execution,
+  write memory, or write `.ndkv`. The report JSON, prompt, status, and legacy
+  replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
+- R97 memory reflection reuse lookup approval token decision record review
+  packet decision preview on 2026-06-20: added the report-only
+  `self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1`
+  layer after the R96 review packet. The decision preview records what an
+  operator would decide for a ready review packet without selecting, recording,
+  or consuming approval/rejection tokens and keeps
+  `approved_lookup_execution_count=0`. It does not perform memory lookup,
+  assume a lookup hit, skip model calls, authorize reflection reuse execution,
+  write memory, or write `.ndkv`. The report JSON, prompt, status, and legacy
+  replay surfaces remain optional/candidate-only and preserve
+  `read_only=true`, `report_only=true`, `candidate_only=true`,
+  `commit_allowed=false`, `admission_write_authorized=false`,
+  `model_call_skip_authorized=false`,
+  `reflection_reuse_execution_authorized=false`,
+  `memory_lookup_performed=false`, `lookup_hit_assumed=false`,
+  `memory_store_write_allowed=false`, and `ndkv_write_allowed=false`.
 
 ## Handoff rules
 

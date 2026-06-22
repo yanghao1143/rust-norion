@@ -1,4 +1,6 @@
 use super::*;
+use crate::adaptive_state::EvolutionLedger;
+use crate::benchmark::BenchmarkGateReport;
 use crate::engine::{
     GenerationContext, HeuristicBackend, InferenceBackend, InferenceRequest, NoironEngine,
 };
@@ -7,8 +9,20 @@ use crate::kv_cache::{MemoryUpdateAction, MemoryUpdateReport};
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::process_reward::RewardAction;
 use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
-use crate::router::{ProfileObservations, ProfileThresholds, RouterState};
+use crate::router::{
+    GenerationMetrics, NoironRouter, ProfileObservations, ProfileThresholds, RouterState,
+    RouterThresholdAdjustmentPreviewPlanner,
+};
 use crate::rust_validation::RustSnippetCheckReport;
+use crate::self_evolution::{
+    SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionReport,
+    SelfEvolutionExperimentLedger, SelfEvolutionOperatorApprovalEvidence,
+    SelfEvolutionOperatorApprovalGate, SelfEvolutionOperatorApprovalReport,
+    SelfEvolutionPromotionPreflightGate, SelfEvolutionPromotionPreflightReport,
+    SelfEvolutionRollbackReplayApplyGate, SelfEvolutionRollbackReplayApplyReport,
+    SelfEvolutionRollbackReplayGate, SelfEvolutionRollbackReplayPlan,
+    SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
+};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -70,8 +84,10 @@ impl InferenceBackend for FastPathExportingBackend {
 }
 
 mod adapter;
+mod admission;
 mod core_line;
 mod evolution_replay;
+mod improvement_corpus;
 mod jsonl_gate;
 mod memory_runtime;
 mod runtime_kv;

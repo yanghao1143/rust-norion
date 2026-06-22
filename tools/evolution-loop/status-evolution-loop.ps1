@@ -800,6 +800,1071 @@ function Get-SelfImproveProposalMemoryAdmissionCommitApprovalDecision {
     }
 }
 
+function Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket {
+    param([object]$Report)
+
+    $review = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1"
+    if ($null -eq $review) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            request_count = $null
+            approval_request_item_count = $null
+            approval_decision_item_count = $null
+            review_packet_item_count = $null
+            ready_review_packet_count = $null
+            pending_approval_count = $null
+            blocked_count = $null
+            first_review_packet_item = $null
+            approval_review_packet_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "target_count")
+        request_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "request_count")
+        approval_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "approval_request_item_count")
+        approval_decision_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "approval_decision_item_count")
+        review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "review_packet_item_count")
+        ready_review_packet_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "ready_review_packet_count")
+        pending_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "pending_approval_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $review -Name "blocked_count")
+        first_review_packet_item = Get-PropertyValue -Object $review -Name "first_review_packet_item_id"
+        approval_review_packet_ready = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "approval_review_packet_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $review -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $review -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionUsefulness {
+    param([object]$Report)
+
+    $reflection = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_usefulness_report_v1"
+    if ($null -eq $reflection) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            projected_report_count = $null
+            accepted_memory_admission_count = $null
+            quarantined_candidate_count = $null
+            review_packet_item_count = $null
+            useful_reflection_item_count = $null
+            pending_operator_approval_count = $null
+            blocked_count = $null
+            wasted_compute_guard_count = $null
+            adapter_safe_count = $null
+            first_reflection_item = $null
+            reflection_usefulness_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_usefulness_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "target_count")
+        projected_report_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "projected_report_count")
+        accepted_memory_admission_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "accepted_memory_admission_count")
+        quarantined_candidate_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "quarantined_candidate_count")
+        review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "review_packet_item_count")
+        useful_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "useful_reflection_item_count")
+        pending_operator_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "pending_operator_approval_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "blocked_count")
+        wasted_compute_guard_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "wasted_compute_guard_count")
+        adapter_safe_count = Convert-ToNullableInt (Get-PropertyValue -Object $reflection -Name "adapter_safe_count")
+        first_reflection_item = Get-PropertyValue -Object $reflection -Name "first_reflection_item_id"
+        reflection_usefulness_ready = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "reflection_usefulness_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $reflection -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reflection -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionDedupeCluster {
+    param([object]$Report)
+
+    $dedupe = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_dedupe_cluster_report_v1"
+    if ($null -eq $dedupe) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            useful_reflection_item_count = $null
+            reflection_cluster_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            wasted_compute_guard_count = $null
+            pending_operator_approval_count = $null
+            adapter_safe_count = $null
+            first_cluster_id = $null
+            reflection_dedupe_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_dedupe_cluster_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "target_count")
+        useful_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "useful_reflection_item_count")
+        reflection_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "reflection_cluster_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "duplicate_reflection_item_count")
+        wasted_compute_guard_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "wasted_compute_guard_count")
+        pending_operator_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "pending_operator_approval_count")
+        adapter_safe_count = Convert-ToNullableInt (Get-PropertyValue -Object $dedupe -Name "adapter_safe_count")
+        first_cluster_id = Get-PropertyValue -Object $dedupe -Name "first_cluster_id"
+        reflection_dedupe_ready = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "reflection_dedupe_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $dedupe -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $dedupe -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReusePlan {
+    param([object]$Report)
+
+    $reuse = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+    if ($null -eq $reuse) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            reflection_cluster_count = $null
+            plan_item_count = $null
+            ready_reuse_plan_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            first_plan_item_id = $null
+            reflection_reuse_plan_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_plan_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "target_count")
+        reflection_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "reflection_cluster_count")
+        plan_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "plan_item_count")
+        ready_reuse_plan_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "ready_reuse_plan_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $reuse -Name "projected_saved_reflection_count")
+        first_plan_item_id = Get-PropertyValue -Object $reuse -Name "first_plan_item_id"
+        reflection_reuse_plan_ready = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "reflection_reuse_plan_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $reuse -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reuse -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReusePreflight {
+    param([object]$Report)
+
+    $preflight = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_preflight_report_v1"
+    if ($null -eq $preflight) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            plan_item_count = $null
+            ready_reuse_plan_count = $null
+            preflight_item_count = $null
+            preflight_passed_item_count = $null
+            blocked_item_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_preflight_item_id = $null
+            reuse_preflight_passed = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_preflight_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "target_count")
+        plan_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "plan_item_count")
+        ready_reuse_plan_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "ready_reuse_plan_count")
+        preflight_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "preflight_item_count")
+        preflight_passed_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "preflight_passed_item_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "blocked_item_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $preflight -Name "projected_model_call_skip_count")
+        first_preflight_item_id = Get-PropertyValue -Object $preflight -Name "first_preflight_item_id"
+        reuse_preflight_passed = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "reuse_preflight_passed")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "reflection_reuse_execution_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $preflight -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $preflight -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupPreview {
+    param([object]$Report)
+
+    $lookupPreview = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1"
+    if ($null -eq $lookupPreview) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            preflight_item_count = $null
+            lookup_preview_item_count = $null
+            ready_lookup_preview_count = $null
+            blocked_item_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_lookup_key = $null
+            lookup_preview_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "target_count")
+        preflight_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "preflight_item_count")
+        lookup_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "lookup_preview_item_count")
+        ready_lookup_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "ready_lookup_preview_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "blocked_item_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $lookupPreview -Name "projected_model_call_skip_count")
+        first_lookup_key = Get-PropertyValue -Object $lookupPreview -Name "first_lookup_key"
+        lookup_preview_ready = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "lookup_preview_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $lookupPreview -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $lookupPreview -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalRequest {
+    param([object]$Report)
+
+    $approvalRequest = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1"
+    if ($null -eq $approvalRequest) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            preflight_item_count = $null
+            lookup_preview_item_count = $null
+            ready_lookup_preview_count = $null
+            approval_request_item_count = $null
+            ready_approval_request_count = $null
+            requested_lookup_approval_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_approval_request_id = $null
+            lookup_approval_request_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "target_count")
+        preflight_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "preflight_item_count")
+        lookup_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "lookup_preview_item_count")
+        ready_lookup_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "ready_lookup_preview_count")
+        approval_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "approval_request_item_count")
+        ready_approval_request_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "ready_approval_request_count")
+        requested_lookup_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "requested_lookup_approval_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $approvalRequest -Name "projected_model_call_skip_count")
+        first_approval_request_id = Get-PropertyValue -Object $approvalRequest -Name "first_approval_request_id"
+        lookup_approval_request_ready = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "lookup_approval_request_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $approvalRequest -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $approvalRequest -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalDecisionPreview {
+    param([object]$Report)
+
+    $decisionPreview = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1"
+    if ($null -eq $decisionPreview) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            preflight_item_count = $null
+            lookup_preview_item_count = $null
+            ready_lookup_preview_count = $null
+            approval_request_item_count = $null
+            ready_approval_request_count = $null
+            approval_decision_preview_item_count = $null
+            ready_approval_decision_preview_count = $null
+            approved_lookup_execution_count = $null
+            pending_approval_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_approval_decision_preview_id = $null
+            lookup_approval_decision_preview_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "target_count")
+        preflight_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "preflight_item_count")
+        lookup_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "lookup_preview_item_count")
+        ready_lookup_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_lookup_preview_count")
+        approval_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_request_item_count")
+        ready_approval_request_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_approval_request_count")
+        approval_decision_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_decision_preview_item_count")
+        ready_approval_decision_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_approval_decision_preview_count")
+        approved_lookup_execution_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approved_lookup_execution_count")
+        pending_approval_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "pending_approval_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "projected_model_call_skip_count")
+        first_approval_decision_preview_id = Get-PropertyValue -Object $decisionPreview -Name "first_approval_decision_preview_id"
+        lookup_approval_decision_preview_ready = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "lookup_approval_decision_preview_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $decisionPreview -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakePreview {
+    param([object]$Report)
+
+    $intakePreview = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1"
+    if ($null -eq $intakePreview) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            preflight_item_count = $null
+            lookup_preview_item_count = $null
+            ready_lookup_preview_count = $null
+            approval_request_item_count = $null
+            ready_approval_request_count = $null
+            approval_decision_preview_item_count = $null
+            ready_approval_decision_preview_count = $null
+            token_intake_preview_item_count = $null
+            ready_token_intake_preview_count = $null
+            pending_operator_token_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_token_intake_preview_id = $null
+            lookup_approval_token_intake_preview_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "target_count")
+        preflight_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "preflight_item_count")
+        lookup_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "lookup_preview_item_count")
+        ready_lookup_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "ready_lookup_preview_count")
+        approval_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "approval_request_item_count")
+        ready_approval_request_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "ready_approval_request_count")
+        approval_decision_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "approval_decision_preview_item_count")
+        ready_approval_decision_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "ready_approval_decision_preview_count")
+        token_intake_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "token_intake_preview_item_count")
+        ready_token_intake_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "ready_token_intake_preview_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "pending_operator_token_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $intakePreview -Name "projected_model_call_skip_count")
+        first_token_intake_preview_id = Get-PropertyValue -Object $intakePreview -Name "first_token_intake_preview_id"
+        lookup_approval_token_intake_preview_ready = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "lookup_approval_token_intake_preview_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $intakePreview -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intakePreview -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview {
+    param([object]$Report)
+
+    $decisionPreview = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1"
+    if ($null -eq $decisionPreview) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            preflight_item_count = $null
+            lookup_preview_item_count = $null
+            ready_lookup_preview_count = $null
+            approval_request_item_count = $null
+            ready_approval_request_count = $null
+            approval_decision_preview_item_count = $null
+            ready_approval_decision_preview_count = $null
+            token_intake_preview_item_count = $null
+            ready_token_intake_preview_count = $null
+            token_intake_decision_preview_item_count = $null
+            ready_token_intake_decision_preview_count = $null
+            pending_operator_token_count = $null
+            approved_lookup_execution_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_token_intake_decision_preview_id = $null
+            lookup_approval_token_intake_decision_preview_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "target_count")
+        preflight_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "preflight_item_count")
+        lookup_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "lookup_preview_item_count")
+        ready_lookup_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_lookup_preview_count")
+        approval_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_request_item_count")
+        ready_approval_request_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_approval_request_count")
+        approval_decision_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_decision_preview_item_count")
+        ready_approval_decision_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_approval_decision_preview_count")
+        token_intake_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "token_intake_preview_item_count")
+        ready_token_intake_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_token_intake_preview_count")
+        token_intake_decision_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "token_intake_decision_preview_item_count")
+        ready_token_intake_decision_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_token_intake_decision_preview_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "pending_operator_token_count")
+        approved_lookup_execution_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approved_lookup_execution_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "projected_model_call_skip_count")
+        first_token_intake_decision_preview_id = Get-PropertyValue -Object $decisionPreview -Name "first_token_intake_decision_preview_id"
+        lookup_approval_token_intake_decision_preview_ready = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "lookup_approval_token_intake_decision_preview_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $decisionPreview -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview {
+    param([object]$Report)
+
+    $recordPreview = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1"
+    if ($null -eq $recordPreview) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            token_intake_decision_preview_item_count = $null
+            ready_token_intake_decision_preview_count = $null
+            token_decision_record_preview_item_count = $null
+            ready_token_decision_record_preview_count = $null
+            pending_operator_token_count = $null
+            approved_lookup_execution_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_token_decision_record_preview_id = $null
+            lookup_approval_token_decision_record_preview_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "target_count")
+        token_intake_decision_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "token_intake_decision_preview_item_count")
+        ready_token_intake_decision_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "ready_token_intake_decision_preview_count")
+        token_decision_record_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "token_decision_record_preview_item_count")
+        ready_token_decision_record_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "ready_token_decision_record_preview_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "pending_operator_token_count")
+        approved_lookup_execution_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "approved_lookup_execution_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordPreview -Name "projected_model_call_skip_count")
+        first_token_decision_record_preview_id = Get-PropertyValue -Object $recordPreview -Name "first_token_decision_record_preview_id"
+        lookup_approval_token_decision_record_preview_ready = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "lookup_approval_token_decision_record_preview_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $recordPreview -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $recordPreview -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest {
+    param([object]$Report)
+
+    $recordRequest = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1"
+    if ($null -eq $recordRequest) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            token_decision_record_preview_item_count = $null
+            ready_token_decision_record_preview_count = $null
+            token_decision_record_request_item_count = $null
+            ready_token_decision_record_request_count = $null
+            requested_token_decision_record_count = $null
+            pending_operator_token_count = $null
+            approved_lookup_execution_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_token_decision_record_request_id = $null
+            lookup_approval_token_decision_record_request_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "target_count")
+        token_decision_record_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "token_decision_record_preview_item_count")
+        ready_token_decision_record_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "ready_token_decision_record_preview_count")
+        token_decision_record_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "token_decision_record_request_item_count")
+        ready_token_decision_record_request_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "ready_token_decision_record_request_count")
+        requested_token_decision_record_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "requested_token_decision_record_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "pending_operator_token_count")
+        approved_lookup_execution_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "approved_lookup_execution_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $recordRequest -Name "projected_model_call_skip_count")
+        first_token_decision_record_request_id = Get-PropertyValue -Object $recordRequest -Name "first_token_decision_record_request_id"
+        lookup_approval_token_decision_record_request_ready = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "lookup_approval_token_decision_record_request_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $recordRequest -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $recordRequest -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket {
+    param([object]$Report)
+
+    $reviewPacket = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1"
+    if ($null -eq $reviewPacket) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            token_decision_record_request_item_count = $null
+            ready_token_decision_record_request_count = $null
+            token_decision_record_review_packet_item_count = $null
+            ready_token_decision_record_review_packet_count = $null
+            requested_token_decision_record_count = $null
+            pending_operator_token_count = $null
+            approved_lookup_execution_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_token_decision_record_review_packet_id = $null
+            lookup_approval_token_decision_record_review_packet_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "target_count")
+        token_decision_record_request_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "token_decision_record_request_item_count")
+        ready_token_decision_record_request_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "ready_token_decision_record_request_count")
+        token_decision_record_review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "token_decision_record_review_packet_item_count")
+        ready_token_decision_record_review_packet_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "ready_token_decision_record_review_packet_count")
+        requested_token_decision_record_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "requested_token_decision_record_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "pending_operator_token_count")
+        approved_lookup_execution_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "approved_lookup_execution_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $reviewPacket -Name "projected_model_call_skip_count")
+        first_token_decision_record_review_packet_id = Get-PropertyValue -Object $reviewPacket -Name "first_token_decision_record_review_packet_id"
+        lookup_approval_token_decision_record_review_packet_ready = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "lookup_approval_token_decision_record_review_packet_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $reviewPacket -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $reviewPacket -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview {
+    param([object]$Report)
+
+    $decisionPreview = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1"
+    if ($null -eq $decisionPreview) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            token_decision_record_review_packet_item_count = $null
+            ready_token_decision_record_review_packet_count = $null
+            token_decision_record_review_packet_decision_preview_item_count = $null
+            ready_token_decision_record_review_packet_decision_preview_count = $null
+            requested_token_decision_record_count = $null
+            pending_operator_token_count = $null
+            approved_lookup_execution_count = $null
+            blocked_item_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            duplicate_cluster_count = $null
+            duplicate_reflection_item_count = $null
+            projected_saved_reflection_count = $null
+            projected_model_call_skip_count = $null
+            first_token_decision_record_review_packet_decision_preview_id = $null
+            lookup_approval_token_decision_record_review_packet_decision_preview_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            model_call_skip_authorized = $null
+            reflection_reuse_execution_authorized = $null
+            memory_lookup_performed = $null
+            lookup_hit_assumed = $null
+            failure_reasons = @()
+            read_only = $null
+            report_only = $null
+            candidate_only = $null
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "target_count")
+        token_decision_record_review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "token_decision_record_review_packet_item_count")
+        ready_token_decision_record_review_packet_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_token_decision_record_review_packet_count")
+        token_decision_record_review_packet_decision_preview_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "token_decision_record_review_packet_decision_preview_item_count")
+        ready_token_decision_record_review_packet_decision_preview_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "ready_token_decision_record_review_packet_decision_preview_count")
+        requested_token_decision_record_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "requested_token_decision_record_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "pending_operator_token_count")
+        approved_lookup_execution_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approved_lookup_execution_count")
+        blocked_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "blocked_item_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "rejection_token_present_count")
+        duplicate_cluster_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "duplicate_cluster_count")
+        duplicate_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "duplicate_reflection_item_count")
+        projected_saved_reflection_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "projected_saved_reflection_count")
+        projected_model_call_skip_count = Convert-ToNullableInt (Get-PropertyValue -Object $decisionPreview -Name "projected_model_call_skip_count")
+        first_token_decision_record_review_packet_decision_preview_id = Get-PropertyValue -Object $decisionPreview -Name "first_token_decision_record_review_packet_decision_preview_id"
+        lookup_approval_token_decision_record_review_packet_decision_preview_ready = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "lookup_approval_token_decision_record_review_packet_decision_preview_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "admission_write_authorized")
+        model_call_skip_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "model_call_skip_authorized")
+        reflection_reuse_execution_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "reflection_reuse_execution_authorized")
+        memory_lookup_performed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "memory_lookup_performed")
+        lookup_hit_assumed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "lookup_hit_assumed")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $decisionPreview -Name "failure_reasons")
+        read_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "read_only")
+        report_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "report_only")
+        candidate_only = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "candidate_only")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $decisionPreview -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalMemoryApprovalTokenIntakePreview {
+    param([object]$Report)
+
+    $intake = Get-PropertyValue -Object $Report -Name "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1"
+    if ($null -eq $intake) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            target_count = $null
+            review_packet_item_count = $null
+            useful_reflection_item_count = $null
+            intake_item_count = $null
+            ready_intake_count = $null
+            pending_operator_token_count = $null
+            blocked_count = $null
+            approval_token_present_count = $null
+            rejection_token_present_count = $null
+            first_intake_item = $null
+            approval_token_intake_ready = $null
+            explicit_operator_approval_required = $null
+            validation_required = $null
+            rollback_required = $null
+            commit_allowed = $null
+            admission_write_authorized = $null
+            failure_reasons = @()
+            auto_apply = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1"
+        target_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "target_count")
+        review_packet_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "review_packet_item_count")
+        useful_reflection_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "useful_reflection_item_count")
+        intake_item_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "intake_item_count")
+        ready_intake_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "ready_intake_count")
+        pending_operator_token_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "pending_operator_token_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "blocked_count")
+        approval_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "approval_token_present_count")
+        rejection_token_present_count = Convert-ToNullableInt (Get-PropertyValue -Object $intake -Name "rejection_token_present_count")
+        first_intake_item = Get-PropertyValue -Object $intake -Name "first_intake_item_id"
+        approval_token_intake_ready = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "approval_token_intake_ready")
+        explicit_operator_approval_required = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "explicit_operator_approval_required")
+        validation_required = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "validation_required")
+        rollback_required = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "rollback_required")
+        commit_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "commit_allowed")
+        admission_write_authorized = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "admission_write_authorized")
+        failure_reasons = Convert-ToStringList (Get-PropertyValue -Object $intake -Name "failure_reasons")
+        auto_apply = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "auto_apply")
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $intake -Name "ndkv_write_allowed")
+    }
+}
+
 function Select-FirstNonNull {
     param(
         [object]$Preferred,
@@ -1688,6 +2753,21 @@ function Read-ReportStatus {
         $proposalMemoryAdmissionCommitRecordStage = Get-SelfImproveProposalMemoryAdmissionCommitRecordStage -Report $report
         $proposalMemoryAdmissionCommitApprovalRequest = Get-SelfImproveProposalMemoryAdmissionCommitApprovalRequest -Report $report
         $proposalMemoryAdmissionCommitApprovalDecision = Get-SelfImproveProposalMemoryAdmissionCommitApprovalDecision -Report $report
+        $proposalMemoryAdmissionCommitApprovalReviewPacket = Get-SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacket -Report $report
+        $proposalMemoryReflectionUsefulness = Get-SelfImproveProposalMemoryReflectionUsefulness -Report $report
+        $proposalMemoryReflectionDedupeCluster = Get-SelfImproveProposalMemoryReflectionDedupeCluster -Report $report
+        $proposalMemoryReflectionReusePlan = Get-SelfImproveProposalMemoryReflectionReusePlan -Report $report
+        $proposalMemoryReflectionReusePreflight = Get-SelfImproveProposalMemoryReflectionReusePreflight -Report $report
+        $proposalMemoryReflectionReuseLookupPreview = Get-SelfImproveProposalMemoryReflectionReuseLookupPreview -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalRequest = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalRequest -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalDecisionPreview = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalDecisionPreview -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Report $report
+        $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Report $report
+        $proposalMemoryApprovalTokenIntakePreview = Get-SelfImproveProposalMemoryApprovalTokenIntakePreview -Report $report
 
         return [pscustomobject][ordered]@{
             path = $Path
@@ -1867,6 +2947,441 @@ function Read-ReportStatus {
             self_improve_proposal_memory_admission_commit_approval_decision_auto_apply = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalDecision -Name "auto_apply"
             self_improve_proposal_memory_admission_commit_approval_decision_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalDecision -Name "memory_store_write_allowed"
             self_improve_proposal_memory_admission_commit_approval_decision_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalDecision -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_source = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "source"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_target_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "target_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_request_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "request_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_request_item_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "approval_request_item_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_decision_item_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "approval_decision_item_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "review_packet_item_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "ready_review_packet_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "pending_approval_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_blocked_count = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "blocked_count"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_first_item = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "first_review_packet_item"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_ready = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "approval_review_packet_ready"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_validation_required = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "validation_required"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_rollback_required = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "rollback_required"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "commit_allowed"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "admission_write_authorized"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "failure_reasons")
+            self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "auto_apply"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryAdmissionCommitApprovalReviewPacket -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_usefulness_source = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "source"
+            self_improve_proposal_memory_reflection_usefulness_target_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "target_count"
+            self_improve_proposal_memory_reflection_usefulness_projected_report_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "projected_report_count"
+            self_improve_proposal_memory_reflection_usefulness_accepted_memory_admission_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "accepted_memory_admission_count"
+            self_improve_proposal_memory_reflection_usefulness_quarantined_candidate_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "quarantined_candidate_count"
+            self_improve_proposal_memory_reflection_usefulness_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "review_packet_item_count"
+            self_improve_proposal_memory_reflection_usefulness_useful_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "useful_reflection_item_count"
+            self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "pending_operator_approval_count"
+            self_improve_proposal_memory_reflection_usefulness_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "blocked_count"
+            self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "wasted_compute_guard_count"
+            self_improve_proposal_memory_reflection_usefulness_adapter_safe_count = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "adapter_safe_count"
+            self_improve_proposal_memory_reflection_usefulness_first_item = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "first_reflection_item"
+            self_improve_proposal_memory_reflection_usefulness_ready = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "reflection_usefulness_ready"
+            self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_usefulness_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "validation_required"
+            self_improve_proposal_memory_reflection_usefulness_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "rollback_required"
+            self_improve_proposal_memory_reflection_usefulness_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_usefulness_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_usefulness_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_usefulness_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "auto_apply"
+            self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionUsefulness -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_dedupe_cluster_source = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "source"
+            self_improve_proposal_memory_reflection_dedupe_cluster_target_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "target_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_useful_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "useful_reflection_item_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "reflection_cluster_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_wasted_compute_guard_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "wasted_compute_guard_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_pending_operator_approval_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "pending_operator_approval_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_adapter_safe_count = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "adapter_safe_count"
+            self_improve_proposal_memory_reflection_dedupe_cluster_first_cluster = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "first_cluster_id"
+            self_improve_proposal_memory_reflection_dedupe_cluster_ready = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "reflection_dedupe_ready"
+            self_improve_proposal_memory_reflection_dedupe_cluster_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_dedupe_cluster_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "validation_required"
+            self_improve_proposal_memory_reflection_dedupe_cluster_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "rollback_required"
+            self_improve_proposal_memory_reflection_dedupe_cluster_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_dedupe_cluster_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_dedupe_cluster_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_dedupe_cluster_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "auto_apply"
+            self_improve_proposal_memory_reflection_dedupe_cluster_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_dedupe_cluster_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionDedupeCluster -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_plan_source = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "source"
+            self_improve_proposal_memory_reflection_reuse_plan_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_plan_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "reflection_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_plan_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "plan_item_count"
+            self_improve_proposal_memory_reflection_reuse_plan_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "ready_reuse_plan_count"
+            self_improve_proposal_memory_reflection_reuse_plan_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_plan_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_plan_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_plan_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "first_plan_item_id"
+            self_improve_proposal_memory_reflection_reuse_plan_ready = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "reflection_reuse_plan_ready"
+            self_improve_proposal_memory_reflection_reuse_plan_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_plan_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_plan_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_plan_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_plan_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_plan_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_plan_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_plan_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_plan_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePlan -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_preflight_source = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "source"
+            self_improve_proposal_memory_reflection_reuse_preflight_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_plan_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "plan_item_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_ready_reuse_plan_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "ready_reuse_plan_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "preflight_item_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_passed_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "preflight_passed_item_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_blocked_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_preflight_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "first_preflight_item_id"
+            self_improve_proposal_memory_reflection_reuse_preflight_passed = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "reuse_preflight_passed"
+            self_improve_proposal_memory_reflection_reuse_preflight_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_preflight_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_preflight_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_preflight_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_preflight_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_preflight_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_preflight_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_preflight_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_preflight_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_preflight_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_preflight_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReusePreflight -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_preflight_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "preflight_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "lookup_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "ready_lookup_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_blocked_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_first_lookup_key = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "first_lookup_key"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "lookup_preview_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_preview_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupPreview -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_preflight_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "preflight_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_lookup_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "lookup_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready_lookup_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "ready_lookup_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "approval_request_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "ready_approval_request_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_requested_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "requested_lookup_approval_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "first_approval_request_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "lookup_approval_request_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalRequest -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_preflight_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "preflight_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_lookup_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "lookup_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_lookup_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "ready_lookup_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approval_request_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "approval_request_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_approval_request_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "ready_approval_request_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "approval_decision_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "ready_approval_decision_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approved_lookup_execution_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "approved_lookup_execution_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_pending_approval_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "pending_approval_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "first_approval_decision_preview_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "lookup_approval_decision_preview_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalDecisionPreview -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_preflight_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "preflight_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_lookup_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "lookup_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_lookup_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "ready_lookup_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_request_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "approval_request_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_approval_request_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "ready_approval_request_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_decision_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "approval_decision_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_approval_decision_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "ready_approval_decision_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "token_intake_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "ready_token_intake_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "pending_operator_token_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "first_token_intake_preview_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "lookup_approval_token_intake_preview_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreview -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_preflight_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "preflight_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_lookup_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "lookup_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_lookup_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "ready_lookup_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_request_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "approval_request_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_approval_request_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "ready_approval_request_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_decision_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "approval_decision_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_approval_decision_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "ready_approval_decision_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_token_intake_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "token_intake_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_token_intake_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "ready_token_intake_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "token_intake_decision_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "ready_token_intake_decision_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "pending_operator_token_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approved_lookup_execution_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "approved_lookup_execution_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "first_token_intake_decision_preview_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "lookup_approval_token_intake_decision_preview_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreview -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_token_intake_decision_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "token_intake_decision_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready_token_intake_decision_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "ready_token_intake_decision_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "token_decision_record_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "ready_token_decision_record_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "pending_operator_token_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_approved_lookup_execution_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "approved_lookup_execution_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "first_token_decision_record_preview_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "lookup_approval_token_decision_record_preview_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreview -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_token_decision_record_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "token_decision_record_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready_token_decision_record_preview_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "ready_token_decision_record_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "token_decision_record_request_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "ready_token_decision_record_request_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_requested_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "requested_token_decision_record_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "pending_operator_token_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_approved_lookup_execution_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "approved_lookup_execution_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "first_token_decision_record_request_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "lookup_approval_token_decision_record_request_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequest -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_token_decision_record_request_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "token_decision_record_request_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready_token_decision_record_request_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "ready_token_decision_record_request_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "token_decision_record_review_packet_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "ready_token_decision_record_review_packet_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_requested_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "requested_token_decision_record_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "pending_operator_token_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_approved_lookup_execution_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "approved_lookup_execution_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "first_token_decision_record_review_packet_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "lookup_approval_token_decision_record_review_packet_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_source = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "source"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_target_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "target_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_token_decision_record_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "token_decision_record_review_packet_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready_token_decision_record_review_packet_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "ready_token_decision_record_review_packet_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "token_decision_record_review_packet_decision_preview_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "ready_token_decision_record_review_packet_decision_preview_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_requested_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "requested_token_decision_record_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "pending_operator_token_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_approved_lookup_execution_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "approved_lookup_execution_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_blocked_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "blocked_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_duplicate_cluster_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "duplicate_cluster_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_duplicate_reflection_item_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "duplicate_reflection_item_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_projected_saved_reflection_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "projected_saved_reflection_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_projected_model_call_skip_count = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "projected_model_call_skip_count"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_first_item = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "first_token_decision_record_review_packet_decision_preview_id"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "lookup_approval_token_decision_record_review_packet_decision_preview_ready"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_validation_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "validation_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_rollback_required = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "rollback_required"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_commit_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "commit_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_model_call_skip_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "model_call_skip_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_execution_authorized = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "reflection_reuse_execution_authorized"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_memory_lookup_performed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "memory_lookup_performed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_lookup_hit_assumed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "lookup_hit_assumed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "failure_reasons")
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_read_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "read_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "report_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_candidate_only = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "candidate_only"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_auto_apply = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "auto_apply"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Name "ndkv_write_allowed"
+            self_improve_proposal_memory_approval_token_intake_source = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "source"
+            self_improve_proposal_memory_approval_token_intake_target_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "target_count"
+            self_improve_proposal_memory_approval_token_intake_review_packet_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "review_packet_item_count"
+            self_improve_proposal_memory_approval_token_intake_useful_reflection_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "useful_reflection_item_count"
+            self_improve_proposal_memory_approval_token_intake_item_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "intake_item_count"
+            self_improve_proposal_memory_approval_token_intake_ready_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "ready_intake_count"
+            self_improve_proposal_memory_approval_token_intake_pending_operator_token_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "pending_operator_token_count"
+            self_improve_proposal_memory_approval_token_intake_blocked_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "blocked_count"
+            self_improve_proposal_memory_approval_token_intake_approval_token_present_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "approval_token_present_count"
+            self_improve_proposal_memory_approval_token_intake_rejection_token_present_count = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "rejection_token_present_count"
+            self_improve_proposal_memory_approval_token_intake_first_item = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "first_intake_item"
+            self_improve_proposal_memory_approval_token_intake_ready = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "approval_token_intake_ready"
+            self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "explicit_operator_approval_required"
+            self_improve_proposal_memory_approval_token_intake_validation_required = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "validation_required"
+            self_improve_proposal_memory_approval_token_intake_rollback_required = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "rollback_required"
+            self_improve_proposal_memory_approval_token_intake_commit_allowed = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "commit_allowed"
+            self_improve_proposal_memory_approval_token_intake_admission_write_authorized = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "admission_write_authorized"
+            self_improve_proposal_memory_approval_token_intake_failure_reasons = @(Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "failure_reasons")
+            self_improve_proposal_memory_approval_token_intake_auto_apply = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "auto_apply"
+            self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "memory_store_write_allowed"
+            self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed = Get-PropertyValue -Object $proposalMemoryApprovalTokenIntakePreview -Name "ndkv_write_allowed"
             ledger_lag_rounds = $lag
             stale = if ($null -eq $lag) { $null } else { [bool]($lag -gt 0) }
             remote_runtime_probed = Convert-ToNullableBool (Get-PropertyValue -Object $remoteRuntime -Name "probed")
@@ -3012,6 +4527,36 @@ if ($ReportPath.Trim().Length -gt 0) {
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_request_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_request_count) commit_record_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_commit_record_item_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_item_count) requested=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_requested_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_first_item) commit_approval_request_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_ready) explicit_commit_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_explicit_commit_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalRequestFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_request_ndkv_write_allowed)"
     $proposalAdmissionCommitApprovalDecisionFailures = @($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_memory_admission_commit_approval_decision_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_item_count) recorded=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_recorded_count) approved=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_approved_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_first_item) commit_approval_decision_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_ready) explicit_commit_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_explicit_commit_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalDecisionFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_decision_ndkv_write_allowed)"
+    $proposalAdmissionCommitApprovalReviewPacketFailures = @($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_source) targets=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_count) approval_request_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_request_item_count) approval_decision_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_decision_item_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count) ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count) pending=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_blocked_count) first_item=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_first_item) approval_review_packet_ready=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_admission_write_authorized) failure_reasons=$proposalAdmissionCommitApprovalReviewPacketFailures auto_apply=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed)"
+    $proposalMemoryReflectionUsefulnessFailures = @($reportStatus.self_improve_proposal_memory_reflection_usefulness_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_target_count) projected=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_projected_report_count) accepted_memory=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_accepted_memory_admission_count) quarantined=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_quarantined_candidate_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_review_packet_item_count) useful=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_useful_count) pending_operator_approval=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_blocked_count) wasted_compute_guard=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count) adapter_safe=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_first_item) reflection_usefulness_ready=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_admission_write_authorized) failure_reasons=$proposalMemoryReflectionUsefulnessFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed)"
+    $proposalMemoryReflectionDedupeClusterFailures = @($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_dedupe_cluster_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_target_count) useful=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_useful_count) clusters=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_duplicate_reflection_item_count) wasted_compute_guard=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_wasted_compute_guard_count) pending_operator_approval=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_pending_operator_approval_count) adapter_safe=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_adapter_safe_count) first_cluster=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_first_cluster) reflection_dedupe_ready=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_admission_write_authorized) failure_reasons=$proposalMemoryReflectionDedupeClusterFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_dedupe_cluster_ndkv_write_allowed)"
+    $proposalMemoryReflectionReusePlanFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_plan_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_target_count) clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_cluster_count) plan_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_item_count) ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_ready_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_projected_saved_reflection_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_first_item) reflection_reuse_plan_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_admission_write_authorized) failure_reasons=$proposalMemoryReflectionReusePlanFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_plan_ndkv_write_allowed)"
+    $proposalMemoryReflectionReusePreflightFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_preflight_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_target_count) plan_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_plan_item_count) ready_plan_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_ready_reuse_plan_count) preflight_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_item_count) passed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_passed_item_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_blocked_item_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_first_item) reuse_preflight_passed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_passed) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_execution_authorized) failure_reasons=$proposalMemoryReflectionReusePreflightFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_preflight_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupPreviewFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_target_count) preflight_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_preflight_item_count) lookup_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_item_count) ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_ready_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_blocked_item_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_projected_model_call_skip_count) first_lookup_key=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_first_lookup_key) lookup_preview_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupPreviewFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_preview_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalRequestFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_target_count) preflight_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_preflight_item_count) lookup_preview_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_lookup_preview_item_count) ready_lookup_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready_lookup_preview_count) approval_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_item_count) ready_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready_count) requested=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_requested_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_first_item) lookup_approval_request_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalRequestFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_request_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalDecisionPreviewFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_target_count) preflight_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_preflight_item_count) lookup_preview_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_lookup_preview_item_count) ready_lookup_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_lookup_preview_count) approval_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approval_request_item_count) ready_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_approval_request_count) decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_item_count) ready_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready_count) approved_lookup_executions=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approved_lookup_execution_count) pending=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_pending_approval_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_first_item) lookup_approval_decision_preview_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalDecisionPreviewFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalTokenIntakePreviewFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_target_count) preflight_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_preflight_item_count) lookup_preview_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_lookup_preview_item_count) ready_lookup_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_lookup_preview_count) approval_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_request_item_count) ready_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_approval_request_count) decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_decision_preview_item_count) ready_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_approval_decision_preview_count) token_intake_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_item_count) ready_token_intake_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_pending_operator_token_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_first_item) lookup_approval_token_intake_preview_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalTokenIntakePreviewFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_target_count) preflight_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_preflight_item_count) lookup_preview_items=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_lookup_preview_item_count) ready_lookup_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_lookup_preview_count) approval_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_request_item_count) ready_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_approval_request_count) decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_decision_preview_item_count) ready_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_approval_decision_preview_count) token_intake_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_token_intake_preview_item_count) ready_token_intake_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_token_intake_preview_count) token_intake_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_item_count) ready_token_intake_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_pending_operator_token_count) approved_lookup_executions=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approved_lookup_execution_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_first_item) lookup_approval_token_intake_decision_preview_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalTokenIntakeDecisionPreviewFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreviewFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_target_count) token_intake_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_token_intake_decision_preview_item_count) ready_token_intake_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready_token_intake_decision_preview_count) token_decision_record_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_item_count) ready_token_decision_record_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_pending_operator_token_count) approved_lookup_executions=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_approved_lookup_execution_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_first_item) lookup_approval_token_decision_record_preview_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordPreviewFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_target_count) token_decision_record_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_token_decision_record_preview_item_count) ready_token_decision_record_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready_token_decision_record_preview_count) token_decision_record_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_item_count) ready_token_decision_record_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready_count) requested_token_decision_records=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_requested_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_pending_operator_token_count) approved_lookup_executions=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_approved_lookup_execution_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_first_item) lookup_approval_token_decision_record_request_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordRequestFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_target_count) token_decision_record_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_token_decision_record_request_item_count) ready_token_decision_record_requests=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready_token_decision_record_request_count) token_decision_record_review_packets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_item_count) ready_token_decision_record_review_packets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready_count) requested_token_decision_records=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_requested_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_pending_operator_token_count) approved_lookup_executions=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_approved_lookup_execution_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_first_item) lookup_approval_token_decision_record_review_packet_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_ndkv_write_allowed)"
+    $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreviewFailures = @($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_source) targets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_target_count) token_decision_record_review_packets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_token_decision_record_review_packet_item_count) ready_token_decision_record_review_packets=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready_token_decision_record_review_packet_count) review_packet_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_item_count) ready_review_packet_decision_previews=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready_count) requested_token_decision_records=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_requested_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_pending_operator_token_count) approved_lookup_executions=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_approved_lookup_execution_count) blocked=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_rejection_token_present_count) duplicate_clusters=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_duplicate_cluster_count) duplicate_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_duplicate_reflection_item_count) projected_saved_reflections=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_projected_saved_reflection_count) projected_model_call_skips=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_projected_model_call_skip_count) first_item=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_first_item) lookup_approval_token_decision_record_review_packet_decision_preview_ready=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_admission_write_authorized) model_call_skip_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_model_call_skip_authorized) reflection_reuse_execution_authorized=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_execution_authorized) memory_lookup_performed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_memory_lookup_performed) lookup_hit_assumed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_lookup_hit_assumed) read_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_read_only) report_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_only) candidate_only=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_candidate_only) failure_reasons=$proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreviewFailures auto_apply=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_ndkv_write_allowed)"
+    $proposalMemoryApprovalTokenIntakeFailures = @($reportStatus.self_improve_proposal_memory_approval_token_intake_failure_reasons | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
+    Write-Host "report_self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1: source=$($reportStatus.self_improve_proposal_memory_approval_token_intake_source) targets=$($reportStatus.self_improve_proposal_memory_approval_token_intake_target_count) review_packet_items=$($reportStatus.self_improve_proposal_memory_approval_token_intake_review_packet_item_count) useful_reflections=$($reportStatus.self_improve_proposal_memory_approval_token_intake_useful_reflection_item_count) intake_items=$($reportStatus.self_improve_proposal_memory_approval_token_intake_item_count) ready=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ready_count) pending_operator_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_pending_operator_token_count) blocked=$($reportStatus.self_improve_proposal_memory_approval_token_intake_blocked_count) approval_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_approval_token_present_count) rejection_tokens=$($reportStatus.self_improve_proposal_memory_approval_token_intake_rejection_token_present_count) first_item=$($reportStatus.self_improve_proposal_memory_approval_token_intake_first_item) approval_token_intake_ready=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ready) explicit_operator_approval_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_explicit_operator_approval_required) validation_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_validation_required) rollback_required=$($reportStatus.self_improve_proposal_memory_approval_token_intake_rollback_required) commit_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_commit_allowed) admission_write_authorized=$($reportStatus.self_improve_proposal_memory_approval_token_intake_admission_write_authorized) failure_reasons=$proposalMemoryApprovalTokenIntakeFailures auto_apply=$($reportStatus.self_improve_proposal_memory_approval_token_intake_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_approval_token_intake_ndkv_write_allowed)"
 }
 Write-Host "next_round_decision: schema=$($nextRoundDecision.schema) display_state=$($nextRoundDecision.display_state) safe_to_wait_current_round_active=$($nextRoundDecision.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecision.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecision.operator_attention_blocked) reason=$($nextRoundDecision.reason_code) read_only=$($nextRoundDecision.read_only) report_only=$($nextRoundDecision.report_only) side_effects=$($nextRoundDecision.side_effects)"
 Write-Host "next_round_decision_report_v1: schema=$($nextRoundDecisionReportV1.schema) display_state=$($nextRoundDecisionReportV1.display_state) safe_to_wait_current_round_active=$($nextRoundDecisionReportV1.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecisionReportV1.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecisionReportV1.operator_attention_blocked) reason=$($nextRoundDecisionReportV1.reason_code) read_only=$($nextRoundDecisionReportV1.read_only) report_only=$($nextRoundDecisionReportV1.report_only) side_effects=$($nextRoundDecisionReportV1.side_effects)"

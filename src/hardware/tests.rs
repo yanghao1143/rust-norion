@@ -358,6 +358,149 @@ fn every_supported_device_profile_has_a_plan() {
 }
 
 #[test]
+fn runtime_device_capability_catalog_covers_common_backends() {
+    let catalog = runtime_device_capability_catalog();
+
+    assert!(
+        catalog
+            .iter()
+            .any(|capability| capability.device == DeviceClass::CpuOnly
+                && capability.backend_family == "cpu")
+    );
+    assert!(
+        catalog
+            .iter()
+            .any(|capability| capability.backend_family.contains("cuda"))
+    );
+    assert!(
+        catalog
+            .iter()
+            .any(|capability| capability.backend_family.contains("directml"))
+    );
+    assert!(
+        catalog
+            .iter()
+            .any(|capability| capability.backend_family.contains("metal"))
+    );
+    assert!(
+        catalog
+            .iter()
+            .any(|capability| capability.backend_family.contains("vulkan"))
+    );
+}
+
+#[test]
+fn runtime_budget_no_device_fails_closed_to_cpu_stub() {
+    let plan = HardwareAllocator::new().plan(
+        HardwareSnapshot::default(),
+        TaskProfile::General,
+        2048,
+        HierarchyWeights::default(),
+    );
+    let budget = &plan.runtime_budget;
+
+    assert_eq!(budget.requested_device, DeviceClass::Auto);
+    assert_eq!(budget.selected_device, DeviceClass::CpuOnly);
+    assert_eq!(budget.selected_adapter, RuntimeAdapterHint::PortableRust);
+    assert_eq!(
+        budget.quantization_profile,
+        RuntimeQuantizationProfile::CpuStub
+    );
+    assert_eq!(
+        budget.fallback_reason,
+        RuntimeBudgetFallbackReason::AutoDeviceCpuStub
+    );
+    assert!(budget.fail_closed_cpu_stub);
+    assert!(budget.read_only);
+    assert!(!budget.write_allowed);
+    assert!(!budget.applied);
+    assert_eq!(
+        budget.total_required_bytes,
+        budget
+            .model_weight_bytes
+            .saturating_add(budget.kv_cache_bytes)
+            .saturating_add(budget.gene_segment_cache_bytes)
+            .saturating_add(budget.routing_reflection_overhead_bytes)
+    );
+}
+
+#[test]
+fn runtime_budget_low_memory_prefers_q4_without_state_writes() {
+    let allocator = HardwareAllocator::new();
+    let input = RuntimeBudgetInput::fixture(2048).with_available_memory_bytes(700 * 1024 * 1024);
+    let plan = allocator.plan_with_runtime_budget(
+        HardwareSnapshot::new(DeviceClass::Mobile, 0.20, 0.20, 0.80, 0.10),
+        TaskProfile::General,
+        2048,
+        HierarchyWeights::default(),
+        input,
+    );
+    let budget = &plan.runtime_budget;
+
+    assert_eq!(budget.requested_device, DeviceClass::Mobile);
+    assert_eq!(budget.selected_device, DeviceClass::Mobile);
+    assert_eq!(budget.quantization_profile, RuntimeQuantizationProfile::Q4);
+    assert_eq!(
+        budget.fallback_reason,
+        RuntimeBudgetFallbackReason::MemoryPressureQuantized
+    );
+    assert!(!budget.fail_closed_cpu_stub);
+    assert!(budget.memory_pressure <= 1.0);
+    assert!(budget.read_only);
+    assert!(!budget.write_allowed);
+    assert!(!budget.applied);
+}
+
+#[test]
+fn runtime_budget_preferred_accelerator_keeps_q8_path() {
+    let plan = HardwareAllocator::new().plan(
+        HardwareSnapshot::new(DeviceClass::DiscreteGpu, 0.12, 0.18, 0.20, 0.10),
+        TaskProfile::Coding,
+        4096,
+        HierarchyWeights::default(),
+    );
+    let budget = &plan.runtime_budget;
+
+    assert_eq!(budget.requested_device, DeviceClass::DiscreteGpu);
+    assert_eq!(budget.selected_device, DeviceClass::DiscreteGpu);
+    assert_eq!(budget.selected_adapter, RuntimeAdapterHint::Cuda);
+    assert_eq!(budget.quantization_profile, RuntimeQuantizationProfile::Q8);
+    assert_eq!(budget.fallback_reason, RuntimeBudgetFallbackReason::None);
+    assert!(!budget.fail_closed_cpu_stub);
+    assert!(budget.available_budget_bytes > budget.total_required_bytes);
+}
+
+#[test]
+fn runtime_budget_overflow_fails_closed_to_cpu_stub() {
+    let allocator = HardwareAllocator::new();
+    let input = RuntimeBudgetInput::fixture(4096)
+        .with_model_parameter_count(4_000_000_000)
+        .with_available_memory_bytes(128 * 1024 * 1024);
+    let plan = allocator.plan_with_runtime_budget(
+        HardwareSnapshot::new(DeviceClass::BrowserWasm, 0.20, 0.20, 0.70, 0.10),
+        TaskProfile::LongDocument,
+        4096,
+        HierarchyWeights::default(),
+        input,
+    );
+    let budget = &plan.runtime_budget;
+
+    assert_eq!(budget.selected_device, DeviceClass::CpuOnly);
+    assert_eq!(
+        budget.quantization_profile,
+        RuntimeQuantizationProfile::CpuStub
+    );
+    assert_eq!(
+        budget.fallback_reason,
+        RuntimeBudgetFallbackReason::BudgetExceededCpuStub
+    );
+    assert!(budget.fail_closed_cpu_stub);
+    assert!(budget.memory_pressure > 1.0);
+    assert!(!budget.write_allowed);
+    assert!(!budget.applied);
+}
+
+#[test]
 fn device_plan_gate_covers_all_explicit_profiles() {
     let report = DevicePlanGateReport::evaluate();
 

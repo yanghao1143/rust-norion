@@ -444,6 +444,30 @@ impl Args {
         if let Some(value) = self.benchmark_max_memory_governance_failures {
             gate.max_memory_governance_failures = Some(value);
         }
+        if let Some(value) = self.benchmark_min_reasoning_genome_expression_cases {
+            gate.min_reasoning_genome_expression_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_reasoning_genome_expression_device_profiles {
+            gate.min_reasoning_genome_expression_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_reasoning_genome_splice_cases {
+            gate.min_reasoning_genome_splice_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_reasoning_genome_splice_device_profiles {
+            gate.min_reasoning_genome_splice_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_gene_scissors_proposal_cases {
+            gate.min_gene_scissors_proposal_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_gene_scissors_proposal_device_profiles {
+            gate.min_gene_scissors_proposal_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_reasoning_genome_repair_payloads {
+            gate.min_reasoning_genome_repair_payloads = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_reasoning_genome_regeneration_payloads {
+            gate.min_reasoning_genome_regeneration_payloads = Some(value);
+        }
         if let Some(value) = self.benchmark_min_memory_governance_cases {
             gate.min_memory_governance_cases = Some(value);
         }

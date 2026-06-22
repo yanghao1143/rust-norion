@@ -1,8 +1,10 @@
 use super::super::{
-    BenchmarkEmbeddingEvidence, BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence,
-    BenchmarkReflectionEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
+    BenchmarkEmbeddingEvidence, BenchmarkGenomeEvidence, BenchmarkImprovementCorpusEvidence,
+    BenchmarkLiveEvolutionEvidence, BenchmarkMemoryGovernanceEvidence, BenchmarkReflectionEvidence,
+    BenchmarkRuntimeDeviceExecutionEvidence,
 };
 use super::BenchmarkSummary;
+use crate::improvement_corpus::ImprovementCorpusReport;
 
 impl BenchmarkSummary {
     pub fn reflection_evidence(&self) -> BenchmarkReflectionEvidence {
@@ -11,6 +13,87 @@ impl BenchmarkSummary {
 
     pub fn live_evolution_evidence(&self) -> BenchmarkLiveEvolutionEvidence {
         self.live_evolution_evidence.clone()
+    }
+
+    pub fn genome_evidence(&self) -> BenchmarkGenomeEvidence {
+        self.genome_evidence.clone()
+    }
+
+    pub fn record_improvement_corpus_report(&mut self, report: &ImprovementCorpusReport) {
+        self.improvement_corpus_evidence.record_report(report);
+    }
+
+    pub fn improvement_corpus_evidence(&self) -> BenchmarkImprovementCorpusEvidence {
+        self.improvement_corpus_evidence.clone()
+    }
+
+    pub fn improvement_corpus_reports(&self) -> usize {
+        self.improvement_corpus_evidence.reports
+    }
+
+    pub fn improvement_corpus_episodes(&self) -> usize {
+        self.improvement_corpus_evidence.episodes
+    }
+
+    pub fn improvement_corpus_active_adaptation(&self) -> usize {
+        self.improvement_corpus_evidence.active_adaptation
+    }
+
+    pub fn improvement_corpus_compiler_passed(&self) -> u64 {
+        self.improvement_corpus_evidence.compiler_passed
+    }
+
+    pub fn improvement_corpus_test_passed(&self) -> u64 {
+        self.improvement_corpus_evidence.test_passed
+    }
+
+    pub fn improvement_corpus_benchmark_passed(&self) -> u64 {
+        self.improvement_corpus_evidence.benchmark_passed
+    }
+
+    pub fn reasoning_genome_expression_cases(&self) -> usize {
+        self.genome_evidence.expression_cases
+    }
+
+    pub fn reasoning_genome_expression_device_profiles(&self) -> usize {
+        self.genome_evidence.expression_device_profiles()
+    }
+
+    pub fn reasoning_genome_splice_cases(&self) -> usize {
+        self.genome_evidence.splice_cases
+    }
+
+    pub fn reasoning_genome_splice_device_profiles(&self) -> usize {
+        self.genome_evidence.splice_device_profiles()
+    }
+
+    pub fn gene_scissors_proposal_cases(&self) -> usize {
+        self.genome_evidence.gene_scissors_proposal_cases
+    }
+
+    pub fn gene_scissors_proposal_device_profiles(&self) -> usize {
+        self.genome_evidence
+            .gene_scissors_proposal_device_profiles()
+    }
+
+    pub fn total_reasoning_genome_repair_payloads(&self) -> usize {
+        self.genome_evidence.total_repair_payloads
+    }
+
+    pub fn total_reasoning_genome_regeneration_payloads(&self) -> usize {
+        self.genome_evidence.total_regeneration_payloads
+    }
+
+    pub fn total_reasoning_genome_lifecycle_records(&self) -> usize {
+        self.genome_evidence.total_lifecycle_records
+    }
+
+    pub fn total_reasoning_genome_tombstone_candidates(&self) -> usize {
+        self.genome_evidence.total_lifecycle_tombstone_candidates
+    }
+
+    pub fn total_reasoning_genome_failures(&self) -> usize {
+        self.genome_evidence.failures.len()
     }
 
     pub fn memory_governance_evidence(&self) -> BenchmarkMemoryGovernanceEvidence {

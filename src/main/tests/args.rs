@@ -1,6 +1,66 @@
 use super::*;
 
 #[test]
+fn parses_reasoning_genome_benchmark_gate_flags() {
+    let args = Args::parse(vec![
+        "--benchmark-min-reasoning-genome-expression-cases".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-reasoning-genome-expression-device-profiles".to_owned(),
+        "3".to_owned(),
+        "--benchmark-min-reasoning-genome-splice-cases".to_owned(),
+        "4".to_owned(),
+        "--benchmark-min-reasoning-genome-splice-device-profiles".to_owned(),
+        "5".to_owned(),
+        "--benchmark-min-gene-scissors-proposal-cases".to_owned(),
+        "6".to_owned(),
+        "--benchmark-min-gene-scissors-proposal-device-profiles".to_owned(),
+        "7".to_owned(),
+        "--benchmark-min-reasoning-genome-repair-payloads".to_owned(),
+        "8".to_owned(),
+        "--benchmark-min-reasoning-genome-regeneration-payloads".to_owned(),
+        "9".to_owned(),
+    ]);
+
+    assert!(args.benchmark_gate_enabled);
+    assert!(args.benchmark_all_devices);
+    assert_eq!(
+        args.benchmark_min_reasoning_genome_expression_cases,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_reasoning_genome_expression_device_profiles,
+        Some(3)
+    );
+    assert_eq!(args.benchmark_min_reasoning_genome_splice_cases, Some(4));
+    assert_eq!(
+        args.benchmark_min_reasoning_genome_splice_device_profiles,
+        Some(5)
+    );
+    assert_eq!(args.benchmark_min_gene_scissors_proposal_cases, Some(6));
+    assert_eq!(
+        args.benchmark_min_gene_scissors_proposal_device_profiles,
+        Some(7)
+    );
+    assert_eq!(args.benchmark_min_reasoning_genome_repair_payloads, Some(8));
+    assert_eq!(
+        args.benchmark_min_reasoning_genome_regeneration_payloads,
+        Some(9)
+    );
+    let gate = args.benchmark_gate();
+    assert_eq!(gate.min_reasoning_genome_expression_cases, Some(2));
+    assert_eq!(
+        gate.min_reasoning_genome_expression_device_profiles,
+        Some(3)
+    );
+    assert_eq!(gate.min_reasoning_genome_splice_cases, Some(4));
+    assert_eq!(gate.min_reasoning_genome_splice_device_profiles, Some(5));
+    assert_eq!(gate.min_gene_scissors_proposal_cases, Some(6));
+    assert_eq!(gate.min_gene_scissors_proposal_device_profiles, Some(7));
+    assert_eq!(gate.min_reasoning_genome_repair_payloads, Some(8));
+    assert_eq!(gate.min_reasoning_genome_regeneration_payloads, Some(9));
+}
+
+#[test]
 fn parses_recursive_scheduler_flags() {
     let args = Args::parse(vec![
         "--profile".to_owned(),

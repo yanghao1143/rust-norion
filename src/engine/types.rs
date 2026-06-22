@@ -5,16 +5,18 @@ use crate::experience::{ExperienceMatch, ExperienceRuntimeTokenMetrics};
 use crate::experience_replay::ExperienceReplayReport;
 use crate::gist_memory::GistRecord;
 use crate::hardware::HardwarePlan;
-use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::hierarchy::{HierarchyWeights, TaskAwareHierarchyPlan, TaskProfile};
 use crate::infini_memory::InfiniMemoryPlan;
 use crate::kv_cache::{
     MemoryCompactionPolicy, MemoryCompactionReport, MemoryMatch, MemoryRetentionPolicy,
     MemoryUpdateReport, RetentionReport,
 };
+use crate::memory_admission::MemoryAdmissionPreview;
 use crate::process_reward::ProcessRewardReport;
+use crate::reasoning_genome::{DnaSplicePreview, GenomeExpression};
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{DraftToken, InferenceDraft, ReflectionReport, RuntimeDiagnostics};
-use crate::router::{GenerationMetrics, RouteBudget};
+use crate::router::{AdaptiveRoutingPlan, ComputeBudgetSchedule, GenerationMetrics, RouteBudget};
 use crate::runtime::RuntimeAdapterObservation;
 use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
@@ -228,6 +230,9 @@ pub struct InferenceOutcome {
     pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
     pub recursive_runtime_calls: usize,
     pub route_budget: RouteBudget,
+    pub adaptive_route_plan: AdaptiveRoutingPlan,
+    pub compute_budget_schedule: ComputeBudgetSchedule,
+    pub task_hierarchy_plan: TaskAwareHierarchyPlan,
     pub hierarchy: HierarchyWeights,
     pub tier_plan: TieredCachePlan,
     pub tier_migrations: Vec<TierMigration>,
@@ -246,8 +251,11 @@ pub struct InferenceOutcome {
     pub stored_gist_memory_ids: Vec<u64>,
     pub exported_runtime_kv_blocks: usize,
     pub stored_runtime_kv_memory_ids: Vec<u64>,
+    pub memory_admission: MemoryAdmissionPreview,
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
+    pub reasoning_genome: GenomeExpression,
+    pub reasoning_genome_splice: DnaSplicePreview,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub retention_report: RetentionReport,

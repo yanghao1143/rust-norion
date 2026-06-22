@@ -51,6 +51,29 @@ fn summary_records_case_outcomes() {
     assert_eq!(summary.len(), 1);
     assert!(summary.average_quality() > 0.0);
     assert!(summary.summary_line().contains("cases=1"));
+    assert_eq!(summary.adaptive_routing_cases(), 1);
+    assert!(summary.total_adaptive_routing_candidates() > 0);
+    assert_eq!(summary.total_adaptive_routing_failures(), 0);
+    assert_eq!(summary.task_hierarchy_cases(), 1);
+    assert!(summary.total_task_hierarchy_mutation_records() >= 1);
+    assert!(summary.total_task_hierarchy_compute_reduction_milli() > 0);
+    assert!(summary.summary_line().contains("adaptive_routing_cases=1"));
+    assert!(
+        summary
+            .summary_line()
+            .contains("adaptive_routing_candidates=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("adaptive_routing_saved_tokens=")
+    );
+    assert!(summary.summary_line().contains("task_hierarchy_cases=1"));
+    assert!(
+        summary
+            .summary_line()
+            .contains("task_hierarchy_compute_reduction_milli=")
+    );
     assert!(
         summary
             .summary_line()

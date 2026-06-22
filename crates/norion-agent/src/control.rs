@@ -804,6 +804,7 @@ mod tests {
                     submitted: vec![MemoryNote::new("agent_cycle", "remember clean loop")],
                     failures: Vec::new(),
                     blocked_reasons: Vec::new(),
+                    note_quality: None,
                 }),
             ),
             AgentReportGateDecision {

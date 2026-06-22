@@ -1,0 +1,43 @@
+name: Safety review
+description: Review privacy, writes, rollback, governance, or deployment risk.
+title: "[Safety] "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: surface
+    attributes:
+      label: Surface under review
+      description: Which module, issue, PR, trace, benchmark, or deployment path is being reviewed?
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks to evaluate
+      placeholder: |
+        - raw data exposure:
+        - durable write:
+        - rollback gap:
+        - license/provenance:
+        - commercial-use ambiguity:
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence to inspect
+      description: Commands, traces, docs, PRs, artifacts, or GitHub settings.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundaries
+      options:
+        - label: This review does not authorize writes or deployment by itself.
+          required: true
+        - label: Findings will avoid raw prompts, answers, secrets, or private payloads.
+          required: true
+        - label: Maintainer approval is still required before merge or promotion.
+          required: true

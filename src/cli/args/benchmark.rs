@@ -5,6 +5,7 @@ mod core;
 mod evolution_device_profiles;
 mod evolution_live;
 mod evolution_replay;
+mod genome;
 mod misc;
 mod reflection;
 mod runtime;
@@ -166,6 +167,14 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_runtime_kv_precision_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_max_runtime_device_execution_violations: &'a mut Option<usize>,
     pub(crate) benchmark_max_memory_governance_failures: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_expression_cases: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_expression_device_profiles: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_splice_cases: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_splice_device_profiles: &'a mut Option<usize>,
+    pub(crate) benchmark_min_gene_scissors_proposal_cases: &'a mut Option<usize>,
+    pub(crate) benchmark_min_gene_scissors_proposal_device_profiles: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_repair_payloads: &'a mut Option<usize>,
+    pub(crate) benchmark_min_reasoning_genome_regeneration_payloads: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_governance_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_governance_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_retention_activity_cases: &'a mut Option<usize>,
@@ -204,6 +213,9 @@ impl BenchmarkFlagParse<'_> {
             return Some(consumed);
         }
         if let Some(consumed) = runtime::parse(self, raw, index) {
+            return Some(consumed);
+        }
+        if let Some(consumed) = genome::parse(self, raw, index) {
             return Some(consumed);
         }
         if let Some(consumed) = reflection::parse(self, raw, index) {

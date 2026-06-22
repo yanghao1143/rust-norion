@@ -91,6 +91,11 @@ impl KvFusionCache {
                     continue;
                 };
 
+                let namespace = memory_namespace(&self.entries[primary_index].key).to_owned();
+                let primary_vector_dimensions = self.entries[primary_index].vector.len();
+                let removed_vector_dimensions = self.entries[removed_index].vector.len();
+                let primary_protected = protected.contains(&primary_id);
+                let removed_protected = protected.contains(&removed_id);
                 let duplicate = self.entries[removed_index].clone();
                 merge_memory_entry(
                     &mut self.entries[primary_index],
@@ -103,6 +108,11 @@ impl KvFusionCache {
                     primary_id,
                     removed_id,
                     similarity,
+                    namespace,
+                    primary_vector_dimensions,
+                    removed_vector_dimensions,
+                    primary_protected,
+                    removed_protected,
                 });
             }
         }

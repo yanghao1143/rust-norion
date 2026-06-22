@@ -37,6 +37,7 @@ pub fn trace_json_line_with_case(
         .iter()
         .map(|adapter| adapter.as_str().to_owned())
         .collect::<Vec<_>>();
+    let runtime_budget = runtime_budget_json(&outcome.hardware_plan);
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = AutoReplayTraceFields::from(outcome.auto_replay_report.as_ref());
     let best_adapter_observation = outcome.runtime_adapter_observations.first();
@@ -56,11 +57,39 @@ pub fn trace_json_line_with_case(
     let agent_team_messages = outcome.agent_team_plan.message_summaries(16);
     let agent_team_conflicts = outcome.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = outcome.agent_team_plan.evolution_summaries(8);
+    let agent_team_aggregation = &outcome.agent_team_plan.aggregation;
+    let reasoning_genome_mutation_intents = outcome.reasoning_genome.mutation_intents();
+    let reasoning_genome_proposal_ids = outcome.reasoning_genome.proposal_ids();
+    let reasoning_genome_lifecycle_actions = outcome.reasoning_genome.lifecycle_action_summaries();
+    let reasoning_genome_lifecycle_summaries = outcome.reasoning_genome.lifecycle_summaries(8);
+    let reasoning_genome_splice_finding_kinds = outcome.reasoning_genome_splice.finding_kinds();
+    let reasoning_genome_splice_mutation_intents =
+        outcome.reasoning_genome_splice.mutation_intents();
+    let reasoning_genome_splice_proposal_ids = outcome.reasoning_genome_splice.proposal_ids();
+    let reasoning_genome_splice_dispositions =
+        outcome.reasoning_genome_splice.disposition_summaries();
+    let reasoning_genome_splice_reason_summaries =
+        outcome.reasoning_genome_splice.segment_reason_summaries(8);
+    let reasoning_genome_splice_lifecycle_states =
+        outcome.reasoning_genome_splice.lifecycle_state_summaries();
+    let reasoning_genome_splice_lifecycle_summaries =
+        outcome.reasoning_genome_splice.lifecycle_summaries(8);
     let runtime_kv_stored = outcome.stored_runtime_kv_memory_ids.len();
     let runtime_kv_held = outcome
         .exported_runtime_kv_blocks
         .saturating_sub(runtime_kv_stored);
     let runtime_kv_hold = runtime_kv_held > 0;
+    let memory_admission_kinds = outcome.memory_admission.kind_summaries();
+    let memory_admission_decisions = outcome.memory_admission.decision_summaries();
+    let memory_admission_candidates = outcome.memory_admission.candidate_summaries();
+    let memory_admission_review_packets = outcome.memory_admission.review_packet_summaries();
+    let memory_admission_ledger_summaries = outcome.memory_admission.ledger_summaries();
+    let kv_fusion_score_summaries = outcome.memory_admission.fusion_score_summaries(12);
+    let adaptive_route_actions = outcome.adaptive_route_plan.action_summaries();
+    let adaptive_route_selected_routes = outcome.adaptive_route_plan.selected_route_summaries();
+    let adaptive_route_score_summaries = outcome.adaptive_route_plan.score_summaries(12);
+    let compute_budget_notes = outcome.compute_budget_schedule.notes.clone();
+    let task_hierarchy_mutation_summaries = outcome.task_hierarchy_plan.mutation_summaries(8);
 
     format!(
         "{{\
@@ -75,27 +104,33 @@ pub fn trace_json_line_with_case(
          \"reflection\":{{\"issues\":{},\"critical_issues\":{},\"max_severity\":\"{}\",\"issue_codes\":{},\"revision_actions\":{},\"revision_passes\":{}}},\
          \"router_threshold_after\":{:.6},\
          \"route\":{{\"threshold\":{:.6},\"attention_fraction\":{:.6},\"attention_tokens\":{},\"fast_tokens\":{}}},\
+         \"adaptive_routing\":{{\"candidates\":{},\"include\":{},\"compress\":{},\"defer\":{},\"skip\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"actions\":{},\"selected_routes\":{},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
+         \"compute_budget\":{{\"budget\":\"{}\",\"base_threshold\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"route_fanout_before\":{},\"route_fanout_after\":{},\"candidate_count\":{},\"selected_candidates\":{},\"anchor_count\":{},\"anchors_preserved\":{},\"anchors_preserved_count\":{},\"low_value_skipped\":{},\"kv_lookup_budget\":{},\"kv_lookups_planned\":{},\"kv_lookups_skipped\":{},\"reflection_pass_budget\":{},\"validation_run_budget\":{},\"validation_cost_tokens\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"estimated_budget_tokens\":{},\"estimated_spent_tokens\":{},\"wasted_compute_avoided_tokens\":{},\"fallback_triggered\":{},\"notes\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
+         \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
-         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
+         \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"runtime_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
          \"recursive\":{{\"required\":{},\"prompt_tokens\":{},\"native_window\":{},\"chunks\":{},\"merge_rounds\":{},\"execution_waves\":{},\"max_parallel_chunks\":{},\"chunk_tokens\":{},\"overlap_tokens\":{},\"runtime_calls\":{}}},\
          \"tiers\":{{\"hot_gpu\":{},\"warm_ram\":{},\"cold_disk\":{}}},\
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
-         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
+         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"aggregation\":{{\"lane_count\":{},\"message_summaries\":{},\"conflict_topics\":{},\"unresolved_conflict_topics\":{},\"budget_scope\":\"{}\",\"max_parallel_lanes\":{},\"attention_fraction\":{:.6},\"main_thread_writer\":\"{}\"}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
+         \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"repair_payloads\":{},\"regeneration_payloads\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"lifecycle_records\":{},\"lifecycle_actions\":{},\"lifecycle_summaries\":{},\"lifecycle_tombstone_candidates\":{},\"lifecycle_pending_validations\":{},\"lifecycle_source_evidence\":{},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_retained\":{},\"splice_skipped\":{},\"splice_quarantined\":{},\"splice_repair_candidates\":{},\"splice_dispositions\":{},\"splice_reason_summaries\":{},\"splice_lifecycle_records\":{},\"splice_lifecycle_states\":{},\"splice_lifecycle_summaries\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
          \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_online_reward_reinforcements\":{},\"live_evolution_online_reward_penalties\":{},\"live_evolution_online_reward_strength\":{:.6},\"live_evolution_online_reward_reinforcement_strength\":{:.6},\"live_evolution_online_reward_penalty_strength\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"memory_admission\":{{\"candidates\":{},\"ready\":{},\"blocked\":{},\"admitted\":{},\"hold\":{},\"reject\":{},\"quarantine\":{},\"kinds\":{},\"decisions\":{},\"candidate_summaries\":{},\"review_packets\":{},\"review_packet_summaries\":{},\"ledger_records\":{},\"ledger_authorized\":{},\"ledger_applied\":{},\"ledger_preview_only\":{},\"ledger_held\":{},\"ledger_rejected\":{},\"ledger_duplicate\":{},\"ledger_decayed\":{},\"ledger_merged\":{},\"ledger_rollback\":{},\"ledger_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
+         \"kv_fusion\":{{\"candidates\":{},\"fused\":{},\"compressed\":{},\"skipped\":{},\"held\":{},\"rejected\":{},\"approval_blocked\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_online_reward_strength\":{:.6},\"live_online_reward_reinforcement_strength\":{:.6},\"live_online_reward_penalty_strength\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
          \"evolution_ledger\":{{\"live_inference_runs\":{},\"cumulative_live_router_threshold_mutations\":{},\"cumulative_live_hierarchy_weight_mutations\":{},\"cumulative_live_router_threshold_delta\":{:.6},\"cumulative_live_hierarchy_weight_delta\":{:.6},\"cumulative_live_online_reward_feedbacks\":{},\"cumulative_live_online_reward_reinforcements\":{},\"cumulative_live_online_reward_penalties\":{},\"cumulative_live_online_reward_strength\":{:.6},\"cumulative_live_online_reward_reinforcement_strength\":{:.6},\"cumulative_live_online_reward_penalty_strength\":{:.6},\"cumulative_live_memory_reinforcements\":{},\"cumulative_live_memory_penalties\":{},\"cumulative_live_memory_updates\":{},\"cumulative_live_stored_memories\":{},\"cumulative_live_stored_gist_memories\":{},\"cumulative_live_stored_runtime_kv_memories\":{},\"cumulative_live_stored_memory_updates\":{},\"cumulative_live_reflection_issues\":{},\"cumulative_live_critical_reflection_issues\":{},\"cumulative_live_revision_actions\":{},\"replay_runs\":{},\"replay_items\":{},\"cumulative_router_threshold_mutations\":{},\"cumulative_hierarchy_weight_mutations\":{},\"cumulative_router_threshold_delta\":{:.6},\"cumulative_hierarchy_weight_delta\":{:.6},\"cumulative_memory_reinforcements\":{},\"cumulative_memory_penalties\":{},\"cumulative_memory_updates\":{},\"cumulative_replay_live_memory_feedback_items\":{},\"cumulative_replay_live_memory_feedback_updates\":{},\"cumulative_replay_live_memory_feedback_reinforcements\":{},\"cumulative_replay_live_memory_feedback_penalties\":{},\"cumulative_replay_live_memory_feedback_detail_items\":{},\"cumulative_replay_live_memory_feedback_applied\":{},\"cumulative_replay_live_memory_feedback_removed\":{},\"cumulative_replay_live_memory_feedback_missing\":{},\"cumulative_replay_live_memory_feedback_strength_delta\":{:.6},\"cumulative_replay_business_contract_items\":{},\"cumulative_replay_business_contract_passed\":{},\"cumulative_replay_business_contract_failed\":{},\"cumulative_replay_business_contract_raw_passed\":{},\"cumulative_replay_business_contract_raw_failed\":{},\"cumulative_replay_business_contract_response_normalized\":{},\"cumulative_replay_business_contract_sanitized\":{},\"cumulative_replay_business_contract_canonical_fallbacks\":{},\"cumulative_replay_live_evolution_items\":{},\"cumulative_replay_live_evolution_router_threshold_mutations\":{},\"cumulative_replay_live_evolution_hierarchy_weight_mutations\":{},\"cumulative_replay_live_evolution_router_threshold_delta\":{:.6},\"cumulative_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"cumulative_replay_live_evolution_online_reward_feedbacks\":{},\"cumulative_replay_live_evolution_online_reward_reinforcements\":{},\"cumulative_replay_live_evolution_online_reward_penalties\":{},\"cumulative_replay_live_evolution_online_reward_strength\":{:.6},\"cumulative_replay_live_evolution_online_reward_reinforcement_strength\":{:.6},\"cumulative_replay_live_evolution_online_reward_penalty_strength\":{:.6},\"cumulative_replay_live_evolution_memory_updates\":{},\"cumulative_replay_live_evolution_stored_memory_updates\":{},\"cumulative_replay_live_evolution_reflection_issues\":{},\"cumulative_replay_live_evolution_critical_reflection_issues\":{},\"cumulative_replay_live_evolution_revision_actions\":{},\"cumulative_recursive_replay_items\":{},\"cumulative_recursive_runtime_calls\":{},\"cumulative_drift_rollbacks\":{},\"cumulative_rollback_router_threshold_delta\":{:.6},\"cumulative_rollback_hierarchy_weight_delta\":{:.6}}},\
          \"retention\":{{\"stale_after\":{},\"decay_rate\":{:.6},\"remove_below_strength\":{:.6},\"remove_after_failures\":{},\"before\":{},\"after\":{},\"decayed\":{},\"removed\":{}}},\
-         \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{}}},\
+         \"memory_compaction\":{{\"similarity_threshold\":{:.6},\"max_candidates\":{},\"max_merges\":{},\"before\":{},\"after\":{},\"merged\":{},\"removed\":{},\"pairs\":{}}},\
          \"experience_id\":{}\
          }}",
         option_string_json(case_name),
@@ -116,6 +151,86 @@ pub fn trace_json_line_with_case(
         outcome.route_budget.attention_fraction,
         outcome.route_budget.attention_tokens,
         outcome.route_budget.fast_tokens,
+        outcome.adaptive_route_plan.candidates,
+        outcome.adaptive_route_plan.include,
+        outcome.adaptive_route_plan.compress,
+        outcome.adaptive_route_plan.defer,
+        outcome.adaptive_route_plan.skip,
+        outcome.adaptive_route_plan.input_tokens,
+        outcome.adaptive_route_plan.retained_tokens,
+        outcome.adaptive_route_plan.saved_tokens,
+        outcome.adaptive_route_plan.min_score,
+        outcome.adaptive_route_plan.max_score,
+        outcome.adaptive_route_plan.average_score,
+        string_array_json(&adaptive_route_actions),
+        string_array_json(&adaptive_route_selected_routes),
+        string_array_json(&adaptive_route_score_summaries),
+        outcome.adaptive_route_plan.read_only,
+        outcome.adaptive_route_plan.write_allowed,
+        outcome.adaptive_route_plan.applied,
+        outcome.compute_budget_schedule.compute_budget.as_str(),
+        outcome.compute_budget_schedule.base_threshold,
+        outcome.compute_budget_schedule.threshold_after,
+        outcome.compute_budget_schedule.threshold_delta,
+        outcome.compute_budget_schedule.route_fanout_before,
+        outcome.compute_budget_schedule.route_fanout_after,
+        outcome.compute_budget_schedule.candidate_count,
+        outcome.compute_budget_schedule.selected_candidates,
+        outcome.compute_budget_schedule.anchor_count,
+        outcome.compute_budget_schedule.anchors_preserved(),
+        outcome.compute_budget_schedule.anchors_preserved,
+        outcome.compute_budget_schedule.low_value_skipped,
+        outcome.compute_budget_schedule.kv_lookup_budget,
+        outcome.compute_budget_schedule.kv_lookups_planned,
+        outcome.compute_budget_schedule.kv_lookups_skipped,
+        outcome.compute_budget_schedule.reflection_pass_budget,
+        outcome.compute_budget_schedule.validation_run_budget,
+        outcome.compute_budget_schedule.validation_cost_tokens,
+        outcome.compute_budget_schedule.input_tokens,
+        outcome.compute_budget_schedule.retained_tokens,
+        outcome.compute_budget_schedule.saved_tokens,
+        outcome.compute_budget_schedule.estimated_budget_tokens,
+        outcome.compute_budget_schedule.estimated_spent_tokens,
+        outcome
+            .compute_budget_schedule
+            .wasted_compute_avoided_tokens,
+        outcome.compute_budget_schedule.fallback_triggered,
+        string_array_json(&compute_budget_notes),
+        outcome.compute_budget_schedule.read_only,
+        outcome.compute_budget_schedule.write_allowed,
+        outcome.compute_budget_schedule.applied,
+        outcome.task_hierarchy_plan.mode.as_str(),
+        outcome.task_hierarchy_plan.signals.language.as_str(),
+        outcome.task_hierarchy_plan.signals.coding_intent,
+        outcome.task_hierarchy_plan.signals.validation_mode,
+        outcome.task_hierarchy_plan.signals.memory_need,
+        outcome.task_hierarchy_plan.signals.compute_budget.as_str(),
+        outcome.task_hierarchy_plan.hierarchy_depth,
+        outcome.task_hierarchy_plan.route_fanout,
+        outcome.task_hierarchy_plan.route_pressure,
+        outcome.task_hierarchy_plan.compute_reduction,
+        outcome.task_hierarchy_plan.threshold_before,
+        outcome.task_hierarchy_plan.threshold_after,
+        outcome.task_hierarchy_plan.threshold_after - outcome.task_hierarchy_plan.threshold_before,
+        json_escape(&hierarchy_summary(
+            outcome.task_hierarchy_plan.hierarchy_before
+        )),
+        json_escape(&hierarchy_summary(
+            outcome.task_hierarchy_plan.hierarchy_after
+        )),
+        string_array_json(&outcome.task_hierarchy_plan.selected_lanes),
+        string_array_json(&outcome.task_hierarchy_plan.skipped_lanes),
+        string_array_json(&outcome.task_hierarchy_plan.memory_lanes),
+        string_array_json(&outcome.task_hierarchy_plan.skipped_memory_lanes),
+        outcome.task_hierarchy_plan.mutation_count(),
+        string_array_json(&task_hierarchy_mutation_summaries),
+        json_escape(&outcome.task_hierarchy_plan.rollback_anchor_id),
+        outcome.task_hierarchy_plan.mutation_history_replayable(),
+        false,
+        outcome.task_hierarchy_plan.runtime_applied,
+        outcome.task_hierarchy_plan.state_write_allowed,
+        outcome.task_hierarchy_plan.adaptive_state_write_allowed,
+        outcome.task_hierarchy_plan.ndkv_write_allowed,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
@@ -196,6 +311,7 @@ pub fn trace_json_line_with_case(
         option_u64_json(outcome.hardware_plan.latency_budget_ms),
         outcome.hardware_plan.local_kv_token_budget,
         outcome.hardware_plan.global_kv_token_budget,
+        runtime_budget,
         outcome.hardware_plan.execution.primary_lane.as_str(),
         outcome.hardware_plan.execution.fallback_lane.as_str(),
         outcome.hardware_plan.execution.memory_mode.as_str(),
@@ -253,9 +369,63 @@ pub fn trace_json_line_with_case(
         json_escape(&outcome.agent_team_plan.isolation.namespace),
         string_array_json(&outcome.agent_team_plan.isolation.allowed_outputs),
         string_array_json(&outcome.agent_team_plan.isolation.denied_capabilities),
+        agent_team_aggregation.lane_count,
+        string_array_json(&agent_team_aggregation.message_summaries),
+        string_array_json(&agent_team_aggregation.conflict_topics),
+        string_array_json(&agent_team_aggregation.unresolved_conflict_topics),
+        json_escape(&agent_team_aggregation.budget_scope),
+        agent_team_aggregation.max_parallel_lanes,
+        agent_team_aggregation.attention_fraction,
+        json_escape(&agent_team_aggregation.main_thread_writer),
         string_array_json(&agent_team_messages),
         string_array_json(&agent_team_conflicts),
         string_array_json(&agent_team_evolution),
+        json_escape(&outcome.reasoning_genome.genome_id),
+        json_escape(&outcome.reasoning_genome.stable_anchor_id),
+        outcome.reasoning_genome.expression_gene_count,
+        outcome.reasoning_genome.active_gene_count(),
+        outcome.reasoning_genome.aged_gene_count(),
+        outcome.reasoning_genome.malignant_gene_count(),
+        outcome.reasoning_genome.relabel_candidate_count(),
+        outcome.reasoning_genome.regeneration_candidate_count(),
+        outcome.reasoning_genome.scissors_proposal_count(),
+        outcome.reasoning_genome.repair_payload_count(),
+        outcome.reasoning_genome.regeneration_payload_count(),
+        string_array_json(&reasoning_genome_mutation_intents),
+        string_array_json(&reasoning_genome_proposal_ids),
+        outcome.reasoning_genome.read_only,
+        outcome.reasoning_genome.write_allowed,
+        outcome.reasoning_genome.applied,
+        outcome.reasoning_genome.youth_pressure,
+        outcome.reasoning_genome.lifecycle_record_count(),
+        string_array_json(&reasoning_genome_lifecycle_actions),
+        string_array_json(&reasoning_genome_lifecycle_summaries),
+        outcome.reasoning_genome.tombstone_candidate_count(),
+        outcome
+            .reasoning_genome
+            .pending_lifecycle_validation_count(),
+        outcome.reasoning_genome.lifecycle_source_evidence_count(),
+        outcome.reasoning_genome_splice.segments.len(),
+        outcome.reasoning_genome_splice.exon_count(),
+        outcome.reasoning_genome_splice.intron_count(),
+        outcome.reasoning_genome_splice.variant_count(),
+        outcome.reasoning_genome_splice.retained_count(),
+        outcome.reasoning_genome_splice.skipped_count(),
+        outcome.reasoning_genome_splice.quarantined_count(),
+        outcome.reasoning_genome_splice.repair_candidate_count(),
+        string_array_json(&reasoning_genome_splice_dispositions),
+        string_array_json(&reasoning_genome_splice_reason_summaries),
+        outcome.reasoning_genome_splice.lifecycle_record_count(),
+        string_array_json(&reasoning_genome_splice_lifecycle_states),
+        string_array_json(&reasoning_genome_splice_lifecycle_summaries),
+        outcome.reasoning_genome_splice.findings.len(),
+        string_array_json(&reasoning_genome_splice_finding_kinds),
+        string_array_json(&reasoning_genome_splice_mutation_intents),
+        outcome.reasoning_genome_splice.mutation_plans.len(),
+        string_array_json(&reasoning_genome_splice_proposal_ids),
+        outcome.reasoning_genome_splice.read_only,
+        outcome.reasoning_genome_splice.write_allowed,
+        outcome.reasoning_genome_splice.applied,
         outcome.stream_reports.len(),
         outcome.used_memories.len(),
         option_u64_json(outcome.stored_memory_id),
@@ -339,6 +509,49 @@ pub fn trace_json_line_with_case(
         auto_replay.recursive_runtime_calls,
         auto_replay.average_recursive_call_pressure,
         auto_replay.max_recursive_call_pressure,
+        outcome.memory_admission.candidate_count(),
+        outcome.memory_admission.ready_count(),
+        outcome.memory_admission.blocked_count(),
+        outcome.memory_admission.admitted_count(),
+        outcome.memory_admission.hold_count(),
+        outcome.memory_admission.reject_count(),
+        outcome.memory_admission.quarantine_count(),
+        string_array_json(&memory_admission_kinds),
+        string_array_json(&memory_admission_decisions),
+        string_array_json(&memory_admission_candidates),
+        outcome.memory_admission.review_packet_count(),
+        string_array_json(&memory_admission_review_packets),
+        outcome.memory_admission.ledger_record_count(),
+        outcome.memory_admission.ledger_authorized_count(),
+        outcome.memory_admission.ledger_applied_count(),
+        outcome.memory_admission.ledger_preview_only_count(),
+        outcome.memory_admission.ledger_held_count(),
+        outcome.memory_admission.ledger_rejected_count(),
+        outcome.memory_admission.ledger_duplicate_count(),
+        outcome.memory_admission.ledger_decayed_count(),
+        outcome.memory_admission.ledger_merged_count(),
+        outcome.memory_admission.ledger_rollback_count(),
+        string_array_json(&memory_admission_ledger_summaries),
+        outcome.memory_admission.read_only,
+        outcome.memory_admission.write_allowed,
+        outcome.memory_admission.applied,
+        outcome.memory_admission.fusion_plan.candidates,
+        outcome.memory_admission.fusion_plan.fused,
+        outcome.memory_admission.fusion_plan.compressed,
+        outcome.memory_admission.fusion_plan.skipped,
+        outcome.memory_admission.fusion_plan.held,
+        outcome.memory_admission.fusion_plan.rejected,
+        outcome.memory_admission.fusion_plan.approval_blocked,
+        outcome.memory_admission.fusion_plan.input_tokens,
+        outcome.memory_admission.fusion_plan.retained_tokens,
+        outcome.memory_admission.fusion_plan.saved_tokens,
+        outcome.memory_admission.fusion_plan.min_score,
+        outcome.memory_admission.fusion_plan.max_score,
+        outcome.memory_admission.fusion_plan.average_score,
+        string_array_json(&kv_fusion_score_summaries),
+        outcome.memory_admission.fusion_plan.read_only,
+        outcome.memory_admission.fusion_plan.write_allowed,
+        outcome.memory_admission.fusion_plan.applied,
         outcome.live_evolution.router_threshold_delta,
         outcome.live_evolution.hierarchy_weight_delta,
         outcome.live_evolution.online_reward_feedbacks,
@@ -491,6 +704,62 @@ pub fn trace_json_line_with_case(
         outcome.memory_compaction_report.after,
         outcome.memory_compaction_report.merged.len(),
         outcome.memory_compaction_report.removed.len(),
+        memory_compaction_pairs_json(&outcome.memory_compaction_report.merged),
         outcome.experience_id
+    )
+}
+
+fn memory_compaction_pairs_json(pairs: &[crate::kv_cache::MemoryCompactionMerge]) -> String {
+    let values = pairs
+        .iter()
+        .map(|pair| {
+            format!(
+                "{{\"primary_id\":{},\"removed_id\":{},\"similarity\":{:.6},\"namespace\":\"{}\",\"primary_vector_dimensions\":{},\"removed_vector_dimensions\":{},\"primary_protected\":{},\"removed_protected\":{}}}",
+                pair.primary_id,
+                pair.removed_id,
+                pair.similarity,
+                json_escape(&pair.namespace),
+                pair.primary_vector_dimensions,
+                pair.removed_vector_dimensions,
+                pair.primary_protected,
+                pair.removed_protected
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
+}
+
+fn runtime_budget_json(plan: &crate::hardware::HardwarePlan) -> String {
+    let budget = &plan.runtime_budget;
+    format!(
+        "{{\"requested_device\":\"{}\",\"selected_device\":\"{}\",\"selected_adapter\":\"{}\",\"backend_family\":\"{}\",\"quantization_profile\":\"{}\",\"weight_quantization_bits\":{},\"kv_cache_quantization_bits\":{},\"gene_cache_quantization_bits\":{},\"model_weight_bytes\":{},\"kv_cache_bytes\":{},\"gene_segment_cache_bytes\":{},\"routing_reflection_overhead_bytes\":{},\"total_required_bytes\":{},\"available_budget_bytes\":{},\"memory_pressure\":{:.6},\"fallback_reason\":\"{}\",\"fail_closed_cpu_stub\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
+        budget.requested_device.as_str(),
+        budget.selected_device.as_str(),
+        budget.selected_adapter.as_str(),
+        json_escape(budget.backend_family),
+        budget.quantization_profile.as_str(),
+        budget.weight_quantization_bits,
+        budget.kv_cache_quantization_bits,
+        budget.gene_cache_quantization_bits,
+        budget.model_weight_bytes,
+        budget.kv_cache_bytes,
+        budget.gene_segment_cache_bytes,
+        budget.routing_reflection_overhead_bytes,
+        budget.total_required_bytes,
+        budget.available_budget_bytes,
+        budget.memory_pressure,
+        budget.fallback_reason.as_str(),
+        budget.fail_closed_cpu_stub,
+        budget.read_only,
+        budget.write_allowed,
+        budget.applied
+    )
+}
+
+fn hierarchy_summary(weights: crate::hierarchy::HierarchyWeights) -> String {
+    format!(
+        "g:{:.3}|l:{:.3}|c:{:.3}",
+        weights.global, weights.local, weights.convolution
     )
 }

@@ -5,7 +5,8 @@ use crate::hierarchy::HierarchyWeights;
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
 use crate::reflection::{ReflectionIssue, ReflectionSeverity, RuntimeDiagnostics};
 use crate::router::RouteBudget;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -2944,6 +2945,41 @@ fn persistence_admission_guard_skips_cross_task_transcript_pollution() {
     assert_eq!(loaded.records()[0].id, clean_id);
     assert!(loaded.records()[0].lesson.contains("clean Rust range loop"));
     assert_eq!(loaded.hygiene_report(8).quarantine_candidate_count, 0);
+    cleanup(path);
+}
+
+#[test]
+fn read_only_load_missing_experience_does_not_create_state() {
+    let path = temp_path("experience-read-only-missing");
+
+    let loaded = ExperienceStore::load_from_disk_kv_read_only(&path).unwrap();
+
+    assert!(loaded.is_empty());
+    assert!(!path.exists());
+    cleanup(path);
+}
+
+#[test]
+fn read_only_load_preserves_partial_tail_record() {
+    let path = temp_path("experience-read-only-partial-tail");
+    let mut store = ExperienceStore::new();
+    let id = store.record(input("stable read only load", 0.82));
+    store.save_to_disk_kv(&path).unwrap();
+    let clean_len = fs::metadata(&path).unwrap().len();
+
+    {
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(b"NDK1").unwrap();
+        file.write_all(&[1]).unwrap();
+    }
+    let dirty_len = fs::metadata(&path).unwrap().len();
+
+    let loaded = ExperienceStore::load_from_disk_kv_read_only(&path).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded.records()[0].id, id);
+    assert_eq!(fs::metadata(&path).unwrap().len(), dirty_len);
+    assert!(dirty_len > clean_len);
     cleanup(path);
 }
 

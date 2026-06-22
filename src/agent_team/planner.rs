@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::experience::ExperienceMatch;
 use crate::hardware::HardwarePlan;
 use crate::hierarchy::TaskProfile;
@@ -8,7 +10,7 @@ use crate::toolsmith::ToolsmithPlan;
 
 use super::types::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
-    AgentNode, AgentRole, AgentTeamPlan,
+    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamPlan,
 };
 use super::util::{compact, contains_any, stable_hash};
 
@@ -89,6 +91,7 @@ impl AgentTeamPlanner {
                 namespace: format!("agent_team/{run_id}"),
                 ..AgentIsolationPolicy::default()
             },
+            aggregation: AgentTeamAggregation::default(),
             agents: default_agents(&run_id),
             messages: Vec::new(),
             conflicts: Vec::new(),
@@ -96,6 +99,7 @@ impl AgentTeamPlanner {
             notes: Vec::new(),
         };
         plan.agents.truncate(self.max_agents);
+        retain_active_agent_dependencies(&mut plan);
 
         push_message(
             &mut plan,
@@ -245,7 +249,9 @@ impl AgentTeamPlanner {
             input.hardware_plan.pressure,
             plan.collision_free()
         ));
+        retain_active_conflicts(&mut plan);
         plan.messages.truncate(self.max_messages);
+        plan.aggregation = aggregate_team_blackboard(&plan, input);
         plan
     }
 }
@@ -320,6 +326,10 @@ fn push_message(
     confidence: f32,
     evidence: Vec<String>,
 ) {
+    if !plan.has_role(role) {
+        return;
+    }
+
     let id = format!("{}-msg-{}", plan.run_id, plan.messages.len());
     plan.messages.push(AgentMessage {
         id,
@@ -330,4 +340,87 @@ fn push_message(
         confidence: confidence.clamp(0.0, 1.0),
         evidence,
     });
+}
+
+fn retain_active_agent_dependencies(plan: &mut AgentTeamPlan) {
+    let active_roles = plan
+        .agents
+        .iter()
+        .map(|agent| agent.role.as_str())
+        .collect::<Vec<_>>();
+    for agent in &mut plan.agents {
+        agent
+            .dependencies
+            .retain(|dependency| active_roles.iter().any(|role| role == dependency));
+    }
+}
+
+fn retain_active_conflicts(plan: &mut AgentTeamPlan) {
+    let active_roles = plan
+        .agents
+        .iter()
+        .map(|agent| agent.role)
+        .collect::<Vec<_>>();
+    plan.conflicts.retain(|conflict| {
+        conflict
+            .roles
+            .iter()
+            .all(|role| active_roles.iter().any(|active| active == role))
+    });
+}
+
+fn aggregate_team_blackboard(
+    plan: &AgentTeamPlan,
+    input: AgentTeamInput<'_>,
+) -> AgentTeamAggregation {
+    let lanes = plan
+        .messages
+        .iter()
+        .map(|message| message.lane.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let message_summaries = plan
+        .messages
+        .iter()
+        .map(AgentMessage::summary)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let conflict_topics = plan
+        .conflicts
+        .iter()
+        .map(|conflict| conflict.topic.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let unresolved_conflict_topics = plan
+        .conflicts
+        .iter()
+        .filter(|conflict| !conflict.resolved)
+        .map(|conflict| conflict.topic.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let active_agents = plan.active_agent_count();
+    let hardware_parallel = input.hardware_plan.execution.max_parallel_chunks.max(1);
+    let max_parallel_lanes = hardware_parallel.min(active_agents.max(1));
+    let budget_scope = if active_agents == 0 {
+        "disabled"
+    } else if max_parallel_lanes < active_agents {
+        "serialized_read_only_lanes_under_main_thread"
+    } else {
+        "parallel_read_only_lanes_under_main_thread"
+    };
+
+    AgentTeamAggregation {
+        lane_count: lanes.len(),
+        message_summaries,
+        conflict_topics,
+        unresolved_conflict_topics,
+        budget_scope: budget_scope.to_owned(),
+        max_parallel_lanes,
+        attention_fraction: input.route_budget.attention_fraction.clamp(0.0, 1.0),
+        main_thread_writer: "main_thread".to_owned(),
+    }
 }

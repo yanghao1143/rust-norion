@@ -96,30 +96,43 @@ impl KvFusionCache {
 
     pub fn load_from_disk_kv(path: impl AsRef<Path>) -> io::Result<Self> {
         let store = DiskKvStore::open(path)?;
-        let mut cache = Self::new();
-
-        for key in store.keys_with_prefix("memory/") {
-            let Some(value) = store.get(&key)? else {
-                continue;
-            };
-            let Ok(line) = String::from_utf8(value) else {
-                continue;
-            };
-            let Some(entry) = deserialize_entry(&line) else {
-                continue;
-            };
-            cache.next_id = cache.next_id.max(entry.id + 1);
-            cache.clock = cache.clock.max(entry.created_at).max(entry.last_access);
-            cache.entries.push(entry);
-        }
-
-        if let Some(value) = store.get("meta/next_id")?
-            && let Ok(next_id) = String::from_utf8_lossy(&value).parse::<u64>()
-        {
-            cache.next_id = cache.next_id.max(next_id);
-        }
-        cache.clock = cache.clock.saturating_add(1);
-
-        Ok(cache)
+        load_cache_from_store(&store)
     }
+
+    pub fn load_from_disk_kv_read_only_existing(
+        path: impl AsRef<Path>,
+    ) -> io::Result<Option<Self>> {
+        let Some(store) = DiskKvStore::open_read_only_existing(path)? else {
+            return Ok(None);
+        };
+        load_cache_from_store(&store).map(Some)
+    }
+}
+
+fn load_cache_from_store(store: &DiskKvStore) -> io::Result<KvFusionCache> {
+    let mut cache = KvFusionCache::new();
+
+    for key in store.keys_with_prefix("memory/") {
+        let Some(value) = store.get(&key)? else {
+            continue;
+        };
+        let Ok(line) = String::from_utf8(value) else {
+            continue;
+        };
+        let Some(entry) = deserialize_entry(&line) else {
+            continue;
+        };
+        cache.next_id = cache.next_id.max(entry.id + 1);
+        cache.clock = cache.clock.max(entry.created_at).max(entry.last_access);
+        cache.entries.push(entry);
+    }
+
+    if let Some(value) = store.get("meta/next_id")?
+        && let Ok(next_id) = String::from_utf8_lossy(&value).parse::<u64>()
+    {
+        cache.next_id = cache.next_id.max(next_id);
+    }
+    cache.clock = cache.clock.saturating_add(1);
+
+    Ok(cache)
 }

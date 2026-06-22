@@ -1,5 +1,48 @@
 use super::util::compact;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentTeamAggregation {
+    pub lane_count: usize,
+    pub message_summaries: Vec<String>,
+    pub conflict_topics: Vec<String>,
+    pub unresolved_conflict_topics: Vec<String>,
+    pub budget_scope: String,
+    pub max_parallel_lanes: usize,
+    pub attention_fraction: f32,
+    pub main_thread_writer: String,
+}
+
+impl Default for AgentTeamAggregation {
+    fn default() -> Self {
+        Self {
+            lane_count: 0,
+            message_summaries: Vec::new(),
+            conflict_topics: Vec::new(),
+            unresolved_conflict_topics: Vec::new(),
+            budget_scope: "disabled".to_owned(),
+            max_parallel_lanes: 0,
+            attention_fraction: 0.0,
+            main_thread_writer: "main_thread".to_owned(),
+        }
+    }
+}
+
+impl AgentTeamAggregation {
+    pub fn summary(&self) -> String {
+        format!(
+            "lanes={} summaries={} conflicts={} unresolved={} budget_scope={} max_parallel_lanes={} attention_fraction={:.3} writer={}",
+            self.lane_count,
+            self.message_summaries.len(),
+            self.conflict_topics.len(),
+            self.unresolved_conflict_topics.len(),
+            self.budget_scope,
+            self.max_parallel_lanes,
+            self.attention_fraction,
+            self.main_thread_writer
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AgentRole {
     Planner,
@@ -170,6 +213,7 @@ pub struct AgentTeamPlan {
     pub run_id: String,
     pub main_thread_goal: String,
     pub isolation: AgentIsolationPolicy,
+    pub aggregation: AgentTeamAggregation,
     pub agents: Vec<AgentNode>,
     pub messages: Vec<AgentMessage>,
     pub conflicts: Vec<AgentConflict>,
@@ -184,6 +228,7 @@ impl Default for AgentTeamPlan {
             run_id: "agent-team-disabled".to_owned(),
             main_thread_goal: String::new(),
             isolation: AgentIsolationPolicy::default(),
+            aggregation: AgentTeamAggregation::default(),
             agents: Vec::new(),
             messages: Vec::new(),
             conflicts: Vec::new(),
@@ -285,6 +330,13 @@ impl AgentTeamPlan {
                 .take(3)
                 .map(|signal| format!("agent_team:evolve:{}:{:.2}", signal.target, signal.score)),
         );
+        notes.push(format!(
+            "agent_team:aggregation:lanes={}:summaries={}:budget_scope={}:max_parallel_lanes={}",
+            self.aggregation.lane_count,
+            self.aggregation.message_summaries.len(),
+            self.aggregation.budget_scope,
+            self.aggregation.max_parallel_lanes
+        ));
         notes
     }
 }

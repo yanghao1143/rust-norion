@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use super::format::{HEADER_LEN, OP_DELETE, OP_PUT, validate_key_value, write_record};
-use super::index::{RecordPointer, scan_index};
+use super::index::{RecordPointer, scan_index, scan_index_read_only};
 
 #[derive(Debug, Clone)]
 pub struct DiskKvStore {
     path: PathBuf,
     index: HashMap<String, RecordPointer>,
+    read_only: bool,
 }
 
 impl DiskKvStore {
@@ -27,7 +28,25 @@ impl DiskKvStore {
             .open(&path)?;
 
         let index = scan_index(&path)?;
-        Ok(Self { path, index })
+        Ok(Self {
+            path,
+            index,
+            read_only: false,
+        })
+    }
+
+    pub fn open_read_only_existing(path: impl AsRef<Path>) -> io::Result<Option<Self>> {
+        let path = path.as_ref().to_path_buf();
+        let index = match scan_index_read_only(&path) {
+            Ok(index) => index,
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        Ok(Some(Self {
+            path,
+            index,
+            read_only: true,
+        }))
     }
 
     pub fn path(&self) -> &Path {
@@ -64,6 +83,7 @@ impl DiskKvStore {
     }
 
     pub fn put(&mut self, key: impl AsRef<str>, value: impl AsRef<[u8]>) -> io::Result<()> {
+        self.ensure_writable()?;
         let key = key.as_ref();
         let value = value.as_ref();
         validate_key_value(key.as_bytes(), value)?;
@@ -100,6 +120,7 @@ impl DiskKvStore {
     }
 
     pub fn delete(&mut self, key: &str) -> io::Result<bool> {
+        self.ensure_writable()?;
         if !self.index.contains_key(key) {
             return Ok(false);
         }
@@ -116,6 +137,7 @@ impl DiskKvStore {
     }
 
     pub fn compact(&mut self) -> io::Result<()> {
+        self.ensure_writable()?;
         let mut entries = Vec::new();
         for key in self.keys() {
             if let Some(value) = self.get(&key)? {
@@ -142,6 +164,16 @@ impl DiskKvStore {
         }
         fs::rename(&compact_path, &self.path)?;
         self.index = scan_index(&self.path)?;
+        Ok(())
+    }
+
+    fn ensure_writable(&self) -> io::Result<()> {
+        if self.read_only {
+            return Err(io::Error::new(
+                ErrorKind::PermissionDenied,
+                "disk kv store was opened read-only",
+            ));
+        }
         Ok(())
     }
 }

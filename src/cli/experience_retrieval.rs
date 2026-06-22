@@ -8,7 +8,7 @@ use crate::Args;
 pub(crate) fn run_experience_retrieval_report(
     args: &Args,
 ) -> io::Result<ExperienceRetrievalReport> {
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
     Ok(store.retrieval_report(&args.prompt, args.profile, args.experience_retrieval_limit))
 }
 
@@ -110,7 +110,10 @@ fn option_usize_text(value: Option<usize>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Args;
     use rust_norion::TaskProfile;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn retrieval_report_lines_include_noise_counters() {
@@ -138,5 +141,34 @@ mod tests {
         assert!(summary.contains("suppressed_prompt_index_candidates=2"));
         assert!(summary.contains("max_retrieval_noise_penalty=0.440000"));
         assert!(lines.contains(&"matches: none".to_owned()));
+    }
+
+    #[test]
+    fn retrieval_report_missing_experience_is_read_only() {
+        let path = temp_path("retrieval-missing-read-only");
+        let args = Args::parse(vec![
+            "--experience".to_owned(),
+            path.display().to_string(),
+            "--experience-retrieval".to_owned(),
+            "missing experience retrieval prompt".to_owned(),
+        ]);
+
+        let report = run_experience_retrieval_report(&args).unwrap();
+
+        assert_eq!(report.total_records, 0);
+        assert!(report.matches.is_empty());
+        assert!(!path.exists());
+        let _ = fs::remove_file(path);
+    }
+
+    fn temp_path(label: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "rust-norion-{label}-{}-{nanos}.ndkv",
+            std::process::id()
+        ))
     }
 }

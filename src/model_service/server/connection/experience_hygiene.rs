@@ -31,7 +31,7 @@ pub(super) fn handle_experience_hygiene(
         return write_http_json(stream, 200, "OK", &body);
     }
 
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
     let report = store.hygiene_report(args.experience_hygiene_limit);
     let index_report = store.index_report(args.experience_hygiene_limit);
     let quarantine_plan = store.hygiene_quarantine_plan(args.experience_hygiene_limit);
@@ -56,7 +56,11 @@ pub(super) fn handle_experience_hygiene_quarantine(
         .limit
         .unwrap_or(args.experience_hygiene_limit)
         .max(1);
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = if request.apply {
+        ExperienceStore::load_from_disk_kv(&args.experience_path)?
+    } else {
+        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
+    };
     let (retained_store, quarantined_store, plan) = store.split_hygiene_quarantine(limit);
     let mut backup_path = None;
     let mut quarantine_path = None;

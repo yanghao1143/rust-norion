@@ -6301,6 +6301,7 @@ mod tests {
             submitted: vec![MemoryNote::new("agent_cycle", "remember clean handoff")],
             failures: Vec::new(),
             blocked_reasons: Vec::new(),
+            note_quality: None,
         };
 
         MemorySubmissionSummaryHistoryRecorder::new()
@@ -6402,6 +6403,7 @@ mod tests {
                 submitted: vec![note],
                 failures: Vec::new(),
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
 
@@ -6476,6 +6478,7 @@ mod tests {
                     reason: "store unavailable".to_owned(),
                 }],
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
 
@@ -6813,6 +6816,7 @@ mod tests {
                 submitted: vec![note],
                 failures: Vec::new(),
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
         let decision = AgentReportGate::new().evaluate(&record);
@@ -6861,6 +6865,7 @@ mod tests {
                 submitted: vec![clean_note],
                 failures: Vec::new(),
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
         let dirty_record = AgentCycleLedgerRecord::new(
@@ -6943,6 +6948,7 @@ mod tests {
                 submitted: vec![note],
                 failures: Vec::new(),
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
         let decision = AgentReportGate::new().evaluate(&record);
@@ -7082,6 +7088,7 @@ mod tests {
                 submitted: vec![note],
                 failures: Vec::new(),
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
         let decision = AgentReportGate::new().evaluate(&record);
@@ -7335,6 +7342,7 @@ mod tests {
                 submitted: vec![note],
                 failures: Vec::new(),
                 blocked_reasons: Vec::new(),
+                note_quality: None,
             }),
         );
         let decision = AgentReportGate::new().evaluate(&record);

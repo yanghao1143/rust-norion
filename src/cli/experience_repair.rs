@@ -15,7 +15,11 @@ pub(crate) struct ExperienceRepairCommandReport {
 }
 
 pub(crate) fn run_experience_repair(args: &Args) -> io::Result<ExperienceRepairCommandReport> {
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = if args.experience_repair_apply {
+        ExperienceStore::load_from_disk_kv(&args.experience_path)?
+    } else {
+        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
+    };
     let (repaired_store, plan) = store.repaired_legacy_metadata_store(args.experience_repair_limit);
     let mut report = ExperienceRepairCommandReport {
         plan,

@@ -1,4 +1,6 @@
-use super::super::super::fields::{extract_json_f32_field, extract_json_usize_field};
+use super::super::super::fields::{
+    extract_json_f32_field, extract_json_usize_field, json_object_after_field,
+};
 
 pub(super) struct AutoReplayTrace {
     pub(super) applied: usize,
@@ -24,26 +26,32 @@ pub(super) struct AutoReplayTrace {
 
 impl AutoReplayTrace {
     pub(super) fn from_line(line: &str) -> Self {
+        let auto_replay = json_object_after_field(line, "auto_replay").unwrap_or("");
+        let evolution_ledger = json_object_after_field(line, "evolution_ledger").unwrap_or("");
+
         Self {
-            applied: json_usize(line, "applied"),
-            router_updates: json_usize(line, "router_updates"),
-            hierarchy_updates: json_usize(line, "hierarchy_updates"),
-            router_threshold_mutations: json_usize(line, "router_threshold_mutations"),
-            hierarchy_weight_mutations: json_usize(line, "hierarchy_weight_mutations"),
-            router_threshold_delta: json_f32(line, "router_threshold_delta"),
-            hierarchy_weight_delta: json_f32(line, "hierarchy_weight_delta"),
-            reinforced: json_usize(line, "reinforced"),
-            penalized: json_usize(line, "penalized"),
-            touched_memories: json_usize(line, "touched_memories"),
-            memory_reinforcements: json_usize(line, "memory_reinforcements"),
-            memory_penalties: json_usize(line, "memory_penalties"),
-            live_memory_feedback: LiveMemoryFeedbackTrace::from_line(line, "live_memory_feedback"),
-            business_contract: BusinessContractTrace::from_line(line, "business_contract"),
-            live_evolution: LiveEvolutionTrace::from_line(line, "live_evolution"),
-            recursive_runtime: RecursiveRuntimeTrace::from_line(line),
-            replay_runs: json_usize(line, "replay_runs"),
-            replay_items: json_usize(line, "replay_items"),
-            cumulative: CumulativeAutoReplayTrace::from_line(line),
+            applied: json_usize(auto_replay, "applied"),
+            router_updates: json_usize(auto_replay, "router_updates"),
+            hierarchy_updates: json_usize(auto_replay, "hierarchy_updates"),
+            router_threshold_mutations: json_usize(auto_replay, "router_threshold_mutations"),
+            hierarchy_weight_mutations: json_usize(auto_replay, "hierarchy_weight_mutations"),
+            router_threshold_delta: json_f32(auto_replay, "router_threshold_delta"),
+            hierarchy_weight_delta: json_f32(auto_replay, "hierarchy_weight_delta"),
+            reinforced: json_usize(auto_replay, "reinforced"),
+            penalized: json_usize(auto_replay, "penalized"),
+            touched_memories: json_usize(auto_replay, "touched_memories"),
+            memory_reinforcements: json_usize(auto_replay, "memory_reinforcements"),
+            memory_penalties: json_usize(auto_replay, "memory_penalties"),
+            live_memory_feedback: LiveMemoryFeedbackTrace::from_scope(
+                auto_replay,
+                "live_memory_feedback",
+            ),
+            business_contract: BusinessContractTrace::from_scope(auto_replay, "business_contract"),
+            live_evolution: LiveEvolutionTrace::from_scope(auto_replay, "live_evolution"),
+            recursive_runtime: RecursiveRuntimeTrace::from_scope(auto_replay),
+            replay_runs: json_usize(evolution_ledger, "replay_runs"),
+            replay_items: json_usize(evolution_ledger, "replay_items"),
+            cumulative: CumulativeAutoReplayTrace::from_scope(evolution_ledger),
         }
     }
 }
@@ -61,17 +69,17 @@ pub(super) struct LiveMemoryFeedbackTrace {
 }
 
 impl LiveMemoryFeedbackTrace {
-    fn from_line(line: &str, prefix: &str) -> Self {
+    fn from_scope(scope: &str, prefix: &str) -> Self {
         Self {
-            items: json_usize(line, &format!("{prefix}_items")),
-            updates: json_usize(line, &format!("{prefix}_updates")),
-            reinforcements: json_usize(line, &format!("{prefix}_reinforcements")),
-            penalties: json_usize(line, &format!("{prefix}_penalties")),
-            detail_items: json_usize(line, &format!("{prefix}_detail_items")),
-            applied: json_usize(line, &format!("{prefix}_applied")),
-            removed: json_usize(line, &format!("{prefix}_removed")),
-            missing: json_usize(line, &format!("{prefix}_missing")),
-            strength_delta: json_f32(line, &format!("{prefix}_strength_delta")),
+            items: json_usize(scope, &format!("{prefix}_items")),
+            updates: json_usize(scope, &format!("{prefix}_updates")),
+            reinforcements: json_usize(scope, &format!("{prefix}_reinforcements")),
+            penalties: json_usize(scope, &format!("{prefix}_penalties")),
+            detail_items: json_usize(scope, &format!("{prefix}_detail_items")),
+            applied: json_usize(scope, &format!("{prefix}_applied")),
+            removed: json_usize(scope, &format!("{prefix}_removed")),
+            missing: json_usize(scope, &format!("{prefix}_missing")),
+            strength_delta: json_f32(scope, &format!("{prefix}_strength_delta")),
         }
     }
 }
@@ -88,16 +96,16 @@ pub(super) struct BusinessContractTrace {
 }
 
 impl BusinessContractTrace {
-    fn from_line(line: &str, prefix: &str) -> Self {
+    fn from_scope(scope: &str, prefix: &str) -> Self {
         Self {
-            items: json_usize(line, &format!("{prefix}_items")),
-            passed: json_usize(line, &format!("{prefix}_passed")),
-            failed: json_usize(line, &format!("{prefix}_failed")),
-            raw_passed: json_usize(line, &format!("{prefix}_raw_passed")),
-            raw_failed: json_usize(line, &format!("{prefix}_raw_failed")),
-            response_normalized: json_usize(line, &format!("{prefix}_response_normalized")),
-            sanitized: json_usize(line, &format!("{prefix}_sanitized")),
-            canonical_fallbacks: json_usize(line, &format!("{prefix}_canonical_fallbacks")),
+            items: json_usize(scope, &format!("{prefix}_items")),
+            passed: json_usize(scope, &format!("{prefix}_passed")),
+            failed: json_usize(scope, &format!("{prefix}_failed")),
+            raw_passed: json_usize(scope, &format!("{prefix}_raw_passed")),
+            raw_failed: json_usize(scope, &format!("{prefix}_raw_failed")),
+            response_normalized: json_usize(scope, &format!("{prefix}_response_normalized")),
+            sanitized: json_usize(scope, &format!("{prefix}_sanitized")),
+            canonical_fallbacks: json_usize(scope, &format!("{prefix}_canonical_fallbacks")),
         }
     }
 }
@@ -122,42 +130,48 @@ pub(super) struct LiveEvolutionTrace {
 }
 
 impl LiveEvolutionTrace {
-    fn from_line(line: &str, prefix: &str) -> Self {
+    fn from_scope(scope: &str, prefix: &str) -> Self {
         Self {
-            items: json_usize(line, &format!("{prefix}_items")),
+            items: json_usize(scope, &format!("{prefix}_items")),
             router_threshold_mutations: json_usize(
-                line,
+                scope,
                 &format!("{prefix}_router_threshold_mutations"),
             ),
             hierarchy_weight_mutations: json_usize(
-                line,
+                scope,
                 &format!("{prefix}_hierarchy_weight_mutations"),
             ),
-            router_threshold_delta: json_f32(line, &format!("{prefix}_router_threshold_delta")),
-            hierarchy_weight_delta: json_f32(line, &format!("{prefix}_hierarchy_weight_delta")),
-            online_reward_feedbacks: json_usize(line, &format!("{prefix}_online_reward_feedbacks")),
+            router_threshold_delta: json_f32(scope, &format!("{prefix}_router_threshold_delta")),
+            hierarchy_weight_delta: json_f32(scope, &format!("{prefix}_hierarchy_weight_delta")),
+            online_reward_feedbacks: json_usize(
+                scope,
+                &format!("{prefix}_online_reward_feedbacks"),
+            ),
             online_reward_reinforcements: json_usize(
-                line,
+                scope,
                 &format!("{prefix}_online_reward_reinforcements"),
             ),
-            online_reward_penalties: json_usize(line, &format!("{prefix}_online_reward_penalties")),
-            online_reward_strength: json_f32(line, &format!("{prefix}_online_reward_strength")),
+            online_reward_penalties: json_usize(
+                scope,
+                &format!("{prefix}_online_reward_penalties"),
+            ),
+            online_reward_strength: json_f32(scope, &format!("{prefix}_online_reward_strength")),
             online_reward_reinforcement_strength: json_f32(
-                line,
+                scope,
                 &format!("{prefix}_online_reward_reinforcement_strength"),
             ),
             online_reward_penalty_strength: json_f32(
-                line,
+                scope,
                 &format!("{prefix}_online_reward_penalty_strength"),
             ),
-            memory_updates: json_usize(line, &format!("{prefix}_memory_updates")),
-            stored_memory_updates: json_usize(line, &format!("{prefix}_stored_memory_updates")),
-            reflection_issues: json_usize(line, &format!("{prefix}_reflection_issues")),
+            memory_updates: json_usize(scope, &format!("{prefix}_memory_updates")),
+            stored_memory_updates: json_usize(scope, &format!("{prefix}_stored_memory_updates")),
+            reflection_issues: json_usize(scope, &format!("{prefix}_reflection_issues")),
             critical_reflection_issues: json_usize(
-                line,
+                scope,
                 &format!("{prefix}_critical_reflection_issues"),
             ),
-            revision_actions: json_usize(line, &format!("{prefix}_revision_actions")),
+            revision_actions: json_usize(scope, &format!("{prefix}_revision_actions")),
         }
     }
 }
@@ -170,12 +184,12 @@ pub(super) struct RecursiveRuntimeTrace {
 }
 
 impl RecursiveRuntimeTrace {
-    fn from_line(line: &str) -> Self {
+    fn from_scope(scope: &str) -> Self {
         Self {
-            items: json_usize(line, "recursive_runtime_items"),
-            calls: json_usize(line, "recursive_runtime_calls"),
-            average_call_pressure: json_f32(line, "avg_recursive_call_pressure"),
-            max_call_pressure: json_f32(line, "max_recursive_call_pressure"),
+            items: json_usize(scope, "recursive_runtime_items"),
+            calls: json_usize(scope, "recursive_runtime_calls"),
+            average_call_pressure: json_f32(scope, "avg_recursive_call_pressure"),
+            max_call_pressure: json_f32(scope, "max_recursive_call_pressure"),
         }
     }
 }
@@ -196,29 +210,29 @@ pub(super) struct CumulativeAutoReplayTrace {
 }
 
 impl CumulativeAutoReplayTrace {
-    fn from_line(line: &str) -> Self {
+    fn from_scope(scope: &str) -> Self {
         Self {
-            router_threshold_mutations: json_usize(line, "cumulative_router_threshold_mutations"),
-            hierarchy_weight_mutations: json_usize(line, "cumulative_hierarchy_weight_mutations"),
-            router_threshold_delta: json_f32(line, "cumulative_router_threshold_delta"),
-            hierarchy_weight_delta: json_f32(line, "cumulative_hierarchy_weight_delta"),
-            memory_reinforcements: json_usize(line, "cumulative_memory_reinforcements"),
-            memory_penalties: json_usize(line, "cumulative_memory_penalties"),
-            memory_updates: json_usize(line, "cumulative_memory_updates"),
-            replay_live_memory_feedback: LiveMemoryFeedbackTrace::from_line(
-                line,
+            router_threshold_mutations: json_usize(scope, "cumulative_router_threshold_mutations"),
+            hierarchy_weight_mutations: json_usize(scope, "cumulative_hierarchy_weight_mutations"),
+            router_threshold_delta: json_f32(scope, "cumulative_router_threshold_delta"),
+            hierarchy_weight_delta: json_f32(scope, "cumulative_hierarchy_weight_delta"),
+            memory_reinforcements: json_usize(scope, "cumulative_memory_reinforcements"),
+            memory_penalties: json_usize(scope, "cumulative_memory_penalties"),
+            memory_updates: json_usize(scope, "cumulative_memory_updates"),
+            replay_live_memory_feedback: LiveMemoryFeedbackTrace::from_scope(
+                scope,
                 "cumulative_replay_live_memory_feedback",
             ),
-            replay_business_contract: BusinessContractTrace::from_line(
-                line,
+            replay_business_contract: BusinessContractTrace::from_scope(
+                scope,
                 "cumulative_replay_business_contract",
             ),
-            replay_live_evolution: LiveEvolutionTrace::from_line(
-                line,
+            replay_live_evolution: LiveEvolutionTrace::from_scope(
+                scope,
                 "cumulative_replay_live_evolution",
             ),
-            recursive_replay_items: json_usize(line, "cumulative_recursive_replay_items"),
-            recursive_runtime_calls: json_usize(line, "cumulative_recursive_runtime_calls"),
+            recursive_replay_items: json_usize(scope, "cumulative_recursive_replay_items"),
+            recursive_runtime_calls: json_usize(scope, "cumulative_recursive_runtime_calls"),
         }
     }
 }

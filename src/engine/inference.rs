@@ -2,10 +2,25 @@ use crate::adaptive_state::LiveInferenceEvolution;
 use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
+use crate::gist_memory::GistRecord;
+use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
+use crate::kv_cache::MemoryMatch;
+use crate::memory_admission::{
+    MemoryAdmissionInput, MemoryAdmissionPreview, MemoryPrivacyClassification,
+    ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan, ReinforcedKvFusionPolicy,
+    ReinforcedKvFusionSource, fusion_candidate_from_admission,
+};
 use crate::process_reward::{ProcessRewardInput, RewardAction};
-use crate::recursive_scheduler::RecursiveScheduler;
+use crate::reasoning_genome::{
+    DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneSegment, GeneSegmentDisposition,
+    GeneSegmentSource, GenomeExpression, GenomeExpressionInput, ReasoningGenome,
+};
+use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::DraftToken;
-use crate::router::RoutingContext;
+use crate::router::{
+    AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
+    AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
+};
 use crate::runtime::RuntimeAdapterObservation;
 use crate::toolsmith::ToolsmithInput;
 
@@ -60,6 +75,16 @@ impl NoironEngine {
             self.scheduler_for_backend_window(backend.runtime_native_context_window());
         let recursive_schedule = recursive_scheduler.plan(&request.prompt);
         let base_hierarchy = self.hierarchy.adapt_to_profile(request.profile);
+        let task_hierarchy_plan = TaskAwareHierarchyPlanner::new().plan(TaskAwareHierarchyInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            max_tokens: request.max_tokens,
+            prompt_tokens: recursive_schedule.prompt_tokens,
+            used_memories: used_memories.len(),
+            threshold_before: self.router.threshold_for(request.profile),
+            hierarchy_before: base_hierarchy,
+        });
+        let base_hierarchy = task_hierarchy_plan.hierarchy_after;
         let hardware_plan = self.hardware_allocator.plan(
             self.hardware_snapshot,
             request.profile,
@@ -82,10 +107,13 @@ impl NoironEngine {
             latency_budget_ms: hardware_plan.latency_budget_ms,
             hardware_pressure: hardware_plan.pressure,
             compute_headroom: hardware_plan.compute_headroom(),
+            hierarchy: hardware_plan.hierarchy,
         };
-        let route_budget = self
-            .router
-            .budget_for_prompt_with_context(&request.prompt, routing_context);
+        let route_budget = self.router.budget_for_prompt_with_context_threshold(
+            &request.prompt,
+            routing_context,
+            task_hierarchy_plan.threshold_after,
+        );
         let hierarchy = hardware_plan.hierarchy;
         let transformer_plan =
             self.transformer_planner
@@ -309,6 +337,96 @@ impl NoironEngine {
             let feedback_note = process_reward_feedback_note(&process_reward, reward_metrics);
             process_reward.notes.push(feedback_note);
         }
+        let runtime_kv_stored_count = stored_runtime_kv_memory_ids.len();
+        let runtime_kv_hold =
+            exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
+        let best_adapter_observation = runtime_adapter_observations.first();
+        let runtime_adapter_selection_mismatch = match (
+            best_adapter_observation.map(|observation| observation.adapter.as_str()),
+            runtime_diagnostics.selected_adapter.as_deref(),
+        ) {
+            (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
+            _ => false,
+        };
+        let mut memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            report: &report,
+            process_reward: &process_reward,
+            drift_report: &drift_report,
+            stored_memory: stored_memory_id.is_some(),
+            gist_records: gist_records.len(),
+            stored_gist_memories: stored_gist_memory_ids.len(),
+            exported_runtime_kv_blocks,
+            stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            runtime_kv_hold,
+            used_memories: used_memories.len(),
+            memory_feedback_updates: memory_feedback.total_updates(),
+            runtime_adapter_observations: runtime_adapter_observations.len(),
+            runtime_adapter_selection_mismatch,
+            runtime_adapter_best_score: best_adapter_observation
+                .map(|observation| observation.score),
+            runtime_adapter_best_reward: best_adapter_observation
+                .map(|observation| observation.reward),
+            runtime_adapter_best_quality: best_adapter_observation
+                .map(|observation| observation.quality),
+            toolsmith_blueprints: toolsmith_plan.blueprint_count(),
+            toolsmith_ready: toolsmith_plan.ready_count(),
+            toolsmith_held: toolsmith_plan.held_count(),
+            toolsmith_rejected: toolsmith_plan.rejected_count(),
+            toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
+        });
+        let genome_input = GenomeExpressionInput {
+            profile: request.profile,
+            quality: report.quality,
+            process_reward: process_reward.total,
+            contradiction_count: report.contradictions.len(),
+            critical_reflection_issue_count: report.critical_issue_count(),
+            revision_action_count: report.revision_actions.len(),
+            used_memories: used_memories.len(),
+            memory_feedback_updates: memory_feedback.total_updates(),
+            route_attention_fraction: route_budget.attention_fraction,
+            agent_team_collision_free: agent_team_plan.collision_free(),
+            toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
+            drift_memory_write_allowed: drift_report.allow_memory_write,
+            drift_rollback: drift_report.rollback_adaptive,
+            runtime_kv_hold,
+        };
+        let reasoning_genome = ReasoningGenome::default_for_profile(request.profile)
+            .with_feedback_health(&genome_input)
+            .express(genome_input);
+        let reasoning_genome_splice = reasoning_genome_splice_preview(
+            request.profile,
+            &recursive_schedule,
+            &used_memories,
+            &gist_records,
+            exported_runtime_kv_blocks,
+            report.quality,
+            drift_report.rollback_adaptive,
+            drift_report.penalize_used_memory,
+            drift_report.allow_runtime_kv_write,
+            runtime_kv_hold,
+            reasoning_genome.stable_anchor_id.clone(),
+        );
+        memory_admission.fusion_plan = reinforced_kv_fusion_plan_from_runtime_evidence(
+            &memory_admission,
+            &reasoning_genome_splice,
+            process_reward.total,
+        );
+        let (adaptive_route_plan, compute_budget_schedule) =
+            adaptive_route_plan_from_runtime_evidence(
+                request.profile,
+                route_budget.threshold,
+                routing_context,
+                ComputeBudgetContext::from_task_plan(
+                    &task_hierarchy_plan,
+                    recursive_schedule.prompt_tokens,
+                )
+                .with_max_tokens(request.max_tokens),
+                &reasoning_genome,
+                &reasoning_genome_splice,
+                process_reward.total,
+            );
 
         let router_threshold_after = self.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
@@ -399,6 +517,9 @@ impl NoironEngine {
             runtime_adapter_observations,
             recursive_runtime_calls,
             route_budget,
+            adaptive_route_plan,
+            compute_budget_schedule,
+            task_hierarchy_plan,
             hierarchy,
             tier_plan,
             tier_migrations,
@@ -417,8 +538,11 @@ impl NoironEngine {
             stored_gist_memory_ids,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memory_ids,
+            memory_admission,
             drift_report,
             process_reward,
+            reasoning_genome,
+            reasoning_genome_splice,
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
             retention_report,
@@ -471,5 +595,409 @@ impl NoironEngine {
             self.recursive_scheduler.overlap_tokens(),
             self.recursive_scheduler.merge_fan_in(),
         )
+    }
+}
+
+fn reinforced_kv_fusion_plan_from_runtime_evidence(
+    admission: &MemoryAdmissionPreview,
+    splice: &DnaSplicePreview,
+    process_reward: f32,
+) -> ReinforcedKvFusionPlan {
+    let mut candidates = admission
+        .candidates
+        .iter()
+        .map(fusion_candidate_from_admission)
+        .collect::<Vec<_>>();
+
+    for (index, classified) in splice.segments.iter().enumerate() {
+        let segment = &classified.segment;
+        let source = fusion_source_from_gene_source(segment.source);
+        let reinforcement = fusion_reinforcement_from_disposition(
+            classified.disposition,
+            process_reward,
+            segment.fitness,
+        );
+        let contradictory = classified.disposition == GeneSegmentDisposition::Quarantined
+            || classified
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("contradiction"));
+        let required_anchor =
+            segment.source == GeneSegmentSource::Prompt && segment.start_token == 0;
+        candidates.push(
+            ReinforcedKvFusionCandidate::new(
+                format!("splice:{}:{index}", source.as_str()),
+                source,
+                segment.token_count().max(1),
+            )
+            .with_scores(
+                segment_trust_score(segment),
+                segment_recency(segment.kv_residency, segment.age),
+                segment.fitness,
+                fusion_task_relevance_from_disposition(classified.disposition, segment.source),
+                reinforcement,
+            )
+            .with_privacy(fusion_privacy_from_segment(segment))
+            .with_rollback_anchor(splice.stable_anchor_id.clone())
+            .with_source_hash(if segment.source_hash.is_empty() {
+                format!("segment:{}:{index}", source.as_str())
+            } else {
+                segment.source_hash.clone()
+            })
+            .with_contradictory(contradictory)
+            .with_required_anchor(required_anchor),
+        );
+    }
+
+    ReinforcedKvFusionPlan::from_candidates(ReinforcedKvFusionPolicy::default(), candidates)
+}
+
+fn fusion_source_from_gene_source(source: GeneSegmentSource) -> ReinforcedKvFusionSource {
+    match source {
+        GeneSegmentSource::Prompt | GeneSegmentSource::GenomeLedger => {
+            ReinforcedKvFusionSource::GenomeSegment
+        }
+        GeneSegmentSource::SemanticMemory => ReinforcedKvFusionSource::SemanticMemory,
+        GeneSegmentSource::GistMemory => ReinforcedKvFusionSource::GistMemory,
+        GeneSegmentSource::RuntimeKv => ReinforcedKvFusionSource::RuntimeKv,
+        GeneSegmentSource::ToolOutput => ReinforcedKvFusionSource::ColdEvidence,
+    }
+}
+
+fn fusion_reinforcement_from_disposition(
+    disposition: GeneSegmentDisposition,
+    process_reward: f32,
+    fitness: f32,
+) -> f32 {
+    let reward = process_reward.clamp(0.0, 1.0);
+    match disposition {
+        GeneSegmentDisposition::Retained => (reward * 0.60 + fitness * 0.40).clamp(0.0, 1.0),
+        GeneSegmentDisposition::RepairCandidate => 0.05,
+        GeneSegmentDisposition::Skipped => -0.25,
+        GeneSegmentDisposition::Quarantined => -0.85,
+    }
+}
+
+fn fusion_task_relevance_from_disposition(
+    disposition: GeneSegmentDisposition,
+    source: GeneSegmentSource,
+) -> f32 {
+    let source_relevance: f32 = match source {
+        GeneSegmentSource::Prompt => 0.96,
+        GeneSegmentSource::SemanticMemory => 0.82,
+        GeneSegmentSource::GistMemory => 0.78,
+        GeneSegmentSource::RuntimeKv => 0.84,
+        GeneSegmentSource::GenomeLedger => 0.86,
+        GeneSegmentSource::ToolOutput => 0.62,
+    };
+    let disposition_bonus: f32 = match disposition {
+        GeneSegmentDisposition::Retained => 0.08,
+        GeneSegmentDisposition::RepairCandidate => 0.02,
+        GeneSegmentDisposition::Skipped | GeneSegmentDisposition::Quarantined => 0.0,
+    };
+    (source_relevance + disposition_bonus).clamp(0.0, 1.0)
+}
+
+fn fusion_privacy_from_segment(segment: &GeneSegment) -> MemoryPrivacyClassification {
+    if segment.privacy_risk >= 0.50 {
+        MemoryPrivacyClassification::SensitiveBlocked
+    } else if segment.source == GeneSegmentSource::ToolOutput {
+        MemoryPrivacyClassification::PublicSafe
+    } else {
+        MemoryPrivacyClassification::DigestOnly
+    }
+}
+
+fn adaptive_route_plan_from_runtime_evidence(
+    profile: crate::hierarchy::TaskProfile,
+    threshold: f32,
+    routing_context: RoutingContext,
+    compute_budget: ComputeBudgetContext,
+    reasoning_genome: &GenomeExpression,
+    splice: &DnaSplicePreview,
+    process_reward: f32,
+) -> (AdaptiveRoutingPlan, ComputeBudgetSchedule) {
+    let mut candidates = Vec::new();
+
+    for (index, classified) in splice.segments.iter().enumerate() {
+        let segment = &classified.segment;
+        let source = adaptive_route_source_from_gene_source(segment.source);
+        let estimated_tokens = segment.token_count().max(1);
+        let trust = segment_trust_score(segment);
+        let components = AdaptiveRouteScoreComponents::new(
+            segment_task_intent(profile, segment.source, classified.disposition),
+            profile_language_mode(profile),
+            profile_code_mode(profile),
+            segment.fitness,
+            segment_recency(segment.kv_residency, segment.age),
+            trust,
+            segment_compute_cost(estimated_tokens, source),
+            (process_reward + segment.fitness * 0.5).clamp(0.0, 1.0),
+        );
+        let anchor_required =
+            segment.source == GeneSegmentSource::Prompt && segment.start_token == 0;
+        candidates.push(
+            AdaptiveRouteCandidate::new(
+                format!("segment:{}:{index}", source.as_str()),
+                source,
+                estimated_tokens,
+                components,
+            )
+            .with_anchor_required(anchor_required),
+        );
+    }
+
+    for (index, record) in reasoning_genome.lifecycle_records.iter().enumerate() {
+        let components = AdaptiveRouteScoreComponents::new(
+            0.72,
+            profile_language_mode(profile),
+            profile_code_mode(profile),
+            record.fitness_score,
+            (1.0 - record.decay_score).clamp(0.0, 1.0),
+            (1.0 - record.drift_score).clamp(0.0, 1.0),
+            0.05,
+            process_reward,
+        );
+        candidates.push(
+            AdaptiveRouteCandidate::new(
+                format!("gene:record:{index}"),
+                AdaptiveRouteSource::ReasoningGenome,
+                1,
+                components,
+            )
+            .with_anchor_required(record.action.as_str() == "keep"),
+        );
+    }
+
+    let budgeted = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        profile,
+        threshold,
+        routing_context,
+        compute_budget,
+        candidates,
+    );
+    (budgeted.routing_plan, budgeted.schedule)
+}
+
+fn adaptive_route_source_from_gene_source(source: GeneSegmentSource) -> AdaptiveRouteSource {
+    match source {
+        GeneSegmentSource::Prompt => AdaptiveRouteSource::PromptChunk,
+        GeneSegmentSource::SemanticMemory => AdaptiveRouteSource::SemanticMemory,
+        GeneSegmentSource::GistMemory => AdaptiveRouteSource::GistMemory,
+        GeneSegmentSource::RuntimeKv => AdaptiveRouteSource::RuntimeKv,
+        GeneSegmentSource::GenomeLedger => AdaptiveRouteSource::ReasoningGenome,
+        GeneSegmentSource::ToolOutput => AdaptiveRouteSource::ToolOutput,
+    }
+}
+
+fn segment_task_intent(
+    profile: crate::hierarchy::TaskProfile,
+    source: GeneSegmentSource,
+    disposition: crate::reasoning_genome::GeneSegmentDisposition,
+) -> f32 {
+    let source_score: f32 = match source {
+        GeneSegmentSource::Prompt => 0.92,
+        GeneSegmentSource::SemanticMemory => 0.78,
+        GeneSegmentSource::GistMemory => 0.74,
+        GeneSegmentSource::RuntimeKv => 0.66,
+        GeneSegmentSource::GenomeLedger => 0.82,
+        GeneSegmentSource::ToolOutput => 0.70,
+    };
+    let profile_bonus: f32 = match profile {
+        crate::hierarchy::TaskProfile::Coding => 0.05,
+        crate::hierarchy::TaskProfile::Writing => 0.04,
+        crate::hierarchy::TaskProfile::LongDocument => 0.08,
+        crate::hierarchy::TaskProfile::General => 0.0,
+    };
+    let disposition_bonus: f32 = match disposition {
+        crate::reasoning_genome::GeneSegmentDisposition::Retained => 0.06,
+        crate::reasoning_genome::GeneSegmentDisposition::RepairCandidate => 0.02,
+        crate::reasoning_genome::GeneSegmentDisposition::Skipped
+        | crate::reasoning_genome::GeneSegmentDisposition::Quarantined => 0.0,
+    };
+    (source_score + profile_bonus + disposition_bonus).clamp(0.0, 1.0)
+}
+
+fn profile_language_mode(profile: crate::hierarchy::TaskProfile) -> f32 {
+    match profile {
+        crate::hierarchy::TaskProfile::Writing | crate::hierarchy::TaskProfile::LongDocument => {
+            0.88
+        }
+        crate::hierarchy::TaskProfile::Coding => 0.54,
+        crate::hierarchy::TaskProfile::General => 0.62,
+    }
+}
+
+fn profile_code_mode(profile: crate::hierarchy::TaskProfile) -> f32 {
+    match profile {
+        crate::hierarchy::TaskProfile::Coding => 0.92,
+        crate::hierarchy::TaskProfile::LongDocument => 0.36,
+        crate::hierarchy::TaskProfile::General | crate::hierarchy::TaskProfile::Writing => 0.22,
+    }
+}
+
+fn segment_recency(kv_residency: GeneKvResidency, age: u32) -> f32 {
+    let residency = match kv_residency {
+        GeneKvResidency::Sink => 0.92,
+        GeneKvResidency::HotRecent => 0.86,
+        GeneKvResidency::PackedSynopsis => 0.70,
+        GeneKvResidency::ColdEvidence => 0.46,
+        GeneKvResidency::None => 0.28,
+    };
+    let age_discount = (age.min(12) as f32 / 12.0) * 0.30;
+    (residency - age_discount).clamp(0.0, 1.0)
+}
+
+fn segment_trust_score(segment: &GeneSegment) -> f32 {
+    let schema = if segment.schema_valid { 0.28 } else { 0.0 };
+    let kv_shape = if segment.kv_shape_valid { 0.22 } else { 0.0 };
+    let drift = (1.0 - segment.drift_score).clamp(0.0, 1.0) * 0.30;
+    let privacy = (1.0 - segment.privacy_risk).clamp(0.0, 1.0) * 0.20;
+    (schema + kv_shape + drift + privacy).clamp(0.0, 1.0)
+}
+
+fn segment_compute_cost(estimated_tokens: usize, source: AdaptiveRouteSource) -> f32 {
+    let token_cost = (estimated_tokens as f32 / 512.0).min(1.0);
+    let source_cost: f32 = match source {
+        AdaptiveRouteSource::PromptChunk => 0.18,
+        AdaptiveRouteSource::SemanticMemory => 0.32,
+        AdaptiveRouteSource::GistMemory => 0.20,
+        AdaptiveRouteSource::RuntimeKv => 0.62,
+        AdaptiveRouteSource::ReasoningGenome => 0.12,
+        AdaptiveRouteSource::ToolOutput => 0.40,
+    };
+    (token_cost * 0.70 + source_cost * 0.30).clamp(0.0, 1.0)
+}
+
+fn reasoning_genome_splice_preview(
+    profile: crate::hierarchy::TaskProfile,
+    recursive_schedule: &RecursiveSchedule,
+    used_memories: &[MemoryMatch],
+    gist_records: &[GistRecord],
+    exported_runtime_kv_blocks: usize,
+    quality: f32,
+    drift_rollback: bool,
+    penalize_used_memory: bool,
+    allow_runtime_kv_write: bool,
+    runtime_kv_hold: bool,
+    stable_anchor_id: String,
+) -> DnaSplicePreview {
+    let mut segments = Vec::new();
+    let prompt_source_hash = format!(
+        "prompt:{}:tokens={}",
+        profile_slug(profile),
+        recursive_schedule.prompt_tokens
+    );
+
+    for chunk in &recursive_schedule.chunks {
+        let drift_score = if drift_rollback { 0.72 } else { 0.04 };
+        let kv_residency = if chunk.index == 0 {
+            GeneKvResidency::Sink
+        } else {
+            GeneKvResidency::HotRecent
+        };
+        segments.push(
+            GeneSegment::new(
+                format!("segment:prompt:{}", chunk.index),
+                profile,
+                GeneSegmentSource::Prompt,
+                chunk.start_token,
+                chunk.end_token,
+            )
+            .with_source_hash(prompt_source_hash.clone())
+            .with_metadata(
+                format!("prompt chunk {}", chunk.index),
+                "bounded prompt context for splice preview",
+                format!("estimated_tokens={}", chunk.estimated_tokens),
+            )
+            .with_kv_residency(kv_residency)
+            .with_health(quality, drift_score, 0.0),
+        );
+    }
+
+    for memory in used_memories {
+        let drift_score = if penalize_used_memory { 0.42 } else { 0.05 };
+        segments.push(
+            GeneSegment::new(
+                format!("segment:memory:{}", memory.id),
+                profile,
+                GeneSegmentSource::SemanticMemory,
+                0,
+                1,
+            )
+            .with_source_hash(format!("memory:{}", memory.id))
+            .with_metadata(
+                format!("memory {}", memory.id),
+                "retrieved semantic memory evidence",
+                format!("similarity={:.3}", memory.similarity),
+            )
+            .with_kv_residency(GeneKvResidency::ColdEvidence)
+            .with_health(memory.strength, drift_score, 0.0),
+        );
+    }
+
+    for (index, gist) in gist_records.iter().enumerate() {
+        segments.push(
+            GeneSegment::new(
+                format!("segment:gist:{index}"),
+                profile,
+                GeneSegmentSource::GistMemory,
+                0,
+                gist.source_tokens.max(1),
+            )
+            .with_source_hash(format!(
+                "gist:{index}:{}:{}",
+                gist.level.as_str(),
+                gist.source_tokens
+            ))
+            .with_metadata(
+                format!("{} gist", gist.level.as_str()),
+                "candidate gist memory evidence",
+                format!("importance={:.3}", gist.importance),
+            )
+            .with_kv_residency(GeneKvResidency::PackedSynopsis)
+            .with_health(gist.importance, 0.04, 0.0),
+        );
+    }
+
+    if exported_runtime_kv_blocks > 0 {
+        let drift_score = if runtime_kv_hold || !allow_runtime_kv_write {
+            0.72
+        } else {
+            0.05
+        };
+        let privacy_risk = if !allow_runtime_kv_write { 0.24 } else { 0.0 };
+        segments.push(
+            GeneSegment::new(
+                "segment:runtime-kv",
+                profile,
+                GeneSegmentSource::RuntimeKv,
+                0,
+                exported_runtime_kv_blocks,
+            )
+            .with_source_hash(format!("runtime_kv:exported={exported_runtime_kv_blocks}"))
+            .with_metadata(
+                "runtime KV export",
+                "runtime-generated KV evidence awaiting admission gates",
+                format!("exported_blocks={exported_runtime_kv_blocks}"),
+            )
+            .with_kv_residency(if runtime_kv_hold {
+                GeneKvResidency::ColdEvidence
+            } else {
+                GeneKvResidency::HotRecent
+            })
+            .with_health((quality * 0.86).clamp(0.0, 1.0), drift_score, privacy_risk),
+        );
+    }
+
+    DnaSplicer::default().preview(profile, stable_anchor_id, segments)
+}
+
+fn profile_slug(profile: crate::hierarchy::TaskProfile) -> &'static str {
+    match profile {
+        crate::hierarchy::TaskProfile::General => "general",
+        crate::hierarchy::TaskProfile::Coding => "coding",
+        crate::hierarchy::TaskProfile::Writing => "writing",
+        crate::hierarchy::TaskProfile::LongDocument => "long_document",
     }
 }

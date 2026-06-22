@@ -5,12 +5,17 @@ mod cases;
 mod display;
 mod embedding_evidence;
 mod gate;
+mod genome_evidence;
+mod genome_rejuvenation;
+mod improvement_corpus_evidence;
 mod kv_quant;
 mod live_evidence;
 mod memory_evidence;
 mod reflection_evidence;
 mod roundtrip;
+mod routing_evidence;
 mod runtime_evidence;
+mod self_evolving_memory_evidence;
 mod summary;
 mod summary_gate;
 
@@ -19,6 +24,15 @@ use cases::long_context_benchmark_prompt;
 pub use cases::{BenchmarkCase, default_benchmark_cases};
 pub use embedding_evidence::BenchmarkEmbeddingEvidence;
 pub use gate::{BenchmarkGate, BenchmarkGateReport};
+pub use genome_evidence::BenchmarkGenomeEvidence;
+pub use genome_rejuvenation::{
+    GenomeRejuvenationCase, GenomeRejuvenationCaseResult, GenomeRejuvenationDecision,
+    GenomeRejuvenationDecisionKind, GenomeRejuvenationSimulationGate,
+    GenomeRejuvenationSimulationGateReport, GenomeRejuvenationSimulationReport,
+    GenomeRejuvenationSnapshot, default_genome_rejuvenation_cases,
+    run_default_genome_rejuvenation_simulation, run_genome_rejuvenation_simulation,
+};
+pub use improvement_corpus_evidence::BenchmarkImprovementCorpusEvidence;
 pub use kv_quant::{
     KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate, KvQuantBenchmarkGateReport,
     KvQuantBenchmarkSummary,
@@ -30,8 +44,16 @@ pub use roundtrip::{
     PersistentRoundtripDeviceReport, PersistentRoundtripInput, PersistentRoundtripMatrixReport,
     PersistentRoundtripReport,
 };
+pub use routing_evidence::BenchmarkRoutingEvidence;
 pub use runtime_evidence::{
     BenchmarkRuntimeArchitectureEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
+};
+pub use self_evolving_memory_evidence::{
+    SelfEvolvingMemoryAbCase, SelfEvolvingMemoryAbGate, SelfEvolvingMemoryAbGateReport,
+    SelfEvolvingMemoryAbHarness, SelfEvolvingMemoryAbRecommendation, SelfEvolvingMemoryAbReport,
+    SelfEvolvingMemoryAbResult, SelfEvolvingMemoryEvalLanguage, SelfEvolvingMemoryEvalMode,
+    SelfEvolvingMemoryValidationEvidence, default_self_evolving_memory_ab_cases,
+    run_default_self_evolving_memory_ab_suite, seeded_self_evolving_memory_ab_store,
 };
 pub use summary::{BenchmarkCaseResult, BenchmarkSummary};
 

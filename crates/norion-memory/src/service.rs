@@ -6216,16 +6216,22 @@ mod tests {
                 .iter()
                 .any(|code| code.starts_with("missing_clean_gist:"))
         );
-        assert!(dry_run.summary.detail_codes().contains(
-            &"read_only_detail:context:reject_scope:cross_task_scope:706f6c6c75746564".to_owned()
-        ));
+        assert!(
+            dry_run.summary.detail_codes().contains(
+                &"read_only_detail:semantic:skip:experience:cross_task_scope:706f6c6c75746564"
+                    .to_owned()
+            )
+        );
         assert!(
             detail_codes
                 .contains(&"context_rot:polluted:cross_task_transcript_pollution".to_owned())
         );
-        assert!(detail_codes.contains(
-            &"read_only_detail:context:reject_scope:cross_task_scope:706f6c6c75746564".to_owned()
-        ));
+        assert!(
+            detail_codes.contains(
+                &"read_only_detail:semantic:skip:experience:cross_task_scope:706f6c6c75746564"
+                    .to_owned()
+            )
+        );
         assert!(
             detail_codes.contains(
                 &"read_only_detail:governance:context_rot:polluted:cross_task_transcript_pollution"
@@ -6233,7 +6239,7 @@ mod tests {
             )
         );
         assert!(
-            evidence_summary.contains("read_only_detail:context:reject_scope:cross_task_scope")
+            evidence_summary.contains("read_only_detail:semantic:skip:experience:cross_task_scope")
         );
         assert!(
             evidence_text
@@ -7944,7 +7950,7 @@ mod tests {
 
         assert!(summary.ready);
         assert!(summary.requires_operator_review);
-        assert_eq!(summary.context_rejection_count, 1);
+        assert_eq!(summary.context_rejection_count, 0);
         assert_eq!(summary.projection_parity_mismatch_count, 4);
         assert!(
             summary
@@ -7960,18 +7966,11 @@ mod tests {
         assert!(
             summary
                 .detail_codes()
-                .contains(&"read_only:context:cross_task_scope".to_owned())
+                .contains(&"read_only:semantic:cross_task_scope".to_owned())
         );
-        assert!(
-            summary
-                .detail_codes()
-                .contains(&"migration_readiness_warning:context_rejections".to_owned())
-        );
-        assert!(
-            summary
-                .detail_codes()
-                .contains(&"migration_readiness_warning_detail:context_rejections=1".to_owned())
-        );
+        assert!(summary.detail_codes().contains(
+            &"read_only_detail:semantic:skip:experience:cross_task_scope:726f74".to_owned()
+        ));
         assert!(
             summary
                 .detail_codes()
@@ -7998,7 +7997,7 @@ mod tests {
         assert!(
             summary
                 .summary_line()
-                .contains("read_only:context:cross_task_scope")
+                .contains("read_only:semantic:cross_task_scope")
         );
         assert!(summary.summary_line().contains("parity_mismatches=4"));
     }
@@ -8171,7 +8170,8 @@ mod tests {
         ));
         assert!(text.contains("memory_read_only_plan adapter=clean_shadow"));
         assert!(text.contains("memory_read_only_plan adapter=clean_shadow write_mode=read_only review=false experiences=1 kv_shards=0"));
-        assert!(text.contains("memory_read_only_plan adapter=clean_shadow write_mode=read_only review=false experiences=1 kv_shards=0 noisy=0 context_rot=0 rebuild_required=false rebuild_reasons=0 quality_gate_ready=true quality_gate_blockers=0 quality_gate_warnings=0 repair_items=0 repair_skipped=0 index_ops=1 index_skipped=0 context_admit=1 context_summarize=0 context_reject=0 context_tokens=8 hot_gpu=0 warm_ram=0 cold_disk=0 kvswap_empty=true reason_codes=none"));
+        assert!(text.contains("memory_read_only_plan adapter=clean_shadow write_mode=read_only review=false experiences=1 kv_shards=0 noisy=0 context_rot=0 rebuild_required=false rebuild_reasons=0 quality_gate_ready=true quality_gate_blockers=0 quality_gate_warnings=0 repair_items=0 repair_skipped=0 index_ops=1 index_skipped=0 semantic_matches=1 semantic_skipped=0"));
+        assert!(text.contains("context_admit=1 context_summarize=0 context_reject=0 context_tokens=8 hot_gpu=0 warm_ram=0 cold_disk=0 kvswap_empty=true reason_codes=none"));
         assert!(text.contains("adapter_projection_audit shadow_ready=true isolated_write_ready=true experiences=1 kv_shards=0 issues=0 blockers=0 warnings=0 issue_codes=none"));
         assert!(text.contains(
             "memory_governance records=1 duplicate_groups=0 duplicate_records=0 noisy=0 context_rot=0 reason_codes=none detail_codes=none"
@@ -13190,7 +13190,7 @@ mod tests {
         assert!(!checklist.is_satisfied());
         assert!(blocker_codes.contains(&"projection_parity_clean"));
         assert!(blocker_codes.contains(&"migration_phase:isolated_write"));
-        assert!(warning_codes.contains(&"context_gate_clean"));
+        assert!(context_gate_item.satisfied);
         assert!(warning_codes.contains(&"context_rot_risks_clean"));
         assert!(warning_codes.contains(&"experience_index_quality_gate_ready"));
         assert!(warning_codes.contains(&"clean_gist_repair_clean"));
@@ -13205,7 +13205,7 @@ mod tests {
                 .any(|code| code == "migration_phase:isolated_write:blockers")
         );
         assert!(
-            warning_detail_codes
+            !warning_detail_codes
                 .iter()
                 .any(|code| code == "context_gate_clean:context_rejections")
         );

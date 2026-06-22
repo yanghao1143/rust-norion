@@ -20,6 +20,7 @@ pub mod placement;
 pub mod repair;
 pub mod replay;
 pub mod retention;
+pub mod reuse;
 pub mod runtime_projection;
 pub mod service;
 pub mod short_term;
@@ -64,9 +65,10 @@ pub use governance::{
     SelfImproveProposalSource, SelfImproveRoundIdEvidence, admit_self_improve_learning_candidate,
 };
 pub use index::{
-    DefaultMemoryIndexPlanner, ExperienceIndexFindingProjection, MemoryIndexDocument,
-    MemoryIndexOperation, MemoryIndexOperationKind, MemoryIndexPlan, MemoryIndexPlanner,
-    MemoryIndexSource,
+    DefaultMemoryIndexPlanner, DefaultMemorySemanticRetriever, ExperienceIndexFindingProjection,
+    MemoryIndexDocument, MemoryIndexOperation, MemoryIndexOperationKind, MemoryIndexPlan,
+    MemoryIndexPlanner, MemoryIndexSource, MemorySemanticMatch, MemorySemanticQuery,
+    MemorySemanticRetrievalPlan, MemorySemanticRetriever, MemorySemanticSkip, memory_index_digest,
 };
 pub use infini::{
     DefaultInfiniMemoryPlanner, InfiniMemoryActiveMatch, InfiniMemoryCounts, InfiniMemoryItem,
@@ -103,6 +105,10 @@ pub use retention::{
     DefaultMemoryRetentionPlanner, MemoryCompactionMerge, MemoryCompactionPlan,
     MemoryCompactionPlanner, MemoryCompactionPolicy, MemoryDecay, MemoryRetentionPlan,
     MemoryRetentionPlanner, MemoryRetentionPolicy, MemoryRetentionRemoval, RetentionMemoryEntry,
+};
+pub use reuse::{
+    DefaultMemoryReusePlanner, MemoryReuseDryRunSummary, MemoryReusePlan, MemoryReusePlanner,
+    MemoryReusePolicy,
 };
 pub use runtime_projection::{
     AdaptiveStateMemoryProjection, DefaultRuntimeStateProjector, MemoryProjectionAudit,
@@ -219,6 +225,7 @@ pub enum MemoryAdapterCapability {
     MemoryEvolution,
     StateInspection,
     InfiniMemoryPlanning,
+    SemanticRetrieval,
 }
 
 impl MemoryAdapterCapability {
@@ -241,6 +248,7 @@ impl MemoryAdapterCapability {
             Self::MemoryEvolution => "memory_evolution",
             Self::StateInspection => "state_inspection",
             Self::InfiniMemoryPlanning => "infini_memory_planning",
+            Self::SemanticRetrieval => "semantic_retrieval",
         }
     }
 }

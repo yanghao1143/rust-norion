@@ -3,14 +3,17 @@ use super::super::summary::{
     bullet_list, bullet_runtime_adapter_observations, bullet_runtime_kv_blocks,
     bullet_tool_blueprints,
 };
+use super::json_items::task_intent_summary;
 
 pub(in crate::runtime) fn format_runtime_prompt(request: &RuntimeRequest) -> String {
     let transformer_counts = request.transformer_plan.counts();
+    let task_intent = task_intent_summary(request);
     format!(
         "Noiron runtime request\n\
          runtime: {}\n\
          runtime_architecture: {}\n\
          profile: {:?}\n\
+         task_intent: language={} coding_language={} rust_coding={}\n\
          max_tokens: {}\n\
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
          hierarchy: global={:.3} local={:.3} convolution={:.3}\n\
@@ -31,6 +34,9 @@ pub(in crate::runtime) fn format_runtime_prompt(request: &RuntimeRequest) -> Str
         request.runtime_metadata.summary(),
         request.runtime_architecture.summary(),
         request.profile,
+        task_intent.language_mode,
+        task_intent.coding_language,
+        task_intent.rust_coding,
         request.max_tokens,
         request.route_budget.threshold,
         request.route_budget.attention_fraction,

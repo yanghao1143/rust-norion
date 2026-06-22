@@ -1,14 +1,15 @@
 use rust_norion::{
     DevicePlanGateReport, HeuristicBackend, KvQuantBenchmarkSummary, LocalTransformerRuntime,
     NoironEngine, ProductionKernelConformanceGate, RuntimeBackend, RuntimeManifestDeviceGateReport,
-    evaluate_trace_schema_jsonl,
+    append_self_evolution_admission_trace_jsonl, evaluate_trace_schema_jsonl,
 };
 
 use crate::cli::args::Args;
 use crate::cli::benchmark::{
-    print_benchmark_summary, print_production_kernel_conformance_matrix_report,
-    print_production_kernel_conformance_report, run_benchmark, run_benchmark_for_args,
-    run_production_benchmark_all_devices, run_production_kernel_conformance_all_devices,
+    benchmark_self_evolution_admission_report, print_benchmark_summary,
+    print_production_kernel_conformance_matrix_report, print_production_kernel_conformance_report,
+    run_benchmark, run_benchmark_for_args, run_production_benchmark_all_devices,
+    run_production_kernel_conformance_all_devices,
 };
 use crate::cli::device::{
     print_device_gate_report, print_device_matrix_and_exit, print_device_probe_report,
@@ -385,7 +386,25 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         } else {
             None
         };
-        print_benchmark_summary(&args, &benchmark_path, &summary, gate_report.as_ref());
+        let self_evolution_admission_report = gate_report.as_ref().map(|report| {
+            benchmark_self_evolution_admission_report(
+                format!("benchmark:{}", benchmark_path.display()),
+                &engine,
+                &summary,
+                report,
+                args.profile,
+            )
+        });
+        if let Some(report) = self_evolution_admission_report.as_ref() {
+            append_self_evolution_admission_trace_jsonl(&benchmark_path, report)?;
+        }
+        print_benchmark_summary(
+            &args,
+            &benchmark_path,
+            &summary,
+            gate_report.as_ref(),
+            self_evolution_admission_report.as_ref(),
+        );
         if let Some(trace_schema_gate_path) = &args.trace_schema_gate_path {
             let report = evaluate_trace_schema_jsonl(trace_schema_gate_path)?;
             print_trace_schema_gate_report(trace_schema_gate_path, &report);

@@ -60,7 +60,7 @@ pub(super) fn handle_experience_cleanup_audit(
         }
     }
 
-    let store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
     let hygiene = store.hygiene_report(sample_limit);
     let quarantine = store.hygiene_quarantine_plan(sample_limit);
     let repair = store.legacy_metadata_repair_plan(sample_limit);

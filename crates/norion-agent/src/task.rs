@@ -290,6 +290,11 @@ pub struct TaskDispatchPlanSummary {
     pub remaining_tokens: u32,
     pub remaining_steps: u32,
     pub remaining_messages: u32,
+    pub remaining_zero_budget_roles: usize,
+    pub remaining_partially_depleted_roles: usize,
+    pub remaining_token_depleted_roles: usize,
+    pub remaining_step_depleted_roles: usize,
+    pub remaining_message_depleted_roles: usize,
     pub assigned_rate: f32,
     pub rejected_rate: f32,
     pub telemetry: Vec<String>,
@@ -329,6 +334,11 @@ pub struct TaskDispatchDashboard {
     pub remaining_tokens: u32,
     pub remaining_steps: u32,
     pub remaining_messages: u32,
+    pub remaining_zero_budget_roles: usize,
+    pub remaining_partially_depleted_roles: usize,
+    pub remaining_token_depleted_roles: usize,
+    pub remaining_step_depleted_roles: usize,
+    pub remaining_message_depleted_roles: usize,
     pub assignment_rate: f32,
     pub rejection_rate: f32,
     pub assigned_record_rate: f32,
@@ -389,6 +399,31 @@ impl TaskDispatchPlanSummary {
         let remaining_tokens = plan.remaining.values().map(|budget| budget.tokens).sum();
         let remaining_steps = plan.remaining.values().map(|budget| budget.steps).sum();
         let remaining_messages = plan.remaining.values().map(|budget| budget.messages).sum();
+        let remaining_zero_budget_roles = plan
+            .remaining
+            .values()
+            .filter(|budget| budget.is_zero())
+            .count();
+        let remaining_partially_depleted_roles = plan
+            .remaining
+            .values()
+            .filter(|budget| budget.is_partially_depleted())
+            .count();
+        let remaining_token_depleted_roles = plan
+            .remaining
+            .values()
+            .filter(|budget| budget.token_depleted())
+            .count();
+        let remaining_step_depleted_roles = plan
+            .remaining
+            .values()
+            .filter(|budget| budget.step_depleted())
+            .count();
+        let remaining_message_depleted_roles = plan
+            .remaining
+            .values()
+            .filter(|budget| budget.message_depleted())
+            .count();
         let assigned_rate = rate(assignments, total);
         let rejected_rate = rate(rejections, total);
         let telemetry = task_dispatch_plan_summary_telemetry(
@@ -398,6 +433,11 @@ impl TaskDispatchPlanSummary {
             remaining_tokens,
             remaining_steps,
             remaining_messages,
+            remaining_zero_budget_roles,
+            remaining_partially_depleted_roles,
+            remaining_token_depleted_roles,
+            remaining_step_depleted_roles,
+            remaining_message_depleted_roles,
             assigned_rate,
             rejected_rate,
         );
@@ -409,6 +449,11 @@ impl TaskDispatchPlanSummary {
             remaining_tokens,
             remaining_steps,
             remaining_messages,
+            remaining_zero_budget_roles,
+            remaining_partially_depleted_roles,
+            remaining_token_depleted_roles,
+            remaining_step_depleted_roles,
+            remaining_message_depleted_roles,
             assigned_rate,
             rejected_rate,
             telemetry,
@@ -493,6 +538,26 @@ impl TaskDispatchDashboard {
             .iter()
             .map(|summary| summary.remaining_messages)
             .sum::<u32>();
+        let remaining_zero_budget_roles = summaries
+            .iter()
+            .map(|summary| summary.remaining_zero_budget_roles)
+            .sum::<usize>();
+        let remaining_partially_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.remaining_partially_depleted_roles)
+            .sum::<usize>();
+        let remaining_token_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.remaining_token_depleted_roles)
+            .sum::<usize>();
+        let remaining_step_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.remaining_step_depleted_roles)
+            .sum::<usize>();
+        let remaining_message_depleted_roles = summaries
+            .iter()
+            .map(|summary| summary.remaining_message_depleted_roles)
+            .sum::<usize>();
         let total_tasks = assignments + rejections;
         let assignment_rate = rate(assignments, total_tasks);
         let rejection_rate = rate(rejections, total_tasks);
@@ -509,6 +574,11 @@ impl TaskDispatchDashboard {
             remaining_tokens,
             remaining_steps,
             remaining_messages,
+            remaining_zero_budget_roles,
+            remaining_partially_depleted_roles,
+            remaining_token_depleted_roles,
+            remaining_step_depleted_roles,
+            remaining_message_depleted_roles,
             assignment_rate,
             rejection_rate,
             assigned_record_rate,
@@ -526,6 +596,11 @@ impl TaskDispatchDashboard {
             remaining_tokens,
             remaining_steps,
             remaining_messages,
+            remaining_zero_budget_roles,
+            remaining_partially_depleted_roles,
+            remaining_token_depleted_roles,
+            remaining_step_depleted_roles,
+            remaining_message_depleted_roles,
             assignment_rate,
             rejection_rate,
             assigned_record_rate,
@@ -685,6 +760,7 @@ impl TaskDispatchPlanSummaryHistoryRecorder {
 pub struct TaskDispatchGateDecision {
     pub summary: TaskDispatchPlanSummary,
     pub can_dispatch: bool,
+    pub can_promote_side_effects: bool,
     pub requires_repair_first: bool,
     pub reasons: Vec<String>,
     pub telemetry: Vec<String>,
@@ -706,11 +782,20 @@ impl TaskDispatchGateDecision {
                 rejection.reason
             )
         }));
+        if summary.remaining_partially_depleted_roles > 0 {
+            reasons.push(format!(
+                "dispatch_remaining_partially_depleted_roles={}",
+                summary.remaining_partially_depleted_roles
+            ));
+        }
 
         let can_dispatch = summary.assignments > 0 && summary.rejections == 0;
+        let can_promote_side_effects =
+            can_dispatch && summary.remaining_partially_depleted_roles == 0;
         let requires_repair_first = summary.rejections > 0 || summary.assignments == 0;
         let telemetry = task_dispatch_gate_telemetry(
             can_dispatch,
+            can_promote_side_effects,
             requires_repair_first,
             reasons.len(),
             &summary,
@@ -719,10 +804,19 @@ impl TaskDispatchGateDecision {
         Self {
             summary,
             can_dispatch,
+            can_promote_side_effects,
             requires_repair_first,
             reasons,
             telemetry,
         }
+    }
+
+    pub fn is_dispatchable(&self) -> bool {
+        self.can_dispatch && !self.requires_repair_first
+    }
+
+    pub fn is_side_effect_safe(&self) -> bool {
+        self.can_promote_side_effects && !self.requires_repair_first
     }
 }
 
@@ -878,6 +972,11 @@ fn task_dispatch_plan_summary_telemetry(
     remaining_tokens: u32,
     remaining_steps: u32,
     remaining_messages: u32,
+    remaining_zero_budget_roles: usize,
+    remaining_partially_depleted_roles: usize,
+    remaining_token_depleted_roles: usize,
+    remaining_step_depleted_roles: usize,
+    remaining_message_depleted_roles: usize,
     assigned_rate: f32,
     rejected_rate: f32,
 ) -> Vec<String> {
@@ -889,6 +988,21 @@ fn task_dispatch_plan_summary_telemetry(
         format!("agent_task_dispatch_plan_summary_remaining_tokens={remaining_tokens}"),
         format!("agent_task_dispatch_plan_summary_remaining_steps={remaining_steps}"),
         format!("agent_task_dispatch_plan_summary_remaining_messages={remaining_messages}"),
+        format!(
+            "agent_task_dispatch_plan_summary_remaining_zero_budget_roles={remaining_zero_budget_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_plan_summary_remaining_partially_depleted_roles={remaining_partially_depleted_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_plan_summary_remaining_token_depleted_roles={remaining_token_depleted_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_plan_summary_remaining_step_depleted_roles={remaining_step_depleted_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_plan_summary_remaining_message_depleted_roles={remaining_message_depleted_roles}"
+        ),
         format!("agent_task_dispatch_plan_summary_assigned_rate={assigned_rate:.3}"),
         format!("agent_task_dispatch_plan_summary_rejected_rate={rejected_rate:.3}"),
     ]
@@ -896,6 +1010,7 @@ fn task_dispatch_plan_summary_telemetry(
 
 fn task_dispatch_gate_telemetry(
     can_dispatch: bool,
+    can_promote_side_effects: bool,
     requires_repair_first: bool,
     reasons: usize,
     summary: &TaskDispatchPlanSummary,
@@ -903,6 +1018,7 @@ fn task_dispatch_gate_telemetry(
     vec![
         "agent_task_dispatch_gate=true".to_owned(),
         format!("agent_task_dispatch_gate_can_dispatch={can_dispatch}"),
+        format!("agent_task_dispatch_gate_promote_side_effects={can_promote_side_effects}"),
         format!("agent_task_dispatch_gate_requires_repair_first={requires_repair_first}"),
         format!("agent_task_dispatch_gate_reasons={reasons}"),
         format!(
@@ -910,6 +1026,26 @@ fn task_dispatch_gate_telemetry(
             summary.assignments
         ),
         format!("agent_task_dispatch_gate_rejections={}", summary.rejections),
+        format!(
+            "agent_task_dispatch_gate_remaining_zero_budget_roles={}",
+            summary.remaining_zero_budget_roles
+        ),
+        format!(
+            "agent_task_dispatch_gate_remaining_partially_depleted_roles={}",
+            summary.remaining_partially_depleted_roles
+        ),
+        format!(
+            "agent_task_dispatch_gate_remaining_token_depleted_roles={}",
+            summary.remaining_token_depleted_roles
+        ),
+        format!(
+            "agent_task_dispatch_gate_remaining_step_depleted_roles={}",
+            summary.remaining_step_depleted_roles
+        ),
+        format!(
+            "agent_task_dispatch_gate_remaining_message_depleted_roles={}",
+            summary.remaining_message_depleted_roles
+        ),
     ]
 }
 
@@ -925,6 +1061,11 @@ fn task_dispatch_dashboard_telemetry(
     remaining_tokens: u32,
     remaining_steps: u32,
     remaining_messages: u32,
+    remaining_zero_budget_roles: usize,
+    remaining_partially_depleted_roles: usize,
+    remaining_token_depleted_roles: usize,
+    remaining_step_depleted_roles: usize,
+    remaining_message_depleted_roles: usize,
     assignment_rate: f32,
     rejection_rate: f32,
     assigned_record_rate: f32,
@@ -944,6 +1085,21 @@ fn task_dispatch_dashboard_telemetry(
         format!("agent_task_dispatch_dashboard_remaining_tokens={remaining_tokens}"),
         format!("agent_task_dispatch_dashboard_remaining_steps={remaining_steps}"),
         format!("agent_task_dispatch_dashboard_remaining_messages={remaining_messages}"),
+        format!(
+            "agent_task_dispatch_dashboard_remaining_zero_budget_roles={remaining_zero_budget_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_dashboard_remaining_partially_depleted_roles={remaining_partially_depleted_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_dashboard_remaining_token_depleted_roles={remaining_token_depleted_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_dashboard_remaining_step_depleted_roles={remaining_step_depleted_roles}"
+        ),
+        format!(
+            "agent_task_dispatch_dashboard_remaining_message_depleted_roles={remaining_message_depleted_roles}"
+        ),
         format!("agent_task_dispatch_dashboard_assignment_rate={assignment_rate:.3}"),
         format!("agent_task_dispatch_dashboard_rejection_rate={rejection_rate:.3}"),
         format!("agent_task_dispatch_dashboard_assigned_record_rate={assigned_record_rate:.3}"),
@@ -1310,16 +1466,71 @@ mod tests {
         assert_eq!(summary.remaining_tokens, 12);
         assert_eq!(summary.remaining_steps, 1);
         assert_eq!(summary.remaining_messages, 1);
+        assert_eq!(summary.remaining_zero_budget_roles, 0);
+        assert_eq!(summary.remaining_partially_depleted_roles, 0);
+        assert_eq!(summary.remaining_token_depleted_roles, 0);
+        assert_eq!(summary.remaining_step_depleted_roles, 0);
+        assert_eq!(summary.remaining_message_depleted_roles, 0);
         assert_eq!(summary.assigned_rate, 1.0);
         assert_eq!(summary.rejected_rate, 0.0);
         assert!(gate.can_dispatch);
+        assert!(gate.can_promote_side_effects);
         assert!(!gate.requires_repair_first);
+        assert!(gate.is_dispatchable());
+        assert!(gate.is_side_effect_safe());
         assert!(gate.reasons.is_empty());
         assert!(
             summary
                 .telemetry
                 .iter()
                 .any(|line| { line == "agent_task_dispatch_plan_summary_remaining_tokens=12" })
+        );
+    }
+
+    #[test]
+    fn dispatch_gate_reports_remaining_partial_depletion_without_blocking_current_wave() {
+        let mut planner = DispatchPlanner::new(
+            BudgetLedger::new().with_budget(AgentRole::Coder, AgentBudget::new(20, 1, 2)),
+        );
+        let task = AgentTask::new(
+            "coder-step-limited",
+            AgentRole::Coder,
+            "consume the only step but leave tokens for inspection",
+            AgentBudget::new(8, 1, 1),
+        );
+
+        let plan = planner.plan_with_policy(vec![task], &BudgetPolicy::strict());
+        let summary = plan.summary();
+        let gate = plan.gate();
+
+        assert_eq!(summary.assignments, 1);
+        assert_eq!(summary.rejections, 0);
+        assert_eq!(summary.remaining_tokens, 12);
+        assert_eq!(summary.remaining_steps, 0);
+        assert_eq!(summary.remaining_messages, 1);
+        assert_eq!(summary.remaining_zero_budget_roles, 0);
+        assert_eq!(summary.remaining_partially_depleted_roles, 1);
+        assert_eq!(summary.remaining_token_depleted_roles, 0);
+        assert_eq!(summary.remaining_step_depleted_roles, 1);
+        assert_eq!(summary.remaining_message_depleted_roles, 0);
+        assert!(gate.can_dispatch);
+        assert!(!gate.can_promote_side_effects);
+        assert!(!gate.requires_repair_first);
+        assert!(gate.is_dispatchable());
+        assert!(!gate.is_side_effect_safe());
+        assert_eq!(
+            gate.reasons,
+            vec!["dispatch_remaining_partially_depleted_roles=1"]
+        );
+        assert!(
+            gate.telemetry
+                .iter()
+                .any(|line| { line == "agent_task_dispatch_gate_promote_side_effects=false" })
+        );
+        assert!(
+            gate.telemetry
+                .iter()
+                .any(|line| { line == "agent_task_dispatch_gate_remaining_step_depleted_roles=1" })
         );
     }
 
@@ -1572,6 +1783,11 @@ mod tests {
             remaining_tokens: 10,
             remaining_steps: 1,
             remaining_messages: 1,
+            remaining_zero_budget_roles: 0,
+            remaining_partially_depleted_roles: 0,
+            remaining_token_depleted_roles: 0,
+            remaining_step_depleted_roles: 0,
+            remaining_message_depleted_roles: 0,
             assigned_rate: 1.0,
             rejected_rate: 0.0,
             telemetry: Vec::new(),
@@ -1583,6 +1799,11 @@ mod tests {
             remaining_tokens: 4,
             remaining_steps: 1,
             remaining_messages: 1,
+            remaining_zero_budget_roles: 0,
+            remaining_partially_depleted_roles: 0,
+            remaining_token_depleted_roles: 0,
+            remaining_step_depleted_roles: 0,
+            remaining_message_depleted_roles: 0,
             assigned_rate: 0.0,
             rejected_rate: 1.0,
             telemetry: Vec::new(),

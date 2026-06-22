@@ -189,6 +189,17 @@ pub struct ToolBuildReportSummary {
     pub telemetry: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBuildReliabilitySummary {
+    pub attempts: usize,
+    pub successes: usize,
+    pub issue_count: usize,
+    pub success_rate: f32,
+    pub issue_rate: f32,
+    pub reliable: bool,
+    pub telemetry: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ToolBuildReportSummaryHistory {
     summaries: Vec<ToolBuildReportSummary>,
@@ -459,6 +470,63 @@ impl ToolBuildReportSummary {
     pub fn requires_repair_first(&self) -> bool {
         !self.is_clean
     }
+
+    pub fn reliability(&self) -> ToolBuildReliabilitySummary {
+        ToolBuildReliabilitySummary::from_counts(
+            "agent_tool_build_report_summary",
+            self.requested,
+            self.received,
+            self.built,
+            self.held,
+            self.rejected,
+            self.missing_requests,
+            self.unexpected_receipts,
+            self.duplicate_receipts,
+        )
+    }
+}
+
+impl ToolBuildReliabilitySummary {
+    #[allow(clippy::too_many_arguments)]
+    fn from_counts(
+        telemetry_scope: &str,
+        attempts: usize,
+        received: usize,
+        successes: usize,
+        held: usize,
+        rejected: usize,
+        missing_requests: usize,
+        unexpected_receipts: usize,
+        duplicate_receipts: usize,
+    ) -> Self {
+        let issue_count = held
+            .saturating_add(rejected)
+            .saturating_add(missing_requests)
+            .saturating_add(unexpected_receipts)
+            .saturating_add(duplicate_receipts);
+        let success_rate = rate(successes, attempts);
+        let issue_rate = rate(issue_count, attempts.max(received));
+        let reliable = attempts > 0 && success_rate >= 1.0 && issue_count == 0;
+        let telemetry = vec![
+            format!("{telemetry_scope}_reliability=true"),
+            format!("{telemetry_scope}_attempts={attempts}"),
+            format!("{telemetry_scope}_successes={successes}"),
+            format!("{telemetry_scope}_issue_count={issue_count}"),
+            format!("{telemetry_scope}_success_rate={success_rate:.3}"),
+            format!("{telemetry_scope}_issue_rate={issue_rate:.3}"),
+            format!("{telemetry_scope}_reliable={reliable}"),
+        ];
+
+        Self {
+            attempts,
+            successes,
+            issue_count,
+            success_rate,
+            issue_rate,
+            reliable,
+            telemetry,
+        }
+    }
 }
 
 impl ToolBuildReportSummaryHistory {
@@ -571,6 +639,20 @@ impl ToolBuildReportDashboard {
 
     pub fn health(&self, policy: ToolBuildReportHealthPolicy) -> ToolBuildReportHealth {
         ToolBuildReportHealth::from_dashboard(self.clone(), policy)
+    }
+
+    pub fn reliability(&self) -> ToolBuildReliabilitySummary {
+        ToolBuildReliabilitySummary::from_counts(
+            "agent_tool_build_report_dashboard",
+            self.requested,
+            self.received,
+            self.built,
+            self.held,
+            self.rejected,
+            self.missing_requests,
+            self.unexpected_receipts,
+            self.duplicate_receipts,
+        )
     }
 }
 
@@ -810,7 +892,18 @@ fn tool_build_report_summary_telemetry(
     diagnostics: usize,
     is_clean: bool,
 ) -> Vec<String> {
-    vec![
+    let reliability = ToolBuildReliabilitySummary::from_counts(
+        "agent_tool_build_report_summary",
+        requested,
+        received,
+        built,
+        held,
+        rejected,
+        missing_requests,
+        unexpected_receipts,
+        duplicate_receipts,
+    );
+    let mut telemetry = vec![
         "agent_tool_build_report_summary=true".to_owned(),
         format!("agent_tool_build_report_summary_requested={requested}"),
         format!("agent_tool_build_report_summary_received={received}"),
@@ -822,7 +915,9 @@ fn tool_build_report_summary_telemetry(
         format!("agent_tool_build_report_summary_duplicate_receipts={duplicate_receipts}"),
         format!("agent_tool_build_report_summary_diagnostics={diagnostics}"),
         format!("agent_tool_build_report_summary_clean={is_clean}"),
-    ]
+    ];
+    telemetry.extend(reliability.telemetry);
+    telemetry
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -841,7 +936,18 @@ fn tool_build_report_dashboard_telemetry(
     diagnostics: usize,
     clean_rate: f32,
 ) -> Vec<String> {
-    vec![
+    let reliability = ToolBuildReliabilitySummary::from_counts(
+        "agent_tool_build_report_dashboard",
+        requested,
+        received,
+        built,
+        held,
+        rejected,
+        missing_requests,
+        unexpected_receipts,
+        duplicate_receipts,
+    );
+    let mut telemetry = vec![
         "agent_tool_build_report_dashboard=true".to_owned(),
         format!("agent_tool_build_report_dashboard_records={total_records}"),
         format!("agent_tool_build_report_dashboard_clean_records={clean_records}"),
@@ -856,7 +962,9 @@ fn tool_build_report_dashboard_telemetry(
         format!("agent_tool_build_report_dashboard_duplicate_receipts={duplicate_receipts}"),
         format!("agent_tool_build_report_dashboard_diagnostics={diagnostics}"),
         format!("agent_tool_build_report_dashboard_clean_rate={clean_rate:.3}"),
-    ]
+    ];
+    telemetry.extend(reliability.telemetry);
+    telemetry
 }
 
 fn tool_build_report_history_record_telemetry(
@@ -1064,6 +1172,13 @@ mod tests {
                 format!("artifact:{}", request.entrypoint),
             ))
         }
+    }
+
+    fn assert_rate_close(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < 0.001,
+            "expected rate {actual} to be close to {expected}"
+        );
     }
 
     #[test]
@@ -1358,6 +1473,150 @@ mod tests {
         assert_eq!(
             report.diagnostics,
             vec!["unexpected-build:no admitted request"]
+        );
+    }
+
+    #[test]
+    fn clean_tool_build_report_summary_marks_reliable() {
+        let requests = vec![ToolBuildRequest {
+            proposal_id: "ready-rust".to_owned(),
+            intent: ToolIntent::RuntimeAdapter,
+            rust_crate: "rust".to_owned(),
+            entrypoint: "tools/runtime_adapter.rs".to_owned(),
+            gate_notes: Vec::new(),
+        }];
+        let receipts = vec![ToolBuildReceipt::built(
+            "ready-rust",
+            "artifacts/runtime_adapter",
+        )];
+        let report = ToolBuildReport::from_requests_and_receipts(&requests, &receipts);
+        let summary = report.summary();
+
+        let reliability = summary.reliability();
+
+        assert_eq!(reliability.attempts, 1);
+        assert_eq!(reliability.successes, 1);
+        assert_eq!(reliability.issue_count, 0);
+        assert_rate_close(reliability.success_rate, 1.0);
+        assert_rate_close(reliability.issue_rate, 0.0);
+        assert!(reliability.reliable);
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_tool_build_report_summary_success_rate=1.000")
+        );
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_tool_build_report_summary_issue_rate=0.000")
+        );
+    }
+
+    #[test]
+    fn dirty_tool_build_report_summary_marks_unreliable() {
+        let report = ToolBuildReport {
+            requested: 2,
+            received: 1,
+            built: 1,
+            held: 0,
+            rejected: 0,
+            missing_request_ids: vec!["missing-build".to_owned()],
+            unexpected_receipt_ids: Vec::new(),
+            duplicate_receipt_ids: Vec::new(),
+            diagnostics: Vec::new(),
+            telemetry: Vec::new(),
+        };
+        let summary = report.summary();
+
+        let reliability = summary.reliability();
+
+        assert_eq!(reliability.attempts, 2);
+        assert_eq!(reliability.successes, 1);
+        assert_eq!(reliability.issue_count, 1);
+        assert_rate_close(reliability.success_rate, 0.5);
+        assert_rate_close(reliability.issue_rate, 0.5);
+        assert!(!reliability.reliable);
+        assert!(
+            summary
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_tool_build_report_summary_reliable=false")
+        );
+    }
+
+    #[test]
+    fn tool_build_report_dashboard_summarizes_reliability() {
+        let clean_summary = ToolBuildReport {
+            requested: 1,
+            received: 1,
+            built: 1,
+            held: 0,
+            rejected: 0,
+            missing_request_ids: Vec::new(),
+            unexpected_receipt_ids: Vec::new(),
+            duplicate_receipt_ids: Vec::new(),
+            diagnostics: Vec::new(),
+            telemetry: Vec::new(),
+        }
+        .summary();
+        let dirty_summary = ToolBuildReport {
+            requested: 2,
+            received: 1,
+            built: 1,
+            held: 0,
+            rejected: 0,
+            missing_request_ids: vec!["missing-build".to_owned()],
+            unexpected_receipt_ids: Vec::new(),
+            duplicate_receipt_ids: Vec::new(),
+            diagnostics: Vec::new(),
+            telemetry: Vec::new(),
+        }
+        .summary();
+        let dashboard =
+            ToolBuildReportSummaryHistory::from_summaries(vec![clean_summary, dirty_summary])
+                .dashboard();
+
+        let reliability = dashboard.reliability();
+
+        assert_eq!(reliability.attempts, 3);
+        assert_eq!(reliability.successes, 2);
+        assert_eq!(reliability.issue_count, 1);
+        assert_rate_close(reliability.success_rate, 2.0 / 3.0);
+        assert_rate_close(reliability.issue_rate, 1.0 / 3.0);
+        assert!(!reliability.reliable);
+        assert!(
+            dashboard
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_tool_build_report_dashboard_success_rate=0.667")
+        );
+        assert!(
+            dashboard
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_tool_build_report_dashboard_issue_rate=0.333")
+        );
+    }
+
+    #[test]
+    fn empty_tool_build_report_dashboard_is_not_reliable() {
+        let dashboard = ToolBuildReportSummaryHistory::new().dashboard();
+
+        let reliability = dashboard.reliability();
+
+        assert_eq!(reliability.attempts, 0);
+        assert_eq!(reliability.successes, 0);
+        assert_eq!(reliability.issue_count, 0);
+        assert_rate_close(reliability.success_rate, 0.0);
+        assert_rate_close(reliability.issue_rate, 0.0);
+        assert!(!reliability.reliable);
+        assert!(
+            dashboard
+                .telemetry
+                .iter()
+                .any(|line| line == "agent_tool_build_report_dashboard_reliable=false")
         );
     }
 

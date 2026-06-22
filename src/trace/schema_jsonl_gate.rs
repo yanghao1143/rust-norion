@@ -4,14 +4,288 @@ use std::path::Path;
 
 use super::evaluate_trace_schema_line;
 use super::fields::{
-    extract_json_bool_field, extract_json_string_array_field, extract_json_string_field,
-    extract_json_usize_field, json_object_after_field, trace_note_bool,
+    extract_json_bool_field, extract_json_f32_field, extract_json_nullable_u64_field,
+    extract_json_string_array_field, extract_json_string_field, extract_json_usize_field,
+    extract_last_json_string_array_field, json_escape, json_object_after_field, trace_note_bool,
 };
 
+pub const OPERATOR_HEALTH_SCHEMA: &str = "rust-norion-operator-health-v1";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperatorHealthMetric {
+    pub name: &'static str,
+    pub value: usize,
+}
+
+impl OperatorHealthMetric {
+    fn new(name: &'static str, value: usize) -> Self {
+        Self { name, value }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperatorHealthSection {
+    pub name: &'static str,
+    pub data_present: bool,
+    pub ready: bool,
+    pub review_required: bool,
+    pub blocked: bool,
+    pub events: usize,
+    pub metrics: Vec<OperatorHealthMetric>,
+}
+
+impl OperatorHealthSection {
+    fn new(
+        name: &'static str,
+        data_present: bool,
+        review_required: bool,
+        blocked: bool,
+        events: usize,
+        metrics: Vec<OperatorHealthMetric>,
+        gate_passed: bool,
+    ) -> Self {
+        Self {
+            name,
+            data_present,
+            ready: data_present && gate_passed && !review_required && !blocked,
+            review_required,
+            blocked,
+            events,
+            metrics,
+        }
+    }
+
+    pub fn status(&self) -> &'static str {
+        if !self.data_present {
+            "missing"
+        } else if self.blocked {
+            "blocked"
+        } else if self.review_required {
+            "review_required"
+        } else if self.ready {
+            "ready"
+        } else {
+            "observed"
+        }
+    }
+
+    pub fn metric(&self, name: &str) -> Option<usize> {
+        self.metrics
+            .iter()
+            .find(|metric| metric.name == name)
+            .map(|metric| metric.value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperatorHealthSnapshot {
+    pub schema: &'static str,
+    pub passed: bool,
+    pub checked_lines: usize,
+    pub failure_count: usize,
+    pub trace_ids: Vec<u64>,
+    pub sections: Vec<OperatorHealthSection>,
+}
+
+impl OperatorHealthSnapshot {
+    pub fn section(&self, name: &str) -> Option<&OperatorHealthSection> {
+        self.sections.iter().find(|section| section.name == name)
+    }
+
+    pub fn json_line(&self) -> String {
+        let sections = self
+            .sections
+            .iter()
+            .map(operator_health_section_json)
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "{{\"schema\":\"{}\",\"passed\":{},\"checked_lines\":{},\"failure_count\":{},\"trace_id_count\":{},\"trace_ids\":{},\"sections\":[{}]}}",
+            json_escape(self.schema),
+            self.passed,
+            self.checked_lines,
+            self.failure_count,
+            self.trace_ids.len(),
+            u64_array_json(&self.trace_ids),
+            sections
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SelfEvolutionOperatorApprovalServiceCounters {
+    pub trace_gate_passed: bool,
+    pub data_present: bool,
+    pub approval_ready: bool,
+    pub review_required: bool,
+    pub blocked: bool,
+    pub events: usize,
+    pub approved: usize,
+    pub held: usize,
+    pub review_packets: usize,
+    pub evidence_ids: usize,
+    pub rollback_anchor_ids: usize,
+    pub content_digests: usize,
+    pub source_report_schemas: usize,
+    pub missing_review_packet_refs: usize,
+    pub write_allowed: usize,
+    pub applied: usize,
+    pub activation_allowed: bool,
+    pub memory_write_allowed: bool,
+    pub genome_write_allowed: bool,
+    pub kv_write_allowed: bool,
+}
+
+impl SelfEvolutionOperatorApprovalServiceCounters {
+    pub fn from_trace_gate_report(report: &TraceSchemaGateReport) -> Self {
+        let mut counters = Self {
+            trace_gate_passed: report.passed,
+            data_present: report.self_evolution_operator_approval_events > 0,
+            events: report.self_evolution_operator_approval_events,
+            approved: report.self_evolution_operator_approval_approved,
+            held: report.self_evolution_operator_approval_held,
+            review_packets: report.self_evolution_operator_approval_review_packets,
+            evidence_ids: report.self_evolution_operator_approval_evidence_ids,
+            rollback_anchor_ids: report.self_evolution_operator_approval_rollback_anchor_ids,
+            content_digests: report.self_evolution_operator_approval_content_digests,
+            source_report_schemas: report.self_evolution_operator_approval_source_report_schemas,
+            missing_review_packet_refs: report
+                .self_evolution_operator_approval_missing_review_packet_refs,
+            write_allowed: report.self_evolution_operator_approval_write_allowed,
+            applied: report.self_evolution_operator_approval_applied,
+            activation_allowed: false,
+            memory_write_allowed: false,
+            genome_write_allowed: false,
+            kv_write_allowed: false,
+            ..Self::default()
+        };
+        counters.blocked = counters.data_present && !counters.validation_failures().is_empty();
+        counters.review_required = counters.data_present
+            && (counters.held > 0 || counters.missing_review_packet_refs > 0 || counters.blocked);
+        counters.approval_ready = counters.data_present
+            && counters.approved > 0
+            && !counters.review_required
+            && !counters.blocked;
+        counters
+    }
+
+    pub fn validation_failures(&self) -> Vec<String> {
+        if !self.data_present {
+            return Vec::new();
+        }
+
+        let mut failures = Vec::new();
+        if !self.trace_gate_passed {
+            failures.push("self_evolution_operator_approval_trace_gate_failed".to_owned());
+        }
+        if self.approved.saturating_add(self.held) != self.events {
+            failures.push("self_evolution_operator_approval_decision_count_mismatch".to_owned());
+        }
+        if self.approved > 0 && self.review_packets == 0 {
+            failures.push(
+                "self_evolution_operator_approval_approved_missing_review_packets".to_owned(),
+            );
+        }
+        if self.approved > 0 && self.evidence_ids == 0 {
+            failures
+                .push("self_evolution_operator_approval_approved_missing_evidence_ids".to_owned());
+        }
+        if self.approved > 0 && self.rollback_anchor_ids == 0 {
+            failures.push(
+                "self_evolution_operator_approval_approved_missing_rollback_anchors".to_owned(),
+            );
+        }
+        if self.approved > 0 && self.content_digests == 0 {
+            failures.push(
+                "self_evolution_operator_approval_approved_missing_content_digests".to_owned(),
+            );
+        }
+        if self.approved > 0 && self.source_report_schemas == 0 {
+            failures.push(
+                "self_evolution_operator_approval_approved_missing_source_report_schemas"
+                    .to_owned(),
+            );
+        }
+        if self.missing_review_packet_refs > 0 {
+            failures.push("self_evolution_operator_approval_missing_review_packet_refs".to_owned());
+        }
+        if self.write_allowed > 0 {
+            failures.push("self_evolution_operator_approval_write_allowed".to_owned());
+        }
+        if self.applied > 0 {
+            failures.push("self_evolution_operator_approval_applied".to_owned());
+        }
+        if self.activation_allowed
+            || self.memory_write_allowed
+            || self.genome_write_allowed
+            || self.kv_write_allowed
+        {
+            failures.push("self_evolution_operator_approval_service_write_capability".to_owned());
+        }
+        failures
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_operator_approval_service_counters: data_present={} approval_ready={} review_required={} blocked={} events={} approved={} held={} review_packets={} evidence_ids={} rollback_anchor_ids={} content_digests={} source_report_schemas={} missing_review_packet_refs={} write_allowed={} applied={} activation_allowed={} memory_write_allowed={} genome_write_allowed={} kv_write_allowed={} validation_failures={}",
+            self.data_present,
+            self.approval_ready,
+            self.review_required,
+            self.blocked,
+            self.events,
+            self.approved,
+            self.held,
+            self.review_packets,
+            self.evidence_ids,
+            self.rollback_anchor_ids,
+            self.content_digests,
+            self.source_report_schemas,
+            self.missing_review_packet_refs,
+            self.write_allowed,
+            self.applied,
+            self.activation_allowed,
+            self.memory_write_allowed,
+            self.genome_write_allowed,
+            self.kv_write_allowed,
+            self.validation_failures().len()
+        )
+    }
+
+    pub fn json_object(&self) -> String {
+        let validation_failures = self.validation_failures();
+        format!(
+            "{{\"trace_gate_passed\":{},\"data_present\":{},\"approval_ready\":{},\"review_required\":{},\"blocked\":{},\"events\":{},\"approved\":{},\"held\":{},\"review_packets\":{},\"evidence_ids\":{},\"rollback_anchor_ids\":{},\"content_digests\":{},\"source_report_schemas\":{},\"missing_review_packet_refs\":{},\"write_allowed\":{},\"applied\":{},\"activation_allowed\":{},\"memory_write_allowed\":{},\"genome_write_allowed\":{},\"kv_write_allowed\":{},\"validation_failures\":{},\"summary\":\"{}\"}}",
+            self.trace_gate_passed,
+            self.data_present,
+            self.approval_ready,
+            self.review_required,
+            self.blocked,
+            self.events,
+            self.approved,
+            self.held,
+            self.review_packets,
+            self.evidence_ids,
+            self.rollback_anchor_ids,
+            self.content_digests,
+            self.source_report_schemas,
+            self.missing_review_packet_refs,
+            self.write_allowed,
+            self.applied,
+            self.activation_allowed,
+            self.memory_write_allowed,
+            self.genome_write_allowed,
+            self.kv_write_allowed,
+            string_array_json(&validation_failures),
+            json_escape(&self.summary_line())
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TraceSchemaGateReport {
     pub passed: bool,
     pub checked_lines: usize,
+    pub trace_experience_ids: Vec<u64>,
     pub rust_check_events: usize,
     pub rust_check_passed: usize,
     pub rust_check_failed: usize,
@@ -31,13 +305,232 @@ pub struct TraceSchemaGateReport {
     pub business_contract_event_canonical_fallbacks: usize,
     pub runtime_error_events: usize,
     pub runtime_timeout_events: usize,
+    pub self_evolution_admission_events: usize,
+    pub self_evolution_admission_admitted: usize,
+    pub self_evolution_admission_blocked: usize,
+    pub self_evolution_admission_review_packets: usize,
+    pub self_evolution_admission_evidence_ids: usize,
+    pub self_evolution_admission_missing_review_packet_refs: usize,
+    pub self_evolution_experiment_events: usize,
+    pub self_evolution_experiment_admit: usize,
+    pub self_evolution_experiment_hold: usize,
+    pub self_evolution_experiment_reject: usize,
+    pub self_evolution_experiment_rollback: usize,
+    pub self_evolution_experiment_repeated: usize,
+    pub self_evolution_experiment_conflicts: usize,
+    pub self_evolution_experiment_rollback_replayable: usize,
+    pub self_evolution_experiment_active_candidates: usize,
+    pub self_evolution_experiment_write_allowed: usize,
+    pub self_evolution_experiment_applied: usize,
+    pub self_evolution_rollback_replay_events: usize,
+    pub self_evolution_rollback_replay_items: usize,
+    pub self_evolution_rollback_replay_replayable: usize,
+    pub self_evolution_rollback_replay_blocked: usize,
+    pub self_evolution_rollback_replay_all_replayable: usize,
+    pub self_evolution_rollback_replay_rollback_anchor_ids: usize,
+    pub self_evolution_rollback_replay_evidence_ids: usize,
+    pub self_evolution_rollback_replay_active_candidates: usize,
+    pub self_evolution_rollback_replay_item_write_allowed: usize,
+    pub self_evolution_rollback_replay_item_applied: usize,
+    pub self_evolution_rollback_replay_write_allowed: usize,
+    pub self_evolution_rollback_replay_applied: usize,
+    pub self_evolution_rollback_replay_gate_events: usize,
+    pub self_evolution_rollback_replay_gate_admitted: usize,
+    pub self_evolution_rollback_replay_gate_held: usize,
+    pub self_evolution_rollback_replay_gate_review_packets: usize,
+    pub self_evolution_rollback_replay_gate_review_evidence_ids: usize,
+    pub self_evolution_rollback_replay_gate_missing_review_packet_refs: usize,
+    pub self_evolution_rollback_replay_gate_items: usize,
+    pub self_evolution_rollback_replay_gate_replayable: usize,
+    pub self_evolution_rollback_replay_gate_blocked: usize,
+    pub self_evolution_rollback_replay_gate_all_replayable: usize,
+    pub self_evolution_rollback_replay_gate_rollback_anchor_ids: usize,
+    pub self_evolution_rollback_replay_gate_evidence_ids: usize,
+    pub self_evolution_rollback_replay_gate_active_candidates: usize,
+    pub self_evolution_rollback_replay_gate_item_write_allowed: usize,
+    pub self_evolution_rollback_replay_gate_item_applied: usize,
+    pub self_evolution_rollback_replay_gate_plan_write_allowed: usize,
+    pub self_evolution_rollback_replay_gate_plan_applied: usize,
+    pub self_evolution_rollback_replay_gate_write_allowed: usize,
+    pub self_evolution_rollback_replay_gate_applied: usize,
+    pub self_evolution_operator_approval_events: usize,
+    pub self_evolution_operator_approval_approved: usize,
+    pub self_evolution_operator_approval_held: usize,
+    pub self_evolution_operator_approval_review_packets: usize,
+    pub self_evolution_operator_approval_evidence_ids: usize,
+    pub self_evolution_operator_approval_rollback_anchor_ids: usize,
+    pub self_evolution_operator_approval_content_digests: usize,
+    pub self_evolution_operator_approval_source_report_schemas: usize,
+    pub self_evolution_operator_approval_missing_review_packet_refs: usize,
+    pub self_evolution_operator_approval_write_allowed: usize,
+    pub self_evolution_operator_approval_applied: usize,
+    pub self_evolution_promotion_preflight_events: usize,
+    pub self_evolution_promotion_preflight_ready: usize,
+    pub self_evolution_promotion_preflight_held: usize,
+    pub self_evolution_promotion_preflight_review_packets: usize,
+    pub self_evolution_promotion_preflight_evidence_ids: usize,
+    pub self_evolution_promotion_preflight_rollback_anchor_ids: usize,
+    pub self_evolution_promotion_preflight_content_digests: usize,
+    pub self_evolution_promotion_preflight_source_report_schemas: usize,
+    pub self_evolution_promotion_preflight_missing_refs: usize,
+    pub self_evolution_promotion_preflight_blocked_reasons: usize,
+    pub self_evolution_promotion_preflight_write_allowed: usize,
+    pub self_evolution_promotion_preflight_applied: usize,
+    pub self_evolution_rollback_replay_apply_events: usize,
+    pub self_evolution_rollback_replay_apply_ready: usize,
+    pub self_evolution_rollback_replay_apply_held: usize,
+    pub self_evolution_rollback_replay_apply_items: usize,
+    pub self_evolution_rollback_replay_apply_replayable: usize,
+    pub self_evolution_rollback_replay_apply_blocked: usize,
+    pub self_evolution_rollback_replay_apply_review_packets: usize,
+    pub self_evolution_rollback_replay_apply_evidence_ids: usize,
+    pub self_evolution_rollback_replay_apply_rollback_anchor_ids: usize,
+    pub self_evolution_rollback_replay_apply_content_digests: usize,
+    pub self_evolution_rollback_replay_apply_source_report_schemas: usize,
+    pub self_evolution_rollback_replay_apply_missing_refs: usize,
+    pub self_evolution_rollback_replay_apply_blocked_reasons: usize,
+    pub self_evolution_rollback_replay_apply_write_allowed: usize,
+    pub self_evolution_rollback_replay_apply_applied: usize,
+    pub self_evolving_memory_store_events: usize,
+    pub self_evolving_memory_store_retrieval_events: usize,
+    pub self_evolving_memory_store_maintenance_events: usize,
+    pub self_evolving_memory_store_admission_preview_events: usize,
+    pub self_evolving_memory_store_contexts: usize,
+    pub self_evolving_memory_store_maintenance_actions: usize,
+    pub self_evolving_memory_store_admission_candidates: usize,
+    pub self_evolving_memory_store_write_allowed: usize,
+    pub self_evolving_memory_store_durable_write_allowed: usize,
+    pub self_evolving_memory_store_applied: usize,
+    pub self_evolving_memory_store_applied_to_disk: usize,
+    pub memory_residency_events: usize,
+    pub memory_residency_decisions: usize,
+    pub memory_residency_hot: usize,
+    pub memory_residency_warm: usize,
+    pub memory_residency_cold: usize,
+    pub memory_residency_quarantined: usize,
+    pub memory_residency_retired: usize,
+    pub memory_residency_protected_rollback_anchors: usize,
+    pub memory_residency_blocked_reasons: usize,
+    pub memory_residency_token_estimate: usize,
+    pub memory_residency_write_allowed: usize,
+    pub memory_residency_durable_write_allowed: usize,
+    pub memory_residency_applied: usize,
+    pub unified_writer_gate_events: usize,
+    pub unified_writer_gate_records: usize,
+    pub unified_writer_gate_memory_records: usize,
+    pub unified_writer_gate_genome_records: usize,
+    pub unified_writer_gate_experiment_ledger_records: usize,
+    pub unified_writer_gate_ready_records: usize,
+    pub unified_writer_gate_held_records: usize,
+    pub unified_writer_gate_rejected_records: usize,
+    pub unified_writer_gate_preview_only_records: usize,
+    pub unified_writer_gate_reason_codes: usize,
+    pub unified_writer_gate_explicit_apply_required: usize,
+    pub unified_writer_gate_write_allowed: usize,
+    pub unified_writer_gate_durable_write_allowed: usize,
+    pub unified_writer_gate_applied: usize,
+    pub improvement_corpus_events: usize,
+    pub improvement_corpus_episodes: usize,
+    pub improvement_corpus_active_adaptation: usize,
+    pub improvement_corpus_compiler_passed: usize,
+    pub improvement_corpus_test_passed: usize,
+    pub improvement_corpus_benchmark_passed: usize,
+    pub improvement_corpus_privacy_rejected: usize,
+    pub improvement_corpus_secret_leaks: usize,
+    pub adaptive_routing_events: usize,
+    pub adaptive_routing_candidates: usize,
+    pub adaptive_routing_include: usize,
+    pub adaptive_routing_compress: usize,
+    pub adaptive_routing_defer: usize,
+    pub adaptive_routing_skip: usize,
+    pub adaptive_routing_input_tokens: usize,
+    pub adaptive_routing_retained_tokens: usize,
+    pub adaptive_routing_saved_tokens: usize,
+    pub task_hierarchy_events: usize,
+    pub task_hierarchy_mutation_records: usize,
+    pub task_hierarchy_route_pressure_milli: usize,
+    pub task_hierarchy_compute_reduction_milli: usize,
+    pub compute_budget_events: usize,
+    pub compute_budget_low: usize,
+    pub compute_budget_normal: usize,
+    pub compute_budget_expanded: usize,
+    pub compute_budget_selected_candidates: usize,
+    pub compute_budget_low_value_skipped: usize,
+    pub compute_budget_kv_lookups_skipped: usize,
+    pub compute_budget_validation_cost_tokens: usize,
+    pub compute_budget_saved_tokens: usize,
+    pub compute_budget_avoided_tokens: usize,
+    pub compute_budget_write_allowed: usize,
+    pub compute_budget_applied: usize,
+    pub reasoning_genome_events: usize,
+    pub reasoning_genome_genes: usize,
+    pub reasoning_genome_active_genes: usize,
+    pub reasoning_genome_aged_genes: usize,
+    pub reasoning_genome_malignant_genes: usize,
+    pub reasoning_genome_relabel_candidates: usize,
+    pub reasoning_genome_regeneration_candidates: usize,
+    pub reasoning_genome_gene_scissors_proposals: usize,
+    pub reasoning_genome_repair_payloads: usize,
+    pub reasoning_genome_regeneration_payloads: usize,
+    pub reasoning_genome_lifecycle_records: usize,
+    pub reasoning_genome_lifecycle_tombstone_candidates: usize,
+    pub reasoning_genome_lifecycle_pending_validations: usize,
+    pub reasoning_genome_lifecycle_source_evidence: usize,
+    pub reasoning_genome_splice_segments: usize,
+    pub reasoning_genome_splice_exons: usize,
+    pub reasoning_genome_splice_introns: usize,
+    pub reasoning_genome_splice_variants: usize,
+    pub reasoning_genome_splice_quarantined: usize,
+    pub reasoning_genome_splice_repair_candidates: usize,
+    pub reasoning_genome_splice_findings: usize,
+    pub reasoning_genome_splice_proposals: usize,
+    pub reasoning_genome_write_allowed: usize,
+    pub reasoning_genome_mutation_applied: usize,
+    pub reasoning_genome_splice_write_allowed: usize,
+    pub reasoning_genome_splice_applied: usize,
+    pub memory_admission_events: usize,
+    pub memory_admission_candidates: usize,
+    pub memory_admission_ready: usize,
+    pub memory_admission_blocked: usize,
+    pub memory_admission_admitted: usize,
+    pub memory_admission_hold: usize,
+    pub memory_admission_reject: usize,
+    pub memory_admission_quarantine: usize,
+    pub memory_admission_review_packets: usize,
+    pub memory_admission_ledger_records: usize,
+    pub memory_admission_ledger_authorized: usize,
+    pub memory_admission_ledger_applied: usize,
+    pub memory_admission_ledger_preview_only: usize,
+    pub memory_admission_ledger_held: usize,
+    pub memory_admission_ledger_rejected: usize,
+    pub memory_admission_ledger_duplicate: usize,
+    pub memory_admission_ledger_decayed: usize,
+    pub memory_admission_ledger_merged: usize,
+    pub memory_admission_ledger_rollback: usize,
+    pub kv_fusion_events: usize,
+    pub kv_fusion_candidates: usize,
+    pub kv_fusion_fused: usize,
+    pub kv_fusion_compressed: usize,
+    pub kv_fusion_skipped: usize,
+    pub kv_fusion_held: usize,
+    pub kv_fusion_rejected: usize,
+    pub kv_fusion_approval_blocked: usize,
+    pub kv_fusion_input_tokens: usize,
+    pub kv_fusion_retained_tokens: usize,
+    pub kv_fusion_saved_tokens: usize,
     pub failures: Vec<String>,
 }
 
 impl TraceSchemaGateReport {
+    pub fn self_evolution_operator_approval_service_counters(
+        &self,
+    ) -> SelfEvolutionOperatorApprovalServiceCounters {
+        SelfEvolutionOperatorApprovalServiceCounters::from_trace_gate_report(self)
+    }
+
     pub fn summary_line(&self) -> String {
-        format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={}",
+        let base = format!(
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} self_evolution_promotion_preflight_events={} self_evolution_promotion_preflight_ready={} self_evolution_promotion_preflight_held={} self_evolution_promotion_preflight_review_packets={} self_evolution_promotion_preflight_evidence_ids={} self_evolution_promotion_preflight_rollback_anchor_ids={} self_evolution_promotion_preflight_content_digests={} self_evolution_promotion_preflight_source_report_schemas={} self_evolution_promotion_preflight_missing_refs={} self_evolution_promotion_preflight_blocked_reasons={} self_evolution_promotion_preflight_write_allowed={} self_evolution_promotion_preflight_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -59,14 +552,679 @@ impl TraceSchemaGateReport {
             self.business_contract_event_sanitized,
             self.business_contract_event_canonical_fallbacks,
             self.runtime_error_events,
-            self.runtime_timeout_events
+            self.runtime_timeout_events,
+            self.self_evolution_admission_events,
+            self.self_evolution_admission_admitted,
+            self.self_evolution_admission_blocked,
+            self.self_evolution_admission_review_packets,
+            self.self_evolution_admission_evidence_ids,
+            self.self_evolution_admission_missing_review_packet_refs,
+            self.self_evolution_experiment_events,
+            self.self_evolution_experiment_admit,
+            self.self_evolution_experiment_hold,
+            self.self_evolution_experiment_reject,
+            self.self_evolution_experiment_rollback,
+            self.self_evolution_experiment_repeated,
+            self.self_evolution_experiment_conflicts,
+            self.self_evolution_experiment_rollback_replayable,
+            self.self_evolution_experiment_active_candidates,
+            self.self_evolution_experiment_write_allowed,
+            self.self_evolution_experiment_applied,
+            self.self_evolution_rollback_replay_events,
+            self.self_evolution_rollback_replay_items,
+            self.self_evolution_rollback_replay_replayable,
+            self.self_evolution_rollback_replay_blocked,
+            self.self_evolution_rollback_replay_all_replayable,
+            self.self_evolution_rollback_replay_rollback_anchor_ids,
+            self.self_evolution_rollback_replay_evidence_ids,
+            self.self_evolution_rollback_replay_active_candidates,
+            self.self_evolution_rollback_replay_item_write_allowed,
+            self.self_evolution_rollback_replay_item_applied,
+            self.self_evolution_rollback_replay_write_allowed,
+            self.self_evolution_rollback_replay_applied,
+            self.self_evolution_rollback_replay_gate_events,
+            self.self_evolution_rollback_replay_gate_admitted,
+            self.self_evolution_rollback_replay_gate_held,
+            self.self_evolution_rollback_replay_gate_review_packets,
+            self.self_evolution_rollback_replay_gate_review_evidence_ids,
+            self.self_evolution_rollback_replay_gate_missing_review_packet_refs,
+            self.self_evolution_rollback_replay_gate_items,
+            self.self_evolution_rollback_replay_gate_replayable,
+            self.self_evolution_rollback_replay_gate_blocked,
+            self.self_evolution_rollback_replay_gate_all_replayable,
+            self.self_evolution_rollback_replay_gate_rollback_anchor_ids,
+            self.self_evolution_rollback_replay_gate_evidence_ids,
+            self.self_evolution_rollback_replay_gate_active_candidates,
+            self.self_evolution_rollback_replay_gate_item_write_allowed,
+            self.self_evolution_rollback_replay_gate_item_applied,
+            self.self_evolution_rollback_replay_gate_plan_write_allowed,
+            self.self_evolution_rollback_replay_gate_plan_applied,
+            self.self_evolution_rollback_replay_gate_write_allowed,
+            self.self_evolution_rollback_replay_gate_applied,
+            self.self_evolution_operator_approval_events,
+            self.self_evolution_operator_approval_approved,
+            self.self_evolution_operator_approval_held,
+            self.self_evolution_operator_approval_review_packets,
+            self.self_evolution_operator_approval_evidence_ids,
+            self.self_evolution_operator_approval_rollback_anchor_ids,
+            self.self_evolution_operator_approval_content_digests,
+            self.self_evolution_operator_approval_source_report_schemas,
+            self.self_evolution_operator_approval_missing_review_packet_refs,
+            self.self_evolution_operator_approval_write_allowed,
+            self.self_evolution_operator_approval_applied,
+            self.self_evolution_promotion_preflight_events,
+            self.self_evolution_promotion_preflight_ready,
+            self.self_evolution_promotion_preflight_held,
+            self.self_evolution_promotion_preflight_review_packets,
+            self.self_evolution_promotion_preflight_evidence_ids,
+            self.self_evolution_promotion_preflight_rollback_anchor_ids,
+            self.self_evolution_promotion_preflight_content_digests,
+            self.self_evolution_promotion_preflight_source_report_schemas,
+            self.self_evolution_promotion_preflight_missing_refs,
+            self.self_evolution_promotion_preflight_blocked_reasons,
+            self.self_evolution_promotion_preflight_write_allowed,
+            self.self_evolution_promotion_preflight_applied,
+            self.improvement_corpus_events,
+            self.improvement_corpus_episodes,
+            self.improvement_corpus_active_adaptation,
+            self.improvement_corpus_compiler_passed,
+            self.improvement_corpus_test_passed,
+            self.improvement_corpus_benchmark_passed,
+            self.improvement_corpus_privacy_rejected,
+            self.improvement_corpus_secret_leaks,
+            self.adaptive_routing_events,
+            self.adaptive_routing_candidates,
+            self.adaptive_routing_include,
+            self.adaptive_routing_compress,
+            self.adaptive_routing_defer,
+            self.adaptive_routing_skip,
+            self.adaptive_routing_input_tokens,
+            self.adaptive_routing_retained_tokens,
+            self.adaptive_routing_saved_tokens,
+            self.task_hierarchy_events,
+            self.task_hierarchy_mutation_records,
+            self.task_hierarchy_route_pressure_milli,
+            self.task_hierarchy_compute_reduction_milli,
+            self.compute_budget_events,
+            self.compute_budget_low,
+            self.compute_budget_normal,
+            self.compute_budget_expanded,
+            self.compute_budget_selected_candidates,
+            self.compute_budget_low_value_skipped,
+            self.compute_budget_kv_lookups_skipped,
+            self.compute_budget_validation_cost_tokens,
+            self.compute_budget_saved_tokens,
+            self.compute_budget_avoided_tokens,
+            self.compute_budget_write_allowed,
+            self.compute_budget_applied,
+            self.memory_admission_events,
+            self.memory_admission_candidates,
+            self.memory_admission_ready,
+            self.memory_admission_blocked,
+            self.memory_admission_admitted,
+            self.memory_admission_hold,
+            self.memory_admission_reject,
+            self.memory_admission_quarantine,
+            self.memory_admission_review_packets,
+            self.memory_admission_ledger_records,
+            self.memory_admission_ledger_authorized,
+            self.memory_admission_ledger_applied,
+            self.memory_admission_ledger_preview_only,
+            self.memory_admission_ledger_held,
+            self.memory_admission_ledger_rejected,
+            self.memory_admission_ledger_duplicate,
+            self.memory_admission_ledger_decayed,
+            self.memory_admission_ledger_merged,
+            self.memory_admission_ledger_rollback,
+            self.kv_fusion_events,
+            self.kv_fusion_candidates,
+            self.kv_fusion_fused,
+            self.kv_fusion_compressed,
+            self.kv_fusion_skipped,
+            self.kv_fusion_held,
+            self.kv_fusion_rejected,
+            self.kv_fusion_approval_blocked,
+            self.kv_fusion_input_tokens,
+            self.kv_fusion_retained_tokens,
+            self.kv_fusion_saved_tokens
+        );
+        format!(
+            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={}",
+            self.self_evolution_rollback_replay_apply_events,
+            self.self_evolution_rollback_replay_apply_ready,
+            self.self_evolution_rollback_replay_apply_held,
+            self.self_evolution_rollback_replay_apply_items,
+            self.self_evolution_rollback_replay_apply_replayable,
+            self.self_evolution_rollback_replay_apply_blocked,
+            self.self_evolution_rollback_replay_apply_review_packets,
+            self.self_evolution_rollback_replay_apply_evidence_ids,
+            self.self_evolution_rollback_replay_apply_rollback_anchor_ids,
+            self.self_evolution_rollback_replay_apply_content_digests,
+            self.self_evolution_rollback_replay_apply_source_report_schemas,
+            self.self_evolution_rollback_replay_apply_missing_refs,
+            self.self_evolution_rollback_replay_apply_blocked_reasons,
+            self.self_evolution_rollback_replay_apply_write_allowed,
+            self.self_evolution_rollback_replay_apply_applied,
+            self.self_evolving_memory_store_events,
+            self.self_evolving_memory_store_retrieval_events,
+            self.self_evolving_memory_store_maintenance_events,
+            self.self_evolving_memory_store_admission_preview_events,
+            self.self_evolving_memory_store_contexts,
+            self.self_evolving_memory_store_maintenance_actions,
+            self.self_evolving_memory_store_admission_candidates,
+            self.self_evolving_memory_store_write_allowed,
+            self.self_evolving_memory_store_durable_write_allowed,
+            self.self_evolving_memory_store_applied,
+            self.self_evolving_memory_store_applied_to_disk,
+            self.memory_residency_events,
+            self.memory_residency_decisions,
+            self.memory_residency_hot,
+            self.memory_residency_warm,
+            self.memory_residency_cold,
+            self.memory_residency_quarantined,
+            self.memory_residency_retired,
+            self.memory_residency_protected_rollback_anchors,
+            self.memory_residency_blocked_reasons,
+            self.memory_residency_token_estimate,
+            self.memory_residency_write_allowed,
+            self.memory_residency_durable_write_allowed,
+            self.memory_residency_applied,
+            self.unified_writer_gate_events,
+            self.unified_writer_gate_records,
+            self.unified_writer_gate_memory_records,
+            self.unified_writer_gate_genome_records,
+            self.unified_writer_gate_experiment_ledger_records,
+            self.unified_writer_gate_ready_records,
+            self.unified_writer_gate_held_records,
+            self.unified_writer_gate_rejected_records,
+            self.unified_writer_gate_preview_only_records,
+            self.unified_writer_gate_reason_codes,
+            self.unified_writer_gate_explicit_apply_required,
+            self.unified_writer_gate_write_allowed,
+            self.unified_writer_gate_durable_write_allowed,
+            self.unified_writer_gate_applied,
         )
     }
+
+    pub fn operator_health_snapshot(&self) -> OperatorHealthSnapshot {
+        let mut sections = Vec::new();
+
+        let trace_blocked = !self.passed;
+        sections.push(OperatorHealthSection::new(
+            "trace_gate",
+            self.checked_lines > 0,
+            trace_blocked,
+            trace_blocked,
+            self.checked_lines,
+            vec![
+                OperatorHealthMetric::new("checked_lines", self.checked_lines),
+                OperatorHealthMetric::new("failure_count", self.failures.len()),
+                OperatorHealthMetric::new("trace_id_count", self.trace_experience_ids.len()),
+                OperatorHealthMetric::new("runtime_error_events", self.runtime_error_events),
+                OperatorHealthMetric::new("runtime_timeout_events", self.runtime_timeout_events),
+            ],
+            self.passed,
+        ));
+
+        let memory_events = self
+            .memory_admission_events
+            .saturating_add(self.self_evolving_memory_store_events)
+            .saturating_add(self.memory_residency_events)
+            .saturating_add(self.kv_fusion_events);
+        let memory_review = self
+            .memory_admission_review_packets
+            .saturating_add(self.memory_admission_ledger_preview_only)
+            .saturating_add(self.memory_admission_hold)
+            .saturating_add(self.memory_admission_ledger_held)
+            .saturating_add(self.self_evolving_memory_store_admission_preview_events)
+            .saturating_add(self.memory_residency_protected_rollback_anchors);
+        let memory_blocked = self
+            .memory_admission_blocked
+            .saturating_add(self.memory_admission_reject)
+            .saturating_add(self.memory_admission_quarantine)
+            .saturating_add(self.memory_admission_ledger_rejected)
+            .saturating_add(self.memory_residency_quarantined)
+            .saturating_add(self.kv_fusion_approval_blocked)
+            .saturating_add(self.kv_fusion_rejected);
+        sections.push(OperatorHealthSection::new(
+            "memory",
+            memory_events > 0,
+            memory_review > 0,
+            memory_blocked > 0,
+            memory_events,
+            vec![
+                OperatorHealthMetric::new("admission_events", self.memory_admission_events),
+                OperatorHealthMetric::new("admission_candidates", self.memory_admission_candidates),
+                OperatorHealthMetric::new("admission_ready", self.memory_admission_ready),
+                OperatorHealthMetric::new("admission_blocked", self.memory_admission_blocked),
+                OperatorHealthMetric::new("review_packets", self.memory_admission_review_packets),
+                OperatorHealthMetric::new(
+                    "ledger_preview_only",
+                    self.memory_admission_ledger_preview_only,
+                ),
+                OperatorHealthMetric::new("ledger_applied", self.memory_admission_ledger_applied),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_events",
+                    self.self_evolving_memory_store_events,
+                ),
+                OperatorHealthMetric::new("residency_events", self.memory_residency_events),
+                OperatorHealthMetric::new(
+                    "residency_quarantined",
+                    self.memory_residency_quarantined,
+                ),
+                OperatorHealthMetric::new("kv_fusion_events", self.kv_fusion_events),
+                OperatorHealthMetric::new("kv_fusion_candidates", self.kv_fusion_candidates),
+                OperatorHealthMetric::new("kv_fusion_saved_tokens", self.kv_fusion_saved_tokens),
+                OperatorHealthMetric::new(
+                    "kv_fusion_approval_blocked",
+                    self.kv_fusion_approval_blocked,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let genome_review = self
+            .reasoning_genome_relabel_candidates
+            .saturating_add(self.reasoning_genome_regeneration_candidates)
+            .saturating_add(self.reasoning_genome_gene_scissors_proposals)
+            .saturating_add(self.reasoning_genome_repair_payloads)
+            .saturating_add(self.reasoning_genome_regeneration_payloads)
+            .saturating_add(self.reasoning_genome_lifecycle_pending_validations)
+            .saturating_add(self.reasoning_genome_splice_repair_candidates)
+            .saturating_add(self.reasoning_genome_splice_proposals);
+        let genome_blocked = self
+            .reasoning_genome_malignant_genes
+            .saturating_add(self.reasoning_genome_splice_quarantined)
+            .saturating_add(self.reasoning_genome_write_allowed)
+            .saturating_add(self.reasoning_genome_mutation_applied)
+            .saturating_add(self.reasoning_genome_splice_write_allowed)
+            .saturating_add(self.reasoning_genome_splice_applied);
+        sections.push(OperatorHealthSection::new(
+            "genome",
+            self.reasoning_genome_events > 0,
+            genome_review > 0,
+            genome_blocked > 0,
+            self.reasoning_genome_events,
+            vec![
+                OperatorHealthMetric::new("events", self.reasoning_genome_events),
+                OperatorHealthMetric::new("genes", self.reasoning_genome_genes),
+                OperatorHealthMetric::new("active_genes", self.reasoning_genome_active_genes),
+                OperatorHealthMetric::new("aged_genes", self.reasoning_genome_aged_genes),
+                OperatorHealthMetric::new("malignant_genes", self.reasoning_genome_malignant_genes),
+                OperatorHealthMetric::new(
+                    "gene_scissors_proposals",
+                    self.reasoning_genome_gene_scissors_proposals,
+                ),
+                OperatorHealthMetric::new("repair_payloads", self.reasoning_genome_repair_payloads),
+                OperatorHealthMetric::new(
+                    "regeneration_payloads",
+                    self.reasoning_genome_regeneration_payloads,
+                ),
+                OperatorHealthMetric::new("splice_segments", self.reasoning_genome_splice_segments),
+                OperatorHealthMetric::new(
+                    "splice_quarantined",
+                    self.reasoning_genome_splice_quarantined,
+                ),
+                OperatorHealthMetric::new(
+                    "splice_repair_candidates",
+                    self.reasoning_genome_splice_repair_candidates,
+                ),
+                OperatorHealthMetric::new("write_allowed", self.reasoning_genome_write_allowed),
+                OperatorHealthMetric::new(
+                    "mutation_applied",
+                    self.reasoning_genome_mutation_applied,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let routing_events = self
+            .adaptive_routing_events
+            .saturating_add(self.task_hierarchy_events)
+            .saturating_add(self.compute_budget_events);
+        let routing_review = self
+            .compute_budget_low
+            .saturating_add(self.compute_budget_kv_lookups_skipped)
+            .saturating_add(self.compute_budget_low_value_skipped)
+            .saturating_add(self.compute_budget_write_allowed)
+            .saturating_add(self.compute_budget_applied);
+        sections.push(OperatorHealthSection::new(
+            "routing",
+            routing_events > 0,
+            routing_review > 0,
+            false,
+            routing_events,
+            vec![
+                OperatorHealthMetric::new("adaptive_routing_events", self.adaptive_routing_events),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_candidates",
+                    self.adaptive_routing_candidates,
+                ),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_saved_tokens",
+                    self.adaptive_routing_saved_tokens,
+                ),
+                OperatorHealthMetric::new("task_hierarchy_events", self.task_hierarchy_events),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_mutation_records",
+                    self.task_hierarchy_mutation_records,
+                ),
+                OperatorHealthMetric::new("compute_budget_events", self.compute_budget_events),
+                OperatorHealthMetric::new(
+                    "compute_budget_selected_candidates",
+                    self.compute_budget_selected_candidates,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_saved_tokens",
+                    self.compute_budget_saved_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_avoided_tokens",
+                    self.compute_budget_avoided_tokens,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let approval_events = self
+            .self_evolution_admission_events
+            .saturating_add(self.self_evolution_experiment_events)
+            .saturating_add(self.self_evolution_operator_approval_events)
+            .saturating_add(self.self_evolution_promotion_preflight_events)
+            .saturating_add(self.self_evolution_rollback_replay_gate_events)
+            .saturating_add(self.self_evolution_rollback_replay_apply_events);
+        let approval_review = self
+            .self_evolution_admission_review_packets
+            .saturating_add(self.self_evolution_operator_approval_review_packets)
+            .saturating_add(self.self_evolution_promotion_preflight_review_packets)
+            .saturating_add(self.self_evolution_rollback_replay_gate_review_packets)
+            .saturating_add(self.self_evolution_rollback_replay_apply_review_packets);
+        let approval_missing_refs = self
+            .self_evolution_operator_approval_missing_review_packet_refs
+            .saturating_add(self.self_evolution_promotion_preflight_missing_refs)
+            .saturating_add(self.self_evolution_rollback_replay_gate_missing_review_packet_refs)
+            .saturating_add(self.self_evolution_rollback_replay_apply_missing_refs);
+        let approval_blocked = self
+            .self_evolution_admission_blocked
+            .saturating_add(self.self_evolution_experiment_reject)
+            .saturating_add(self.self_evolution_experiment_conflicts)
+            .saturating_add(self.self_evolution_operator_approval_held)
+            .saturating_add(self.self_evolution_promotion_preflight_held)
+            .saturating_add(self.self_evolution_promotion_preflight_blocked_reasons)
+            .saturating_add(self.self_evolution_rollback_replay_gate_held)
+            .saturating_add(self.self_evolution_rollback_replay_apply_held)
+            .saturating_add(self.self_evolution_rollback_replay_apply_blocked)
+            .saturating_add(approval_missing_refs);
+        sections.push(OperatorHealthSection::new(
+            "approval",
+            approval_events > 0,
+            approval_review > 0,
+            approval_blocked > 0,
+            approval_events,
+            vec![
+                OperatorHealthMetric::new("admission_events", self.self_evolution_admission_events),
+                OperatorHealthMetric::new(
+                    "admission_admitted",
+                    self.self_evolution_admission_admitted,
+                ),
+                OperatorHealthMetric::new(
+                    "admission_blocked",
+                    self.self_evolution_admission_blocked,
+                ),
+                OperatorHealthMetric::new(
+                    "experiment_events",
+                    self.self_evolution_experiment_events,
+                ),
+                OperatorHealthMetric::new("experiment_admit", self.self_evolution_experiment_admit),
+                OperatorHealthMetric::new("experiment_hold", self.self_evolution_experiment_hold),
+                OperatorHealthMetric::new(
+                    "experiment_reject",
+                    self.self_evolution_experiment_reject,
+                ),
+                OperatorHealthMetric::new(
+                    "operator_approval_events",
+                    self.self_evolution_operator_approval_events,
+                ),
+                OperatorHealthMetric::new(
+                    "operator_approved",
+                    self.self_evolution_operator_approval_approved,
+                ),
+                OperatorHealthMetric::new(
+                    "operator_held",
+                    self.self_evolution_operator_approval_held,
+                ),
+                OperatorHealthMetric::new(
+                    "promotion_preflight_events",
+                    self.self_evolution_promotion_preflight_events,
+                ),
+                OperatorHealthMetric::new(
+                    "promotion_ready",
+                    self.self_evolution_promotion_preflight_ready,
+                ),
+                OperatorHealthMetric::new(
+                    "promotion_held",
+                    self.self_evolution_promotion_preflight_held,
+                ),
+                OperatorHealthMetric::new("review_packets", approval_review),
+                OperatorHealthMetric::new("missing_review_refs", approval_missing_refs),
+            ],
+            self.passed,
+        ));
+
+        let rollback_events = self
+            .self_evolution_rollback_replay_events
+            .saturating_add(self.self_evolution_rollback_replay_gate_events)
+            .saturating_add(self.self_evolution_rollback_replay_apply_events);
+        let rollback_review = self
+            .self_evolution_rollback_replay_gate_review_packets
+            .saturating_add(self.self_evolution_rollback_replay_apply_review_packets)
+            .saturating_add(self.self_evolution_rollback_replay_rollback_anchor_ids)
+            .saturating_add(self.self_evolution_rollback_replay_gate_rollback_anchor_ids)
+            .saturating_add(self.self_evolution_rollback_replay_apply_rollback_anchor_ids);
+        let rollback_blocked = self
+            .self_evolution_rollback_replay_blocked
+            .saturating_add(self.self_evolution_rollback_replay_gate_blocked)
+            .saturating_add(self.self_evolution_rollback_replay_gate_missing_review_packet_refs)
+            .saturating_add(self.self_evolution_rollback_replay_apply_blocked)
+            .saturating_add(self.self_evolution_rollback_replay_apply_missing_refs);
+        sections.push(OperatorHealthSection::new(
+            "rollback",
+            rollback_events > 0,
+            rollback_review > 0,
+            rollback_blocked > 0,
+            rollback_events,
+            vec![
+                OperatorHealthMetric::new(
+                    "replay_events",
+                    self.self_evolution_rollback_replay_events,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_items",
+                    self.self_evolution_rollback_replay_items,
+                ),
+                OperatorHealthMetric::new(
+                    "replayable",
+                    self.self_evolution_rollback_replay_replayable,
+                ),
+                OperatorHealthMetric::new("blocked", self.self_evolution_rollback_replay_blocked),
+                OperatorHealthMetric::new(
+                    "rollback_anchor_ids",
+                    self.self_evolution_rollback_replay_rollback_anchor_ids,
+                ),
+                OperatorHealthMetric::new(
+                    "gate_events",
+                    self.self_evolution_rollback_replay_gate_events,
+                ),
+                OperatorHealthMetric::new(
+                    "apply_events",
+                    self.self_evolution_rollback_replay_apply_events,
+                ),
+                OperatorHealthMetric::new(
+                    "apply_ready",
+                    self.self_evolution_rollback_replay_apply_ready,
+                ),
+                OperatorHealthMetric::new(
+                    "apply_held",
+                    self.self_evolution_rollback_replay_apply_held,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let privacy_events = self
+            .improvement_corpus_events
+            .saturating_add(self.business_contract_events);
+        let privacy_review = self
+            .improvement_corpus_privacy_rejected
+            .saturating_add(self.business_contract_event_protocol_leaks)
+            .saturating_add(self.business_contract_event_response_normalized)
+            .saturating_add(self.business_contract_event_sanitized)
+            .saturating_add(self.business_contract_event_canonical_fallbacks);
+        let privacy_blocked = self
+            .improvement_corpus_secret_leaks
+            .saturating_add(self.business_contract_event_protocol_leaks);
+        sections.push(OperatorHealthSection::new(
+            "privacy",
+            privacy_events > 0,
+            privacy_review > 0,
+            privacy_blocked > 0,
+            privacy_events,
+            vec![
+                OperatorHealthMetric::new(
+                    "improvement_corpus_events",
+                    self.improvement_corpus_events,
+                ),
+                OperatorHealthMetric::new(
+                    "privacy_rejected",
+                    self.improvement_corpus_privacy_rejected,
+                ),
+                OperatorHealthMetric::new("secret_leaks", self.improvement_corpus_secret_leaks),
+                OperatorHealthMetric::new(
+                    "business_contract_events",
+                    self.business_contract_events,
+                ),
+                OperatorHealthMetric::new(
+                    "protocol_leaks",
+                    self.business_contract_event_protocol_leaks,
+                ),
+                OperatorHealthMetric::new(
+                    "response_normalized",
+                    self.business_contract_event_response_normalized,
+                ),
+                OperatorHealthMetric::new("sanitized", self.business_contract_event_sanitized),
+            ],
+            self.passed,
+        ));
+
+        let benchmark_events = self
+            .rust_check_events
+            .saturating_add(self.business_contract_events)
+            .saturating_add(self.improvement_corpus_events);
+        let benchmark_review = self
+            .rust_check_feedback_updates
+            .saturating_add(self.business_contract_event_response_normalized)
+            .saturating_add(self.business_contract_event_sanitized)
+            .saturating_add(self.business_contract_event_canonical_fallbacks);
+        let benchmark_blocked = self
+            .rust_check_failed
+            .saturating_add(self.business_contract_event_failed)
+            .saturating_add(self.improvement_corpus_secret_leaks);
+        sections.push(OperatorHealthSection::new(
+            "benchmark",
+            benchmark_events > 0,
+            benchmark_review > 0,
+            benchmark_blocked > 0,
+            benchmark_events,
+            vec![
+                OperatorHealthMetric::new("rust_check_events", self.rust_check_events),
+                OperatorHealthMetric::new("rust_check_passed", self.rust_check_passed),
+                OperatorHealthMetric::new("rust_check_failed", self.rust_check_failed),
+                OperatorHealthMetric::new(
+                    "business_contract_events",
+                    self.business_contract_events,
+                ),
+                OperatorHealthMetric::new(
+                    "business_contract_passed",
+                    self.business_contract_event_passed,
+                ),
+                OperatorHealthMetric::new(
+                    "business_contract_failed",
+                    self.business_contract_event_failed,
+                ),
+                OperatorHealthMetric::new(
+                    "improvement_corpus_events",
+                    self.improvement_corpus_events,
+                ),
+                OperatorHealthMetric::new(
+                    "compiler_passed",
+                    self.improvement_corpus_compiler_passed,
+                ),
+                OperatorHealthMetric::new("test_passed", self.improvement_corpus_test_passed),
+                OperatorHealthMetric::new(
+                    "benchmark_passed",
+                    self.improvement_corpus_benchmark_passed,
+                ),
+            ],
+            self.passed,
+        ));
+
+        OperatorHealthSnapshot {
+            schema: OPERATOR_HEALTH_SCHEMA,
+            passed: self.passed,
+            checked_lines: self.checked_lines,
+            failure_count: self.failures.len(),
+            trace_ids: self.trace_experience_ids.clone(),
+            sections,
+        }
+    }
+
+    pub fn operator_health_json(&self) -> String {
+        self.operator_health_snapshot().json_line()
+    }
+}
+
+fn operator_health_section_json(section: &OperatorHealthSection) -> String {
+    let metrics = section
+        .metrics
+        .iter()
+        .map(|metric| format!("\"{}\":{}", json_escape(metric.name), metric.value))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"name\":\"{}\",\"status\":\"{}\",\"data_present\":{},\"ready\":{},\"review_required\":{},\"blocked\":{},\"events\":{},\"metrics\":{{{}}}}}",
+        json_escape(section.name),
+        json_escape(section.status()),
+        section.data_present,
+        section.ready,
+        section.review_required,
+        section.blocked,
+        section.events,
+        metrics
+    )
+}
+
+fn u64_array_json(values: &[u64]) -> String {
+    let values = values
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
+}
+
+fn string_array_json(values: &[String]) -> String {
+    let values = values
+        .iter()
+        .map(|value| format!("\"{}\"", json_escape(value)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{values}]")
 }
 
 pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSchemaGateReport> {
     let content = fs::read_to_string(path)?;
     let mut checked_lines = 0;
+    let mut trace_experience_ids = Vec::new();
     let mut rust_check_events = 0;
     let mut rust_check_passed = 0;
     let mut rust_check_failed = 0;
@@ -86,6 +1244,219 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut business_contract_event_canonical_fallbacks = 0;
     let mut runtime_error_events = 0;
     let mut runtime_timeout_events = 0;
+    let mut self_evolution_admission_events = 0;
+    let mut self_evolution_admission_admitted = 0;
+    let mut self_evolution_admission_blocked = 0;
+    let mut self_evolution_admission_review_packets = 0;
+    let mut self_evolution_admission_evidence_ids = 0;
+    let mut self_evolution_admission_missing_review_packet_refs = 0;
+    let mut self_evolution_experiment_events = 0;
+    let mut self_evolution_experiment_admit = 0;
+    let mut self_evolution_experiment_hold = 0;
+    let mut self_evolution_experiment_reject = 0;
+    let mut self_evolution_experiment_rollback = 0;
+    let mut self_evolution_experiment_repeated = 0;
+    let mut self_evolution_experiment_conflicts = 0;
+    let mut self_evolution_experiment_rollback_replayable = 0;
+    let mut self_evolution_experiment_active_candidates = 0;
+    let mut self_evolution_experiment_write_allowed = 0;
+    let mut self_evolution_experiment_applied = 0;
+    let mut self_evolution_rollback_replay_events = 0;
+    let mut self_evolution_rollback_replay_items = 0;
+    let mut self_evolution_rollback_replay_replayable = 0;
+    let mut self_evolution_rollback_replay_blocked = 0;
+    let mut self_evolution_rollback_replay_all_replayable = 0;
+    let mut self_evolution_rollback_replay_rollback_anchor_ids = 0;
+    let mut self_evolution_rollback_replay_evidence_ids = 0;
+    let mut self_evolution_rollback_replay_active_candidates = 0;
+    let mut self_evolution_rollback_replay_item_write_allowed = 0;
+    let mut self_evolution_rollback_replay_item_applied = 0;
+    let mut self_evolution_rollback_replay_write_allowed = 0;
+    let mut self_evolution_rollback_replay_applied = 0;
+    let mut self_evolution_rollback_replay_gate_events = 0;
+    let mut self_evolution_rollback_replay_gate_admitted = 0;
+    let mut self_evolution_rollback_replay_gate_held = 0;
+    let mut self_evolution_rollback_replay_gate_review_packets = 0;
+    let mut self_evolution_rollback_replay_gate_review_evidence_ids = 0;
+    let mut self_evolution_rollback_replay_gate_missing_review_packet_refs = 0;
+    let mut self_evolution_rollback_replay_gate_items = 0;
+    let mut self_evolution_rollback_replay_gate_replayable = 0;
+    let mut self_evolution_rollback_replay_gate_blocked = 0;
+    let mut self_evolution_rollback_replay_gate_all_replayable = 0;
+    let mut self_evolution_rollback_replay_gate_rollback_anchor_ids = 0;
+    let mut self_evolution_rollback_replay_gate_evidence_ids = 0;
+    let mut self_evolution_rollback_replay_gate_active_candidates = 0;
+    let mut self_evolution_rollback_replay_gate_item_write_allowed = 0;
+    let mut self_evolution_rollback_replay_gate_item_applied = 0;
+    let mut self_evolution_rollback_replay_gate_plan_write_allowed = 0;
+    let mut self_evolution_rollback_replay_gate_plan_applied = 0;
+    let mut self_evolution_rollback_replay_gate_write_allowed = 0;
+    let mut self_evolution_rollback_replay_gate_applied = 0;
+    let mut self_evolution_operator_approval_events = 0;
+    let mut self_evolution_operator_approval_approved = 0;
+    let mut self_evolution_operator_approval_held = 0;
+    let mut self_evolution_operator_approval_review_packets = 0;
+    let mut self_evolution_operator_approval_evidence_ids = 0;
+    let mut self_evolution_operator_approval_rollback_anchor_ids = 0;
+    let mut self_evolution_operator_approval_content_digests = 0;
+    let mut self_evolution_operator_approval_source_report_schemas = 0;
+    let mut self_evolution_operator_approval_missing_review_packet_refs = 0;
+    let mut self_evolution_operator_approval_write_allowed = 0;
+    let mut self_evolution_operator_approval_applied = 0;
+    let mut self_evolution_promotion_preflight_events = 0;
+    let mut self_evolution_promotion_preflight_ready = 0;
+    let mut self_evolution_promotion_preflight_held = 0;
+    let mut self_evolution_promotion_preflight_review_packets = 0;
+    let mut self_evolution_promotion_preflight_evidence_ids = 0;
+    let mut self_evolution_promotion_preflight_rollback_anchor_ids = 0;
+    let mut self_evolution_promotion_preflight_content_digests = 0;
+    let mut self_evolution_promotion_preflight_source_report_schemas = 0;
+    let mut self_evolution_promotion_preflight_missing_refs = 0;
+    let mut self_evolution_promotion_preflight_blocked_reasons = 0;
+    let mut self_evolution_promotion_preflight_write_allowed = 0;
+    let mut self_evolution_promotion_preflight_applied = 0;
+    let mut self_evolution_rollback_replay_apply_events = 0;
+    let mut self_evolution_rollback_replay_apply_ready = 0;
+    let mut self_evolution_rollback_replay_apply_held = 0;
+    let mut self_evolution_rollback_replay_apply_items = 0;
+    let mut self_evolution_rollback_replay_apply_replayable = 0;
+    let mut self_evolution_rollback_replay_apply_blocked = 0;
+    let mut self_evolution_rollback_replay_apply_review_packets = 0;
+    let mut self_evolution_rollback_replay_apply_evidence_ids = 0;
+    let mut self_evolution_rollback_replay_apply_rollback_anchor_ids = 0;
+    let mut self_evolution_rollback_replay_apply_content_digests = 0;
+    let mut self_evolution_rollback_replay_apply_source_report_schemas = 0;
+    let mut self_evolution_rollback_replay_apply_missing_refs = 0;
+    let mut self_evolution_rollback_replay_apply_blocked_reasons = 0;
+    let mut self_evolution_rollback_replay_apply_write_allowed = 0;
+    let mut self_evolution_rollback_replay_apply_applied = 0;
+    let mut self_evolving_memory_store_events = 0;
+    let mut self_evolving_memory_store_retrieval_events = 0;
+    let mut self_evolving_memory_store_maintenance_events = 0;
+    let mut self_evolving_memory_store_admission_preview_events = 0;
+    let mut self_evolving_memory_store_contexts = 0;
+    let mut self_evolving_memory_store_maintenance_actions = 0;
+    let mut self_evolving_memory_store_admission_candidates = 0;
+    let mut self_evolving_memory_store_write_allowed = 0;
+    let mut self_evolving_memory_store_durable_write_allowed = 0;
+    let mut self_evolving_memory_store_applied = 0;
+    let mut self_evolving_memory_store_applied_to_disk = 0;
+    let mut memory_residency_events = 0;
+    let mut memory_residency_decisions = 0;
+    let mut memory_residency_hot = 0;
+    let mut memory_residency_warm = 0;
+    let mut memory_residency_cold = 0;
+    let mut memory_residency_quarantined = 0;
+    let mut memory_residency_retired = 0;
+    let mut memory_residency_protected_rollback_anchors = 0;
+    let mut memory_residency_blocked_reasons = 0;
+    let mut memory_residency_token_estimate = 0;
+    let mut memory_residency_write_allowed = 0;
+    let mut memory_residency_durable_write_allowed = 0;
+    let mut memory_residency_applied = 0;
+    let mut unified_writer_gate_events = 0;
+    let mut unified_writer_gate_records = 0;
+    let mut unified_writer_gate_memory_records = 0;
+    let mut unified_writer_gate_genome_records = 0;
+    let mut unified_writer_gate_experiment_ledger_records = 0;
+    let mut unified_writer_gate_ready_records = 0;
+    let mut unified_writer_gate_held_records = 0;
+    let mut unified_writer_gate_rejected_records = 0;
+    let mut unified_writer_gate_preview_only_records = 0;
+    let mut unified_writer_gate_reason_codes = 0;
+    let mut unified_writer_gate_explicit_apply_required = 0;
+    let mut unified_writer_gate_write_allowed = 0;
+    let mut unified_writer_gate_durable_write_allowed = 0;
+    let mut unified_writer_gate_applied = 0;
+    let mut improvement_corpus_events = 0;
+    let mut improvement_corpus_episodes = 0;
+    let mut improvement_corpus_active_adaptation = 0;
+    let mut improvement_corpus_compiler_passed = 0;
+    let mut improvement_corpus_test_passed = 0;
+    let mut improvement_corpus_benchmark_passed = 0;
+    let mut improvement_corpus_privacy_rejected = 0;
+    let mut improvement_corpus_secret_leaks = 0;
+    let mut adaptive_routing_events = 0;
+    let mut adaptive_routing_candidates = 0;
+    let mut adaptive_routing_include = 0;
+    let mut adaptive_routing_compress = 0;
+    let mut adaptive_routing_defer = 0;
+    let mut adaptive_routing_skip = 0;
+    let mut adaptive_routing_input_tokens = 0;
+    let mut adaptive_routing_retained_tokens = 0;
+    let mut adaptive_routing_saved_tokens = 0;
+    let mut task_hierarchy_events = 0;
+    let mut task_hierarchy_mutation_records = 0;
+    let mut task_hierarchy_route_pressure_milli = 0;
+    let mut task_hierarchy_compute_reduction_milli = 0;
+    let mut compute_budget_events = 0;
+    let mut compute_budget_low = 0;
+    let mut compute_budget_normal = 0;
+    let mut compute_budget_expanded = 0;
+    let mut compute_budget_selected_candidates = 0;
+    let mut compute_budget_low_value_skipped = 0;
+    let mut compute_budget_kv_lookups_skipped = 0;
+    let mut compute_budget_validation_cost_tokens = 0;
+    let mut compute_budget_saved_tokens = 0;
+    let mut compute_budget_avoided_tokens = 0;
+    let mut compute_budget_write_allowed = 0;
+    let mut compute_budget_applied = 0;
+    let mut reasoning_genome_events = 0;
+    let mut reasoning_genome_genes = 0;
+    let mut reasoning_genome_active_genes = 0;
+    let mut reasoning_genome_aged_genes = 0;
+    let mut reasoning_genome_malignant_genes = 0;
+    let mut reasoning_genome_relabel_candidates = 0;
+    let mut reasoning_genome_regeneration_candidates = 0;
+    let mut reasoning_genome_gene_scissors_proposals = 0;
+    let mut reasoning_genome_repair_payloads = 0;
+    let mut reasoning_genome_regeneration_payloads = 0;
+    let mut reasoning_genome_lifecycle_records = 0;
+    let mut reasoning_genome_lifecycle_tombstone_candidates = 0;
+    let mut reasoning_genome_lifecycle_pending_validations = 0;
+    let mut reasoning_genome_lifecycle_source_evidence = 0;
+    let mut reasoning_genome_splice_segments = 0;
+    let mut reasoning_genome_splice_exons = 0;
+    let mut reasoning_genome_splice_introns = 0;
+    let mut reasoning_genome_splice_variants = 0;
+    let mut reasoning_genome_splice_quarantined = 0;
+    let mut reasoning_genome_splice_repair_candidates = 0;
+    let mut reasoning_genome_splice_findings = 0;
+    let mut reasoning_genome_splice_proposals = 0;
+    let mut reasoning_genome_write_allowed = 0;
+    let mut reasoning_genome_mutation_applied = 0;
+    let mut reasoning_genome_splice_write_allowed = 0;
+    let mut reasoning_genome_splice_applied = 0;
+    let mut memory_admission_events = 0;
+    let mut memory_admission_candidates = 0;
+    let mut memory_admission_ready = 0;
+    let mut memory_admission_blocked = 0;
+    let mut memory_admission_admitted = 0;
+    let mut memory_admission_hold = 0;
+    let mut memory_admission_reject = 0;
+    let mut memory_admission_quarantine = 0;
+    let mut memory_admission_review_packets = 0;
+    let mut memory_admission_ledger_records = 0;
+    let mut memory_admission_ledger_authorized = 0;
+    let mut memory_admission_ledger_applied = 0;
+    let mut memory_admission_ledger_preview_only = 0;
+    let mut memory_admission_ledger_held = 0;
+    let mut memory_admission_ledger_rejected = 0;
+    let mut memory_admission_ledger_duplicate = 0;
+    let mut memory_admission_ledger_decayed = 0;
+    let mut memory_admission_ledger_merged = 0;
+    let mut memory_admission_ledger_rollback = 0;
+    let mut kv_fusion_events = 0;
+    let mut kv_fusion_candidates = 0;
+    let mut kv_fusion_fused = 0;
+    let mut kv_fusion_compressed = 0;
+    let mut kv_fusion_skipped = 0;
+    let mut kv_fusion_held = 0;
+    let mut kv_fusion_rejected = 0;
+    let mut kv_fusion_approval_blocked = 0;
+    let mut kv_fusion_input_tokens = 0;
+    let mut kv_fusion_retained_tokens = 0;
+    let mut kv_fusion_saved_tokens = 0;
     let mut failures = Vec::new();
 
     for (index, line) in content.lines().enumerate() {
@@ -95,6 +1466,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         }
 
         checked_lines += 1;
+        if let Some(experience_id) = extract_json_nullable_u64_field(line, "experience_id") {
+            trace_experience_ids.push(experience_id);
+        }
         if let Some(summary) = rust_check_trace_gate_summary(line) {
             rust_check_events += summary.events;
             rust_check_passed += summary.passed;
@@ -120,6 +1494,259 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             runtime_error_events += summary.events;
             runtime_timeout_events += summary.timeouts;
         }
+        if let Some(summary) = self_evolution_admission_trace_gate_summary(line) {
+            self_evolution_admission_events += summary.events;
+            self_evolution_admission_admitted += summary.admitted;
+            self_evolution_admission_blocked += summary.blocked;
+            self_evolution_admission_review_packets += summary.review_packets;
+            self_evolution_admission_evidence_ids += summary.evidence_ids;
+            self_evolution_admission_missing_review_packet_refs +=
+                summary.missing_review_packet_refs;
+        }
+        if let Some(summary) = self_evolution_experiment_trace_gate_summary(line) {
+            self_evolution_experiment_events += summary.events;
+            self_evolution_experiment_admit += summary.admit;
+            self_evolution_experiment_hold += summary.hold;
+            self_evolution_experiment_reject += summary.reject;
+            self_evolution_experiment_rollback += summary.rollback;
+            self_evolution_experiment_repeated += summary.repeated;
+            self_evolution_experiment_conflicts += summary.conflicts;
+            self_evolution_experiment_rollback_replayable += summary.rollback_replayable;
+            self_evolution_experiment_active_candidates += summary.active_candidates;
+            self_evolution_experiment_write_allowed += summary.write_allowed;
+            self_evolution_experiment_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolution_rollback_replay_trace_gate_summary(line) {
+            self_evolution_rollback_replay_events += summary.events;
+            self_evolution_rollback_replay_items += summary.items;
+            self_evolution_rollback_replay_replayable += summary.replayable;
+            self_evolution_rollback_replay_blocked += summary.blocked;
+            self_evolution_rollback_replay_all_replayable += summary.all_replayable;
+            self_evolution_rollback_replay_rollback_anchor_ids += summary.rollback_anchor_ids;
+            self_evolution_rollback_replay_evidence_ids += summary.evidence_ids;
+            self_evolution_rollback_replay_active_candidates += summary.active_candidates;
+            self_evolution_rollback_replay_item_write_allowed += summary.item_write_allowed;
+            self_evolution_rollback_replay_item_applied += summary.item_applied;
+            self_evolution_rollback_replay_write_allowed += summary.write_allowed;
+            self_evolution_rollback_replay_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolution_rollback_replay_gate_trace_gate_summary(line) {
+            self_evolution_rollback_replay_gate_events += summary.events;
+            self_evolution_rollback_replay_gate_admitted += summary.admitted;
+            self_evolution_rollback_replay_gate_held += summary.held;
+            self_evolution_rollback_replay_gate_review_packets += summary.review_packets;
+            self_evolution_rollback_replay_gate_review_evidence_ids += summary.review_evidence_ids;
+            self_evolution_rollback_replay_gate_missing_review_packet_refs +=
+                summary.missing_review_packet_refs;
+            self_evolution_rollback_replay_gate_items += summary.items;
+            self_evolution_rollback_replay_gate_replayable += summary.replayable;
+            self_evolution_rollback_replay_gate_blocked += summary.blocked;
+            self_evolution_rollback_replay_gate_all_replayable += summary.all_replayable;
+            self_evolution_rollback_replay_gate_rollback_anchor_ids += summary.rollback_anchor_ids;
+            self_evolution_rollback_replay_gate_evidence_ids += summary.evidence_ids;
+            self_evolution_rollback_replay_gate_active_candidates += summary.active_candidates;
+            self_evolution_rollback_replay_gate_item_write_allowed += summary.item_write_allowed;
+            self_evolution_rollback_replay_gate_item_applied += summary.item_applied;
+            self_evolution_rollback_replay_gate_plan_write_allowed += summary.plan_write_allowed;
+            self_evolution_rollback_replay_gate_plan_applied += summary.plan_applied;
+            self_evolution_rollback_replay_gate_write_allowed += summary.write_allowed;
+            self_evolution_rollback_replay_gate_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolution_operator_approval_trace_gate_summary(line) {
+            self_evolution_operator_approval_events += summary.events;
+            self_evolution_operator_approval_approved += summary.approved;
+            self_evolution_operator_approval_held += summary.held;
+            self_evolution_operator_approval_review_packets += summary.review_packets;
+            self_evolution_operator_approval_evidence_ids += summary.evidence_ids;
+            self_evolution_operator_approval_rollback_anchor_ids += summary.rollback_anchor_ids;
+            self_evolution_operator_approval_content_digests += summary.content_digests;
+            self_evolution_operator_approval_source_report_schemas += summary.source_report_schemas;
+            self_evolution_operator_approval_missing_review_packet_refs +=
+                summary.missing_review_packet_refs;
+            self_evolution_operator_approval_write_allowed += summary.write_allowed;
+            self_evolution_operator_approval_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolution_promotion_preflight_trace_gate_summary(line) {
+            self_evolution_promotion_preflight_events += summary.events;
+            self_evolution_promotion_preflight_ready += summary.ready;
+            self_evolution_promotion_preflight_held += summary.held;
+            self_evolution_promotion_preflight_review_packets += summary.review_packets;
+            self_evolution_promotion_preflight_evidence_ids += summary.evidence_ids;
+            self_evolution_promotion_preflight_rollback_anchor_ids += summary.rollback_anchor_ids;
+            self_evolution_promotion_preflight_content_digests += summary.content_digests;
+            self_evolution_promotion_preflight_source_report_schemas +=
+                summary.source_report_schemas;
+            self_evolution_promotion_preflight_missing_refs += summary.missing_refs;
+            self_evolution_promotion_preflight_blocked_reasons += summary.blocked_reasons;
+            self_evolution_promotion_preflight_write_allowed += summary.write_allowed;
+            self_evolution_promotion_preflight_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolution_rollback_replay_apply_trace_gate_summary(line) {
+            self_evolution_rollback_replay_apply_events += summary.events;
+            self_evolution_rollback_replay_apply_ready += summary.ready;
+            self_evolution_rollback_replay_apply_held += summary.held;
+            self_evolution_rollback_replay_apply_items += summary.items;
+            self_evolution_rollback_replay_apply_replayable += summary.replayable;
+            self_evolution_rollback_replay_apply_blocked += summary.blocked;
+            self_evolution_rollback_replay_apply_review_packets += summary.review_packets;
+            self_evolution_rollback_replay_apply_evidence_ids += summary.evidence_ids;
+            self_evolution_rollback_replay_apply_rollback_anchor_ids += summary.rollback_anchor_ids;
+            self_evolution_rollback_replay_apply_content_digests += summary.content_digests;
+            self_evolution_rollback_replay_apply_source_report_schemas +=
+                summary.source_report_schemas;
+            self_evolution_rollback_replay_apply_missing_refs += summary.missing_refs;
+            self_evolution_rollback_replay_apply_blocked_reasons += summary.blocked_reasons;
+            self_evolution_rollback_replay_apply_write_allowed += summary.write_allowed;
+            self_evolution_rollback_replay_apply_applied += summary.applied;
+        }
+        if let Some(summary) = self_evolving_memory_store_trace_gate_summary(line) {
+            self_evolving_memory_store_events += summary.events;
+            self_evolving_memory_store_retrieval_events += summary.retrieval_events;
+            self_evolving_memory_store_maintenance_events += summary.maintenance_events;
+            self_evolving_memory_store_admission_preview_events += summary.admission_preview_events;
+            self_evolving_memory_store_contexts += summary.contexts;
+            self_evolving_memory_store_maintenance_actions += summary.maintenance_actions;
+            self_evolving_memory_store_admission_candidates += summary.admission_candidates;
+            self_evolving_memory_store_write_allowed += summary.write_allowed;
+            self_evolving_memory_store_durable_write_allowed += summary.durable_write_allowed;
+            self_evolving_memory_store_applied += summary.applied;
+            self_evolving_memory_store_applied_to_disk += summary.applied_to_disk;
+        }
+        if let Some(summary) = memory_residency_trace_gate_summary(line) {
+            memory_residency_events += summary.events;
+            memory_residency_decisions += summary.decisions;
+            memory_residency_hot += summary.hot;
+            memory_residency_warm += summary.warm;
+            memory_residency_cold += summary.cold;
+            memory_residency_quarantined += summary.quarantined;
+            memory_residency_retired += summary.retired;
+            memory_residency_protected_rollback_anchors += summary.protected_rollback_anchors;
+            memory_residency_blocked_reasons += summary.blocked_reasons;
+            memory_residency_token_estimate += summary.token_estimate;
+            memory_residency_write_allowed += summary.write_allowed;
+            memory_residency_durable_write_allowed += summary.durable_write_allowed;
+            memory_residency_applied += summary.applied;
+        }
+        if let Some(summary) = unified_writer_gate_trace_gate_summary(line) {
+            unified_writer_gate_events += summary.events;
+            unified_writer_gate_records += summary.records;
+            unified_writer_gate_memory_records += summary.memory_records;
+            unified_writer_gate_genome_records += summary.genome_records;
+            unified_writer_gate_experiment_ledger_records += summary.experiment_ledger_records;
+            unified_writer_gate_ready_records += summary.ready_records;
+            unified_writer_gate_held_records += summary.held_records;
+            unified_writer_gate_rejected_records += summary.rejected_records;
+            unified_writer_gate_preview_only_records += summary.preview_only_records;
+            unified_writer_gate_reason_codes += summary.reason_codes;
+            unified_writer_gate_explicit_apply_required += summary.explicit_apply_required;
+            unified_writer_gate_write_allowed += summary.write_allowed;
+            unified_writer_gate_durable_write_allowed += summary.durable_write_allowed;
+            unified_writer_gate_applied += summary.applied;
+        }
+        if let Some(summary) = improvement_corpus_trace_gate_summary(line) {
+            improvement_corpus_events += summary.events;
+            improvement_corpus_episodes += summary.episodes;
+            improvement_corpus_active_adaptation += summary.active_adaptation;
+            improvement_corpus_compiler_passed += summary.compiler_passed;
+            improvement_corpus_test_passed += summary.test_passed;
+            improvement_corpus_benchmark_passed += summary.benchmark_passed;
+            improvement_corpus_privacy_rejected += summary.privacy_rejected;
+            improvement_corpus_secret_leaks += summary.secret_leaks;
+        }
+        if let Some(summary) = adaptive_routing_trace_gate_summary(line) {
+            adaptive_routing_events += summary.events;
+            adaptive_routing_candidates += summary.candidates;
+            adaptive_routing_include += summary.include;
+            adaptive_routing_compress += summary.compress;
+            adaptive_routing_defer += summary.defer;
+            adaptive_routing_skip += summary.skip;
+            adaptive_routing_input_tokens += summary.input_tokens;
+            adaptive_routing_retained_tokens += summary.retained_tokens;
+            adaptive_routing_saved_tokens += summary.saved_tokens;
+        }
+        if let Some(summary) = task_hierarchy_trace_gate_summary(line) {
+            task_hierarchy_events += summary.events;
+            task_hierarchy_mutation_records += summary.mutation_records;
+            task_hierarchy_route_pressure_milli += summary.route_pressure_milli;
+            task_hierarchy_compute_reduction_milli += summary.compute_reduction_milli;
+        }
+        if let Some(summary) = compute_budget_trace_gate_summary(line) {
+            compute_budget_events += summary.events;
+            compute_budget_low += summary.low;
+            compute_budget_normal += summary.normal;
+            compute_budget_expanded += summary.expanded;
+            compute_budget_selected_candidates += summary.selected_candidates;
+            compute_budget_low_value_skipped += summary.low_value_skipped;
+            compute_budget_kv_lookups_skipped += summary.kv_lookups_skipped;
+            compute_budget_validation_cost_tokens += summary.validation_cost_tokens;
+            compute_budget_saved_tokens += summary.saved_tokens;
+            compute_budget_avoided_tokens += summary.avoided_tokens;
+            compute_budget_write_allowed += summary.write_allowed;
+            compute_budget_applied += summary.applied;
+        }
+        if let Some(summary) = reasoning_genome_trace_gate_summary(line) {
+            reasoning_genome_events += summary.events;
+            reasoning_genome_genes += summary.genes;
+            reasoning_genome_active_genes += summary.active_genes;
+            reasoning_genome_aged_genes += summary.aged_genes;
+            reasoning_genome_malignant_genes += summary.malignant_genes;
+            reasoning_genome_relabel_candidates += summary.relabel_candidates;
+            reasoning_genome_regeneration_candidates += summary.regeneration_candidates;
+            reasoning_genome_gene_scissors_proposals += summary.gene_scissors_proposals;
+            reasoning_genome_repair_payloads += summary.repair_payloads;
+            reasoning_genome_regeneration_payloads += summary.regeneration_payloads;
+            reasoning_genome_lifecycle_records += summary.lifecycle_records;
+            reasoning_genome_lifecycle_tombstone_candidates +=
+                summary.lifecycle_tombstone_candidates;
+            reasoning_genome_lifecycle_pending_validations += summary.lifecycle_pending_validations;
+            reasoning_genome_lifecycle_source_evidence += summary.lifecycle_source_evidence;
+            reasoning_genome_splice_segments += summary.splice_segments;
+            reasoning_genome_splice_exons += summary.splice_exons;
+            reasoning_genome_splice_introns += summary.splice_introns;
+            reasoning_genome_splice_variants += summary.splice_variants;
+            reasoning_genome_splice_quarantined += summary.splice_quarantined;
+            reasoning_genome_splice_repair_candidates += summary.splice_repair_candidates;
+            reasoning_genome_splice_findings += summary.splice_findings;
+            reasoning_genome_splice_proposals += summary.splice_proposals;
+            reasoning_genome_write_allowed += summary.write_allowed;
+            reasoning_genome_mutation_applied += summary.mutation_applied;
+            reasoning_genome_splice_write_allowed += summary.splice_write_allowed;
+            reasoning_genome_splice_applied += summary.splice_applied;
+        }
+        if let Some(summary) = memory_admission_trace_gate_summary(line) {
+            memory_admission_events += summary.events;
+            memory_admission_candidates += summary.candidates;
+            memory_admission_ready += summary.ready;
+            memory_admission_blocked += summary.blocked;
+            memory_admission_admitted += summary.admitted;
+            memory_admission_hold += summary.hold;
+            memory_admission_reject += summary.reject;
+            memory_admission_quarantine += summary.quarantine;
+            memory_admission_review_packets += summary.review_packets;
+            memory_admission_ledger_records += summary.ledger_records;
+            memory_admission_ledger_authorized += summary.ledger_authorized;
+            memory_admission_ledger_applied += summary.ledger_applied;
+            memory_admission_ledger_preview_only += summary.ledger_preview_only;
+            memory_admission_ledger_held += summary.ledger_held;
+            memory_admission_ledger_rejected += summary.ledger_rejected;
+            memory_admission_ledger_duplicate += summary.ledger_duplicate;
+            memory_admission_ledger_decayed += summary.ledger_decayed;
+            memory_admission_ledger_merged += summary.ledger_merged;
+            memory_admission_ledger_rollback += summary.ledger_rollback;
+        }
+        if let Some(summary) = kv_fusion_trace_gate_summary(line) {
+            kv_fusion_events += summary.events;
+            kv_fusion_candidates += summary.candidates;
+            kv_fusion_fused += summary.fused;
+            kv_fusion_compressed += summary.compressed;
+            kv_fusion_skipped += summary.skipped;
+            kv_fusion_held += summary.held;
+            kv_fusion_rejected += summary.rejected;
+            kv_fusion_approval_blocked += summary.approval_blocked;
+            kv_fusion_input_tokens += summary.input_tokens;
+            kv_fusion_retained_tokens += summary.retained_tokens;
+            kv_fusion_saved_tokens += summary.saved_tokens;
+        }
         failures.extend(
             evaluate_trace_schema_line(line)
                 .into_iter()
@@ -134,6 +1761,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     Ok(TraceSchemaGateReport {
         passed: failures.is_empty(),
         checked_lines,
+        trace_experience_ids,
         rust_check_events,
         rust_check_passed,
         rust_check_failed,
@@ -153,6 +1781,219 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         business_contract_event_canonical_fallbacks,
         runtime_error_events,
         runtime_timeout_events,
+        self_evolution_admission_events,
+        self_evolution_admission_admitted,
+        self_evolution_admission_blocked,
+        self_evolution_admission_review_packets,
+        self_evolution_admission_evidence_ids,
+        self_evolution_admission_missing_review_packet_refs,
+        self_evolution_experiment_events,
+        self_evolution_experiment_admit,
+        self_evolution_experiment_hold,
+        self_evolution_experiment_reject,
+        self_evolution_experiment_rollback,
+        self_evolution_experiment_repeated,
+        self_evolution_experiment_conflicts,
+        self_evolution_experiment_rollback_replayable,
+        self_evolution_experiment_active_candidates,
+        self_evolution_experiment_write_allowed,
+        self_evolution_experiment_applied,
+        self_evolution_rollback_replay_events,
+        self_evolution_rollback_replay_items,
+        self_evolution_rollback_replay_replayable,
+        self_evolution_rollback_replay_blocked,
+        self_evolution_rollback_replay_all_replayable,
+        self_evolution_rollback_replay_rollback_anchor_ids,
+        self_evolution_rollback_replay_evidence_ids,
+        self_evolution_rollback_replay_active_candidates,
+        self_evolution_rollback_replay_item_write_allowed,
+        self_evolution_rollback_replay_item_applied,
+        self_evolution_rollback_replay_write_allowed,
+        self_evolution_rollback_replay_applied,
+        self_evolution_rollback_replay_gate_events,
+        self_evolution_rollback_replay_gate_admitted,
+        self_evolution_rollback_replay_gate_held,
+        self_evolution_rollback_replay_gate_review_packets,
+        self_evolution_rollback_replay_gate_review_evidence_ids,
+        self_evolution_rollback_replay_gate_missing_review_packet_refs,
+        self_evolution_rollback_replay_gate_items,
+        self_evolution_rollback_replay_gate_replayable,
+        self_evolution_rollback_replay_gate_blocked,
+        self_evolution_rollback_replay_gate_all_replayable,
+        self_evolution_rollback_replay_gate_rollback_anchor_ids,
+        self_evolution_rollback_replay_gate_evidence_ids,
+        self_evolution_rollback_replay_gate_active_candidates,
+        self_evolution_rollback_replay_gate_item_write_allowed,
+        self_evolution_rollback_replay_gate_item_applied,
+        self_evolution_rollback_replay_gate_plan_write_allowed,
+        self_evolution_rollback_replay_gate_plan_applied,
+        self_evolution_rollback_replay_gate_write_allowed,
+        self_evolution_rollback_replay_gate_applied,
+        self_evolution_operator_approval_events,
+        self_evolution_operator_approval_approved,
+        self_evolution_operator_approval_held,
+        self_evolution_operator_approval_review_packets,
+        self_evolution_operator_approval_evidence_ids,
+        self_evolution_operator_approval_rollback_anchor_ids,
+        self_evolution_operator_approval_content_digests,
+        self_evolution_operator_approval_source_report_schemas,
+        self_evolution_operator_approval_missing_review_packet_refs,
+        self_evolution_operator_approval_write_allowed,
+        self_evolution_operator_approval_applied,
+        self_evolution_promotion_preflight_events,
+        self_evolution_promotion_preflight_ready,
+        self_evolution_promotion_preflight_held,
+        self_evolution_promotion_preflight_review_packets,
+        self_evolution_promotion_preflight_evidence_ids,
+        self_evolution_promotion_preflight_rollback_anchor_ids,
+        self_evolution_promotion_preflight_content_digests,
+        self_evolution_promotion_preflight_source_report_schemas,
+        self_evolution_promotion_preflight_missing_refs,
+        self_evolution_promotion_preflight_blocked_reasons,
+        self_evolution_promotion_preflight_write_allowed,
+        self_evolution_promotion_preflight_applied,
+        self_evolution_rollback_replay_apply_events,
+        self_evolution_rollback_replay_apply_ready,
+        self_evolution_rollback_replay_apply_held,
+        self_evolution_rollback_replay_apply_items,
+        self_evolution_rollback_replay_apply_replayable,
+        self_evolution_rollback_replay_apply_blocked,
+        self_evolution_rollback_replay_apply_review_packets,
+        self_evolution_rollback_replay_apply_evidence_ids,
+        self_evolution_rollback_replay_apply_rollback_anchor_ids,
+        self_evolution_rollback_replay_apply_content_digests,
+        self_evolution_rollback_replay_apply_source_report_schemas,
+        self_evolution_rollback_replay_apply_missing_refs,
+        self_evolution_rollback_replay_apply_blocked_reasons,
+        self_evolution_rollback_replay_apply_write_allowed,
+        self_evolution_rollback_replay_apply_applied,
+        self_evolving_memory_store_events,
+        self_evolving_memory_store_retrieval_events,
+        self_evolving_memory_store_maintenance_events,
+        self_evolving_memory_store_admission_preview_events,
+        self_evolving_memory_store_contexts,
+        self_evolving_memory_store_maintenance_actions,
+        self_evolving_memory_store_admission_candidates,
+        self_evolving_memory_store_write_allowed,
+        self_evolving_memory_store_durable_write_allowed,
+        self_evolving_memory_store_applied,
+        self_evolving_memory_store_applied_to_disk,
+        memory_residency_events,
+        memory_residency_decisions,
+        memory_residency_hot,
+        memory_residency_warm,
+        memory_residency_cold,
+        memory_residency_quarantined,
+        memory_residency_retired,
+        memory_residency_protected_rollback_anchors,
+        memory_residency_blocked_reasons,
+        memory_residency_token_estimate,
+        memory_residency_write_allowed,
+        memory_residency_durable_write_allowed,
+        memory_residency_applied,
+        unified_writer_gate_events,
+        unified_writer_gate_records,
+        unified_writer_gate_memory_records,
+        unified_writer_gate_genome_records,
+        unified_writer_gate_experiment_ledger_records,
+        unified_writer_gate_ready_records,
+        unified_writer_gate_held_records,
+        unified_writer_gate_rejected_records,
+        unified_writer_gate_preview_only_records,
+        unified_writer_gate_reason_codes,
+        unified_writer_gate_explicit_apply_required,
+        unified_writer_gate_write_allowed,
+        unified_writer_gate_durable_write_allowed,
+        unified_writer_gate_applied,
+        improvement_corpus_events,
+        improvement_corpus_episodes,
+        improvement_corpus_active_adaptation,
+        improvement_corpus_compiler_passed,
+        improvement_corpus_test_passed,
+        improvement_corpus_benchmark_passed,
+        improvement_corpus_privacy_rejected,
+        improvement_corpus_secret_leaks,
+        adaptive_routing_events,
+        adaptive_routing_candidates,
+        adaptive_routing_include,
+        adaptive_routing_compress,
+        adaptive_routing_defer,
+        adaptive_routing_skip,
+        adaptive_routing_input_tokens,
+        adaptive_routing_retained_tokens,
+        adaptive_routing_saved_tokens,
+        task_hierarchy_events,
+        task_hierarchy_mutation_records,
+        task_hierarchy_route_pressure_milli,
+        task_hierarchy_compute_reduction_milli,
+        compute_budget_events,
+        compute_budget_low,
+        compute_budget_normal,
+        compute_budget_expanded,
+        compute_budget_selected_candidates,
+        compute_budget_low_value_skipped,
+        compute_budget_kv_lookups_skipped,
+        compute_budget_validation_cost_tokens,
+        compute_budget_saved_tokens,
+        compute_budget_avoided_tokens,
+        compute_budget_write_allowed,
+        compute_budget_applied,
+        reasoning_genome_events,
+        reasoning_genome_genes,
+        reasoning_genome_active_genes,
+        reasoning_genome_aged_genes,
+        reasoning_genome_malignant_genes,
+        reasoning_genome_relabel_candidates,
+        reasoning_genome_regeneration_candidates,
+        reasoning_genome_gene_scissors_proposals,
+        reasoning_genome_repair_payloads,
+        reasoning_genome_regeneration_payloads,
+        reasoning_genome_lifecycle_records,
+        reasoning_genome_lifecycle_tombstone_candidates,
+        reasoning_genome_lifecycle_pending_validations,
+        reasoning_genome_lifecycle_source_evidence,
+        reasoning_genome_splice_segments,
+        reasoning_genome_splice_exons,
+        reasoning_genome_splice_introns,
+        reasoning_genome_splice_variants,
+        reasoning_genome_splice_quarantined,
+        reasoning_genome_splice_repair_candidates,
+        reasoning_genome_splice_findings,
+        reasoning_genome_splice_proposals,
+        reasoning_genome_write_allowed,
+        reasoning_genome_mutation_applied,
+        reasoning_genome_splice_write_allowed,
+        reasoning_genome_splice_applied,
+        memory_admission_events,
+        memory_admission_candidates,
+        memory_admission_ready,
+        memory_admission_blocked,
+        memory_admission_admitted,
+        memory_admission_hold,
+        memory_admission_reject,
+        memory_admission_quarantine,
+        memory_admission_review_packets,
+        memory_admission_ledger_records,
+        memory_admission_ledger_authorized,
+        memory_admission_ledger_applied,
+        memory_admission_ledger_preview_only,
+        memory_admission_ledger_held,
+        memory_admission_ledger_rejected,
+        memory_admission_ledger_duplicate,
+        memory_admission_ledger_decayed,
+        memory_admission_ledger_merged,
+        memory_admission_ledger_rollback,
+        kv_fusion_events,
+        kv_fusion_candidates,
+        kv_fusion_fused,
+        kv_fusion_compressed,
+        kv_fusion_skipped,
+        kv_fusion_held,
+        kv_fusion_rejected,
+        kv_fusion_approval_blocked,
+        kv_fusion_input_tokens,
+        kv_fusion_retained_tokens,
+        kv_fusion_saved_tokens,
         failures,
     })
 }
@@ -191,6 +2032,52 @@ fn rust_check_trace_gate_summary(line: &str) -> Option<RustCheckTraceGateSummary
     }
 
     Some(summary)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct UnifiedWriterGateTraceGateSummary {
+    events: usize,
+    records: usize,
+    memory_records: usize,
+    genome_records: usize,
+    experiment_ledger_records: usize,
+    ready_records: usize,
+    held_records: usize,
+    rejected_records: usize,
+    preview_only_records: usize,
+    reason_codes: usize,
+    explicit_apply_required: usize,
+    write_allowed: usize,
+    durable_write_allowed: usize,
+    applied: usize,
+}
+
+fn unified_writer_gate_trace_gate_summary(line: &str) -> Option<UnifiedWriterGateTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-unified-writer-gate-v1\"") {
+        return None;
+    }
+
+    Some(UnifiedWriterGateTraceGateSummary {
+        events: 1,
+        records: extract_json_usize_field(line, "records").unwrap_or(0),
+        memory_records: extract_json_usize_field(line, "memory_records").unwrap_or(0),
+        genome_records: extract_json_usize_field(line, "genome_records").unwrap_or(0),
+        experiment_ledger_records: extract_json_usize_field(line, "experiment_ledger_records")
+            .unwrap_or(0),
+        ready_records: extract_json_usize_field(line, "ready_records").unwrap_or(0),
+        held_records: extract_json_usize_field(line, "held_records").unwrap_or(0),
+        rejected_records: extract_json_usize_field(line, "rejected_records").unwrap_or(0),
+        preview_only_records: extract_json_usize_field(line, "preview_only_records").unwrap_or(0),
+        reason_codes: extract_json_usize_field(line, "reason_code_count").unwrap_or(0),
+        explicit_apply_required: usize::from(
+            extract_json_bool_field(line, "explicit_apply_required").unwrap_or(false),
+        ),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        durable_write_allowed: usize::from(
+            extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -277,4 +2164,792 @@ fn runtime_error_trace_gate_summary(line: &str) -> Option<RuntimeErrorTraceGateS
     }
 
     (summary.events > 0).then_some(summary)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionAdmissionTraceGateSummary {
+    events: usize,
+    admitted: usize,
+    blocked: usize,
+    review_packets: usize,
+    evidence_ids: usize,
+    missing_review_packet_refs: usize,
+}
+
+fn self_evolution_admission_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionAdmissionTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\"") {
+        return None;
+    }
+
+    let admitted = extract_json_bool_field(line, "admitted_for_human_review").unwrap_or(false);
+    let blocked_reasons = extract_last_json_string_array_field(line, "blocked_reasons")
+        .map(|reasons| reasons.len())
+        .unwrap_or(0);
+    let review_packet = json_object_after_field(line, "review_packet");
+    let review_packets = review_packet
+        .and_then(|object| extract_json_string_array_field(object, "approval_review_packet_ids"))
+        .map(|ids| ids.len())
+        .unwrap_or(0);
+    let evidence_ids = review_packet
+        .and_then(|object| extract_json_string_array_field(object, "evidence_ids"))
+        .map(|ids| ids.len())
+        .unwrap_or(0);
+    let missing_review_packet_refs = usize::from(review_packets == 0 || evidence_ids == 0);
+
+    Some(SelfEvolutionAdmissionTraceGateSummary {
+        events: 1,
+        admitted: usize::from(admitted),
+        blocked: usize::from(!admitted || blocked_reasons > 0),
+        review_packets,
+        evidence_ids,
+        missing_review_packet_refs,
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionExperimentTraceGateSummary {
+    events: usize,
+    admit: usize,
+    hold: usize,
+    reject: usize,
+    rollback: usize,
+    repeated: usize,
+    conflicts: usize,
+    rollback_replayable: usize,
+    active_candidates: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_experiment_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionExperimentTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-experiment-v1\"") {
+        return None;
+    }
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+
+    Some(SelfEvolutionExperimentTraceGateSummary {
+        events: 1,
+        admit: usize::from(decision == "admit_for_human_review"),
+        hold: usize::from(decision == "hold"),
+        reject: usize::from(decision == "reject"),
+        rollback: usize::from(decision == "rollback"),
+        repeated: usize::from(
+            extract_json_bool_field(line, "repeated_experiment").unwrap_or(false),
+        ),
+        conflicts: usize::from(
+            extract_json_bool_field(line, "conflicting_evidence").unwrap_or(false),
+        ),
+        rollback_replayable: usize::from(
+            extract_json_bool_field(line, "rollback_replayable").unwrap_or(false),
+        ),
+        active_candidates: usize::from(
+            extract_json_bool_field(line, "active_candidate").unwrap_or(false),
+        ),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionRollbackReplayTraceGateSummary {
+    events: usize,
+    items: usize,
+    replayable: usize,
+    blocked: usize,
+    all_replayable: usize,
+    rollback_anchor_ids: usize,
+    evidence_ids: usize,
+    active_candidates: usize,
+    item_write_allowed: usize,
+    item_applied: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_rollback_replay_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionRollbackReplayTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-plan-v1\"") {
+        return None;
+    }
+
+    Some(SelfEvolutionRollbackReplayTraceGateSummary {
+        events: 1,
+        items: extract_json_usize_field(line, "item_count").unwrap_or(0),
+        replayable: extract_json_usize_field(line, "replayable").unwrap_or(0),
+        blocked: extract_json_usize_field(line, "blocked").unwrap_or(0),
+        all_replayable: usize::from(
+            extract_json_bool_field(line, "all_replayable").unwrap_or(false),
+        ),
+        rollback_anchor_ids: extract_json_string_array_field(line, "rollback_anchor_ids")
+            .map(|ids| ids.len())
+            .unwrap_or(0),
+        evidence_ids: extract_json_string_array_field(line, "evidence_ids")
+            .map(|ids| ids.len())
+            .unwrap_or(0),
+        active_candidates: extract_json_usize_field(line, "active_candidates").unwrap_or(0),
+        item_write_allowed: extract_json_usize_field(line, "item_write_allowed").unwrap_or(0),
+        item_applied: extract_json_usize_field(line, "item_applied").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionRollbackReplayGateTraceGateSummary {
+    events: usize,
+    admitted: usize,
+    held: usize,
+    review_packets: usize,
+    review_evidence_ids: usize,
+    missing_review_packet_refs: usize,
+    items: usize,
+    replayable: usize,
+    blocked: usize,
+    all_replayable: usize,
+    rollback_anchor_ids: usize,
+    evidence_ids: usize,
+    active_candidates: usize,
+    item_write_allowed: usize,
+    item_applied: usize,
+    plan_write_allowed: usize,
+    plan_applied: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_rollback_replay_gate_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionRollbackReplayGateTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-gate-v1\"") {
+        return None;
+    }
+
+    let admitted = extract_json_bool_field(line, "admitted_for_human_review").unwrap_or(false);
+    let review_packet = json_object_after_field(line, "review_packet");
+    let review_packets = review_packet
+        .and_then(|object| extract_json_string_array_field(object, "approval_review_packet_ids"))
+        .map(|ids| ids.len())
+        .unwrap_or(0);
+    let review_evidence_ids = review_packet
+        .and_then(|object| extract_json_string_array_field(object, "evidence_ids"))
+        .map(|ids| ids.len())
+        .unwrap_or(0);
+    let missing_review_packet_refs =
+        usize::from(review_packets == 0 || (admitted && review_evidence_ids == 0));
+
+    Some(SelfEvolutionRollbackReplayGateTraceGateSummary {
+        events: 1,
+        admitted: usize::from(admitted),
+        held: usize::from(!admitted),
+        review_packets,
+        review_evidence_ids,
+        missing_review_packet_refs,
+        items: extract_json_usize_field(line, "item_count").unwrap_or(0),
+        replayable: extract_json_usize_field(line, "replayable").unwrap_or(0),
+        blocked: extract_json_usize_field(line, "blocked").unwrap_or(0),
+        all_replayable: usize::from(
+            extract_json_bool_field(line, "all_replayable").unwrap_or(false),
+        ),
+        rollback_anchor_ids: extract_json_string_array_field(line, "rollback_anchor_ids")
+            .map(|ids| ids.len())
+            .unwrap_or(0),
+        evidence_ids: extract_json_string_array_field(line, "evidence_ids")
+            .map(|ids| ids.len())
+            .unwrap_or(0),
+        active_candidates: extract_json_usize_field(line, "active_candidates").unwrap_or(0),
+        item_write_allowed: extract_json_usize_field(line, "item_write_allowed").unwrap_or(0),
+        item_applied: extract_json_usize_field(line, "item_applied").unwrap_or(0),
+        plan_write_allowed: usize::from(
+            extract_json_bool_field(line, "plan_write_allowed").unwrap_or(false),
+        ),
+        plan_applied: usize::from(extract_json_bool_field(line, "plan_applied").unwrap_or(false)),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionOperatorApprovalTraceGateSummary {
+    events: usize,
+    approved: usize,
+    held: usize,
+    review_packets: usize,
+    evidence_ids: usize,
+    rollback_anchor_ids: usize,
+    content_digests: usize,
+    source_report_schemas: usize,
+    missing_review_packet_refs: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_operator_approval_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionOperatorApprovalTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-operator-approval-v1\"") {
+        return None;
+    }
+
+    let approved = extract_json_bool_field(line, "operator_approved").unwrap_or(false);
+    let review_packets =
+        extract_json_usize_field(line, "approved_review_packet_count").unwrap_or(0);
+    let evidence_ids = extract_json_usize_field(line, "approved_evidence_count").unwrap_or(0);
+    let rollback_anchor_ids =
+        extract_json_usize_field(line, "approved_rollback_anchor_count").unwrap_or(0);
+    let content_digests =
+        extract_json_usize_field(line, "approved_content_digest_count").unwrap_or(0);
+    let source_report_schemas =
+        extract_json_usize_field(line, "approved_source_report_schema_count").unwrap_or(0);
+
+    Some(SelfEvolutionOperatorApprovalTraceGateSummary {
+        events: 1,
+        approved: usize::from(approved),
+        held: usize::from(!approved),
+        review_packets,
+        evidence_ids,
+        rollback_anchor_ids,
+        content_digests,
+        source_report_schemas,
+        missing_review_packet_refs: usize::from(review_packets == 0 || evidence_ids == 0),
+        write_allowed: usize::from(
+            extract_json_bool_field(line, "activation_write_allowed").unwrap_or(false)
+                || extract_json_bool_field(line, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(
+            extract_json_bool_field(line, "active_candidate").unwrap_or(false)
+                || extract_json_bool_field(line, "applied").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionPromotionPreflightTraceGateSummary {
+    events: usize,
+    ready: usize,
+    held: usize,
+    review_packets: usize,
+    evidence_ids: usize,
+    rollback_anchor_ids: usize,
+    content_digests: usize,
+    source_report_schemas: usize,
+    missing_refs: usize,
+    blocked_reasons: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_promotion_preflight_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionPromotionPreflightTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-promotion-preflight-v1\"") {
+        return None;
+    }
+
+    let ready = extract_json_bool_field(line, "ready_for_explicit_promotion").unwrap_or(false);
+    let review_packets = extract_json_usize_field(line, "review_packet_count").unwrap_or(0);
+    let evidence_ids = extract_json_usize_field(line, "evidence_id_count").unwrap_or(0);
+    let rollback_anchor_ids = extract_json_usize_field(line, "rollback_anchor_count").unwrap_or(0);
+    let content_digests = extract_json_usize_field(line, "content_digest_count").unwrap_or(0);
+    let source_report_schemas =
+        extract_json_usize_field(line, "source_report_schema_count").unwrap_or(0);
+    let missing_refs = usize::from(
+        review_packets == 0
+            || evidence_ids == 0
+            || rollback_anchor_ids == 0
+            || content_digests == 0
+            || source_report_schemas == 0,
+    );
+
+    Some(SelfEvolutionPromotionPreflightTraceGateSummary {
+        events: 1,
+        ready: usize::from(ready),
+        held: usize::from(!ready),
+        review_packets,
+        evidence_ids,
+        rollback_anchor_ids,
+        content_digests,
+        source_report_schemas,
+        missing_refs,
+        blocked_reasons: extract_json_usize_field(line, "blocked_reasons_count").unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(line, "activation_write_allowed").unwrap_or(false)
+                || extract_json_bool_field(line, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(
+            extract_json_bool_field(line, "active_candidate").unwrap_or(false)
+                || extract_json_bool_field(line, "applied").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolutionRollbackReplayApplyTraceGateSummary {
+    events: usize,
+    ready: usize,
+    held: usize,
+    items: usize,
+    replayable: usize,
+    blocked: usize,
+    review_packets: usize,
+    evidence_ids: usize,
+    rollback_anchor_ids: usize,
+    content_digests: usize,
+    source_report_schemas: usize,
+    missing_refs: usize,
+    blocked_reasons: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_evolution_rollback_replay_apply_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolutionRollbackReplayApplyTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-apply-v1\"") {
+        return None;
+    }
+
+    let ready = extract_json_bool_field(line, "ready_for_operator_apply").unwrap_or(false);
+    let review_packets = extract_json_usize_field(line, "review_packet_count").unwrap_or(0);
+    let evidence_ids = extract_json_usize_field(line, "evidence_id_count").unwrap_or(0);
+    let rollback_anchor_ids = extract_json_usize_field(line, "rollback_anchor_count").unwrap_or(0);
+    let content_digests = extract_json_usize_field(line, "content_digest_count").unwrap_or(0);
+    let source_report_schemas =
+        extract_json_usize_field(line, "source_report_schema_count").unwrap_or(0);
+    let missing_refs = usize::from(
+        review_packets == 0
+            || evidence_ids == 0
+            || rollback_anchor_ids == 0
+            || content_digests == 0
+            || source_report_schemas == 0,
+    );
+
+    Some(SelfEvolutionRollbackReplayApplyTraceGateSummary {
+        events: 1,
+        ready: usize::from(ready),
+        held: usize::from(!ready),
+        items: extract_json_usize_field(line, "item_count").unwrap_or(0),
+        replayable: extract_json_usize_field(line, "replayable").unwrap_or(0),
+        blocked: extract_json_usize_field(line, "blocked").unwrap_or(0),
+        review_packets,
+        evidence_ids,
+        rollback_anchor_ids,
+        content_digests,
+        source_report_schemas,
+        missing_refs,
+        blocked_reasons: extract_json_usize_field(line, "blocked_reasons_count").unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(line, "activation_write_allowed").unwrap_or(false)
+                || extract_json_bool_field(line, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(
+            extract_json_bool_field(line, "active_candidate").unwrap_or(false)
+                || extract_json_bool_field(line, "applied").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolvingMemoryStoreTraceGateSummary {
+    events: usize,
+    retrieval_events: usize,
+    maintenance_events: usize,
+    admission_preview_events: usize,
+    contexts: usize,
+    maintenance_actions: usize,
+    admission_candidates: usize,
+    write_allowed: usize,
+    durable_write_allowed: usize,
+    applied: usize,
+    applied_to_disk: usize,
+}
+
+fn self_evolving_memory_store_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolvingMemoryStoreTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolving-memory-store-v1\"") {
+        return None;
+    }
+
+    let operation = extract_json_string_field(line, "operation").unwrap_or_default();
+
+    Some(SelfEvolvingMemoryStoreTraceGateSummary {
+        events: 1,
+        retrieval_events: usize::from(operation == "retrieval"),
+        maintenance_events: usize::from(operation == "maintenance"),
+        admission_preview_events: usize::from(operation == "admission_preview"),
+        contexts: extract_json_usize_field(line, "contexts").unwrap_or(0),
+        maintenance_actions: extract_json_usize_field(line, "maintenance_actions").unwrap_or(0),
+        admission_candidates: extract_json_usize_field(line, "candidates").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        durable_write_allowed: usize::from(
+            extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+        applied_to_disk: usize::from(
+            extract_json_bool_field(line, "applied_to_disk").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct MemoryResidencyTraceGateSummary {
+    events: usize,
+    decisions: usize,
+    hot: usize,
+    warm: usize,
+    cold: usize,
+    quarantined: usize,
+    retired: usize,
+    protected_rollback_anchors: usize,
+    blocked_reasons: usize,
+    token_estimate: usize,
+    write_allowed: usize,
+    durable_write_allowed: usize,
+    applied: usize,
+}
+
+fn memory_residency_trace_gate_summary(line: &str) -> Option<MemoryResidencyTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-memory-residency-plan-v1\"") {
+        return None;
+    }
+
+    Some(MemoryResidencyTraceGateSummary {
+        events: 1,
+        decisions: extract_json_usize_field(line, "decision_count").unwrap_or(0),
+        hot: extract_json_usize_field(line, "hot").unwrap_or(0),
+        warm: extract_json_usize_field(line, "warm").unwrap_or(0),
+        cold: extract_json_usize_field(line, "cold").unwrap_or(0),
+        quarantined: extract_json_usize_field(line, "quarantined").unwrap_or(0),
+        retired: extract_json_usize_field(line, "retired").unwrap_or(0),
+        protected_rollback_anchors: extract_json_usize_field(line, "protected_rollback_anchors")
+            .unwrap_or(0),
+        blocked_reasons: extract_json_usize_field(line, "blocked_reasons").unwrap_or(0),
+        token_estimate: extract_json_usize_field(line, "token_estimate").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        durable_write_allowed: usize::from(
+            extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ImprovementCorpusTraceGateSummary {
+    events: usize,
+    episodes: usize,
+    active_adaptation: usize,
+    compiler_passed: usize,
+    test_passed: usize,
+    benchmark_passed: usize,
+    privacy_rejected: usize,
+    secret_leaks: usize,
+}
+
+fn improvement_corpus_trace_gate_summary(line: &str) -> Option<ImprovementCorpusTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-improvement-corpus-v1\"") {
+        return None;
+    }
+
+    let records = json_object_after_field(line, "records");
+    let active_adaptation = json_object_after_field(line, "active_adaptation");
+    let evidence = json_object_after_field(line, "evidence");
+    let privacy = json_object_after_field(line, "privacy");
+
+    Some(ImprovementCorpusTraceGateSummary {
+        events: 1,
+        episodes: records
+            .and_then(|object| extract_json_usize_field(object, "total"))
+            .unwrap_or(0),
+        active_adaptation: active_adaptation
+            .and_then(|object| extract_json_usize_field(object, "eligible"))
+            .unwrap_or(0),
+        compiler_passed: evidence
+            .and_then(|object| extract_json_usize_field(object, "compiler_passed"))
+            .unwrap_or(0),
+        test_passed: evidence
+            .and_then(|object| extract_json_usize_field(object, "test_passed"))
+            .unwrap_or(0),
+        benchmark_passed: evidence
+            .and_then(|object| extract_json_usize_field(object, "benchmark_passed"))
+            .unwrap_or(0),
+        privacy_rejected: privacy
+            .and_then(|object| extract_json_usize_field(object, "rejected"))
+            .unwrap_or(0),
+        secret_leaks: privacy
+            .and_then(|object| extract_json_usize_field(object, "secret_leaks"))
+            .unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct AdaptiveRoutingTraceGateSummary {
+    events: usize,
+    candidates: usize,
+    include: usize,
+    compress: usize,
+    defer: usize,
+    skip: usize,
+    input_tokens: usize,
+    retained_tokens: usize,
+    saved_tokens: usize,
+}
+
+fn adaptive_routing_trace_gate_summary(line: &str) -> Option<AdaptiveRoutingTraceGateSummary> {
+    let routing = json_object_after_field(line, "adaptive_routing")?;
+
+    Some(AdaptiveRoutingTraceGateSummary {
+        events: 1,
+        candidates: extract_json_usize_field(routing, "candidates").unwrap_or(0),
+        include: extract_json_usize_field(routing, "include").unwrap_or(0),
+        compress: extract_json_usize_field(routing, "compress").unwrap_or(0),
+        defer: extract_json_usize_field(routing, "defer").unwrap_or(0),
+        skip: extract_json_usize_field(routing, "skip").unwrap_or(0),
+        input_tokens: extract_json_usize_field(routing, "input_tokens").unwrap_or(0),
+        retained_tokens: extract_json_usize_field(routing, "retained_tokens").unwrap_or(0),
+        saved_tokens: extract_json_usize_field(routing, "saved_tokens").unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct TaskHierarchyTraceGateSummary {
+    events: usize,
+    mutation_records: usize,
+    route_pressure_milli: usize,
+    compute_reduction_milli: usize,
+}
+
+fn task_hierarchy_trace_gate_summary(line: &str) -> Option<TaskHierarchyTraceGateSummary> {
+    let task = json_object_after_field(line, "task_hierarchy")?;
+
+    Some(TaskHierarchyTraceGateSummary {
+        events: 1,
+        mutation_records: extract_json_usize_field(task, "mutation_records").unwrap_or(0),
+        route_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(task, "route_pressure").unwrap_or(0.0),
+        ),
+        compute_reduction_milli: trace_gate_milli(
+            extract_json_f32_field(task, "compute_reduction").unwrap_or(0.0),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ComputeBudgetTraceGateSummary {
+    events: usize,
+    low: usize,
+    normal: usize,
+    expanded: usize,
+    selected_candidates: usize,
+    low_value_skipped: usize,
+    kv_lookups_skipped: usize,
+    validation_cost_tokens: usize,
+    saved_tokens: usize,
+    avoided_tokens: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn compute_budget_trace_gate_summary(line: &str) -> Option<ComputeBudgetTraceGateSummary> {
+    let budget = json_object_after_field(line, "compute_budget")?;
+    let budget_kind = extract_json_string_field(budget, "budget").unwrap_or_default();
+
+    Some(ComputeBudgetTraceGateSummary {
+        events: 1,
+        low: usize::from(budget_kind == "low"),
+        normal: usize::from(budget_kind == "normal"),
+        expanded: usize::from(budget_kind == "expanded"),
+        selected_candidates: extract_json_usize_field(budget, "selected_candidates").unwrap_or(0),
+        low_value_skipped: extract_json_usize_field(budget, "low_value_skipped").unwrap_or(0),
+        kv_lookups_skipped: extract_json_usize_field(budget, "kv_lookups_skipped").unwrap_or(0),
+        validation_cost_tokens: extract_json_usize_field(budget, "validation_cost_tokens")
+            .unwrap_or(0),
+        saved_tokens: extract_json_usize_field(budget, "saved_tokens").unwrap_or(0),
+        avoided_tokens: extract_json_usize_field(budget, "wasted_compute_avoided_tokens")
+            .unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(budget, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(budget, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ReasoningGenomeTraceGateSummary {
+    events: usize,
+    genes: usize,
+    active_genes: usize,
+    aged_genes: usize,
+    malignant_genes: usize,
+    relabel_candidates: usize,
+    regeneration_candidates: usize,
+    gene_scissors_proposals: usize,
+    repair_payloads: usize,
+    regeneration_payloads: usize,
+    lifecycle_records: usize,
+    lifecycle_tombstone_candidates: usize,
+    lifecycle_pending_validations: usize,
+    lifecycle_source_evidence: usize,
+    splice_segments: usize,
+    splice_exons: usize,
+    splice_introns: usize,
+    splice_variants: usize,
+    splice_quarantined: usize,
+    splice_repair_candidates: usize,
+    splice_findings: usize,
+    splice_proposals: usize,
+    write_allowed: usize,
+    mutation_applied: usize,
+    splice_write_allowed: usize,
+    splice_applied: usize,
+}
+
+fn reasoning_genome_trace_gate_summary(line: &str) -> Option<ReasoningGenomeTraceGateSummary> {
+    let genome = json_object_after_field(line, "reasoning_genome")?;
+
+    Some(ReasoningGenomeTraceGateSummary {
+        events: 1,
+        genes: extract_json_usize_field(genome, "gene_count").unwrap_or(0),
+        active_genes: extract_json_usize_field(genome, "active_genes").unwrap_or(0),
+        aged_genes: extract_json_usize_field(genome, "aged_genes").unwrap_or(0),
+        malignant_genes: extract_json_usize_field(genome, "malignant_genes").unwrap_or(0),
+        relabel_candidates: extract_json_usize_field(genome, "relabel_candidates").unwrap_or(0),
+        regeneration_candidates: extract_json_usize_field(genome, "regeneration_candidates")
+            .unwrap_or(0),
+        gene_scissors_proposals: extract_json_usize_field(genome, "gene_scissors_proposals")
+            .unwrap_or(0),
+        repair_payloads: extract_json_usize_field(genome, "repair_payloads").unwrap_or(0),
+        regeneration_payloads: extract_json_usize_field(genome, "regeneration_payloads")
+            .unwrap_or(0),
+        lifecycle_records: extract_json_usize_field(genome, "lifecycle_records").unwrap_or(0),
+        lifecycle_tombstone_candidates: extract_json_usize_field(
+            genome,
+            "lifecycle_tombstone_candidates",
+        )
+        .unwrap_or(0),
+        lifecycle_pending_validations: extract_json_usize_field(
+            genome,
+            "lifecycle_pending_validations",
+        )
+        .unwrap_or(0),
+        lifecycle_source_evidence: extract_json_usize_field(genome, "lifecycle_source_evidence")
+            .unwrap_or(0),
+        splice_segments: extract_json_usize_field(genome, "splice_segments").unwrap_or(0),
+        splice_exons: extract_json_usize_field(genome, "splice_exons").unwrap_or(0),
+        splice_introns: extract_json_usize_field(genome, "splice_introns").unwrap_or(0),
+        splice_variants: extract_json_usize_field(genome, "splice_variants").unwrap_or(0),
+        splice_quarantined: extract_json_usize_field(genome, "splice_quarantined").unwrap_or(0),
+        splice_repair_candidates: extract_json_usize_field(genome, "splice_repair_candidates")
+            .unwrap_or(0),
+        splice_findings: extract_json_usize_field(genome, "splice_findings").unwrap_or(0),
+        splice_proposals: extract_json_usize_field(genome, "splice_proposals").unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(genome, "write_allowed").unwrap_or(false),
+        ),
+        mutation_applied: usize::from(
+            extract_json_bool_field(genome, "mutation_applied").unwrap_or(false),
+        ),
+        splice_write_allowed: usize::from(
+            extract_json_bool_field(genome, "splice_write_allowed").unwrap_or(false),
+        ),
+        splice_applied: usize::from(
+            extract_json_bool_field(genome, "splice_applied").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct MemoryAdmissionTraceGateSummary {
+    events: usize,
+    candidates: usize,
+    ready: usize,
+    blocked: usize,
+    admitted: usize,
+    hold: usize,
+    reject: usize,
+    quarantine: usize,
+    review_packets: usize,
+    ledger_records: usize,
+    ledger_authorized: usize,
+    ledger_applied: usize,
+    ledger_preview_only: usize,
+    ledger_held: usize,
+    ledger_rejected: usize,
+    ledger_duplicate: usize,
+    ledger_decayed: usize,
+    ledger_merged: usize,
+    ledger_rollback: usize,
+}
+
+fn memory_admission_trace_gate_summary(line: &str) -> Option<MemoryAdmissionTraceGateSummary> {
+    let admission = json_object_after_field(line, "memory_admission")?;
+
+    Some(MemoryAdmissionTraceGateSummary {
+        events: 1,
+        candidates: extract_json_usize_field(admission, "candidates").unwrap_or(0),
+        ready: extract_json_usize_field(admission, "ready").unwrap_or(0),
+        blocked: extract_json_usize_field(admission, "blocked").unwrap_or(0),
+        admitted: extract_json_usize_field(admission, "admitted").unwrap_or(0),
+        hold: extract_json_usize_field(admission, "hold").unwrap_or(0),
+        reject: extract_json_usize_field(admission, "reject").unwrap_or(0),
+        quarantine: extract_json_usize_field(admission, "quarantine").unwrap_or(0),
+        review_packets: extract_json_usize_field(admission, "review_packets").unwrap_or(0),
+        ledger_records: extract_json_usize_field(admission, "ledger_records").unwrap_or(0),
+        ledger_authorized: extract_json_usize_field(admission, "ledger_authorized").unwrap_or(0),
+        ledger_applied: extract_json_usize_field(admission, "ledger_applied").unwrap_or(0),
+        ledger_preview_only: extract_json_usize_field(admission, "ledger_preview_only")
+            .unwrap_or(0),
+        ledger_held: extract_json_usize_field(admission, "ledger_held").unwrap_or(0),
+        ledger_rejected: extract_json_usize_field(admission, "ledger_rejected").unwrap_or(0),
+        ledger_duplicate: extract_json_usize_field(admission, "ledger_duplicate").unwrap_or(0),
+        ledger_decayed: extract_json_usize_field(admission, "ledger_decayed").unwrap_or(0),
+        ledger_merged: extract_json_usize_field(admission, "ledger_merged").unwrap_or(0),
+        ledger_rollback: extract_json_usize_field(admission, "ledger_rollback").unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct KvFusionTraceGateSummary {
+    events: usize,
+    candidates: usize,
+    fused: usize,
+    compressed: usize,
+    skipped: usize,
+    held: usize,
+    rejected: usize,
+    approval_blocked: usize,
+    input_tokens: usize,
+    retained_tokens: usize,
+    saved_tokens: usize,
+}
+
+fn kv_fusion_trace_gate_summary(line: &str) -> Option<KvFusionTraceGateSummary> {
+    let fusion = json_object_after_field(line, "kv_fusion")?;
+
+    Some(KvFusionTraceGateSummary {
+        events: 1,
+        candidates: extract_json_usize_field(fusion, "candidates").unwrap_or(0),
+        fused: extract_json_usize_field(fusion, "fused").unwrap_or(0),
+        compressed: extract_json_usize_field(fusion, "compressed").unwrap_or(0),
+        skipped: extract_json_usize_field(fusion, "skipped").unwrap_or(0),
+        held: extract_json_usize_field(fusion, "held").unwrap_or(0),
+        rejected: extract_json_usize_field(fusion, "rejected").unwrap_or(0),
+        approval_blocked: extract_json_usize_field(fusion, "approval_blocked").unwrap_or(0),
+        input_tokens: extract_json_usize_field(fusion, "input_tokens").unwrap_or(0),
+        retained_tokens: extract_json_usize_field(fusion, "retained_tokens").unwrap_or(0),
+        saved_tokens: extract_json_usize_field(fusion, "saved_tokens").unwrap_or(0),
+    })
+}
+
+fn trace_gate_milli(value: f32) -> usize {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as usize
+    } else {
+        0
+    }
 }

@@ -11,6 +11,12 @@ mod coverage;
 mod embedding;
 #[path = "tests/evolution_ledger.rs"]
 mod evolution_ledger;
+#[path = "tests/genome.rs"]
+mod genome;
+#[path = "tests/genome_rejuvenation.rs"]
+mod genome_rejuvenation;
+#[path = "tests/improvement_corpus.rs"]
+mod improvement_corpus;
 #[path = "tests/live_evolution.rs"]
 mod live_evolution;
 #[path = "tests/live_memory_feedback.rs"]
@@ -21,6 +27,8 @@ mod memory_governance;
 mod recursive_reflection;
 #[path = "tests/roundtrip_quant.rs"]
 mod roundtrip_quant;
+#[path = "tests/routing.rs"]
+mod routing;
 #[path = "tests/runtime_adapter.rs"]
 mod runtime_adapter;
 #[path = "tests/runtime_device.rs"]
@@ -29,6 +37,8 @@ mod runtime_device;
 mod runtime_forward;
 #[path = "tests/runtime_kv.rs"]
 mod runtime_kv;
+#[path = "tests/self_evolving_memory.rs"]
+mod self_evolving_memory;
 
 fn baseline_benchmark_result(
     name: impl Into<String>,

@@ -63,6 +63,11 @@ The north star is now explicitly scoped around five core requirements:
 - Semantic retrieval, sparse filtering, and gist generation reuse the
   self-developed model's own tokenizer and embedding surface instead of
   introducing a hidden third-party encoder dependency.
+- Memory, genome, and experiment-ledger writes default to preview/read-only.
+  Durable admission requires a writer gate, validation evidence, rollback plan,
+  and maintainer/operator approval.
+- External projects and papers are research references until fact, license, and
+  attribution review is complete; incompatible licenses stay concept-only.
 
 - 默认不依赖 Gemma、Llama、Qwen 等第三方模型权重。
 - 核心路径不依赖闭源量化、注意力、记忆或调度组件。
@@ -70,6 +75,8 @@ The north star is now explicitly scoped around five core requirements:
 - 可借鉴公开论文和开放算法思想，但实现细节由本仓库自主掌控。
 - 运行时记忆、经验库和自适应状态全部本地化、可检查、可替换。
 - 语义检索、稀疏筛选和 gist 生成复用自研模型自身的 tokenizer 与 embedding 接口，不引入隐藏的第三方编码器依赖。
+- memory、genome 和 experiment ledger 写入默认 preview/read-only；持久化准入必须经过 writer gate、验证证据、rollback plan 和维护者/操作者批准。
+- 外部项目和论文在事实、许可证和 attribution 复核完成前只作为研究参考；许可证不兼容的材料只做概念参考。
 
 ## Architecture Target / 架构目标
 
@@ -80,7 +87,8 @@ The north star is now explicitly scoped around five core requirements:
    Multi-factor router, hierarchy controller, recursive scheduler,
    Hot/Warm/Cold cache scheduler, sparse KV filter, reflection loop, RLVR-style
    process rewards, drift guard, Rust-only Toolsmith planning, read-only Agent
-   Team coordination, experience replay, and persisted adaptive state.
+   Team coordination, Reasoning Genome Chain, Gene Scissors, experience replay,
+   and persisted adaptive state.
 
 3. Memory system / 记忆系统
    Infini-attention-style global/local KV split, hierarchical gist memory,
@@ -215,6 +223,20 @@ The north star is now explicitly scoped around five core requirements:
     messages, risks, gates, and evolution hints into a blackboard, while the
     main thread remains the only writer to code, memory, and adaptive state.
 
+16. Reasoning Genome Chain and Gene Scissors / 推理基因链与基因剪
+    Add a DNA/NDA-style layer above routing, memory, reflection, and tools:
+    reasoning genes encode reusable strategy atoms, genome chains compose those
+    atoms per task profile, expression traces record how a chain affected an
+    inference, and fitness comes from process reward, compiler/test/benchmark
+    evidence, reflection diagnostics, latency, memory usefulness, and drift.
+    Gene Scissors is the controlled editor for this genome. It can propose
+    relabelling aged genes so their current purpose is explicit, cutting weak
+    genes, quarantining malignant genes, regenerating young replacement genes
+    from stable anchors, splicing validated genes, or rolling back low-fitness
+    changes, but every durable edit must pass dry-run evidence, trace/schema
+    gates, benchmark floors, rollback caps, and human/operator approval before
+    it can mutate persisted adaptive state.
+
 ## Target Module Fusion / 目标模块融合
 
 The following algorithmic ideas are merged into the project goal as owned local
@@ -262,6 +284,71 @@ modules, not external product dependencies:
   reports and the cumulative evolution ledger should record when that
   structured live-evolution evidence is consumed, so self-evolution can be
   audited beyond text notes.
+- Reasoning Genome Chain and Gene Scissors:
+  [`docs/architecture/reasoning-genome-chain.md`](docs/architecture/reasoning-genome-chain.md)
+  defines the new DNA/NDA-style evolution goal. Reasoning genes capture local
+  strategy atoms such as retrieval posture, routing preference, adaptive
+  threshold policy, reflection checks, language mode, budget rules, and
+  tool-use constraints. Genome expression influences router, hierarchy, memory,
+  Toolsmith, Agent Team, and reflection inputs without modifying model weights.
+  Gene Scissors can only edit the genome through auditable proposals, dry-run
+  traces, process-reward fitness, Rust compiler/tests/benchmarks, drift gates,
+  and rollback ledgers, so self-evolution remains reviewable and reversible.
+  Aged genes should first produce relabel plans that refresh label, purpose,
+  and tags. Malignant genes should be quarantined before cut/regeneration, and
+  regenerated genes must come from stable anchors or high-fitness siblings
+  rather than from raw private prompts.
+- DNA-inspired splicing and segment repair:
+  The genome layer now starts an `express_chain` / `memory_chain` split: active
+  genes stay small and trace-visible, while disk-backed memory-chain evidence
+  keeps source experience ids, KV/gist ids, stable anchors, fitness,
+  validation gates, and rollback links. The read-only `DnaSplicer` classifies
+  `GeneSegment` records as exon, intron, or variant; `MutDetector` reports
+  stale labels, mislabels, drift, privacy, schema, format-drift, truncation,
+  insertion/deletion, empty-range, missing-source-hash, and KV-shape variants; `MutFixer` emits
+  read-only mutation plans for relabel, quarantine, repair, regenerate, or
+  splice. A malignant or polluted segment is cut only by first writing a
+  quarantine plan that stores a digest, reason, evidence summary, rollback
+  record, validation requirement, and redacted lineage. Repair, regeneration,
+  and re-admission remain blocked until validation passes, and no genome record
+  may leak raw prompts, secrets, copied third-party text, or hidden reasoning.
+  Public references guide behavior specifications only:
+  DNA-inspired references include Evo/Evo2, SpliceBERT/SpliceTransformer,
+  AlphaGenome, GeneFormer, and TrinityDNA; LLM chunk/KV references include
+  CEPE, RAPID, SEQPACK, StreamingLLM, and ChunkedRAG; Rust inference references
+  include Candle, mistral.rs, and Axum/OpenAI-compatible gateway projects.
+  These are research/reference backlog items, not verified implementation
+  sources. Code from projects with unclear or incompatible terms stays out of
+  the core implementation unless independently reviewed. Inference outcomes now emit read-only splice preview
+  evidence derived from prompt chunks, retrieved memory, gist records, and
+  runtime-KV exports; trace/schema and benchmark gates record splice segment,
+  exon/intron/variant, finding, proposal, and read-only status counts so this
+  control layer remains auditable before any future admission writer exists.
+- Reasoning DNA runtime organization:
+  Closed-loop thinking should expose an auditable gene segment graph without
+  exposing hidden reasoning. `express_chain` records the active strategy atoms
+  used by a run: task profile, route fragment, threshold bias, KV admission
+  posture, reflection heuristic, validation gate, and outcome digest. The
+  `memory_chain` records the longer-lived provenance: sanitized evidence
+  summary, source ids, version, purpose tags, confidence, last validation
+  result, and rollback anchor. Relabel/rejuvenation refreshes stale semantic
+  labels from evidence instead of blindly keeping old memory or deleting useful
+  strategy.
+- Self-evolution writer gates:
+  Memory, genome, and experiment-ledger writes must remain deny-by-default.
+  A candidate cannot mutate `.ndkv`, adaptive state, genome state, or experiment
+  history unless the writer gate confirms candidate-only preview evidence,
+  validation status, rollback plan, privacy/license checks, and explicit
+  maintainer/operator approval. Failed, harmful, polluted, low-confidence, or
+  stale candidates stay quarantined with digest-only evidence until a separate
+  repair/regeneration path proves they can be safely re-admitted.
+- Clean-room and license guardrails:
+  `fortunto2/rust-code` may be used only after MIT/license attribution review
+  and a scoped Norion-owned port plan. `Kuberwastaken/claurst` is GPL-3.0
+  concept reference only: do not copy source, tests, prompts, docs text, assets,
+  schemas, or command/tool implementations unless the project explicitly accepts
+  GPL obligations. The clean-room baseline is tracked in
+  [`docs/architecture/external-agent-baselines.md`](docs/architecture/external-agent-baselines.md).
 - Drift guard:
   contradiction, low-confidence, or high-perplexity drafts should gate durable
   memory writes, block unsafe runtime KV admission, penalize contaminated
@@ -366,8 +453,162 @@ These are algorithmic references, not product dependencies:
 - RLVR and test-time scaling:
   optimize routing, memory retention, and compute allocation without frequent
   weight retraining.
+- rust-code / claurst-style Rust AI codebases:
+  may be used only as license-reviewed, clean-room external references for
+  behavior, terminology, or risk review. GPL or otherwise incompatible source
+  must not be copied, translated, or used as implementation substrate in this
+  repository.
 
 以上方向只作为公开算法启发，不作为外部权重、闭源组件或厂商运行时依赖。
+
+## Current Snapshot / 当前快照
+
+Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
+lineage-audit implementation, #77 graduation-checklist closure, #47
+privacy-redaction corpus hardening, #50 malignant-gene recovery drills, #51
+genome aging/rejuvenation benchmark simulation baseline, #72 gene purpose
+relabel validator baseline, #73 reversible Gene Scissors transaction journal
+baseline, #79 pursuit-goal queue baseline, and #74 thinking-phase gene-chain
+scheduler baseline, plus #75 multilingual coding eval, #76 memory
+consolidation, #78 local research deployment guardrail, and R94 unified
+writer-gate consolidation baselines.
+
+- Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
+  describe capability milestones, not the published crate/package version.
+- The v0.7 substrate is now in place: Rust-native Transformer templates,
+  KV import/export ABI, benchmark harnesses for self-developed runtimes,
+  self-owned runtime ABI, model-side embeddings, production manifest gates,
+  reference/local production kernels, all-device benchmark coverage, and
+  device/quantization budget planning have substantially landed.
+- The roadmap is now in the v0.8 integration-hardening band. R84/#43,
+  R85/#44, and R86/#45 are completed baselines for deterministic Noiron
+  orchestration, disk-backed KV residency/compaction, Reasoning Genome
+  splicing, model adapter execution, validation, reflection,
+  approval-gated admission, compute-budget scheduling, and wasted-compute
+  telemetry. R87/#46 adds the redacted lineage audit export baseline,
+  R88/#47 adds the shared privacy-redaction corpus and detector baseline,
+  R92/#50 adds deterministic malignant-gene poisoning defense and recovery
+  drills, R91/#51 adds deterministic genome aging/rejuvenation simulation
+  evidence, R89/#72 adds purpose ontology / relabel validation, R90/#73 adds
+  reversible Gene Scissors transaction journaling, R93/#79 adds the
+  deterministic pursuit-goal queue baseline, #74 adds the read-only
+  thinking-phase gene-chain scheduler baseline, #75 adds the
+  English/Chinese/Rust coding evaluation profile baseline, and #76 adds the
+  preview-only memory consolidation/forgetting worker baseline. #78 adds the
+  deterministic local research deployment profile and resource-guard baseline.
+  R94 adds the unified writer-gate consolidation baseline across memory,
+  genome, and experiment-ledger write domains. R95 adds the reference backlog
+  verification and license-review gate for #63/#64/#65. R96 adds the
+  clean-room implementation audit and source-provenance scanner for
+  #18/#40/#60. The default queue now advances to R97 English/Chinese/Rust
+  coding service and eval harness as the next bounded preview goal with
+  explicit success, stop, budget, rollback, approval, and conflict-isolation
+  gates.
+- Active acceleration lane: #79 now provides deterministic queue records and
+  read-only queue reports for bounded self-evolution, and #74 now provides the
+  thinking-phase phase scheduler above hierarchy, genome-chain, routing, and
+  compute-budget evidence. #75 now provides local multilingual coding eval
+  fixtures, scoring thresholds, redacted evidence packets, and overfit guards.
+  #76 now provides replayable digest-only memory consolidation, decay,
+  tombstone, cross-tenant merge rejection, and before/after metric evidence.
+  #78 now provides deterministic non-commercial local deployment profiles,
+  resource/backpressure guards, disabled durable-write defaults, and operator
+  health evidence. R94 now provides the shared read-only writer-gate evidence
+  layer and trace-schema counters. R95 now provides the reference fact/license
+  verification gate and deterministic chunk-repair fixture catalog. R96 now
+  provides the clean-room source-provenance scanner and contamination fixtures.
+  R97 now has the first coding service/eval readiness bridge that turns #75
+  fixtures into deterministic `ChatRequest` plans with streaming, cancellation,
+  max-token, diagnostics, health, model-capability, offline/mock, evidence, and
+  Rust-validation coverage. Continue with R97 endpoint/runner wiring next.
+- Recently advanced or closed implementation lanes include #16 append-only
+  disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
+  #20 self-evolution experiment ledger / rollback / approval gates, #25
+  reinforced KV-Fusion scoring and admission arbitration, #43 unified Noiron
+  engine orchestration loop, #44 KV residency / compaction / replay-safe
+  retention policy, and #45 compute-budget scheduler / wasted-compute
+  telemetry with explicit before/after benchmark fanout evidence.
+- Completed hardening lane #46 `[Genome] Add lineage graph, rollback anchors,
+  and audit export` closed on GitHub after adding redacted JSON/Markdown
+  lineage packets for splice previews and dual-chain genome records. #47
+  `[Governance] Add privacy redaction corpus for memory, genome, and trace
+  evidence` now adds a shared detector, synthetic redaction corpus, policy
+  documentation, and regression tests proving memory reports, genome mutation
+  fixtures, trace events, benchmark artifacts, audit exports, and review
+  packets do not leak raw prompts, answers, secrets, hidden reasoning,
+  executable payloads, tenant identifiers, or unreviewed third-party source
+  text.
+- #50 `[Genome] Add malignant-gene poisoning defense and recovery drills` is
+  closed after adding deterministic synthetic drills for malicious instruction
+  segments, false memory, bad routing thresholds, contradictory rules, stale
+  labels, and irreversible-delete attempts. The drill evidence now proves
+  quarantine, reversible cut candidates, stable-anchor regeneration, replay
+  validation hold/reject reasons, rollback/tombstone metadata, redaction
+  status, and preview-only admission.
+- #51 `[Benchmark] Add genome aging and rejuvenation simulation suite` is
+  implemented as a deterministic, read-only benchmark surface. It records
+  digest-only before/after fitness, drift, wasted-compute proxy, routing-cost
+  proxy, memory usefulness, validation status, replay digests, rollback
+  readiness, and approval-required preview decisions for keep/relabel/refresh/
+  regenerate/quarantine/tombstone coverage.
+- #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
+  Its checklist is the policy bridge for later memory/genome/evolution writes:
+  preview evidence can graduate only after writer gates, validation evidence,
+  rollback anchors, privacy/license checks, and maintainer/operator approval.
+- #79 `[Evolution] Add pursuit goal queue and stop gates` is now the completed
+  baseline for ordered pursuit goals. It adds deterministic `EvolutionGoal`
+  records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
+  for #74/#75/#76/#78/R94/R95, budget and rollback stops, approval holds, and
+  conflict isolation between failed and later goals. With #74, #75, #76, #78,
+  and R94 now completed, the live default queue begins at R95.
+- #74 `[Runtime] Add thinking-phase gene-chain execution scheduler` is now the
+  completed baseline for deterministic planning, memory recall, genome
+  expression, route selection, answer synthesis, verification, and reflection
+  phase reports. It selects express-chain and memory-chain records through
+  task-aware hierarchy thresholds and adaptive route evidence, emits
+  digest-only selected segment/route traces, supports disabled adapter
+  passthrough mode, and remains read-only.
+- #75 `[Benchmark] Add English Chinese Rust coding eval datasets and scoring
+  profiles` is now the completed baseline for local license-safe multilingual
+  coding evaluation. It adds deterministic English, Chinese, Rust codegen,
+  Rust repair, and multilingual explanation fixtures, profile thresholds,
+  compiler/test validation plans for Rust fixtures, redacted evidence packets,
+  overfit guards, improvement comparison, and safe fixture-addition guidance in
+  [`docs/governance/coding-eval-profiles.md`](docs/governance/coding-eval-profiles.md).
+- #76 `[Memory] Add memory consolidation and forgetting worker` is now the
+  completed baseline for preview-only memory consolidation. It adds digest-only
+  snapshot records, replayable merge/decay/tombstone/rejection decisions,
+  cross-tenant merge rejection evidence, GeneSegment-anchor-compatible
+  evidence classes, before/after memory-size, token, retrieval precision,
+  replay-safety, and benchmark-impact metrics, plus trace-gate-compatible
+  JSONL output. Policy is documented in
+  [`docs/governance/memory-consolidation-worker.md`](docs/governance/memory-consolidation-worker.md).
+- #78 `[Runtime] Add local research deployment profiles and resource guards` is
+  now the completed baseline for non-commercial local deployment guardrails. It
+  adds CPU-only, single-GPU, low-memory, and benchmark/replay profile templates,
+  resource and backpressure guard reports, disabled durable memory/genome/
+  experiment-ledger writes by default, operator health evidence, and policy
+  documentation in
+  [`docs/governance/local-research-deployment-profiles.md`](docs/governance/local-research-deployment-profiles.md).
+- R94 `self-evolution writer gate consolidation` is now the completed baseline
+  for a shared read-only `UnifiedWriterGate` over memory admission, Gene
+  Scissors transaction journals, and self-evolution promotion preflight
+  reports. It emits count/digest-only `rust-norion-unified-writer-gate-v1`
+  JSONL evidence, rejects unsafe write/applied/active sources, and keeps
+  `ready_for_explicit_apply` out of normal trace-schema passage until a later
+  scoped apply issue exists. Policy is documented in
+  [`docs/governance/unified-writer-gate.md`](docs/governance/unified-writer-gate.md).
+- v1.0 remains the target state: a production-grade local Agent Harness plus a
+  test-time scaling inference engine for self-owned Transformer models.
+- PR #1 is currently open from
+  `codex/r83-memory-admission-review-packets` into
+  `codex-runtime-device-abi`. GitHub currently reports merge state
+  `MERGEABLE`, both focused validation checks are green, and merge still
+  requires the repository's configured review approval to clear.
+- GitHub issue #31 is the master tracker for the future implementation roadmap.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #75, #76,
+  #77, #78, #79, and R94 as completed or landing baselines in this branch; R95
+  is the next active pursuit goal for reference fact/license verification.
 
 ## Version Plan / 版本计划
 
@@ -609,8 +850,230 @@ These are algorithmic references, not product dependencies:
   benchmark summaries and gates now also count runtime token cases and
   uncertainty-bearing token totals, so production sweeps can prove token-level
   entropy/logprob feedback remains present across every device)
+- v0.8: unified Noiron orchestration loop and gated self-evolution admission
+  (baseline: issue #43 has provided the deterministic request path that composes
+  FHT-DKE routing, adaptive attention thresholds, disk-backed KV memory,
+  reinforced KV-Fusion, task-aware hierarchy adjustment, Reasoning Genome
+  express/memory-chain splicing, runtime adapter/model execution, validation,
+  closed-loop reflection, experiment ledger evidence, rollback plans, and
+  approval-gated memory/genome admission. Durable writes stay preview-only
+  until writer gates, validation evidence, rollback anchors, privacy/license
+  checks, and maintainer/operator approval are all present. Issue #44 is the
+  completed KV residency/compaction baseline, #45 is the completed
+  routing-budget and wasted-compute telemetry baseline, and #77 is the closed
+  preview-to-write graduation checklist. #46 is the completed redacted
+  lineage/audit export baseline, #47 is the completed privacy-redaction corpus
+  baseline, #50 is the completed malignant-gene recovery drill baseline, #51 is
+  the deterministic genome rejuvenation simulation baseline, #72 is the purpose
+  ontology / relabel validator baseline, and #73 is the reversible Gene
+  Scissors transaction journal baseline. #79 is the completed pursuit-goal
+  scheduler baseline with default #74/#75/#76/#78/R94/R95/R96/R97 queue records,
+  success, stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
+  completed thinking-phase scheduler baseline with deterministic phase
+  contracts, digest-only segment and route traces, budget exhaustion reporting,
+  disabled-mode adapter passthrough, and no durable writes. #75 is the
+  completed multilingual coding-eval profile baseline with local fixtures,
+  scoring thresholds, Rust compiler/test validation plans, redacted evidence
+  packets, and overfit guards. #76 is the completed preview-only memory
+  consolidation baseline with replayable merge/decay/tombstone/rejection
+  plans, cross-tenant isolation, rollback anchors, before/after metrics, and
+  trace-gated JSONL. #78 is the completed local research deployment guardrail
+  baseline with deterministic CPU/GPU/low-memory/benchmark profiles, resource
+  guards, disabled write defaults, and operator-health evidence. R94 is the
+  completed unified writer-gate baseline with shared memory/genome/
+  experiment-ledger evidence, deny-by-default policy, and trace-gated JSONL.
+  R95 is the completed reference backlog verification baseline with source,
+  license, clean-room, and chunk-repair fixture evidence. R96 is the completed
+  clean-room implementation audit baseline with provenance-manifest,
+  contamination-scanner, and compact evidence-packet coverage. The live default
+  pursuit queue now starts at R97.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
+
+## GitHub Tracker Sync / GitHub 路线同步
+
+- #31 `[Roadmap] Master tracker for future rust-norion implementation`: master
+  roadmap tracker for capability sequencing and cross-issue status.
+- #16 `[Memory] Append-only disk-backed KV ledger writer gates`: advanced the
+  deny-by-default durable memory writer surface; treat as a completed/closed
+  v0.7 memory-governance lane feeding v0.8 orchestration.
+- #17 `[Router] FHT-DKE adaptive router scoring loop`: advanced adaptive
+  router/hierarchy scoring evidence; treat as a completed/closed v0.7 routing
+  lane feeding v0.8 route selection.
+- #20 `[Evolution] Self-evolution experiment ledger rollback approval gates`:
+  advanced experiment ledger, rollback, and approval evidence; treat as a
+  completed/closed v0.7 governance lane feeding v0.8 admission.
+- #25 `[Memory] Reinforced KV-Fusion scoring and admission arbitration`:
+  advanced memory reinforcement/admission scoring; treat as a completed/closed
+  v0.7 memory-quality lane feeding v0.8 orchestration.
+- #43 `[Runtime] Build unified Noiron engine orchestration loop`: completed /
+  closed v0.8 baseline. Connects routing, disk-backed KV memory, Reasoning
+  Genome splicing, model adapter execution, validation, reflection, and
+  approval-gated memory/genome admission into one deterministic engine path.
+- #44 `[Memory] Add KV residency, compaction, and replay-safe retention
+  policy`: completed / closed v0.8 memory baseline for hot/warm/cold
+  residency, deterministic compaction, stale retirement, replay-safe retention,
+  and rollback-anchor preservation.
+- #45 `[Routing] Add compute-budget scheduler and wasted-compute telemetry`:
+  completed / closed v0.8 compute-governance baseline. Gates budget-aware
+  fanout changes, before/after compute benchmark comparison,
+  saved-context / skipped-low-value-chunk / validation-cost telemetry, and
+  correctness-anchor preservation under pruning.
+- #46 `[Genome] Add lineage graph, rollback anchors, and audit export`:
+  completed / closed v0.8 genome-audit baseline. Exports redacted lineage and
+  rollback-anchor evidence for splice previews and dual-chain genome records,
+  with digest-only before/after evidence and preview/applied repair state.
+- #47 `[Governance] Add privacy redaction corpus for memory, genome, and trace
+  evidence`: completed / closed v0.8 privacy-governance baseline. Adds the
+  shared `privacy_redaction` corpus, policy lines, stable redaction digests,
+  reason codes, and common private/executable payload detector used by memory
+  admission summaries, genome lineage audit exports, trace schema checks, and
+  benchmark evidence. Policy is documented in
+  [`docs/governance/privacy-redaction-corpus.md`](docs/governance/privacy-redaction-corpus.md).
+- #50 `[Genome] Add malignant-gene poisoning defense and recovery drills`:
+  completed / closed v0.8 genome-safety drill baseline. Adds
+  `MalignantGeneRecoveryDrillCorpus` fixtures for malicious instruction
+  segments, false memory, bad routing thresholds, contradictory rules, stale
+  labels, and irreversible-delete attempts. Each drill proves detect,
+  quarantine, reversible cut candidate, stable-anchor regeneration, replay
+  validation hold/reject, rollback/tombstone evidence, redaction status, and
+  preview-only admission. Policy is documented in
+  [`docs/governance/malignant-gene-recovery-drills.md`](docs/governance/malignant-gene-recovery-drills.md).
+- #51 `[Benchmark] Add genome aging and rejuvenation simulation suite`:
+  completed / closed benchmark baseline for stale labels, aged purpose tags,
+  low-fitness refresh, stable-anchor regeneration, quarantine, tombstone
+  previews, rollback readiness, replay digests, and digest-only evidence before
+  any durable genome edit is accepted. Policy is documented in
+  [`docs/governance/genome-rejuvenation-simulation.md`](docs/governance/genome-rejuvenation-simulation.md).
+- #72 `[Genome] Add gene purpose ontology and relabel validator`: completed
+  baseline for deterministic purpose records, digest-only provenance,
+  preview-only relabel proposals, stale/conflicting/missing-anchor quarantine,
+  and privacy-safe serialization before Gene Scissors edits become durable.
+  Policy is documented in
+  [`docs/governance/gene-purpose-relabel-validator.md`](docs/governance/gene-purpose-relabel-validator.md).
+- #73 `[Genome] Add reversible Gene Scissors transaction journal`: completed
+  baseline for deterministic append-only transaction records, duplicate
+  suppression, replay reports, forensic copy digests, child lineage links,
+  rollback previews, and redacted trace lines for cut/quarantine/regenerate/
+  splice operations. Policy is documented in
+  [`docs/governance/gene-scissors-transaction-journal.md`](docs/governance/gene-scissors-transaction-journal.md).
+- #74 `[Runtime] Add thinking-phase gene-chain execution scheduler`:
+  completed baseline for scheduling genome-chain expression during
+  thinking/runtime phases without bypassing hierarchy, routing, budget, trace,
+  reward, drift, or writer gates. Policy is documented in
+  [`docs/governance/thinking-phase-gene-chain-scheduler.md`](docs/governance/thinking-phase-gene-chain-scheduler.md).
+- #75 `[Benchmark] Add English Chinese Rust coding eval datasets and scoring
+  profiles`: completed baseline for English, Chinese, Rust codegen, Rust
+  repair, and multilingual coding explanation fixtures with scoring profiles,
+  Rust compiler/test validation plans, redacted evidence packets, overfit
+  guards, and safe fixture-addition guidance.
+- #76 `[Memory] Add memory consolidation and forgetting worker`: completed
+  baseline for digest-only consolidation snapshots, compatible duplicate merge
+  previews, stale decay previews, reversible tombstone previews, cross-tenant
+  merge rejection evidence, before/after metrics, and operator-approval flow.
+- #77 `[Governance] Add preview-to-write graduation checklist`: define the
+  checklist for moving read-only preview evidence into durable write/admission
+  paths. Completed / closed governance baseline for future writer admission.
+- #78 `[Runtime] Add local research deployment profiles and resource guards`:
+  completed baseline for deterministic local research deployment profiles,
+  resource/backpressure guards, disabled durable-write defaults, and operator
+  health evidence so experimental runtime work stays bounded on local hardware.
+- #79 `[Evolution] Add pursuit goal queue and stop gates`: completed baseline
+  for a deterministic multi-goal self-evolution queue with per-goal success
+  gates, stop conditions, rollback conditions, budget caps, approval holds,
+  default Noiron pursuit goals, and isolation between failed and later goals.
+  Policy is documented in
+  [`docs/governance/evolution-goal-queue.md`](docs/governance/evolution-goal-queue.md).
+- R94 `self-evolution writer gate consolidation`: completed baseline for
+  shared `UnifiedWriterGate` evaluation across memory admission, Gene Scissors
+  journals, and self-evolution promotion preflight reports, with deny-by-default
+  policy and count/digest-only trace evidence. Policy is documented in
+  [`docs/governance/unified-writer-gate.md`](docs/governance/unified-writer-gate.md).
+
+## R8x/R9x Milestone Backlog / R8x/R9x 里程碑候选
+
+- R84 / #43 completed baseline: unified Noiron orchestration preview path.
+  Produces a read-only orchestration packet for request intake, route plan,
+  memory/KV candidates, gene splice preview, runtime adapter selection,
+  validation/reflection result, and admission candidates.
+- R85 / #44 completed baseline: KV residency and replay-safe retention.
+  Normalizes hot/warm/cold memory residency, deterministic compaction, stale
+  retirement, benchmark reporting, and rollback-anchor preservation for the
+  orchestration baseline.
+- R86 / #45 completed baseline: compute-budget scheduler and wasted-compute
+  telemetry. Verifies budget-aware route fanout, before/after compute
+  benchmarks, saved-context and skipped-work telemetry, validation-cost
+  reporting, and correctness-anchor preservation.
+- R87 / #46 completed baseline: lineage graph, rollback anchors, and audit
+  export. Produces redacted lineage packets that connect genome segment,
+  dual-chain memory, mutation-plan, validation, and rollback evidence without
+  leaking private payloads.
+- R88 / #47 completed baseline: privacy redaction corpus for memory, genome,
+  and trace evidence. Adds synthetic fixture coverage, stable
+  `redaction-digest:*` evidence, reason codes, policy documentation, and common
+  detector wiring for memory reports, genome mutation fixtures, trace events,
+  benchmark artifacts, audit exports, and review packets before broader audit
+  exports or outside collaboration depend on trace packets.
+- R89 / #12/#72 completed baseline: Reasoning DNA dual-chain stabilization.
+  Normalize
+  `express_chain` and `memory_chain` records with segment ids, source ids,
+  purpose tags, version, confidence, last validation result, rollback anchors,
+  and purpose ontology validation.
+- R90 / #13/#14/#73 completed baseline: Gene splicing, mutation taxonomy, and
+  reversible Gene Scissors. Gate variable splicing, intron
+  filtering, segment isolation, insertion/deletion, mislabel, truncation, format
+  drift, stale-label, schema, privacy, and KV-shape findings as read-only
+  `MutationPlan` evidence, then journal cut/quarantine/regenerate/splice
+  operations as reversible transactions.
+- R91 / #15/#51/#72: DNA aging and relabel/rejuvenation. #51 now adds the
+  deterministic simulation baseline for expired, drifting, or semantically aged
+  memory/gene segments with keep/relabel/refresh/regenerate/quarantine/
+  tombstone decisions, replay digests, rollback readiness, and no durable
+  writes. #72 now makes purpose tags, confidence, version, and validation state
+  explicit before any durable relabel edit.
+- R92 / #50 completed baseline: malignant mutation quarantine and regeneration.
+  Quarantines harmful, polluted, low-confidence, false-memory, routing-drift,
+  stale-label, contradictory, secret-risk, or destructive-delete segments with
+  digest-only reasons and rollback records; emits reversible cut/tombstone
+  candidates and stable-anchor regeneration candidates while keeping
+  re-admission held until validation and operator approval.
+- R93 / #79 completed baseline: pursuit-goal queue and stop gates. Queues
+  bounded self-evolution objectives, runs one active goal at a time, stops on
+  success/budget/rollback/approval-hold conditions, and requires
+  maintainer/operator approval before durable mutation.
+- R94 / #77/#6/#20 completed baseline: self-evolution writer gate
+  consolidation. Unifies memory, genome, and experiment-ledger writer-gate
+  evidence through `UnifiedWriterGate` so durable writes remain preview/read-only
+  until validation, rollback, privacy/license, trace/benchmark, exact refs, and
+  maintainer/operator approval requirements pass.
+- R95 / #63/#64/#65 completed baseline: reference backlog verification.
+  Fact-checks and license-reviews DNA-inspired, chunk/KV, and Rust inference
+  references before any behavior spec is promoted to an implementation issue.
+  `ReferenceBacklogReport` keeps GPL, unknown-license, and unverified sources
+  out of source-level reuse while preserving paper/concept references as
+  preview-only design inputs.
+- R96 / #18/#40/#60 completed baseline: clean-room implementation audit.
+  Reconfirms `fortunto2/rust-code` stays behind MIT attribution review and
+  `Kuberwastaken/claurst` remains GPL-3.0 concept-only unless GPL obligations
+  are explicitly accepted. `CleanRoomAuditReport` validates source provenance,
+  compact evidence packets, and contamination fixtures so GPL, unknown-license,
+  private-payload, or unreviewed source material cannot be promoted into
+  implementation work.
+- R97 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
+  #75 provides the completed local scoring dataset/profile baseline. The
+  `CodingServiceEvalReadinessReport` now maps that corpus to deterministic
+  service `ChatRequest` plans and digest-only request/eval evidence for
+  English, Chinese, Rust, and mixed-language coding lanes. #19/#29 continue the
+  local service endpoint, mock backend, streaming/cancellation, diagnostics,
+  runner, compiler/test, and benchmark validation work for self-improving
+  coding behavior.
+- R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
+  completed preview-only consolidation/forgetting worker baseline. #36/#42
+  continue deeper episodic, heuristic, tool-reliability store evolution and A/B
+  evaluation gates.
+- R99 / #78/#62: local research deployment guardrails. Keep non-commercial
+  deployment research bounded by explicit resource profiles, safety runbooks,
+  and reviewable operator controls.
 
 ## Definition of Done / 验收标准
 

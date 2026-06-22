@@ -4,6 +4,8 @@ mod contract;
 mod device;
 mod http;
 mod kv_import;
+mod kv_safety;
+mod native_adapter;
 mod types;
 mod wire;
 
@@ -23,6 +25,11 @@ pub use command::{CommandPromptMode, CommandRuntime, CommandTextOutputFilter, Co
 #[cfg(test)]
 use command::{filter_command_text_output, parse_mistralrs_cli_stats};
 pub use http::MistralRsHttpRuntime;
+pub use native_adapter::{
+    ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,
+    MockRustNativeAdapter, RustNativeAdapterReport, RustNativeAdapterRequest,
+    RustNativeInferenceAdapter,
+};
 pub use types::{
     ModelRuntime, RuntimeAdapterObservation, RuntimeEmbedding, RuntimeError, RuntimeMetadata,
     RuntimeRequest, RuntimeResponse, RuntimeToken, RuntimeTokenId,

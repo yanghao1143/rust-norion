@@ -22,7 +22,11 @@ pub use gate::{
 use gate::{
     validate_device_plan, validate_runtime_device_contract, validate_runtime_manifest_for_device,
 };
-pub use plan::{DeviceExecutionPlan, HardwareAllocator, HardwarePlan, MemoryGovernancePlan};
+pub use plan::{
+    DeviceExecutionPlan, HardwareAllocator, HardwarePlan, MemoryGovernancePlan,
+    RuntimeBudgetFallbackReason, RuntimeBudgetInput, RuntimeBudgetReport, RuntimeDeviceCapability,
+    RuntimeQuantizationProfile, runtime_device_capability_catalog,
+};
 pub use probe::{HardwareProbe, HardwareProbeReport, HardwareSnapshot};
 
 #[cfg(test)]

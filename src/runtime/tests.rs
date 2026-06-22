@@ -628,6 +628,30 @@ impl ModelRuntime for ContractViolatingRuntime {
 }
 
 #[derive(Debug, Default, Clone)]
+struct UnsafeExportRuntime;
+
+impl ModelRuntime for UnsafeExportRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("unsafe-export-runtime", "tok", 4096, 16).with_kv_exchange(false, true)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(4, 16, 4, 2, 1024)
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        Ok(vec![
+            RuntimeKvBlock::new(0, 0, 4, 4, vec![0.1], vec![0.2]),
+            RuntimeKvBlock::new(1, 1, 0, 1, vec![0.3], vec![0.4]),
+        ])
+    }
+
+    fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        Ok(RuntimeResponse::new("unsafe export filtered"))
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 struct DeviceSilentRuntime;
 
 impl ModelRuntime for DeviceSilentRuntime {
@@ -854,6 +878,58 @@ fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
             .iter()
             .any(|step| step.label == "runtime_kv_export")
     );
+}
+
+#[test]
+fn runtime_backend_rejects_non_finite_imported_kv_before_runtime_call() {
+    let memories = vec![MemoryMatch {
+        id: 7,
+        key: "unsafe runtime memory".to_owned(),
+        similarity: 0.91,
+        strength: 1.25,
+        vector: vec![f32::NAN, 0.2, 0.3],
+    }];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let context = GenerationContext {
+        prompt: "reject unsafe runtime kv",
+        profile: TaskProfile::Coding,
+        memories: &memories,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        tier_plan: &tier_plan,
+        infini_memory_plan: &infini_memory_plan,
+        recursive_schedule: &recursive_schedule,
+        hardware_plan: &hardware_plan,
+        experiences: &[],
+        toolsmith_plan: default_toolsmith_plan(),
+        agent_team_plan: default_agent_team_plan(),
+        transformer_plan: &transformer_plan,
+    };
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(backend.runtime().imported_blocks, 0);
+    assert!(
+        !draft
+            .trace
+            .iter()
+            .any(|step| step.label == "runtime_kv_import")
+    );
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "runtime_kv_import_safety"
+            && step.content.contains("non-finite")
+            && step.confidence < 0.20
+    }));
 }
 
 #[test]
@@ -1187,6 +1263,36 @@ fn runtime_response_contract_blocks_out_of_device_adapter_and_kv_export() {
 }
 
 #[test]
+fn runtime_backend_filters_unsafe_exported_kv_blocks() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "filter unsafe export",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(UnsafeExportRuntime);
+
+    let draft = backend.generate(context);
+
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].layer, 1);
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "runtime_kv_export_safety"
+            && step.content.contains("token range is empty")
+            && step.confidence < 0.20
+    }));
+}
+
+#[test]
 fn default_runtime_abi_keeps_command_runtime_compatible() {
     let runtime = CommandRuntime::new("runner");
 
@@ -1296,6 +1402,11 @@ fn command_runtime_formats_prompt_and_expands_placeholders() {
     assert!(prompt.contains("fallback=cpu-portable"));
     assert!(prompt.contains("kv_prefetch="));
     assert!(prompt.contains("transformer: template=none"));
+    assert!(
+        prompt.contains(
+            "task_intent: language=english coding_language=unspecified rust_coding=false"
+        )
+    );
     assert!(args[1].contains("Noiron runtime request"));
     assert_eq!(args[3], request.prompt);
     assert_eq!(args[5], request.prompt);
@@ -1322,6 +1433,15 @@ fn runtime_request_json_includes_control_plane_sections() {
         extract_json_string_field(&payload, "profile").unwrap(),
         "coding"
     );
+    assert_eq!(
+        extract_json_string_field(&payload, "language_mode").unwrap(),
+        "english"
+    );
+    assert_eq!(
+        extract_json_string_field(&payload, "coding_language").unwrap(),
+        "unspecified"
+    );
+    assert!(payload.contains("\"rust_coding\":false"));
     assert_eq!(
         extract_json_string_field(&payload, "model_id").unwrap(),
         "sample-transformer"
@@ -1385,6 +1505,29 @@ fn runtime_request_json_includes_control_plane_sections() {
     assert!(payload.contains("\"runtime_adapter_observations\":["));
     assert!(payload.contains("\"adapter\":\"cpu-simd\""));
     assert!(payload.contains("\"experience_id\":9"));
+}
+
+#[test]
+fn runtime_request_wire_marks_chinese_rust_coding_intent() {
+    let mut request = sample_request();
+    request.prompt = "请用中文解释 Rust 所有权，并给出 cargo test 建议".to_owned();
+
+    let text_payload = format_runtime_prompt(&request);
+    let json_payload = runtime_request_json(&request);
+
+    assert!(
+        text_payload
+            .contains("task_intent: language=chinese coding_language=rust rust_coding=true")
+    );
+    assert_eq!(
+        extract_json_string_field(&json_payload, "language_mode").unwrap(),
+        "chinese"
+    );
+    assert_eq!(
+        extract_json_string_field(&json_payload, "coding_language").unwrap(),
+        "rust"
+    );
+    assert!(json_payload.contains("\"rust_coding\":true"));
 }
 
 #[test]

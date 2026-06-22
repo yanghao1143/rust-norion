@@ -31703,10 +31703,15 @@ mod tests {
         let depleted = crate::budget::BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
 
@@ -31871,10 +31876,15 @@ mod tests {
         let depleted = crate::budget::BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let preflight = AgentCollaborationDispatchPreflight::new().record_and_gate(
@@ -31963,10 +31973,15 @@ mod tests {
         let depleted = crate::budget::BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let dirty_preflight = AgentCollaborationDispatchPreflight::new().record_and_gate(
@@ -32090,10 +32105,15 @@ mod tests {
         let depleted = crate::budget::BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let dirty_preflight = AgentCollaborationDispatchPreflight::new().record_and_gate(
@@ -32265,10 +32285,15 @@ mod tests {
         let depleted = crate::budget::BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let dirty_preflight = AgentCollaborationDispatchPreflight::new().record_and_gate(
@@ -32576,10 +32601,15 @@ mod tests {
         let depleted = crate::budget::BudgetLedgerSummary {
             roles: 1,
             zero_budget_roles: 1,
+            partially_depleted_roles: 0,
+            token_depleted_roles: 1,
+            step_depleted_roles: 1,
+            message_depleted_roles: 1,
             total_tokens: 0,
             total_steps: 0,
             total_messages: 0,
             depleted_roles: vec![AgentRole::Tester],
+            dimension_depleted_roles: vec![AgentRole::Tester],
             telemetry: Vec::new(),
         };
         let dirty_preflight = AgentCollaborationDispatchPreflight::new().record_and_gate(
@@ -43340,6 +43370,7 @@ mod tests {
                     submitted: vec![MemoryNote::new("agent_cycle", "remember clean loop")],
                     failures: Vec::new(),
                     blocked_reasons: Vec::new(),
+                    note_quality: None,
                 }),
             ),
             AgentReportGateDecision {

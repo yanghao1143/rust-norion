@@ -12,10 +12,14 @@ This repository is public for non-commercial research, education, evaluation,
 benchmarking, and experimental deployment. Commercial use requires explicit
 written permission from the copyright holder. See [LICENSE](LICENSE).
 
-Public issues and pull requests are welcome, but merges require maintainer
-review and approval. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Public issues and pull requests are welcome, but merges require repository
+owner or maintainer review and approval. See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [NOTICE.md](NOTICE.md) and
+[Public Collaboration Governance](docs/governance/public-collaboration.md) for
+research deployment boundaries, clean-room reference rules, and protected-branch
+review requirements.
 
-本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过维护者审核批准。
+本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过仓库所有者或维护者审核批准。
 
 ## Project Goal / 项目目标
 
@@ -24,6 +28,12 @@ engine that can make a self-developed model backend behave more adaptively over
 time without retraining model weights on every interaction.
 
 本项目目标是构建一个实用、自主可控优先的本地推理控制引擎，让自研模型后端在不频繁重训权重的前提下，能够随着使用逐步调整推理策略、记忆选择和计算分配。
+
+The project now also targets a Reasoning Genome Chain: DNA/NDA-style reasoning
+genes and Gene Scissors for controlled, auditable evolution of local reasoning
+behavior through validation and rollback gates.
+
+项目也新增推理基因链目标：用 DNA/NDA 风格的 reasoning genes 与 Gene Scissors，在验证、回滚和审计门禁下推动本地推理行为受控进化。
 
 The optimized target combines five non-negotiable requirements:
 
@@ -132,13 +142,25 @@ The target algorithm stack is model-weight independent:
 - self-evolution loop: test-time scaling, RLVR-style rewards for control
   decisions, same-inference online reward feedback, reflection scoring, drift
   gates, adaptive rollback, experience replay, and auditable evolution evidence
+- reasoning genome chain: DNA/NDA-style reasoning genes encode reusable
+  retrieval, routing, reflection, language, safety, and tool-use strategies;
+  Gene Scissors can propose gated relabels for aging genes, cuts/splices,
+  quarantines, regeneration candidates, and rollbacks so the control plane
+  evolves behavior without direct weight retraining
 - Rust Transformer refactor: explicit layer templates for local-window,
   global-memory, and convolutional-fusion compute paths
 
 - 超长上下文：Infini 风格全局/局部 KV 分离、递归长上下文调度、层级 gist 记忆、SpeContext 风格稀疏 KV 筛选
 - 轻量 KV 系统：自研 4/8-bit uniform KV 量化、强化式 KV-Fusion、时间衰减、语义聚类和 Hot/Warm/Cold 分层存储
 - 自进化闭环：Test-time Scaling、针对控制决策的 RLVR 风格奖励、同轮推理在线奖励反馈、反思评分、漂移门控、自适应回滚、经验回放和可审计进化证据
+- 推理基因链：用 DNA/NDA 风格的 reasoning genes 表达可复用的检索、路由、反思、语言、安全和工具使用策略；Gene Scissors 只能在门禁下提出老化基因重打标签、剪切、拼接、隔离、再生候选和回滚，让控制层在不直接重训权重的前提下进化行为
 - Rust Transformer 重构：用显式层模板表达局部窗口、全局记忆、卷积融合等计算路径
+
+See [docs/architecture/reasoning-genome-chain.md](docs/architecture/reasoning-genome-chain.md)
+for the initial Reasoning Genome Chain and Gene Scissors target.
+
+初始的推理基因链与基因剪目标见
+[docs/architecture/reasoning-genome-chain.md](docs/architecture/reasoning-genome-chain.md)。
 
 ## Current Status / 当前状态
 
@@ -165,7 +187,7 @@ Implemented modules:
 
 - `src/router.rs`: multi-factor adaptive router with task-profile-specific attention thresholds and hardware-aware compute pressure
 - `src/adaptive_state.rs`: persisted router, hierarchy, tier-plan control state, memory governance policy, live-inference online reward feedback counters, and cumulative self-evolution ledger for replay-driven router, hierarchy, memory, replay live-feedback consumption, structured live-evolution replay consumption, online reward feedback, recursive-cost mutations, and drift rollback safety audits
-- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, live memory-feedback write and auto-replay consumption gates, live/replay online reward feedback/reinforcement/penalty gates with all-device coverage floors, cumulative evolution-ledger replay live-feedback consumption gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, runtime-KV hold, device-adapter-contract, and best-adapter selection gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
+- `src/benchmark.rs`: built-in benchmark cases, regression gates, recursive long-context coverage gate, per-device recursive coverage gate, Reasoning Genome expression/splice and Gene Scissors proposal coverage gates, auto-replay router-threshold/hierarchy-weight mutation and memory-update coverage gates, live memory-feedback write and auto-replay consumption gates, live/replay online reward feedback/reinforcement/penalty gates with all-device coverage floors, cumulative evolution-ledger replay live-feedback consumption gates, auto-replay recursive cost-pressure floor/ceiling gates, production/reference runtime forward-signal, forward-energy, KV-influence, KV-import, KV-export, runtime-KV hold, device-adapter-contract, and best-adapter selection gates, KV quantization accuracy/latency gate, and persistent roundtrip reuse gate
 - `src/disk_kv.rs`: append-only disk-backed KV store
 - `src/drift.rs`: drift guard for memory-write gates, runtime-KV admission, severity-scaled used-memory penalties, and adaptive-state rollback
 - `src/infini_memory.rs`: Infini-style global/local memory planner with sparse token-budget filtering and vector-carrying import decisions
@@ -794,12 +816,14 @@ runtime KV import/export counts and device coverage,
 runtime adapter contract coverage, adapter-kind diversity, runtime KV storage
 device coverage, runtime adapter
 observation counts, best scores, and best-adapter selection mismatch counts,
+Reasoning Genome expression/splice coverage, Gene Scissors proposal coverage,
 reflection issue/critical issue coverage, revision action coverage,
 auto-replay router/hierarchy/memory update counts, recursive pressure, covered
 device profiles, cumulative evolution-ledger replay/mutation/memory/live-feedback/recursive
 cost counters, drift rollback safety counters, and drift watch/block/rollback counts, so long-context
 coverage, missing per-device recursion, missing runtime
 diagnostics, missing runtime KV precision evidence, missing KV exchange, missing runtime KV import/export coverage across required devices, missing runtime KV storage coverage across required devices, missing runtime KV hold coverage across required devices, missing runtime adapter observation reuse, mismatched runtime adapter selection,
+missing Reasoning Genome expression/splice or Gene Scissors proposal evidence,
 missing closed-loop reflection diagnostics or revision evidence,
 missing replay control-plane coverage,
 missing all-device execution coverage, missing pressure signals, excessive
@@ -807,7 +831,7 @@ recursive replay cost, memory-growth, or safety regressions in the
 self-evolution loop can fail the gate even when average quality still looks
 acceptable.
 
-Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence、runtime token uncertainty 设备覆盖、runtime token evidence 设备覆盖、hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV 长期准入设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / online reward / recursive cost 计数、live 与 replay live-evolution 在线奖励设备覆盖、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime token uncertainty 没有覆盖要求的设备、runtime token-level entropy/logprob 证据没有覆盖要求的设备、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV 长期准入没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、闭环 reflection diagnostics 或 revision 证据缺失、在线奖励反馈没有产生 reinforcement / penalty 证据、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
+Benchmark 汇总会包含递归 case 数、递归设备 profile 覆盖数、memory compaction 计数、runtime forward-signal case 数、forward-energy / KV-influence、runtime token uncertainty 设备覆盖、runtime token evidence 设备覆盖、hot-cold KV precision 覆盖数、runtime KV import/export 计数及其设备覆盖、runtime KV 长期准入设备覆盖、runtime KV hold 设备覆盖、runtime adapter contract 覆盖、adapter 种类数、runtime adapter observation 数量、best score 和 best-adapter selection mismatch 计数、Reasoning Genome expression / splice 覆盖、Gene Scissors proposal 覆盖、reflection issue / critical issue 覆盖、revision action 覆盖、auto-replay 的 router / hierarchy / memory 更新计数、递归压力、已覆盖设备 profile、累计 evolution ledger 的 replay / mutation / memory / live-feedback / online reward / recursive cost 计数、live 与 replay live-evolution 在线奖励设备覆盖、drift rollback 安全计数以及 drift watch/block/rollback 计数，因此即使平均质量看起来仍然合格，长上下文覆盖、逐设备递归覆盖缺失、runtime diagnostics 缺失、runtime token uncertainty 没有覆盖要求的设备、runtime token-level entropy/logprob 证据没有覆盖要求的设备、runtime KV precision 证据缺失、KV 交换缺失、runtime KV import/export 没有覆盖要求的设备、runtime KV 长期准入没有覆盖要求的设备、runtime KV hold 没有覆盖要求的设备、runtime adapter 全部坍缩到同一 fallback、runtime adapter observation 没有进入后续控制路径、实际选择的 adapter 偏离当前设备内最佳 observation、Reasoning Genome expression / splice 或 Gene Scissors proposal 证据缺失、闭环 reflection diagnostics 或 revision 证据缺失、在线奖励反馈没有产生 reinforcement / penalty 证据、回放控制面覆盖缺失、全设备执行覆盖缺失、压力信号缺失、递归回放成本过高、记忆膨胀或自进化安全门控退化也可以触发失败。
 Use `--benchmark-min-runtime-kv-import-device-profiles` and
 `--benchmark-min-runtime-kv-export-device-profiles` when an all-device run must
 prove KV exchange on more than one hardware class. Use
@@ -832,6 +856,32 @@ entropy/logprob 的 token 证据已经跨足够多硬件类别出现时，使用
 `--benchmark-min-runtime-kv-stored-device-profiles`。当还必须证明“已导出但被 hold 的
 runtime KV”跨多个硬件类别都出现过时，使用
 `--benchmark-min-runtime-kv-hold-device-profiles`，避免只靠单个 fast-path watch 样本通过安全门禁。
+
+Use the Reasoning Genome benchmark gates when an experiment must prove the DNA
+chain path is producing auditable expression/splice evidence and Gene Scissors
+repair proposals:
+`--benchmark-min-reasoning-genome-expression-cases`,
+`--benchmark-min-reasoning-genome-splice-cases`, and
+`--benchmark-min-gene-scissors-proposal-cases`. Add
+`--benchmark-min-reasoning-genome-repair-payloads` and
+`--benchmark-min-reasoning-genome-regeneration-payloads` when the run must
+prove aging-gene relabel and malignant-gene regeneration proposals include
+auditable repair payloads. With `--benchmark-all-devices`,
+or by using the matching `*-device-profiles` flags, the same audit can require
+those genome signals across explicit hardware profiles. Trace and benchmark
+evidence also require aging-gene relabel proposals to carry repair payloads and
+malignant-gene regeneration proposals to carry young replacement payloads.
+
+当实验必须证明 DNA 基因链路径已经产生可审计的 expression / splice 证据，并且 Gene
+Scissors 已经输出修复 proposal 时，可以使用
+`--benchmark-min-reasoning-genome-expression-cases`、
+`--benchmark-min-reasoning-genome-splice-cases` 和
+`--benchmark-min-gene-scissors-proposal-cases`。当同一次运行还必须证明老化基因的
+relabel proposal 和恶性基因的 regeneration proposal 带有可审计修复载荷时，加入
+`--benchmark-min-reasoning-genome-repair-payloads` 和
+`--benchmark-min-reasoning-genome-regeneration-payloads`。配合 `--benchmark-all-devices`，
+或者直接使用对应的 `*-device-profiles` 参数时，可以要求这些基因证据覆盖指定数量的显式硬件 profile。
+trace 与 benchmark 证据还会要求老化基因的 relabel proposal 带有修复载荷，并要求恶性基因的 regeneration proposal 带有年轻替代载荷。
 
 Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
 online inference itself mutated control policy, updated live memory feedback,
@@ -1453,7 +1503,11 @@ and hot/cold KV precision, so an external self-developed runtime can enforce
 the same manifest policy the control plane validated. Command runtimes receive
 that architecture in both the text payload and `runtime_architecture` JSON
 object, and `{runtime_architecture}` can be used inside `--runtime-arg`
-templates. They also receive the device execution contract through
+templates. They also receive a derived `task_intent` hint in both wire formats:
+`language_mode` is `english`, `chinese`, or `auto`, while `coding_language`
+is `rust` only when a coding request carries Rust-specific signals. This is an
+adapter hint for self-developed runtimes, not a replacement for the Noiron
+router profile. They also receive the device execution contract through
 `{runtime_device_contract}` so an external self-developed runtime can select
 CUDA, ROCm, Metal, WGPU, WebGPU, DirectML, CoreML, NNAPI, QNN, OpenVINO, CANN,
 MLU, RKNN, portable Rust, or custom adapters without a vendor-specific control
@@ -1467,7 +1521,7 @@ CLI 通过 `--runtime-model-id`、`--runtime-tokenizer`、`--runtime-native-wind
 `--runtime-layers`、`--runtime-hidden-size`、`--runtime-attention-heads`、`--runtime-kv-heads`、`--runtime-local-window`、`--runtime-weights`、`--runtime-tokenizer-path`、`--runtime-config` 和 `--runtime-manifest-gate` 会把同一组元数据变成可执行的生产 manifest 检查，在 runtime 使用前先失败或放行。
 `--production-runtime` 会用同一份 manifest 和当前设备计划实例化 manifest-backed 生产边界；如果同时使用 `--runtime-command ... --runtime-json`，外部自研可执行文件会被 `ModelRuntimeForwardKernel` 包装到 production kernel slot 后面，并接受同一条 production conformance 门禁。`--production-reference-kernel` 会同时启用这条边界并挂载内置 reference kernel，用于本地验证生产 ABI。
 同一组显式架构参数也会配置内置 local runtime prototype。
-runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。导入 KV blocks 会同时出现在 JSON 根字段 `imported_kv_blocks`、文本 payload 的 `imported_kv_blocks` 区段以及 `{imported_kv_blocks}` 参数模板中；生产模式下，外部命令 runtime 收到的是同一批已经通过 manifest 校验的导入 KV blocks，和 Rust `ProductionForwardKernel` 走同一份 ABI。
+runtime metadata 与结构化 JSON 请求 ABI 也会携带生效的 Transformer 层数 / 头数 / 窗口形状、KV 导入/导出块上限和冷热 KV 精度，因此外部自研 runtime 可以执行与控制层门禁一致的 manifest 策略。命令行 runtime 会在文本 payload 和 `runtime_architecture` JSON object 中收到这组架构信息，也可以在 `--runtime-arg` 模板里使用 `{runtime_architecture}`。两种 wire 格式还会携带派生的 `task_intent` hint：`language_mode` 为 `english`、`chinese` 或 `auto`，`coding_language` 只在 coding 请求带有 Rust 信号时标为 `rust`；这是给自研 runtime 的 adapter hint，不替代 Noiron router profile。外部 runtime 还可以通过 `{runtime_device_contract}` 或 JSON 里的 `hardware.runtime_device_contract` 获取设备执行契约，从而在 CUDA、ROCm、Metal、WGPU、WebGPU、DirectML、CoreML、NNAPI、QNN、OpenVINO、CANN、MLU、RKNN、portable Rust 或自定义 adapter 之间选择，而不需要控制层写死厂商路径。导入 KV blocks 会同时出现在 JSON 根字段 `imported_kv_blocks`、文本 payload 的 `imported_kv_blocks` 区段以及 `{imported_kv_blocks}` 参数模板中；生产模式下，外部命令 runtime 收到的是同一批已经通过 manifest 校验的导入 KV blocks，和 Rust `ProductionForwardKernel` 走同一份 ABI。
 
 When KV exchange is enabled, `RuntimeBackend` imports active non-cold memory
 vectors as runtime KV blocks before generation. After generation, exported KV

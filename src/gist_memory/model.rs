@@ -48,4 +48,27 @@ impl GistRecord {
             self.summary
         )
     }
+
+    pub fn gist_memory_key(&self) -> String {
+        format!(
+            "gist:{}:{}",
+            self.level.as_str(),
+            compact_key_part(&self.title, 96)
+        )
+    }
+}
+
+fn compact_key_part(value: &str, max_chars: usize) -> String {
+    let mut out = value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('\t', " ");
+    if out.is_empty() {
+        out = "untitled".to_owned();
+    }
+    if out.chars().count() <= max_chars {
+        return out;
+    }
+    out.chars().take(max_chars).collect()
 }
