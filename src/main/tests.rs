@@ -20,6 +20,9 @@ mod gemma_service;
 #[path = "tests/production_runtime_cli.rs"]
 mod production_runtime_cli;
 
+#[path = "tests/self_goal_queue_cli.rs"]
+mod self_goal_queue_cli;
+
 #[path = "tests/state_gate_cli.rs"]
 mod state_gate_cli;
 
