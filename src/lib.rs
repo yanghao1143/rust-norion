@@ -167,9 +167,11 @@ pub use router::{
     AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan, AdaptiveRoutingPlanner,
     AdaptiveRoutingPolicy, BudgetedAdaptiveRoutingPlan, ComputeBudgetContext, ComputeBudgetPolicy,
     ComputeBudgetSchedule, ComputeBudgetScheduler, GenerationMetrics, NoironRouter,
-    ProfileObservations, ProfileThresholds, Route, RouteBudget, RouterState,
+    ProfileObservations, ProfileThresholds, ROUTER_DECISION_TRACE_SCHEMA, Route, RouteBudget,
+    RouterDecisionTrace, RouterDecisionTraceRow, RouterState,
     RouterThresholdAdjustmentPreviewPlanner, RouterThresholdAdjustmentPreviewPolicy,
     RouterThresholdAdjustmentPreviewReport, RoutingContext, RoutingDecision,
+    RoutingTraceReplayFixture, RoutingTraceReplayReport,
 };
 pub use runtime::{
     ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,

@@ -3,6 +3,7 @@ mod adjustment;
 mod budget;
 mod core;
 mod scoring;
+mod trace_replay;
 mod types;
 
 pub use adaptive::{AdaptiveRoutingPlanner, AdaptiveRoutingPolicy};
@@ -15,6 +16,10 @@ pub use budget::{
     ComputeBudgetScheduler,
 };
 pub use core::NoironRouter;
+pub use trace_replay::{
+    ROUTER_DECISION_TRACE_SCHEMA, RouterDecisionTrace, RouterDecisionTraceRow,
+    RoutingTraceReplayFixture, RoutingTraceReplayReport,
+};
 pub use types::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,
     AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan, GenerationMetrics,
