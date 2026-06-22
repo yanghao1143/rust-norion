@@ -23,6 +23,50 @@ for the focused community strategy, contributor path, and scope guardrails.
 
 本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过仓库所有者或维护者审核批准。
 
+## Research Report and arXiv Draft / 技术报告与 arXiv 草稿
+
+The current research-facing draft is
+[Bio-Inspired Inference Control for Local Large Language Models: A DNA
+Gene-Chain Architecture in Rust](docs/research/bio-inspired-inference-control-report.tex).
+It is a 6--8 page arXiv-style technical report draft that explains rust-norion
+as a bio-inspired inference control-layer engine, links the project code, and
+states the current prototype boundary honestly.
+
+Submission metadata and the TeX upload checklist are tracked in
+[docs/research/README.md](docs/research/README.md). The planned arXiv category
+is `cs.AI`, with author metadata `Hao Yang YangHao`, `Independent Researcher`,
+and contact `2499510083@qq.com`. The paper has not been submitted yet; before
+submission the project should create a stable release tag or commit snapshot
+and keep the repository license statement aligned with the paper.
+
+当前面向研究传播的草稿是
+[Bio-Inspired Inference Control for Local Large Language Models: A DNA
+Gene-Chain Architecture in Rust](docs/research/bio-inspired-inference-control-report.tex)。
+它是 6--8 页 arXiv 风格技术报告草稿，用来说明 rust-norion 的生物启发式推理控制层定位、项目代码地址、当前原型边界和可复现实验计划。
+
+提交元数据和 TeX 上传检查清单记录在
+[docs/research/README.md](docs/research/README.md)。计划分类是 `cs.AI`，作者元数据为
+`Hao Yang YangHao` / `Independent Researcher`，联系邮箱为
+`2499510083@qq.com`。论文尚未正式提交；提交前应创建稳定 release tag 或 commit 快照，并让仓库许可证说明与论文保持一致。
+
+## Contributor Commercial-Use Direction / 贡献者商用方向
+
+The current controlling license is still non-commercial research deployment.
+However, the preferred community direction is a contributor-friendly
+permissive open core: core inference-control primitives should eventually be
+usable commercially by everyone, including contributors, under the same clear
+terms, while enterprise add-ons can remain separately commercial.
+
+This is not active yet. It requires a dedicated license-transition PR that
+updates `LICENSE`, `NOTICE.md`, `CONTRIBUTING.md`, README wording, CI policy
+guards, and any contributor agreement notes together. Until that lands,
+commercial use still requires explicit written permission from the copyright
+holder.
+
+当前生效许可证仍是非商用研究部署许可证。但项目的社区方向是更适合贡献者的 permissive open core：核心推理控制层原语未来应允许所有人，包括贡献者，在同一套清晰条款下进行商用；企业级增强能力可以继续单独商业授权。
+
+这个变更尚未正式生效。它需要单独的许可证迁移 PR，一次性更新 `LICENSE`、`NOTICE.md`、`CONTRIBUTING.md`、README 文案、CI 策略门禁和贡献者协议说明。在该 PR 落地前，商用仍需要版权持有人的明确书面许可。
+
 ## Project Goal / 项目目标
 
 The goal is to build a practical, sovereignty-first local inference control
