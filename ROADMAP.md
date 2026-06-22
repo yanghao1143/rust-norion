@@ -464,7 +464,8 @@ These are algorithmic references, not product dependencies:
 ## Current Snapshot / 当前快照
 
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
-lineage-audit implementation and #77 graduation-checklist closure.
+lineage-audit implementation, #77 graduation-checklist closure, and latest
+branch head `3e5abe5de` (`Add genome lineage audit export`).
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -488,25 +489,29 @@ lineage-audit implementation and #77 graduation-checklist closure.
   retention policy, and #45 compute-budget scheduler / wasted-compute
   telemetry with explicit before/after benchmark fanout evidence.
 - Completed hardening lane #46 `[Genome] Add lineage graph, rollback anchors,
-  and audit export` now produces redacted JSON/Markdown lineage packets for
-  splice previews and dual-chain genome records. Current active hardening lane
-  is #47 privacy redaction corpus, which should broaden fixture coverage so
-  evidence exports cannot leak raw prompts, answers, secrets, hidden reasoning,
-  executable payloads, or unreviewed third-party source text.
+  and audit export` closed on GitHub after adding redacted JSON/Markdown
+  lineage packets for splice previews and dual-chain genome records. Current
+  active hardening lane is #47 privacy redaction corpus / regression suite,
+  which should broaden synthetic fixture coverage so memory reports, genome
+  mutation fixtures, trace events, benchmark artifacts, and review packets
+  cannot leak raw prompts, answers, secrets, hidden reasoning, executable
+  payloads, tenant identifiers, or unreviewed third-party source text.
 - #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
   Its checklist is the policy bridge for later memory/genome/evolution writes:
   preview evidence can graduate only after writer gates, validation evidence,
   rollback anchors, privacy/license checks, and maintainer/operator approval.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
-- PR #1 is currently open and mergeable. The latest `focused Rust crates`
-  checks are green, but GitHub still reports review approval required before
-  merge.
+- PR #1 is currently open and mergeable from
+  `codex/r83-memory-admission-review-packets`. Both latest `focused Rust
+  crates` check runs are green, but GitHub still reports review approval
+  required before merge.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
   Its body now marks #43, #44, #45, #46, and #77 complete; issues #47,
   #50/#51, and #72-#78 extend that tracker with the next
   audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
-  workstream.
+  workstream. The next suggested order keeps #47 first so privacy redaction is
+  validated before broader evidence packets or outside collaboration.
 
 ## Version Plan / 版本计划
 
@@ -802,8 +807,10 @@ lineage-audit implementation and #77 graduation-checklist closure.
   with digest-only before/after evidence and preview/applied repair state.
 - #47 `[Governance] Add privacy redaction corpus for memory, genome, and trace
   evidence`: current active paired hardening lane. Build fixtures and gates
-  that prove audit exports do not leak raw prompts, answers, secrets, hidden
-  reasoning, or unreviewed external-source payloads.
+  that prove memory reports, genome mutation fixtures, trace events, benchmark
+  artifacts, audit exports, and review packets do not leak raw prompts,
+  answers, secrets, hidden reasoning, executable malicious fixtures, tenant
+  identifiers, or unreviewed external-source payloads.
 - #50 `[Genome] Add malignant-gene poisoning defense and recovery drills`:
   downstream genome-safety lane. Prove malignant or polluted GeneSegments are
   quarantined, cut, and regenerated without contaminating neighboring lineage
@@ -853,7 +860,9 @@ lineage-audit implementation and #77 graduation-checklist closure.
   dual-chain memory, mutation-plan, validation, and rollback evidence without
   leaking private payloads.
 - R88 / #47 active: privacy redaction corpus for memory, genome, and trace
-  evidence. Add fixture coverage before broad audit exports or outside
+  evidence. Add synthetic fixture coverage and regression gates for memory
+  reports, genome mutation fixtures, trace events, benchmark artifacts, audit
+  exports, and review packets before broad audit exports or outside
   collaboration depend on trace packets.
 - R89 / #12/#72: Reasoning DNA dual-chain stabilization. Normalize
   `express_chain` and `memory_chain` records with segment ids, source ids,
@@ -883,7 +892,8 @@ lineage-audit implementation and #77 graduation-checklist closure.
 - R95 / #18/#40/#60: clean-room implementation audit. Reconfirm
   `fortunto2/rust-code` stays behind MIT attribution review and
   `Kuberwastaken/claurst` remains GPL-3.0 concept-only unless GPL obligations
-  are explicitly accepted.
+  are explicitly accepted. Do not copy, translate, or mechanically port GPL or
+  unreviewed external source into this repository.
 - R96 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
   Add scoring datasets, local service paths, and compiler/test/benchmark
   validation for self-improving coding behavior.
