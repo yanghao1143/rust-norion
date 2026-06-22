@@ -4,6 +4,7 @@ mod model;
 mod purpose;
 mod schema;
 mod splicing;
+mod transaction;
 
 pub use audit::{
     DNA_LINEAGE_AUDIT_SCHEMA_VERSION, DnaLineageAuditEdge, DnaLineageAuditNode,
@@ -36,6 +37,11 @@ pub use splicing::{
     GeneScissorsLifecycleRecord, GeneScissorsLifecycleState, GeneScissorsValidationStatus,
     GeneSegment, GeneSegmentClass, GeneSegmentDisposition, GeneSegmentSource, GeneVariantKind,
     GeneVariantSeverity, MutDetector, MutFixer, MutationFinding,
+};
+pub use transaction::{
+    GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneScissorsOperatorDecision,
+    GeneScissorsTransaction, GeneScissorsTransactionJournal, GeneScissorsTransactionJournalError,
+    GeneScissorsTransactionReplayReport, GeneScissorsTransactionState,
 };
 
 #[cfg(test)]

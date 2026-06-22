@@ -467,7 +467,8 @@ Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
 lineage-audit implementation, #77 graduation-checklist closure, #47
 privacy-redaction corpus hardening, #50 malignant-gene recovery drills, the #51
 genome aging/rejuvenation benchmark simulation baseline, and the #72 gene
-purpose relabel validator baseline.
+purpose relabel validator baseline, and the #73 reversible Gene Scissors
+transaction journal baseline.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -485,15 +486,15 @@ purpose relabel validator baseline.
   R88/#47 adds the shared privacy-redaction corpus and detector baseline,
   R92/#50 adds deterministic malignant-gene poisoning defense and recovery
   drills, R91/#51 adds deterministic genome aging/rejuvenation simulation
-  evidence, and R89/#72 now adds purpose ontology / relabel validation. The
-  next active genome lane is #73: move reversible Gene Scissors transactions
-  behind the same redaction, rollback, and approval gates.
-- Active acceleration lane: #72 now provides deterministic purpose records and
-  preview-only relabel validation for keep/relabel/refresh/regenerate/
-  quarantine decisions. Continue with #73 reversible Gene Scissors transaction
-  journaling, then #79 pursuit-goal queue scheduling so multiple bounded
+  evidence, R89/#72 adds purpose ontology / relabel validation, and R90/#73 now
+  adds reversible Gene Scissors transaction journaling. The next active
+  evolution lane is #79 pursuit-goal queue scheduling so multiple bounded
   self-evolution goals can run in order with explicit success, stop, budget,
   rollback, and approval gates.
+- Active acceleration lane: #73 now provides deterministic transaction records
+  for quarantine, hold, reject, cut-preview, regenerate-preview,
+  rollback-preview, and promoted Gene Scissors states. Continue with #79
+  pursuit-goal queue scheduling above the experiment ledger and rollback gates.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -536,10 +537,10 @@ purpose relabel validator baseline.
   `MERGEABLE`, both focused validation checks are green, and merge still
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, and #77 as completed
-  or landing baselines in this branch; issues #73-#79 extend the next
-  reversible-transaction, scheduler, evaluation, memory, governance,
-  deployment, and pursuit-goal queue workstream.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, and #77 as
+  completed or landing baselines in this branch; issues #74-#79 extend the next
+  scheduler, evaluation, memory, governance, deployment, and pursuit-goal queue
+  workstream.
 
 ## Version Plan / 版本计划
 
@@ -796,10 +797,10 @@ purpose relabel validator baseline.
   lineage/audit export baseline, #47 is the completed privacy-redaction corpus
   baseline, #50 is the completed malignant-gene recovery drill baseline, #51 is
   the deterministic genome rejuvenation simulation baseline, #72 is the purpose
-  ontology / relabel validator baseline, and #73 is queued for reversible Gene
-  Scissors transactions. #79 is queued above the evolution ledger as the
-  pursuit-goal scheduler with success, stop, budget, rollback, and approval
-  gates.)
+  ontology / relabel validator baseline, and #73 is the reversible Gene
+  Scissors transaction journal baseline. #79 is queued above the evolution
+  ledger as the pursuit-goal scheduler with success, stop, budget, rollback,
+  and approval gates.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -864,9 +865,12 @@ purpose relabel validator baseline.
   and privacy-safe serialization before Gene Scissors edits become durable.
   Policy is documented in
   [`docs/governance/gene-purpose-relabel-validator.md`](docs/governance/gene-purpose-relabel-validator.md).
-- #73 `[Genome] Add reversible Gene Scissors transaction journal`: add a
-  reversible journal for cut/quarantine/regenerate/splice operations so genome
-  edits can be audited and rolled back.
+- #73 `[Genome] Add reversible Gene Scissors transaction journal`: completed
+  baseline for deterministic append-only transaction records, duplicate
+  suppression, replay reports, forensic copy digests, child lineage links,
+  rollback previews, and redacted trace lines for cut/quarantine/regenerate/
+  splice operations. Policy is documented in
+  [`docs/governance/gene-scissors-transaction-journal.md`](docs/governance/gene-scissors-transaction-journal.md).
 - #74 `[Runtime] Add thinking-phase gene-chain execution scheduler`: schedule
   genome-chain expression during thinking/runtime phases without bypassing the
   existing trace, reward, and drift gates.
@@ -916,8 +920,8 @@ purpose relabel validator baseline.
   `express_chain` and `memory_chain` records with segment ids, source ids,
   purpose tags, version, confidence, last validation result, rollback anchors,
   and purpose ontology validation.
-- R90 / #13/#14/#73: Gene splicing, mutation taxonomy, and reversible Gene
-  Scissors. Gate variable splicing, intron
+- R90 / #13/#14/#73 completed baseline: Gene splicing, mutation taxonomy, and
+  reversible Gene Scissors. Gate variable splicing, intron
   filtering, segment isolation, insertion/deletion, mislabel, truncation, format
   drift, stale-label, schema, privacy, and KV-shape findings as read-only
   `MutationPlan` evidence, then journal cut/quarantine/regenerate/splice

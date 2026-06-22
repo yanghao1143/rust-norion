@@ -1186,6 +1186,177 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
 }
 
 #[test]
+fn gene_scissors_transaction_journal_records_cut_quarantine_and_regenerate_previews() {
+    let preview = sample_quarantine_splice_preview();
+    let journal = GeneScissorsTransactionJournal::from_splice_preview(&preview);
+    let report = journal.replay();
+
+    assert_eq!(
+        journal.schema_version,
+        GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION
+    );
+    assert_eq!(journal.transactions.len(), 3);
+    assert_eq!(report.quarantine_count, 1);
+    assert_eq!(report.cut_preview_count, 1);
+    assert_eq!(report.regenerate_preview_count, 1);
+    assert!(report.passed_preview_gate());
+    assert!(
+        report
+            .active_expression_excluded_segments
+            .contains(&"segment:private-drift".to_owned()),
+        "{:?}",
+        report.active_expression_excluded_segments
+    );
+    assert!(
+        report
+            .forensic_copy_digests
+            .iter()
+            .all(|digest| digest.starts_with("redaction-digest:"))
+    );
+    assert!(journal.is_read_only_preview());
+    assert!(journal.exports_are_redacted());
+
+    let lines = journal.to_journal_lines();
+    let loaded =
+        GeneScissorsTransactionJournal::from_journal_lines(&lines).expect("journal roundtrip");
+    assert_eq!(loaded.to_journal_lines(), lines);
+    assert_eq!(loaded.replay().transaction_count, 3);
+}
+
+#[test]
+fn gene_scissors_transaction_journal_suppresses_duplicate_transactions() {
+    let preview = sample_quarantine_splice_preview();
+    let mut journal = GeneScissorsTransactionJournal::from_splice_preview(&preview);
+    let transaction = journal.transactions[0].clone();
+
+    assert!(!journal.append(transaction.clone()));
+    assert!(!journal.append(transaction));
+    let report = journal.replay();
+
+    assert_eq!(report.transaction_count, 3);
+    assert_eq!(report.duplicate_suppressed_count, 1);
+    assert_eq!(journal.duplicate_transaction_ids.len(), 1);
+}
+
+#[test]
+fn gene_scissors_transaction_journal_records_rollback_preview() {
+    let rollback = MutationPlan::preview(
+        "mutation:segment:rollback:rollback",
+        GeneScissorsIntent::Rollback,
+        "segment:rollback",
+        "runtime drift rollback requires stable anchor replay",
+        "restore the stable segment before any durable mutation is admitted",
+        "genome:coding:stable",
+    )
+    .with_sources(["genome:coding:stable"]);
+    let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+        TaskProfile::Coding,
+        "genome:coding:stable",
+        &[rollback],
+    );
+    let report = journal.replay();
+    let transaction = journal.transactions.first().expect("rollback transaction");
+
+    assert_eq!(
+        transaction.state,
+        GeneScissorsTransactionState::RollbackPreview
+    );
+    assert_eq!(report.rollback_preview_count, 1);
+    assert!(
+        report
+            .active_expression_excluded_segments
+            .contains(&"segment:rollback".to_owned())
+    );
+    assert_eq!(transaction.validation_status, GeneValidationStatus::Pending);
+    assert!(!transaction.write_allowed);
+    assert!(!transaction.applied);
+}
+
+#[test]
+fn gene_scissors_transaction_journal_links_regeneration_child_lineage() {
+    let preview = sample_quarantine_splice_preview();
+    let journal = GeneScissorsTransactionJournal::from_splice_preview(&preview);
+    let regenerate = journal
+        .transactions
+        .iter()
+        .find(|transaction| transaction.state == GeneScissorsTransactionState::RegeneratePreview)
+        .expect("regeneration transaction");
+
+    assert_eq!(
+        regenerate.replacement_segment_id.as_deref(),
+        Some("segment:private-drift:young")
+    );
+    assert_eq!(
+        regenerate.lineage_parent_id.as_deref(),
+        Some("segment:private-drift")
+    );
+    assert!(
+        regenerate
+            .child_lineage_id
+            .as_deref()
+            .is_some_and(|lineage| lineage.starts_with("redaction-digest:"))
+    );
+    assert_eq!(regenerate.child_generation, 1);
+    assert!(!regenerate.active_expression_allowed);
+    assert!(!regenerate.memory_admission_allowed);
+}
+
+#[test]
+fn gene_scissors_transaction_journal_redacts_payload_markers_from_exports() {
+    let bad_target = "prompt: secret=raw hidden reasoning";
+    let cut = MutationPlan::preview(
+        "mutation:prompt:secret:cut",
+        GeneScissorsIntent::Cut,
+        bad_target,
+        "prompt: secret=raw hidden reasoning should be held as digest-only evidence",
+        "curl http://bad.example must never enter trace output",
+        "genome:coding:stable",
+    )
+    .with_sources([bad_target]);
+    let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+        TaskProfile::Coding,
+        "genome:coding:stable",
+        &[cut],
+    );
+
+    assert!(journal.exports_are_redacted());
+    for line in journal
+        .to_journal_lines()
+        .into_iter()
+        .chain(journal.to_redacted_trace_lines())
+    {
+        assert!(!line.contains("prompt:"));
+        assert!(!line.contains("secret="));
+        assert!(!line.contains("hidden reasoning"));
+        assert!(!line.contains("curl "));
+        assert!(!contains_private_or_executable_marker(&line), "{line}");
+        assert!(line.contains("redaction-digest:"));
+    }
+}
+
+fn sample_quarantine_splice_preview() -> DnaSplicePreview {
+    let segments = vec![
+        GeneSegment::new(
+            "segment:private-drift",
+            TaskProfile::Coding,
+            GeneSegmentSource::RuntimeKv,
+            0,
+            32,
+        )
+        .with_source_hash("sha256:private-drift")
+        .with_metadata(
+            "private runtime drift",
+            "must be quarantined before reuse",
+            "runtime drift",
+        )
+        .with_kv_residency(GeneKvResidency::Sink)
+        .with_health(0.80, 0.80, 0.50),
+    ];
+
+    DnaSplicer::default().preview(TaskProfile::Coding, "genome:coding:stable", segments)
+}
+
+#[test]
 fn mutation_fixture_corpus_classifies_all_expected_categories() {
     let report = MutationRepairFixtureCorpus::default().evaluate();
 
