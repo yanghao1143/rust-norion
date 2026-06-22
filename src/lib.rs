@@ -251,9 +251,10 @@ pub use toolsmith::{
     ToolBlueprint, ToolBuildStatus, ToolIntent, ToolsmithInput, ToolsmithPlan, ToolsmithPlanner,
 };
 pub use trace::{
-    TraceSchemaGateReport, append_business_contract_trace_jsonl,
-    append_improvement_corpus_trace_jsonl, append_rust_check_trace_jsonl,
-    append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
+    SelfEvolutionOperatorApprovalServiceCounters, TraceSchemaGateReport,
+    append_business_contract_trace_jsonl, append_improvement_corpus_trace_jsonl,
+    append_rust_check_trace_jsonl, append_self_evolution_admission_trace_jsonl,
+    append_self_evolution_experiment_trace_jsonl,
     append_self_evolution_operator_approval_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,

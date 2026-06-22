@@ -546,6 +546,16 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_operator_approvals() {
     );
     assert_eq!(report.self_evolution_operator_approval_write_allowed, 0);
     assert_eq!(report.self_evolution_operator_approval_applied, 0);
+    let counters = report.self_evolution_operator_approval_service_counters();
+    assert!(counters.data_present);
+    assert!(!counters.approval_ready);
+    assert!(counters.review_required);
+    assert!(!counters.blocked);
+    assert!(counters.validation_failures().is_empty());
+    assert!(!counters.activation_allowed);
+    assert!(!counters.memory_write_allowed);
+    assert!(!counters.genome_write_allowed);
+    assert!(!counters.kv_write_allowed);
     assert!(
         report
             .summary_line()
@@ -557,6 +567,102 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_operator_approvals() {
             .contains("self_evolution_operator_approval_held=1")
     );
     cleanup(path);
+}
+
+#[test]
+fn self_evolution_operator_approval_service_counters_mark_clean_approval_ready() {
+    let report = TraceSchemaGateReport {
+        passed: true,
+        checked_lines: 1,
+        self_evolution_operator_approval_events: 1,
+        self_evolution_operator_approval_approved: 1,
+        self_evolution_operator_approval_review_packets: 1,
+        self_evolution_operator_approval_evidence_ids: 2,
+        self_evolution_operator_approval_rollback_anchor_ids: 1,
+        self_evolution_operator_approval_content_digests: 1,
+        self_evolution_operator_approval_source_report_schemas: 1,
+        ..TraceSchemaGateReport::default()
+    };
+
+    let counters = report.self_evolution_operator_approval_service_counters();
+    let json = counters.json_object();
+
+    assert!(counters.data_present);
+    assert!(counters.approval_ready);
+    assert!(!counters.review_required);
+    assert!(!counters.blocked);
+    assert!(counters.validation_failures().is_empty());
+    assert!(!counters.activation_allowed);
+    assert!(!counters.memory_write_allowed);
+    assert!(!counters.genome_write_allowed);
+    assert!(!counters.kv_write_allowed);
+    assert!(json.contains("\"approval_ready\":true"));
+    assert!(json.contains("\"activation_allowed\":false"));
+    assert!(json.contains("\"memory_write_allowed\":false"));
+    assert!(json.contains("\"genome_write_allowed\":false"));
+    assert!(json.contains("\"kv_write_allowed\":false"));
+    assert!(json.contains("\"validation_failures\":[]"));
+}
+
+#[test]
+fn self_evolution_operator_approval_service_counters_fail_closed_on_mutating_flags() {
+    let report = TraceSchemaGateReport {
+        passed: true,
+        checked_lines: 1,
+        self_evolution_operator_approval_events: 1,
+        self_evolution_operator_approval_approved: 1,
+        self_evolution_operator_approval_review_packets: 0,
+        self_evolution_operator_approval_evidence_ids: 0,
+        self_evolution_operator_approval_rollback_anchor_ids: 0,
+        self_evolution_operator_approval_content_digests: 0,
+        self_evolution_operator_approval_source_report_schemas: 0,
+        self_evolution_operator_approval_missing_review_packet_refs: 1,
+        self_evolution_operator_approval_write_allowed: 1,
+        self_evolution_operator_approval_applied: 1,
+        ..TraceSchemaGateReport::default()
+    };
+
+    let counters = report.self_evolution_operator_approval_service_counters();
+    let failures = counters.validation_failures();
+    let json = counters.json_object();
+
+    assert!(counters.data_present);
+    assert!(!counters.approval_ready);
+    assert!(counters.review_required);
+    assert!(counters.blocked);
+    assert!(
+        failures.contains(
+            &"self_evolution_operator_approval_approved_missing_review_packets".to_owned()
+        )
+    );
+    assert!(
+        failures
+            .contains(&"self_evolution_operator_approval_approved_missing_evidence_ids".to_owned())
+    );
+    assert!(failures.contains(
+        &"self_evolution_operator_approval_approved_missing_rollback_anchors".to_owned()
+    ));
+    assert!(
+        failures.contains(
+            &"self_evolution_operator_approval_approved_missing_content_digests".to_owned()
+        )
+    );
+    assert!(failures.contains(
+        &"self_evolution_operator_approval_approved_missing_source_report_schemas".to_owned()
+    ));
+    assert!(
+        failures
+            .contains(&"self_evolution_operator_approval_missing_review_packet_refs".to_owned())
+    );
+    assert!(failures.contains(&"self_evolution_operator_approval_write_allowed".to_owned()));
+    assert!(failures.contains(&"self_evolution_operator_approval_applied".to_owned()));
+    assert!(!counters.activation_allowed);
+    assert!(!counters.memory_write_allowed);
+    assert!(!counters.genome_write_allowed);
+    assert!(!counters.kv_write_allowed);
+    assert!(json.contains("\"blocked\":true"));
+    assert!(json.contains("\"approval_ready\":false"));
+    assert!(json.contains("self_evolution_operator_approval_write_allowed"));
 }
 
 #[test]

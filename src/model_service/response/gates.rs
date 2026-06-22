@@ -178,18 +178,10 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 1,
             );
             let operator_approval_counters = format!(
-                "\"self_evolution_operator_approval_counters\":{{\"events\":{},\"approved\":{},\"held\":{},\"review_packets\":{},\"evidence_ids\":{},\"rollback_anchor_ids\":{},\"content_digests\":{},\"source_report_schemas\":{},\"missing_review_packet_refs\":{},\"write_allowed\":{},\"applied\":{}}}",
-                report.self_evolution_operator_approval_events,
-                report.self_evolution_operator_approval_approved,
-                report.self_evolution_operator_approval_held,
-                report.self_evolution_operator_approval_review_packets,
-                report.self_evolution_operator_approval_evidence_ids,
-                report.self_evolution_operator_approval_rollback_anchor_ids,
-                report.self_evolution_operator_approval_content_digests,
-                report.self_evolution_operator_approval_source_report_schemas,
-                report.self_evolution_operator_approval_missing_review_packet_refs,
-                report.self_evolution_operator_approval_write_allowed,
-                report.self_evolution_operator_approval_applied,
+                "\"self_evolution_operator_approval_counters\":{}",
+                report
+                    .self_evolution_operator_approval_service_counters()
+                    .json_object()
             );
             let experiment_counters = format!(
                 "\"self_evolution_experiment_counters\":{{\"events\":{},\"admit\":{},\"hold\":{},\"reject\":{},\"rollback\":{},\"repeated\":{},\"conflicts\":{},\"rollback_replayable\":{},\"active_candidates\":{},\"write_allowed\":{},\"applied\":{}}}",
@@ -264,6 +256,7 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_norion::SelfEvolutionOperatorApprovalServiceCounters;
 
     #[test]
     fn trace_gate_service_json_exposes_self_evolution_admission_counts() {
@@ -546,8 +539,18 @@ mod tests {
         };
 
         let json = option_trace_gate_service_json(Some(&report));
+        let counters: SelfEvolutionOperatorApprovalServiceCounters =
+            report.self_evolution_operator_approval_service_counters();
 
+        assert!(counters.review_required);
+        assert!(counters.blocked);
+        assert!(!counters.approval_ready);
         assert!(json.contains("\"self_evolution_operator_approval_counters\":{"));
+        assert!(json.contains("\"trace_gate_passed\":true"));
+        assert!(json.contains("\"data_present\":true"));
+        assert!(json.contains("\"approval_ready\":false"));
+        assert!(json.contains("\"review_required\":true"));
+        assert!(json.contains("\"blocked\":true"));
         assert!(json.contains("\"events\":2"));
         assert!(json.contains("\"approved\":1"));
         assert!(json.contains("\"held\":1"));
@@ -559,6 +562,12 @@ mod tests {
         assert!(json.contains("\"missing_review_packet_refs\":1"));
         assert!(json.contains("\"write_allowed\":0"));
         assert!(json.contains("\"applied\":0"));
+        assert!(json.contains("\"activation_allowed\":false"));
+        assert!(json.contains("\"memory_write_allowed\":false"));
+        assert!(json.contains("\"genome_write_allowed\":false"));
+        assert!(json.contains("\"kv_write_allowed\":false"));
+        assert!(json.contains("\"validation_failures\":["));
+        assert!(json.contains("self_evolution_operator_approval_missing_review_packet_refs"));
         assert!(json.contains("\"summary\":"));
     }
 

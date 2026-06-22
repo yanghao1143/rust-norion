@@ -70,7 +70,8 @@ pub use jsonl::{
 };
 pub use schema_jsonl_gate::{
     OPERATOR_HEALTH_SCHEMA, OperatorHealthMetric, OperatorHealthSection, OperatorHealthSnapshot,
-    TraceSchemaGateReport, evaluate_trace_schema_jsonl,
+    SelfEvolutionOperatorApprovalServiceCounters, TraceSchemaGateReport,
+    evaluate_trace_schema_jsonl,
 };
 
 pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
