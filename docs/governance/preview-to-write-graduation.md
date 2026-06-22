@@ -44,8 +44,8 @@ Every graduation request must include these items in the issue or PR:
 | Redaction gate | Evidence uses ids, counts, stable digests, and summaries only. | Reject if raw prompts, answers, hidden reasoning, secrets, payloads, tickets, private refs, or unreviewed source text are exposed. | Delete or replace unsafe evidence before retry. |
 | Rollback gate | Stable rollback anchor, replay plan, and post-rollback validation command are present. | Hold if the candidate cannot be reverted or replayed in isolation. | Roll back to the named anchor before any retry. |
 | Operator approval gate | Maintainer approval is bound to exact review packet ids, evidence ids, rollback anchors, content digests, and source schemas. | Hold if refs are missing, extra, stale, or mismatched. | Keep approval invalid until a new review packet is approved. |
-| License provenance gate | External references and copied code status are documented. | Reject if GPL/AGPL/commercial code was copied without an explicit license decision. | Remove contaminated code and rebuild clean-room notes. |
-| Deployment research gate | Non-commercial deployment scope, resource limits, and rollback plan are documented. | Hold if it requests commercial permission or bypasses maintainer approval. | Disable deployment profile and revert to local preview. |
+| License provenance gate | External references and copied code status are documented. | Reject if AGPL, proprietary, commercial-restricted, unknown-license, or GPL-incompatible code was copied without an explicit license decision. | Remove contaminated code and rebuild clean-room notes. |
+| Deployment research gate | Deployment scope, resource limits, GPL-3.0 compatibility, and rollback plan are documented. | Hold if it bypasses maintainer approval, source availability, attribution, or third-party license review. | Disable deployment profile and revert to local preview. |
 
 ## Module Graduation Owners
 
@@ -58,7 +58,7 @@ graduation approval for every module below.
 | Reasoning Genome | Dual-chain schema, gene labels, splicing, mutation repair, Gene Scissors, regeneration. | `@yanghao1143` | Gene transaction journal, mutation fixtures, relabel validator, quarantine tests, rollback anchors, and redacted lineage export pass. |
 | Self-evolution | Admission, experiment ledger, rollback replay, operator approval, promotion preflight. | `@yanghao1143` | Admission, experiment, approval, promotion preflight, trace-schema, benchmark, and rollback evidence all agree on exact refs. |
 | Routing and hierarchy | FHT-DKE router scoring, adaptive attention thresholds, task-aware hierarchy updates. | `@yanghao1143` | Replayable routing traces, compute-budget telemetry, benchmark deltas, and rollback threshold anchors pass. |
-| Runtime/model service | Adapter registry, streaming, device/quantization policy, local deployment profiles. | `@yanghao1143` | Capability registry, resource guards, cancellation/backpressure tests, and non-commercial deployment runbook pass. |
+| Runtime/model service | Adapter registry, streaming, device/quantization policy, local deployment profiles. | `@yanghao1143` | Capability registry, resource guards, cancellation/backpressure tests, and GPL-3.0-compatible deployment runbook pass. |
 | Toolsmith and agent team | Rust tooling, sub-agent aggregation, conflict/budget isolation, cross-window exchange. | `@yanghao1143` | Ownership isolation, polluted-context sanitizer, budget reports, and conflict aggregation evidence pass. |
 | Adapter or weight training | Adapter-training handoff, LoRA request, direct base-model mutation. | `@yanghao1143` | No-weight lanes are saturated, dataset/license review is complete, and a separate human-approved training issue exists. |
 
@@ -142,14 +142,13 @@ These shortcuts block graduation:
 - changing a default from preview-only to write-enabled without a writer gate
 - treating a passing unit test as proof of a system-level benchmark claim
 - using operator approval that is not bound to exact review packet refs
-- copying GPL/AGPL/commercial source into the repository without an explicit
-  license decision
+- copying AGPL, proprietary, commercial-restricted, unknown-license, or
+  GPL-incompatible source into the repository without an explicit license
+  decision
 - exposing raw prompts, raw answers, secrets, approval tickets, local memory
   payloads, or hidden reasoning in evidence
-- enabling commercial use, paid hosting, sublicensing, or commercial deployment
-  through a technical PR
 - making a deployment profile bypass branch protection, maintainer approval, or
-  non-commercial research constraints
+  GPL-3.0 and third-party license constraints
 
 ## Maintainer Merge Rule
 
@@ -161,10 +160,9 @@ controlled. Graduation requires:
 - conversation resolution
 - CODEOWNER review
 - maintainer approval from `@yanghao1143`
-- no commercial-use permission request
 - no unreviewed external-source contamination
+- GPL-3.0 and third-party license compatibility
 
 The maintainer can approve a preview-only change while rejecting the requested
 write graduation. In that case the code must keep write, active, applied, and
 durable mutation flags closed until a later issue supplies the missing evidence.
-
