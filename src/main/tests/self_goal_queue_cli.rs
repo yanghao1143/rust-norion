@@ -102,6 +102,50 @@ fn self_goal_queue_cli_local_evidence_dry_run_plans_auto_gates() {
 }
 
 #[test]
+fn self_goal_queue_cli_traces_local_evidence_dry_run_digest_only() {
+    let dir = temp_asset_dir("self-goal-queue-cli-local-evidence-trace");
+    fs::create_dir_all(&dir).unwrap();
+    let trace_path = dir.join("local-evidence-trace.jsonl");
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-local-evidence-dry-run".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+    ]);
+
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+    let trace = fs::read_to_string(&trace_path).unwrap();
+
+    assert!(report.local_evidence.enabled);
+    assert!(report.local_evidence.dry_run);
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(trace_report.self_goal_local_evidence_events, 1);
+    assert_eq!(trace_report.self_goal_local_evidence_enabled, 1);
+    assert_eq!(trace_report.self_goal_local_evidence_dry_run, 1);
+    assert_eq!(trace_report.self_goal_local_evidence_ready, 1);
+    assert_eq!(trace_report.self_goal_local_evidence_steps, 4);
+    assert_eq!(trace_report.self_goal_local_evidence_attempted, 0);
+    assert_eq!(trace_report.self_goal_local_evidence_generated, 0);
+    assert_eq!(trace_report.self_goal_local_evidence_manual, 1);
+    assert_eq!(trace_report.self_goal_local_evidence_planned_status, 3);
+    assert!(trace.contains("rust-norion-self-goal-local-evidence-v1"));
+    let local_trace = trace
+        .lines()
+        .find(|line| line.contains("rust-norion-self-goal-local-evidence-v1"))
+        .expect("local evidence trace line");
+    assert!(local_trace.contains("\"packet_digests\":[\"none\",\"none\",\"none\",\"none\"]"));
+    assert!(!local_trace.contains("cargo check"));
+    assert!(!local_trace.contains("cargo test"));
+    assert!(!local_trace.contains("goal="));
+    assert!(!local_trace.contains("label=self-goal-local-evidence"));
+    assert!(!local_trace.contains("generated_packets"));
+    assert!(!local_trace.contains("\"commands\""));
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
     let args = Args::parse(vec![
         "--self-goal-queue".to_owned(),
