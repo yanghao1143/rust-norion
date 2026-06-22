@@ -7,6 +7,10 @@ fn parses_self_goal_queue_flags() {
         "--self-goal-queue-store".to_owned(),
         "target/self-goal-queue.ndkv".to_owned(),
         "--self-goal-queue-store-apply".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "candidate_index=0;kind=cargo_check;passed=true".to_owned(),
+        "--self-goal-queue-evidence-file".to_owned(),
+        "target/self-goal-evidence.txt".to_owned(),
         "--self-goal-queue-tenant".to_owned(),
         "tenant-a".to_owned(),
         "--self-goal-queue-workspace".to_owned(),
@@ -27,6 +31,14 @@ fn parses_self_goal_queue_flags() {
         Some(Path::new("target/self-goal-queue.ndkv"))
     );
     assert!(args.self_goal_queue_store_apply);
+    assert_eq!(
+        args.self_goal_queue_evidence_packets,
+        vec!["candidate_index=0;kind=cargo_check;passed=true".to_owned()]
+    );
+    assert_eq!(
+        args.self_goal_queue_evidence_path.as_deref(),
+        Some(Path::new("target/self-goal-evidence.txt"))
+    );
     assert_eq!(args.self_goal_queue_tenant, "tenant-a");
     assert_eq!(args.self_goal_queue_workspace, "workspace-b");
     assert_eq!(args.self_goal_queue_session, "session-c");

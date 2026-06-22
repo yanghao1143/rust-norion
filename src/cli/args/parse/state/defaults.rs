@@ -26,6 +26,8 @@ impl ParseState {
             self_goal_queue: false,
             self_goal_queue_store_path: None,
             self_goal_queue_store_apply: false,
+            self_goal_queue_evidence_packets: Vec::new(),
+            self_goal_queue_evidence_path: None,
             self_goal_queue_tenant: "local".to_owned(),
             self_goal_queue_workspace: "default".to_owned(),
             self_goal_queue_session: "interactive".to_owned(),
