@@ -466,7 +466,7 @@ These are algorithmic references, not product dependencies:
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
 lineage-audit implementation, #77 graduation-checklist closure, #47
 privacy-redaction corpus hardening, #50 malignant-gene recovery drills, and
-the #51 genome aging/rejuvenation benchmark lane selection.
+the #51 genome aging/rejuvenation benchmark simulation baseline.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -483,14 +483,14 @@ the #51 genome aging/rejuvenation benchmark lane selection.
   telemetry. R87/#46 adds the redacted lineage audit export baseline,
   R88/#47 adds the shared privacy-redaction corpus and detector baseline, and
   R92/#50 adds deterministic malignant-gene poisoning defense and recovery
-  drills. The next active genome lane is #51, using the #47 redaction corpus
-  and #50 recovery fixtures as the safety floor for aging/rejuvenation
-  simulation.
-- Active acceleration lane: R91/#15/#51/#72 is now the next genome milestone.
-  The immediate implementation should add deterministic aging/rejuvenation
-  simulation evidence first, then tighten purpose relabel validation, then move
-  reversible Gene Scissors transactions behind the same redaction, rollback,
-  and approval gates.
+  drills, and R91/#51 adds deterministic genome aging/rejuvenation simulation
+  evidence. The next active genome lane is #72/#73: tighten purpose relabel
+  validation, then move reversible Gene Scissors transactions behind the same
+  redaction, rollback, and approval gates.
+- Active acceleration lane: #51 now provides the benchmark baseline for keep,
+  relabel, refresh, regenerate, quarantine, and tombstone decisions. Continue
+  with #72 purpose ontology / relabel validation before #73 reversible Gene
+  Scissors transaction journaling.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -515,6 +515,12 @@ the #51 genome aging/rejuvenation benchmark lane selection.
   quarantine, reversible cut candidates, stable-anchor regeneration, replay
   validation hold/reject reasons, rollback/tombstone metadata, redaction
   status, and preview-only admission.
+- #51 `[Benchmark] Add genome aging and rejuvenation simulation suite` is
+  implemented as a deterministic, read-only benchmark surface. It records
+  digest-only before/after fitness, drift, wasted-compute proxy, routing-cost
+  proxy, memory usefulness, validation status, replay digests, rollback
+  readiness, and approval-required preview decisions for keep/relabel/refresh/
+  regenerate/quarantine/tombstone coverage.
 - #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
   Its checklist is the policy bridge for later memory/genome/evolution writes:
   preview evidence can graduate only after writer gates, validation evidence,
@@ -530,10 +536,10 @@ the #51 genome aging/rejuvenation benchmark lane selection.
   Its body now marks #43, #44, #45, #46, #47, #50, and #77 complete; issues
   #51 and #72-#78 extend that tracker with the next
   audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
-  workstream. The next suggested order is #51 first, then #72 and #73:
-  measure aging/rejuvenation behavior, make purpose relabeling explicit, and
-  only then journal reversible Gene Scissors transactions on top of the
-  redaction and malignant-defense gates.
+  workstream. With #51 now implemented in this branch, the next suggested order
+  is #72 first and #73 second: make purpose relabeling explicit, and only then
+  journal reversible Gene Scissors transactions on top of the redaction,
+  rejuvenation, and malignant-defense gates.
 
 ## Version Plan / 版本计划
 
@@ -788,9 +794,9 @@ the #51 genome aging/rejuvenation benchmark lane selection.
   routing-budget and wasted-compute telemetry baseline, and #77 is the closed
   preview-to-write graduation checklist. #46 is the completed redacted
   lineage/audit export baseline, #47 is the completed privacy-redaction corpus
-  baseline, #50 is the completed malignant-gene recovery drill baseline, and
-  #51/#72/#73 are queued for rejuvenation simulation, purpose relabeling, and
-  reversible Gene Scissors transactions.)
+  baseline, #50 is the completed malignant-gene recovery drill baseline, #51 is
+  the deterministic genome rejuvenation simulation baseline, and #72/#73 are
+  queued for purpose relabeling plus reversible Gene Scissors transactions.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -844,9 +850,11 @@ the #51 genome aging/rejuvenation benchmark lane selection.
   preview-only admission. Policy is documented in
   [`docs/governance/malignant-gene-recovery-drills.md`](docs/governance/malignant-gene-recovery-drills.md).
 - #51 `[Benchmark] Add genome aging and rejuvenation simulation suite`:
-  downstream rejuvenation lane. Exercise stale labels, aged purpose tags,
-  low-fitness drift, relabel plans, stable-anchor regeneration, and benchmark
-  evidence before any durable genome edit is accepted.
+  completed / closed benchmark baseline for stale labels, aged purpose tags,
+  low-fitness refresh, stable-anchor regeneration, quarantine, tombstone
+  previews, rollback readiness, replay digests, and digest-only evidence before
+  any durable genome edit is accepted. Policy is documented in
+  [`docs/governance/genome-rejuvenation-simulation.md`](docs/governance/genome-rejuvenation-simulation.md).
 - #72 `[Genome] Add gene purpose ontology and relabel validator`: make gene
   purpose explicit, validate relabel operations, and reduce stale-label drift
   before Gene Scissors edits become durable.
@@ -903,10 +911,12 @@ the #51 genome aging/rejuvenation benchmark lane selection.
   drift, stale-label, schema, privacy, and KV-shape findings as read-only
   `MutationPlan` evidence, then journal cut/quarantine/regenerate/splice
   operations as reversible transactions.
-- R91 / #15/#51/#72: DNA aging and relabel/rejuvenation. Add relabel plans for
-  expired, drifting, or semantically aged memory/gene segments based on
-  evidence summaries, purpose tags, confidence, version, and validation state.
-  Simulate youth-retagging and stable-anchor regeneration before durable edits.
+- R91 / #15/#51/#72: DNA aging and relabel/rejuvenation. #51 now adds the
+  deterministic simulation baseline for expired, drifting, or semantically aged
+  memory/gene segments with keep/relabel/refresh/regenerate/quarantine/
+  tombstone decisions, replay digests, rollback readiness, and no durable
+  writes. #72 should make purpose tags, confidence, version, and validation
+  state explicit before any durable relabel edit.
 - R92 / #50 completed baseline: malignant mutation quarantine and regeneration.
   Quarantines harmful, polluted, low-confidence, false-memory, routing-drift,
   stale-label, contradictory, secret-risk, or destructive-delete segments with

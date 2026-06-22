@@ -13,6 +13,8 @@ mod embedding;
 mod evolution_ledger;
 #[path = "tests/genome.rs"]
 mod genome;
+#[path = "tests/genome_rejuvenation.rs"]
+mod genome_rejuvenation;
 #[path = "tests/improvement_corpus.rs"]
 mod improvement_corpus;
 #[path = "tests/live_evolution.rs"]
