@@ -180,7 +180,7 @@ impl AdaptiveRouteDecision {
 
     pub fn summary(&self) -> String {
         format!(
-            "id={} source={} action={} route={} score={:.3} threshold={:.3} retained={} saved={} anchor={} trust={:.3} cost={:.3}",
+            "id={} source={} action={} route={} score={:.3} threshold={:.3} retained={} saved={} anchor={} task={:.3} language={:.3} code={:.3} fitness={:.3} recency={:.3} trust={:.3} cost={:.3} reward={:.3}",
             self.candidate_id,
             self.source.as_str(),
             self.action.as_str(),
@@ -190,8 +190,14 @@ impl AdaptiveRouteDecision {
             self.retained_tokens,
             self.saved_tokens(),
             self.anchor_required,
+            self.components.task_intent,
+            self.components.language_mode,
+            self.components.code_mode,
+            self.components.memory_fitness,
+            self.components.recency,
             self.components.trust,
-            self.components.compute_cost
+            self.components.compute_cost,
+            self.components.reward_history
         )
     }
 }

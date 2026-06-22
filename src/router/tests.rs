@@ -465,8 +465,42 @@ fn adaptive_routing_plan_explains_include_compress_defer_and_skip() {
     assert!(
         plan.score_summaries(4)
             .iter()
-            .all(|summary| summary.contains("score=") && summary.contains("threshold="))
+            .all(|summary| summary.contains("action=")
+                && summary.contains("route=")
+                && summary.contains("score=")
+                && summary.contains("threshold=")
+                && summary.contains("task=")
+                && summary.contains("fitness=")
+                && summary.contains("trust=")
+                && summary.contains("cost=")
+                && summary.contains("reward="))
     );
+}
+
+#[test]
+fn adaptive_routing_seeded_inputs_are_deterministic_and_order_stable() {
+    let planner = AdaptiveRoutingPlanner::new();
+    let threshold = 0.57;
+    let context = RoutingContext {
+        profile: TaskProfile::Coding,
+        hardware_pressure: 0.36,
+        compute_headroom: 0.64,
+        hierarchy: HierarchyWeights::new(0.25, 0.55, 0.20),
+        ..RoutingContext::default()
+    };
+    let candidates = seeded_route_candidates(0xA17E_D1CE, 8);
+
+    let first = planner.plan(TaskProfile::Coding, threshold, context, candidates.clone());
+    let second = planner.plan(TaskProfile::Coding, threshold, context, candidates.clone());
+    let mut reversed = candidates;
+    reversed.reverse();
+    let reversed = planner.plan(TaskProfile::Coding, threshold, context, reversed);
+
+    assert_eq!(first.decisions, second.decisions);
+    assert_eq!(first.decisions, reversed.decisions);
+    assert!(first.decision_count_matches());
+    assert!(first.token_accounting_matches());
+    assert!(first.anchors_retained());
 }
 
 #[test]
@@ -678,4 +712,38 @@ fn route_candidate(
             reward_history,
         ),
     )
+}
+
+fn seeded_route_candidates(seed: u32, count: usize) -> Vec<AdaptiveRouteCandidate> {
+    let mut state = seed;
+    (0..count)
+        .map(|index| {
+            let task_intent = seeded_unit(&mut state);
+            let memory_fitness = seeded_unit(&mut state);
+            let trust = seeded_unit(&mut state);
+            let compute_cost = seeded_unit(&mut state);
+            let reward_history = seeded_unit(&mut state);
+            let estimated_tokens = 32 + (seeded_u32(&mut state) as usize % 256);
+
+            route_candidate(
+                &format!("seeded-{index:02}"),
+                estimated_tokens,
+                task_intent,
+                memory_fitness,
+                trust,
+                compute_cost,
+                reward_history,
+            )
+            .with_anchor_required(index == 0)
+        })
+        .collect()
+}
+
+fn seeded_unit(state: &mut u32) -> f32 {
+    (seeded_u32(state) % 1000) as f32 / 1000.0
+}
+
+fn seeded_u32(state: &mut u32) -> u32 {
+    *state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+    *state
 }
