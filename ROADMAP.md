@@ -526,8 +526,10 @@ writer-gate consolidation baselines.
   `SelfGoalProposalReport`: rust-norion can propose the next R97/R98 goals as
   preview-only, digest-only candidate records. `SelfGoalAdmissionGate` now
   evaluates whether a proposed goal would be admissible through the normal
-  success, budget, rollback, and approval logic, while execution and durable
-  queue writes remain blocked behind future writer gates.
+  success, budget, rollback, and approval logic. `SelfGoalQueuePreviewGate`
+  can now emit the exact digest-only append packet for one preview-admissible
+  candidate, while execution and durable queue writes remain blocked behind
+  future writer gates.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -1084,8 +1086,11 @@ writer-gate consolidation baselines.
   candidates: it can hold on active prior goals, missing evidence, missing
   approval, or the one-goal admission limit; reject rollback/budget/unsafe
   policy cases; or mark one fully evidenced candidate as preview-admissible.
-  No branch creation, durable memory/genome mutation, experiment-ledger write,
-  or queue write happens without future writer-gate promotion.
+  `SelfGoalQueuePreviewGate` then converts that one preview-admissible goal
+  into a digest-only append packet with existing/resulting queue digests and a
+  redacted goal record line. No branch creation, durable memory/genome
+  mutation, experiment-ledger write, or queue write happens without future
+  writer-gate promotion.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
