@@ -7,12 +7,13 @@ use rust_norion::{
     EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
     EvolutionGoalQueueDiskStore, EvolutionGoalQueueReport, EvolutionGoalQueueStoreApproval,
     EvolutionGoalQueueStorePolicy, EvolutionGoalQueueStoreReadReport,
-    EvolutionGoalQueueStoreWriteReport, EvolutionGoalRunEvidence, SelfGoalAdmissionReport,
-    SelfGoalProposalCandidate, SelfGoalProposalReport, SelfGoalQueueAppendApproval,
-    SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport,
-    SelfGoalQueuePreviewReport, TenantResourceLane, TenantScope, TenantScopedKey,
-    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGatePolicy,
-    UnifiedWriterGateReport, append_evolution_goal_queue_store_write_trace_jsonl,
+    EvolutionGoalQueueStoreWriteReport, EvolutionGoalRunEvidence, EvolutionGoalStatus,
+    SelfGoalAdmissionReport, SelfGoalProposalCandidate, SelfGoalProposalReport,
+    SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor,
+    SelfGoalQueueApplyReport, SelfGoalQueuePreviewReport, TenantResourceLane, TenantScope,
+    TenantScopedKey, UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDecision,
+    UnifiedWriterGateDomain, UnifiedWriterGatePolicy, UnifiedWriterGateReport,
+    UnifiedWriterGateWriteScope, append_evolution_goal_queue_store_write_trace_jsonl,
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     default_noiron_pursuit_goal_queue, default_self_goal_admission_report,
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
@@ -30,6 +31,8 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) evidence: SelfGoalQueueCliEvidenceReport,
     pub(crate) queue_run: EvolutionGoalQueueReport,
     pub(crate) run_plan: SelfGoalQueueCliRunPlan,
+    pub(crate) completion_preview: SelfGoalQueueCliCompletionPreview,
+    pub(crate) completion_writer_gate: UnifiedWriterGateReport,
     pub(crate) proposal: SelfGoalProposalReport,
     pub(crate) admission: SelfGoalAdmissionReport,
     pub(crate) queue_preview: SelfGoalQueuePreviewReport,
@@ -51,6 +54,11 @@ impl SelfGoalQueueCliReport {
             self.evidence.summary_line(),
             queue_run_summary_line(&self.queue_run),
             self.run_plan.summary_line(),
+            self.completion_preview.summary_line(),
+            format!(
+                "self_goal_queue_completion_{}",
+                self.completion_writer_gate.summary_line()
+            ),
         ];
         lines.extend(
             self.queue_run
@@ -99,6 +107,14 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
     let (evidence_runs, evidence) = load_self_goal_queue_evidence(args, &current_queue, &proposal)?;
     let queue_run = current_queue.evaluate(&evidence_runs);
     let run_plan = SelfGoalQueueCliRunPlan::from_queue_run(&current_queue, &queue_run);
+    let completion_preview =
+        SelfGoalQueueCliCompletionPreview::from_queue_run(&current_queue, &queue_run);
+    let completion_writer_gate = UnifiedWriterGate::new()
+        .with_policy(UnifiedWriterGatePolicy {
+            durable_writes_enabled: args.self_goal_queue_store_apply,
+            ..UnifiedWriterGatePolicy::default()
+        })
+        .evaluate([completion_preview.writer_gate_candidate()]);
     let admission = default_self_goal_admission_report(&proposal, &evidence_runs);
     let queue_preview =
         default_self_goal_queue_preview_report(&current_queue, &proposal, &admission);
@@ -125,7 +141,18 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         Some(&append_approval),
     );
 
-    let store_write = if args.self_goal_queue_store_apply {
+    let store_write = if args.self_goal_queue_store_apply && append_execution.applied {
+        write_append_execution_result(args, &scope, &key, store_policy, &append_execution)?
+    } else if args.self_goal_queue_store_apply && completion_preview.ready {
+        write_completion_preview_result(
+            args,
+            &scope,
+            &key,
+            store_policy,
+            &completion_preview,
+            &completion_writer_gate,
+        )?
+    } else if args.self_goal_queue_store_apply {
         write_append_execution_result(args, &scope, &key, store_policy, &append_execution)?
     } else {
         None
@@ -147,6 +174,8 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         evidence,
         queue_run,
         run_plan,
+        completion_preview,
+        completion_writer_gate,
         proposal,
         admission,
         queue_preview,
@@ -228,6 +257,149 @@ impl SelfGoalQueueCliRunPlan {
             self.max_steps,
             self.max_tokens,
             self.max_runtime_ms
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliCompletionPreview {
+    pub(crate) ready: bool,
+    pub(crate) completed_count: usize,
+    pub(crate) retained_count: usize,
+    pub(crate) current_queue_digest: String,
+    pub(crate) resulting_queue_digest: String,
+    pub(crate) rollback_anchor_digest: String,
+    pub(crate) completion_digest: String,
+    pub(crate) reason_codes: Vec<String>,
+    pub(crate) resulting_queue: Option<EvolutionGoalQueue>,
+}
+
+impl SelfGoalQueueCliCompletionPreview {
+    fn from_queue_run(queue: &EvolutionGoalQueue, queue_run: &EvolutionGoalQueueReport) -> Self {
+        let current_queue_digest = queue.redaction_digest();
+        let completed_count = queue_run
+            .decisions
+            .iter()
+            .take_while(|decision| decision.status == EvolutionGoalStatus::Passed)
+            .count();
+        let retained_goals = queue
+            .goals
+            .iter()
+            .skip(completed_count)
+            .cloned()
+            .collect::<Vec<_>>();
+        let resulting_queue = EvolutionGoalQueue::new(retained_goals);
+        let resulting_queue_digest = resulting_queue.redaction_digest();
+        let mut reason_codes = Vec::new();
+
+        if queue.goals.is_empty() {
+            reason_codes.push("completion_queue_empty".to_owned());
+        }
+        if completed_count == 0 {
+            reason_codes.push("completion_no_passed_prefix".to_owned());
+        }
+        if queue_run
+            .decisions
+            .iter()
+            .skip(completed_count)
+            .any(|decision| decision.status == EvolutionGoalStatus::Passed)
+        {
+            reason_codes.push("completion_non_prefix_passed_goal_retained".to_owned());
+        }
+
+        let ready = completed_count > 0;
+        if ready {
+            reason_codes.push("completion_prune_preview_ready".to_owned());
+        }
+        let completed_count_text = completed_count.to_string();
+        let retained_count_text = resulting_queue.goals.len().to_string();
+        let reason_text = reason_codes.join("|");
+        let completion_digest = stable_redaction_digest([
+            "self-goal-queue-completion-preview-v1",
+            current_queue_digest.as_str(),
+            resulting_queue_digest.as_str(),
+            completed_count_text.as_str(),
+            retained_count_text.as_str(),
+            reason_text.as_str(),
+        ]);
+
+        Self {
+            ready,
+            completed_count,
+            retained_count: resulting_queue.goals.len(),
+            current_queue_digest: current_queue_digest.clone(),
+            resulting_queue_digest,
+            rollback_anchor_digest: current_queue_digest,
+            completion_digest,
+            reason_codes,
+            resulting_queue: ready.then_some(resulting_queue),
+        }
+    }
+
+    fn writer_gate_candidate(&self) -> UnifiedWriterGateCandidate {
+        let has_result = self.resulting_queue.is_some();
+        let review_packet_ids = self
+            .ready
+            .then(|| format!("self-goal-queue-completion:{}", self.completion_digest))
+            .into_iter()
+            .collect::<Vec<_>>();
+        let evidence_ids = if self.ready {
+            vec![
+                self.current_queue_digest.clone(),
+                self.resulting_queue_digest.clone(),
+                self.completion_digest.clone(),
+            ]
+        } else {
+            Vec::new()
+        };
+        let rollback_anchor_ids = self
+            .ready
+            .then(|| self.rollback_anchor_digest.clone())
+            .into_iter()
+            .collect::<Vec<_>>();
+        let content_digests = if self.ready {
+            vec![
+                self.current_queue_digest.clone(),
+                self.resulting_queue_digest.clone(),
+            ]
+        } else {
+            Vec::new()
+        };
+        let source_report_schemas = self
+            .ready
+            .then(|| "self-goal-queue-completion-preview-v1".to_owned())
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        UnifiedWriterGateCandidate::new(
+            UnifiedWriterGateDomain::EvolutionGoalQueue,
+            format!("self-goal-queue-completion:{}", self.completion_digest),
+            [UnifiedWriterGateWriteScope::EvolutionGoalQueue],
+        )
+        .with_refs(
+            review_packet_ids,
+            evidence_ids,
+            rollback_anchor_ids,
+            content_digests,
+            source_report_schemas,
+        )
+        .with_evidence(self.ready, self.ready, self.ready, self.ready, true)
+        .with_operator_approval(self.ready, self.ready)
+        .with_source_flags(true, true, false, false, false)
+        .with_raw_payload_redacted(has_result || !self.ready)
+    }
+
+    pub(crate) fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_completion ready={} completed={} retained={} current={} resulting={} rollback={} digest={} reasons={}",
+            self.ready,
+            self.completed_count,
+            self.retained_count,
+            self.current_queue_digest,
+            self.resulting_queue_digest,
+            self.rollback_anchor_digest,
+            self.completion_digest,
+            self.reason_codes.join("|")
         )
     }
 }
@@ -544,6 +716,42 @@ fn write_append_execution_result(
     });
     store
         .write_append_execution_result(scope, key, append_execution, approval.as_ref())
+        .map(Some)
+}
+
+fn write_completion_preview_result(
+    args: &Args,
+    scope: &TenantScope,
+    key: &TenantScopedKey,
+    store_policy: EvolutionGoalQueueStorePolicy,
+    completion_preview: &SelfGoalQueueCliCompletionPreview,
+    completion_writer_gate: &UnifiedWriterGateReport,
+) -> io::Result<Option<EvolutionGoalQueueStoreWriteReport>> {
+    let Some(path) = args.self_goal_queue_store_path.as_ref() else {
+        return Ok(None);
+    };
+    if completion_writer_gate.decision != UnifiedWriterGateDecision::ReadyForExplicitApply {
+        return Ok(None);
+    }
+    let Some(resulting_queue) = completion_preview.resulting_queue.as_ref() else {
+        return Ok(None);
+    };
+    let mut store = EvolutionGoalQueueDiskStore::open_with_policy(path, store_policy)?;
+    let approval = EvolutionGoalQueueStoreApproval::for_queue(
+        &args.self_goal_queue_operator,
+        &args.self_goal_queue_ticket,
+        key,
+        resulting_queue,
+        &completion_preview.rollback_anchor_digest,
+    );
+    store
+        .write_queue(
+            scope,
+            key,
+            resulting_queue,
+            &completion_preview.rollback_anchor_digest,
+            Some(&approval),
+        )
         .map(Some)
 }
 
