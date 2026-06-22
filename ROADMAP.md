@@ -463,22 +463,22 @@ These are algorithmic references, not product dependencies:
 
 ## Current Snapshot / 当前快照
 
-Status date: 2026-06-22.
+Status date: 2026-06-22. GitHub issue and PR status refreshed after the #45
+compute-budget closure and #77 graduation-checklist closure.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
-- Capability progress is now in the v0.7 band: Rust-native Transformer
-  templates, KV import/export ABI, benchmark harnesses for self-developed
-  runtimes, self-owned runtime ABI, model-side embeddings, production manifest
-  gates, reference/local production kernels, all-device benchmark coverage, and
+- The v0.7 substrate is now in place: Rust-native Transformer templates,
+  KV import/export ABI, benchmark harnesses for self-developed runtimes,
+  self-owned runtime ABI, model-side embeddings, production manifest gates,
+  reference/local production kernels, all-device benchmark coverage, and
   device/quantization budget planning have substantially landed.
-- The roadmap has crossed into the v0.8 integration band. The v0.7
-  runtime/memory/eval substrate is broad enough to support the current Noiron
-  orchestration baseline, and #43/#44/#45 now provide deterministic routing,
-  disk-backed KV memory, Reasoning Genome splicing, model adapter execution,
-  validation, reflection, approval-gated admission, KV residency, compaction,
-  retention, replay-safe evidence, compute-budget scheduling, and
-  wasted-compute telemetry.
+- The roadmap is now in the v0.8 integration-hardening band. R84/#43,
+  R85/#44, and R86/#45 are completed baselines for deterministic Noiron
+  orchestration, disk-backed KV residency/compaction, Reasoning Genome
+  splicing, model adapter execution, validation, reflection,
+  approval-gated admission, compute-budget scheduling, and wasted-compute
+  telemetry. R87/#46 is the current implementation target.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -489,17 +489,22 @@ Status date: 2026-06-22.
 - Current active hardening lane is #46 `[Genome] Add lineage graph, rollback
   anchors, and audit export`, followed by #47 privacy redaction corpus. These
   should make the completed orchestration, memory, and compute-budget evidence
-  exportable without leaking raw prompts, secrets, hidden reasoning, or
-  unreviewed payloads.
+  exportable without leaking raw prompts, answers, secrets, hidden reasoning,
+  executable payloads, or unreviewed third-party source text.
+- #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
+  Its checklist is the policy bridge for later memory/genome/evolution writes:
+  preview evidence can graduate only after writer gates, validation evidence,
+  rollback anchors, privacy/license checks, and maintainer/operator approval.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
-- PR #1 is currently open and mergeable, but still needs review approval before
-  merge. The `focused Rust crates` checks are still `IN_PROGRESS`, so the PR
-  must not be treated as green yet.
+- PR #1 is currently open and mergeable. The latest `focused Rust crates`
+  checks are green, but GitHub still reports review approval required before
+  merge.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body now marks #43, #44, and #45 complete; issues #46/#47 and #72-#78
-  extend that tracker with the next audit/privacy/gene/eval/memory/governance/
-  deployment workstream.
+  Its body now marks #43, #44, #45, and #77 complete; issues #46/#47,
+  #50/#51, and #72-#78 extend that tracker with the next
+  audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
+  workstream.
 
 ## Version Plan / 版本计划
 
@@ -751,8 +756,11 @@ Status date: 2026-06-22.
   until writer gates, validation evidence, rollback anchors, privacy/license
   checks, and maintainer/operator approval are all present. Issue #44 is the
   completed KV residency/compaction baseline, #45 is the completed
-  routing-budget and wasted-compute telemetry baseline, and #46/#47 are the
-  active lineage/audit and privacy-redaction hardening lanes.)
+  routing-budget and wasted-compute telemetry baseline, and #77 is the closed
+  preview-to-write graduation checklist. #46/#47 are the active lineage/audit
+  and privacy-redaction hardening lanes, with #50/#51/#72/#73 queued for
+  malignant-gene defense, rejuvenation simulation, purpose relabeling, and
+  reversible Gene Scissors transactions.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -792,6 +800,14 @@ Status date: 2026-06-22.
   evidence`: next paired hardening lane. Build fixtures and gates that prove
   audit exports do not leak raw prompts, answers, secrets, hidden reasoning, or
   unreviewed external-source payloads.
+- #50 `[Genome] Add malignant-gene poisoning defense and recovery drills`:
+  downstream genome-safety lane. Prove malignant or polluted GeneSegments are
+  quarantined, cut, and regenerated without contaminating neighboring lineage
+  branches.
+- #51 `[Benchmark] Add genome aging and rejuvenation simulation suite`:
+  downstream rejuvenation lane. Exercise stale labels, aged purpose tags,
+  low-fitness drift, relabel plans, stable-anchor regeneration, and benchmark
+  evidence before any durable genome edit is accepted.
 - #72 `[Genome] Add gene purpose ontology and relabel validator`: make gene
   purpose explicit, validate relabel operations, and reduce stale-label drift
   before Gene Scissors edits become durable.
@@ -809,7 +825,7 @@ Status date: 2026-06-22.
   memory growth bounded.
 - #77 `[Governance] Add preview-to-write graduation checklist`: define the
   checklist for moving read-only preview evidence into durable write/admission
-  paths.
+  paths. Completed / closed governance baseline for future writer admission.
 - #78 `[Runtime] Add local research deployment profiles and resource guards`:
   add local research deployment profiles and resource guards so experimental
   runtime work stays bounded on local hardware.
@@ -828,36 +844,50 @@ Status date: 2026-06-22.
   telemetry. Verifies budget-aware route fanout, before/after compute
   benchmarks, saved-context and skipped-work telemetry, validation-cost
   reporting, and correctness-anchor preservation.
-- Next active / #46: lineage graph, rollback anchors, and audit export. Produce
+- R87 / #46 active: lineage graph, rollback anchors, and audit export. Produce
   redacted lineage packets that connect genome, memory, routing, compute-budget,
   validation, and rollback evidence without leaking private payloads.
-- Next paired / #47: privacy redaction corpus for memory, genome, and trace
+- R88 / #47 paired: privacy redaction corpus for memory, genome, and trace
   evidence. Add fixture coverage before broad audit exports or outside
   collaboration depend on trace packets.
-- R87: Reasoning DNA dual-chain stabilization. Normalize `express_chain` and
-  `memory_chain` records with segment ids, source ids, purpose tags, version,
-  confidence, last validation result, and rollback anchors.
-- R88: Gene splicing and mutation taxonomy. Gate variable splicing, intron
+- R89 / #12/#72: Reasoning DNA dual-chain stabilization. Normalize
+  `express_chain` and `memory_chain` records with segment ids, source ids,
+  purpose tags, version, confidence, last validation result, rollback anchors,
+  and purpose ontology validation.
+- R90 / #13/#14/#73: Gene splicing, mutation taxonomy, and reversible Gene
+  Scissors. Gate variable splicing, intron
   filtering, segment isolation, insertion/deletion, mislabel, truncation, format
   drift, stale-label, schema, privacy, and KV-shape findings as read-only
-  `MutationPlan` evidence.
-- R89: DNA aging and relabel/rejuvenation. Add relabel plans for expired,
-  drifting, or semantically aged memory/gene segments based on evidence
-  summaries, purpose tags, confidence, version, and validation state.
-- R90: malignant mutation quarantine and regeneration. Quarantine harmful,
-  polluted, low-confidence, or secret-risk segments with digest-only reasons and
-  rollback records; allow repair/regeneration/re-admission only after validation
-  and operator approval.
-- R91: self-evolution writer gate consolidation. Unify memory, genome, and
-  experiment-ledger writer gates so all durable writes remain preview/read-only
-  until validation, rollback, privacy/license, and maintainer/operator approval
-  requirements pass.
-- R92: reference backlog verification. Fact-check and license-review
-  DNA-inspired, chunk/KV, and Rust inference references before any behavior spec
-  is promoted to an implementation issue.
-- R93: clean-room implementation audit. Reconfirm `fortunto2/rust-code` stays
-  behind MIT attribution review and `Kuberwastaken/claurst` remains GPL-3.0
-  concept-only unless GPL obligations are explicitly accepted.
+  `MutationPlan` evidence, then journal cut/quarantine/regenerate/splice
+  operations as reversible transactions.
+- R91 / #15/#51/#72: DNA aging and relabel/rejuvenation. Add relabel plans for
+  expired, drifting, or semantically aged memory/gene segments based on
+  evidence summaries, purpose tags, confidence, version, and validation state.
+  Simulate youth-retagging and stable-anchor regeneration before durable edits.
+- R92 / #50/#73: malignant mutation quarantine and regeneration. Quarantine
+  harmful, polluted, low-confidence, or secret-risk segments with digest-only
+  reasons and rollback records; allow repair/regeneration/re-admission only
+  after validation and operator approval.
+- R93 / #77/#6/#20: self-evolution writer gate consolidation. Unify memory,
+  genome, and experiment-ledger writer gates so all durable writes remain
+  preview/read-only until validation, rollback, privacy/license, and
+  maintainer/operator approval requirements pass.
+- R94 / #63/#64/#65: reference backlog verification. Fact-check and
+  license-review DNA-inspired, chunk/KV, and Rust inference references before
+  any behavior spec is promoted to an implementation issue.
+- R95 / #18/#40/#60: clean-room implementation audit. Reconfirm
+  `fortunto2/rust-code` stays behind MIT attribution review and
+  `Kuberwastaken/claurst` remains GPL-3.0 concept-only unless GPL obligations
+  are explicitly accepted.
+- R96 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
+  Add scoring datasets, local service paths, and compiler/test/benchmark
+  validation for self-improving coding behavior.
+- R97 / #76/#36/#42: self-evolving memory consolidation. Add episodic,
+  heuristic, and tool-reliability stores with forgetting/consolidation workers
+  and A/B evaluation gates.
+- R98 / #78/#62: local research deployment guardrails. Keep non-commercial
+  deployment research bounded by explicit resource profiles, safety runbooks,
+  and reviewable operator controls.
 
 ## Definition of Done / 验收标准
 
