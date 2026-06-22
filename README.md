@@ -1672,3 +1672,7 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 通过 CLI 调整可配置的记忆保留与压缩合并策略
 - 扩展全设备硬件 profile、执行计划和真实设备探测适配
 - 把内置 benchmark 套件扩展成回归门禁
+
+## Links / 友情链接
+
+本项目在 [LINUX DO](https://linux.do/) 公益推广，[LINUX DO](https://linux.do/) 是一个真诚、友善、团结、专业的新型综合性社区，欢迎来玩。
