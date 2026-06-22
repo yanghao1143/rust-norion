@@ -1,8 +1,14 @@
+mod audit;
 mod fixtures;
 mod model;
 mod schema;
 mod splicing;
 
+pub use audit::{
+    DNA_LINEAGE_AUDIT_SCHEMA_VERSION, DnaLineageAuditEdge, DnaLineageAuditNode,
+    DnaLineageAuditNodeKind, DnaLineageAuditPacket, DnaLineageRepairState,
+    contains_blocked_payload_marker,
+};
 pub use fixtures::{
     MutationFixtureKind, MutationRepairCandidateFixture, MutationRepairFixture,
     MutationRepairFixtureCorpus, MutationRepairFixtureGateReport, MutationRepairFixtureReport,

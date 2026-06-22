@@ -463,8 +463,8 @@ These are algorithmic references, not product dependencies:
 
 ## Current Snapshot / 当前快照
 
-Status date: 2026-06-22. GitHub issue and PR status refreshed after the #45
-compute-budget closure and #77 graduation-checklist closure.
+Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
+lineage-audit implementation and #77 graduation-checklist closure.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -478,7 +478,8 @@ compute-budget closure and #77 graduation-checklist closure.
   orchestration, disk-backed KV residency/compaction, Reasoning Genome
   splicing, model adapter execution, validation, reflection,
   approval-gated admission, compute-budget scheduling, and wasted-compute
-  telemetry. R87/#46 is the current implementation target.
+  telemetry. R87/#46 now adds the redacted lineage audit export baseline, and
+  R88/#47 is the current privacy-redaction hardening target.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -486,10 +487,11 @@ compute-budget closure and #77 graduation-checklist closure.
   engine orchestration loop, #44 KV residency / compaction / replay-safe
   retention policy, and #45 compute-budget scheduler / wasted-compute
   telemetry with explicit before/after benchmark fanout evidence.
-- Current active hardening lane is #46 `[Genome] Add lineage graph, rollback
-  anchors, and audit export`, followed by #47 privacy redaction corpus. These
-  should make the completed orchestration, memory, and compute-budget evidence
-  exportable without leaking raw prompts, answers, secrets, hidden reasoning,
+- Completed hardening lane #46 `[Genome] Add lineage graph, rollback anchors,
+  and audit export` now produces redacted JSON/Markdown lineage packets for
+  splice previews and dual-chain genome records. Current active hardening lane
+  is #47 privacy redaction corpus, which should broaden fixture coverage so
+  evidence exports cannot leak raw prompts, answers, secrets, hidden reasoning,
   executable payloads, or unreviewed third-party source text.
 - #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
   Its checklist is the policy bridge for later memory/genome/evolution writes:
@@ -501,7 +503,7 @@ compute-budget closure and #77 graduation-checklist closure.
   checks are green, but GitHub still reports review approval required before
   merge.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body now marks #43, #44, #45, and #77 complete; issues #46/#47,
+  Its body now marks #43, #44, #45, #46, and #77 complete; issues #47,
   #50/#51, and #72-#78 extend that tracker with the next
   audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
   workstream.
@@ -757,10 +759,11 @@ compute-budget closure and #77 graduation-checklist closure.
   checks, and maintainer/operator approval are all present. Issue #44 is the
   completed KV residency/compaction baseline, #45 is the completed
   routing-budget and wasted-compute telemetry baseline, and #77 is the closed
-  preview-to-write graduation checklist. #46/#47 are the active lineage/audit
-  and privacy-redaction hardening lanes, with #50/#51/#72/#73 queued for
-  malignant-gene defense, rejuvenation simulation, purpose relabeling, and
-  reversible Gene Scissors transactions.)
+  preview-to-write graduation checklist. #46 is the completed redacted
+  lineage/audit export baseline, #47 is the active privacy-redaction hardening
+  lane, and #50/#51/#72/#73 are queued for malignant-gene defense,
+  rejuvenation simulation, purpose relabeling, and reversible Gene Scissors
+  transactions.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -794,12 +797,13 @@ compute-budget closure and #77 graduation-checklist closure.
   saved-context / skipped-low-value-chunk / validation-cost telemetry, and
   correctness-anchor preservation under pruning.
 - #46 `[Genome] Add lineage graph, rollback anchors, and audit export`:
-  current active hardening lane. Export redacted lineage and rollback-anchor
-  evidence for genome, memory, routing, and compute-budget decisions.
+  completed / closed v0.8 genome-audit baseline. Exports redacted lineage and
+  rollback-anchor evidence for splice previews and dual-chain genome records,
+  with digest-only before/after evidence and preview/applied repair state.
 - #47 `[Governance] Add privacy redaction corpus for memory, genome, and trace
-  evidence`: next paired hardening lane. Build fixtures and gates that prove
-  audit exports do not leak raw prompts, answers, secrets, hidden reasoning, or
-  unreviewed external-source payloads.
+  evidence`: current active paired hardening lane. Build fixtures and gates
+  that prove audit exports do not leak raw prompts, answers, secrets, hidden
+  reasoning, or unreviewed external-source payloads.
 - #50 `[Genome] Add malignant-gene poisoning defense and recovery drills`:
   downstream genome-safety lane. Prove malignant or polluted GeneSegments are
   quarantined, cut, and regenerated without contaminating neighboring lineage
@@ -844,10 +848,11 @@ compute-budget closure and #77 graduation-checklist closure.
   telemetry. Verifies budget-aware route fanout, before/after compute
   benchmarks, saved-context and skipped-work telemetry, validation-cost
   reporting, and correctness-anchor preservation.
-- R87 / #46 active: lineage graph, rollback anchors, and audit export. Produce
-  redacted lineage packets that connect genome, memory, routing, compute-budget,
-  validation, and rollback evidence without leaking private payloads.
-- R88 / #47 paired: privacy redaction corpus for memory, genome, and trace
+- R87 / #46 completed baseline: lineage graph, rollback anchors, and audit
+  export. Produces redacted lineage packets that connect genome segment,
+  dual-chain memory, mutation-plan, validation, and rollback evidence without
+  leaking private payloads.
+- R88 / #47 active: privacy redaction corpus for memory, genome, and trace
   evidence. Add fixture coverage before broad audit exports or outside
   collaboration depend on trace packets.
 - R89 / #12/#72: Reasoning DNA dual-chain stabilization. Normalize

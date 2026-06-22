@@ -623,6 +623,202 @@ fn dna_splicer_isolates_malformed_chunk_without_poisoning_neighbor_segments() {
 }
 
 #[test]
+fn lineage_audit_export_cuts_bad_segment_without_poisoning_neighbors() {
+    let segments = vec![
+        GeneSegment::new(
+            "segment:healthy-left",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::SemanticMemory,
+            0,
+            64,
+        )
+        .with_source_hash("sha256:left")
+        .with_metadata(
+            "healthy left",
+            "safe semantic memory chunk",
+            "left bounded chunk",
+        )
+        .with_health(0.90, 0.02, 0.01),
+        GeneSegment::new(
+            "segment:malformed-middle",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::RuntimeKv,
+            64,
+            64,
+        )
+        .with_source_hash("sha256:middle")
+        .with_metadata(
+            "malformed middle",
+            "bad range should be repaired locally",
+            "middle bad chunk",
+        )
+        .with_schema(false, false)
+        .with_health(0.84, 0.03, 0.01),
+        GeneSegment::new(
+            "segment:healthy-right",
+            TaskProfile::LongDocument,
+            GeneSegmentSource::GistMemory,
+            64,
+            128,
+        )
+        .with_source_hash("sha256:right")
+        .with_metadata(
+            "healthy right",
+            "safe gist memory chunk",
+            "right bounded chunk",
+        )
+        .with_health(0.88, 0.04, 0.01),
+    ];
+    let preview = DnaSplicer::default().preview(
+        TaskProfile::LongDocument,
+        "genome:long_document:stable",
+        segments,
+    );
+
+    let packet = DnaLineageAuditPacket::from_splice_preview(&preview);
+    let left = packet
+        .nodes_for_source("segment:healthy-left")
+        .into_iter()
+        .find(|node| node.kind == DnaLineageAuditNodeKind::OriginalSegment)
+        .expect("left segment node");
+    let middle = packet
+        .nodes_for_source("segment:malformed-middle")
+        .into_iter()
+        .find(|node| node.kind == DnaLineageAuditNodeKind::OriginalSegment)
+        .expect("middle segment node");
+    let right = packet
+        .nodes_for_source("segment:healthy-right")
+        .into_iter()
+        .find(|node| node.kind == DnaLineageAuditNodeKind::OriginalSegment)
+        .expect("right segment node");
+
+    assert_eq!(left.gate_status, "retained");
+    assert_eq!(right.gate_status, "retained");
+    assert_eq!(middle.gate_status, "repair_candidate");
+    assert!(middle.reason_codes.contains(&"empty_range".to_owned()));
+    assert!(middle.reason_codes.contains(&"schema".to_owned()));
+    assert!(middle.reason_codes.contains(&"kv_shape".to_owned()));
+
+    let left_id = left.id.clone();
+    let middle_id = middle.id.clone();
+    let right_id = right.id.clone();
+    assert!(!packet.edges.iter().any(|edge| {
+        (edge.parent_id == middle_id && (edge.child_id == left_id || edge.child_id == right_id))
+            || (edge.child_id == middle_id
+                && (edge.parent_id == left_id || edge.parent_id == right_id))
+    }));
+
+    let json = packet.to_redacted_json();
+    assert!(json.contains("\"before_digest\""));
+    assert!(json.contains("\"after_digest\""));
+    assert!(json.contains("\"reason_codes\""));
+    assert!(json.contains("\"gate_status\""));
+    assert!(json.contains("\"rollback_anchor_id\""));
+    assert!(!json.contains("bad range should be repaired locally"));
+    assert!(!json.contains("middle bad chunk"));
+    assert!(packet.exports_are_redacted());
+}
+
+#[test]
+fn lineage_audit_export_distinguishes_preview_and_applied_repairs() {
+    let segments = vec![
+        GeneSegment::new(
+            "segment:private-drift",
+            TaskProfile::Coding,
+            GeneSegmentSource::RuntimeKv,
+            0,
+            24,
+        )
+        .with_source_hash("sha256:private-drift")
+        .with_metadata(
+            "private runtime drift",
+            "must be quarantined before reuse",
+            "runtime drift",
+        )
+        .with_health(0.80, 0.80, 0.50),
+    ];
+    let preview =
+        DnaSplicer::default().preview(TaskProfile::Coding, "genome:coding:stable", segments);
+    let preview_packet = DnaLineageAuditPacket::from_splice_preview(&preview);
+    let preview_json = preview_packet.to_redacted_json();
+
+    assert!(preview_json.contains("\"repair_state\":\"preview_only\""));
+    assert!(!preview_json.contains("\"repair_state\":\"approved_applied\""));
+
+    let mut applied_preview = preview.clone();
+    let regenerate = applied_preview
+        .mutation_plans
+        .iter_mut()
+        .find(|plan| plan.intent == GeneScissorsIntent::Regenerate)
+        .expect("regeneration plan");
+    regenerate.validation_status = GeneValidationStatus::Passed;
+    regenerate.admission_write_authorized = true;
+    regenerate.applied = true;
+    applied_preview.read_only = false;
+    applied_preview.write_allowed = true;
+    applied_preview.applied = true;
+
+    let applied_packet = DnaLineageAuditPacket::from_splice_preview(&applied_preview);
+    let applied_json = applied_packet.to_redacted_json();
+
+    assert!(applied_json.contains("\"repair_state\":\"approved_applied\""));
+    assert!(applied_json.contains("\"kind\":\"approved_repair\""));
+    assert!(applied_json.contains("\"gate_status\":\"passed\""));
+    assert!(applied_packet.exports_are_redacted());
+}
+
+#[test]
+fn lineage_audit_export_redacts_private_and_executable_payload_markers() {
+    let unsafe_segment_id =
+        "prompt: secret=abc api_key=xyz curl http://bad.example powershell rm -rf";
+    let segments = vec![
+        GeneSegment::new(
+            unsafe_segment_id,
+            TaskProfile::Coding,
+            GeneSegmentSource::Prompt,
+            0,
+            32,
+        )
+        .with_source_hash("secret=raw-source-hash")
+        .with_metadata(
+            "answer: private key material",
+            "curl http://bad.example should never be exported",
+            "powershell rm -rf marker",
+        )
+        .with_health(0.80, 0.92, 0.95),
+    ];
+    let preview =
+        DnaSplicer::default().preview(TaskProfile::Coding, "genome:coding:stable", segments);
+
+    let packet = DnaLineageAuditPacket::from_splice_preview(&preview);
+    let json = packet.to_redacted_json();
+    let markdown = packet.to_redacted_markdown();
+
+    assert!(json.contains("redacted-ref:audit-digest:"));
+    assert!(markdown.contains("redacted-ref:audit-digest:"));
+    for marker in [
+        "prompt:",
+        "answer:",
+        "secret=",
+        "api_key",
+        "private key",
+        "curl ",
+        "powershell",
+        "rm ",
+    ] {
+        assert!(
+            !json.to_ascii_lowercase().contains(marker),
+            "json leaked marker {marker}: {json}"
+        );
+        assert!(
+            !markdown.to_ascii_lowercase().contains(marker),
+            "markdown leaked marker {marker}: {markdown}"
+        );
+    }
+    assert!(packet.exports_are_redacted());
+}
+
+#[test]
 fn mut_detector_reports_splice_boundaries_and_kv_shape_variants() {
     let policy = DnaSplicerPolicy {
         max_segment_tokens: 32,
@@ -1236,6 +1432,67 @@ fn dual_chain_schema_round_trips_expression_and_memory_records() {
             .iter()
             .all(|record| record.operator_approval_required && !record.applied)
     );
+}
+
+#[test]
+fn lineage_audit_from_dual_chain_tracks_express_memory_parent_edges() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
+    let source = DnaGeneSourceEvidence::new(
+        DnaGeneEvidenceKind::SyntheticDefault,
+        "sha256:genome-default",
+        "prompt: secret=raw answer: hidden source summary must stay out of audit exports",
+    );
+    let mut chain =
+        DnaGeneChain::preview_from_genome(&genome, "tenant:local", "session:audit", source);
+
+    let memory_gene = ReasoningGene::new(
+        "gene:coding:memory-tool-reliability",
+        ReasoningGeneKind::ToolUse,
+        "tool reliability memory",
+        "retain validated Toolsmith and runtime adapter reliability evidence",
+    )
+    .with_tags(["memory_chain", "tool_reliability"])
+    .with_health(2, 0.82, 0.08);
+    let memory_record = DnaGeneRecord::from_reasoning_gene(
+        DnaChainKind::Memory,
+        TaskProfile::Coding,
+        chain.stable_anchor_id.clone(),
+        DnaGeneLineage::new("tenant:local", "session:audit")
+            .with_parent("gene:coding:tool-use")
+            .with_inheritance(chain.stable_anchor_id.clone(), 1),
+        DnaGeneSourceEvidence::new(
+            DnaGeneEvidenceKind::ToolReliability,
+            "sha256:tool-reliability",
+            "answer: private key should not leave digest-only audit",
+        ),
+        &memory_gene,
+    );
+    chain.push_memory_record(memory_record);
+
+    let packet = DnaLineageAuditPacket::from_gene_chain(&chain);
+    let memory_node = packet
+        .nodes_for_source("gene:coding:memory-tool-reliability")
+        .into_iter()
+        .find(|node| node.kind == DnaLineageAuditNodeKind::GeneRecord)
+        .expect("memory-chain gene node");
+
+    assert_eq!(memory_node.chain_kind.as_deref(), Some("memory_chain"));
+    assert_eq!(memory_node.gate_status, "preview_only");
+    assert!(
+        memory_node
+            .reason_codes
+            .contains(&"tool_reliability".to_owned())
+    );
+    assert!(packet.edges.iter().any(|edge| {
+        edge.parent_id == "gene:gene:coding:tool-use"
+            && edge.child_id == memory_node.id
+            && edge.relation == "parent_gene"
+    }));
+    let json = packet.to_redacted_json();
+    assert!(!json.contains("prompt:"));
+    assert!(!json.contains("answer:"));
+    assert!(!json.contains("secret="));
+    assert!(packet.exports_are_redacted());
 }
 
 #[test]
