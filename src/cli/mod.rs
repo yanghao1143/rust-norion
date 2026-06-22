@@ -11,5 +11,6 @@ pub(crate) mod help;
 pub(crate) mod kv_quant;
 pub(crate) mod roundtrip;
 pub(crate) mod runtime_manifest;
+pub(crate) mod self_goal_queue;
 pub(crate) mod state;
 pub(crate) mod trace_schema;
