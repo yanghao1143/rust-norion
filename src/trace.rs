@@ -42,6 +42,7 @@ use runtime_device::evaluate_trace_runtime_device_execution;
 use runtime_kv::evaluate_trace_runtime_kv;
 use self_goal::{
     evaluate_evolution_goal_queue_store_write_schema_line,
+    evaluate_self_goal_local_evidence_schema_line,
     evaluate_self_goal_queue_append_execution_schema_line,
     evaluate_self_goal_queue_apply_schema_line, evaluate_self_goal_queue_continuation_schema_line,
     evaluate_self_goal_queue_evidence_collection_schema_line,
@@ -178,6 +179,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
         failures.extend(evaluate_self_goal_queue_evidence_collection_schema_line(
             line,
         ));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-goal-local-evidence-v1\"") {
+        failures.extend(evaluate_self_goal_local_evidence_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-evolution-goal-queue-store-write-v1\"") {
