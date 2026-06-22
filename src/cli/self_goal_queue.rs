@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::Path;
 
 use rust_norion::{
@@ -21,6 +21,11 @@ use rust_norion::{
 };
 
 use crate::cli::args::Args;
+
+const SELF_GOAL_QUEUE_CONTINUATION_PLAN_SCHEMA_VERSION: &str =
+    "self_goal_queue_continuation_plan_v1";
+const SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-continuation-plan-v1";
 
 #[derive(Debug, Clone)]
 pub(crate) struct SelfGoalQueueCliReport {
@@ -165,6 +170,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
     if let Some(trace_path) = self_goal_trace_path(args) {
         append_self_goal_queue_apply_trace_jsonl(trace_path, &apply)?;
         append_self_goal_queue_append_execution_trace_jsonl(trace_path, &append_execution)?;
+        append_self_goal_queue_continuation_trace_jsonl(trace_path, &continuation_plan)?;
         if let Some(store_write) = &store_write {
             append_evolution_goal_queue_store_write_trace_jsonl(trace_path, store_write)?;
         }
@@ -346,6 +352,31 @@ impl SelfGoalQueueCliContinuationPlan {
             self.plan.evidence_template_digest,
             self.continuation_digest,
             self.reason_codes.join("|")
+        )
+    }
+
+    fn json_line(&self) -> String {
+        format!(
+            "{{\"schema\":\"{}\",\"plan_schema\":\"{}\",\"source\":\"{}\",\"ready\":{},\"queue_digest\":\"{}\",\"goals\":{},\"active\":{},\"active_goal_id\":\"{}\",\"required_evidence_count\":{},\"required_evidence\":{},\"evidence_template_digest\":\"{}\",\"continuation_digest\":\"{}\",\"budget_attempts\":{},\"budget_steps\":{},\"budget_tokens\":{},\"budget_runtime_ms\":{},\"reason_code_count\":{},\"reason_codes\":{},\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"{}\"}}",
+            json_escape(SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA),
+            json_escape(SELF_GOAL_QUEUE_CONTINUATION_PLAN_SCHEMA_VERSION),
+            json_escape(self.source),
+            self.ready,
+            json_escape(&self.queue_digest),
+            self.goal_count,
+            self.plan.active,
+            json_escape(self.plan.active_goal_id.as_deref().unwrap_or("none")),
+            self.plan.required_evidence.len(),
+            json_string_array(&self.plan.required_evidence),
+            json_escape(&self.plan.evidence_template_digest),
+            json_escape(&self.continuation_digest),
+            self.plan.max_attempts,
+            self.plan.max_steps,
+            self.plan.max_tokens,
+            self.plan.max_runtime_ms,
+            self.reason_codes.len(),
+            json_string_array(&self.reason_codes),
+            json_escape(&self.summary_line())
         )
     }
 }
@@ -856,4 +887,32 @@ fn self_goal_trace_path(args: &Args) -> Option<&Path> {
     args.trace_path
         .as_deref()
         .or(args.trace_schema_gate_path.as_deref())
+}
+
+fn append_self_goal_queue_continuation_trace_jsonl(
+    path: impl AsRef<Path>,
+    plan: &SelfGoalQueueCliContinuationPlan,
+) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(file, "{}", plan.json_line())
+}
+
+fn json_string_array(values: &[String]) -> String {
+    let values = values
+        .iter()
+        .map(|value| format!("\"{}\"", json_escape(value)))
+        .collect::<Vec<_>>();
+    format!("[{}]", values.join(","))
+}
+
+fn json_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }
