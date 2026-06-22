@@ -489,16 +489,19 @@ scheduler baseline.
   drills, R91/#51 adds deterministic genome aging/rejuvenation simulation
   evidence, R89/#72 adds purpose ontology / relabel validation, R90/#73 adds
   reversible Gene Scissors transaction journaling, R93/#79 adds the
-  deterministic pursuit-goal queue baseline, and #74 now adds the read-only
-  thinking-phase gene-chain scheduler baseline. The default queue installs #75,
-  #76, #78, and R94 as the next bounded preview goals with explicit success,
-  stop, budget, rollback, approval, and conflict-isolation gates.
+  deterministic pursuit-goal queue baseline, #74 adds the read-only
+  thinking-phase gene-chain scheduler baseline, and #75 adds the
+  English/Chinese/Rust coding evaluation profile baseline. The default queue
+  now advances to #76, #78, and R94 as the next bounded preview goals with
+  explicit success, stop, budget, rollback, approval, and conflict-isolation
+  gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
   read-only queue reports for bounded self-evolution, and #74 now provides the
   thinking-phase phase scheduler above hierarchy, genome-chain, routing, and
-  compute-budget evidence. Continue with #75 English/Chinese/Rust evaluation
-  profiles next, then advance #76, #78, and R94 only after each active goal
-  reaches its target or stops cleanly.
+  compute-budget evidence. #75 now provides local multilingual coding eval
+  fixtures, scoring thresholds, redacted evidence packets, and overfit guards.
+  Continue with #76 memory consolidation next, then advance #78 and R94 only
+  after each active goal reaches its target or stops cleanly.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -537,7 +540,8 @@ scheduler baseline.
   baseline for ordered pursuit goals. It adds deterministic `EvolutionGoal`
   records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
   for #74/#75/#76/#78/R94, budget and rollback stops, approval holds, and
-  conflict isolation between failed and later goals.
+  conflict isolation between failed and later goals. With #74 and #75 now
+  completed, the live default queue begins at #76, then #78 and R94.
 - #74 `[Runtime] Add thinking-phase gene-chain execution scheduler` is now the
   completed baseline for deterministic planning, memory recall, genome
   expression, route selection, answer synthesis, verification, and reflection
@@ -545,6 +549,13 @@ scheduler baseline.
   task-aware hierarchy thresholds and adaptive route evidence, emits
   digest-only selected segment/route traces, supports disabled adapter
   passthrough mode, and remains read-only.
+- #75 `[Benchmark] Add English Chinese Rust coding eval datasets and scoring
+  profiles` is now the completed baseline for local license-safe multilingual
+  coding evaluation. It adds deterministic English, Chinese, Rust codegen,
+  Rust repair, and multilingual explanation fixtures, profile thresholds,
+  compiler/test validation plans for Rust fixtures, redacted evidence packets,
+  overfit guards, improvement comparison, and safe fixture-addition guidance in
+  [`docs/governance/coding-eval-profiles.md`](docs/governance/coding-eval-profiles.md).
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open from
@@ -553,9 +564,9 @@ scheduler baseline.
   `MERGEABLE`, both focused validation checks are green, and merge still
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #77, and
-  #79 as completed or landing baselines in this branch; issues #75-#78 extend
-  the next evaluation, memory, governance, and deployment workstream.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #75, #77,
+  and #79 as completed or landing baselines in this branch; issues #76 and #78
+  extend the next memory and deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -818,7 +829,11 @@ scheduler baseline.
   stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
   completed thinking-phase scheduler baseline with deterministic phase
   contracts, digest-only segment and route traces, budget exhaustion reporting,
-  disabled-mode adapter passthrough, and no durable writes.)
+  disabled-mode adapter passthrough, and no durable writes. #75 is the
+  completed multilingual coding-eval profile baseline with local fixtures,
+  scoring thresholds, Rust compiler/test validation plans, redacted evidence
+  packets, and overfit guards. The live default pursuit queue now starts at
+  #76, then #78 and R94.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -895,8 +910,10 @@ scheduler baseline.
   reward, drift, or writer gates. Policy is documented in
   [`docs/governance/thinking-phase-gene-chain-scheduler.md`](docs/governance/thinking-phase-gene-chain-scheduler.md).
 - #75 `[Benchmark] Add English Chinese Rust coding eval datasets and scoring
-  profiles`: add English, Chinese, and Rust coding evaluation datasets with
-  scoring profiles for benchmark and test-time scaling evidence.
+  profiles`: completed baseline for English, Chinese, Rust codegen, Rust
+  repair, and multilingual coding explanation fixtures with scoring profiles,
+  Rust compiler/test validation plans, redacted evidence packets, overfit
+  guards, and safe fixture-addition guidance.
 - #76 `[Memory] Add memory consolidation and forgetting worker`: consolidate
   useful durable memory, decay or forget stale/unsafe records, and keep local
   memory growth bounded.
@@ -977,8 +994,9 @@ scheduler baseline.
   are explicitly accepted. Do not copy, translate, or mechanically port GPL or
   unreviewed external source into this repository.
 - R96 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
-  Add scoring datasets, local service paths, and compiler/test/benchmark
-  validation for self-improving coding behavior.
+  #75 provides the completed local scoring dataset/profile baseline. #19/#29
+  continue the local service paths and compiler/test/benchmark validation for
+  self-improving coding behavior.
 - R97 / #76/#36/#42: self-evolving memory consolidation. Add episodic,
   heuristic, and tool-reliability stores with forgetting/consolidation workers
   and A/B evaluation gates.

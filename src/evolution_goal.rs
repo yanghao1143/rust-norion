@@ -600,36 +600,6 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
     vec![
         EvolutionGoal::new(
             10,
-            "#74 thinking-phase gene-chain execution scheduler",
-            EvolutionGoalSuccessGate::new([
-                EvolutionGoalEvidenceKind::CargoCheck,
-                EvolutionGoalEvidenceKind::FocusedTests,
-                EvolutionGoalEvidenceKind::TraceSchemaGate,
-                EvolutionGoalEvidenceKind::ExperimentLedger,
-            ]),
-            [
-                "roadmap:R93",
-                "issue:#74",
-                "pursuit:thinking-phase-gene-chain",
-            ],
-        ),
-        EvolutionGoal::new(
-            20,
-            "#75 English Chinese Rust coding evaluation profiles",
-            EvolutionGoalSuccessGate::new([
-                EvolutionGoalEvidenceKind::CargoCheck,
-                EvolutionGoalEvidenceKind::FocusedTests,
-                EvolutionGoalEvidenceKind::BenchmarkGate,
-                EvolutionGoalEvidenceKind::TraceSchemaGate,
-            ]),
-            [
-                "roadmap:R96",
-                "issue:#75",
-                "pursuit:english-chinese-rust-evals",
-            ],
-        ),
-        EvolutionGoal::new(
-            30,
             "#76 memory consolidation and forgetting worker",
             EvolutionGoalSuccessGate::new([
                 EvolutionGoalEvidenceKind::CargoCheck,
@@ -645,7 +615,7 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
             ],
         ),
         EvolutionGoal::new(
-            40,
+            20,
             "#78 local research deployment profiles and resource guards",
             EvolutionGoalSuccessGate::new([
                 EvolutionGoalEvidenceKind::CargoCheck,
@@ -661,7 +631,7 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
             ],
         ),
         EvolutionGoal::new(
-            50,
+            30,
             "R94 self-evolution writer gate consolidation",
             EvolutionGoalSuccessGate::new([
                 EvolutionGoalEvidenceKind::CargoCheck,
@@ -1080,12 +1050,10 @@ mod tests {
     fn default_noiron_pursuit_goal_queue_lists_multiple_roadmap_goals() {
         let queue = default_noiron_pursuit_goal_queue();
 
-        assert_eq!(queue.goals.len(), 5);
-        assert!(queue.goals[0].objective.contains("#74"));
-        assert!(queue.goals[1].objective.contains("#75"));
-        assert!(queue.goals[2].objective.contains("#76"));
-        assert!(queue.goals[3].objective.contains("#78"));
-        assert!(queue.goals[4].objective.contains("R94"));
+        assert_eq!(queue.goals.len(), 3);
+        assert!(queue.goals[0].objective.contains("#76"));
+        assert!(queue.goals[1].objective.contains("#78"));
+        assert!(queue.goals[2].objective.contains("R94"));
 
         let report = queue.evaluate(&[]);
 

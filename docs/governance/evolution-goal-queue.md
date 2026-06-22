@@ -29,10 +29,10 @@ replaced with `redaction-digest:*` before they enter the serialized record.
 ## Default Noiron Queue
 
 `default_noiron_pursuit_goal_queue()` installs the current project pursuit
-queue as preview-only planning state:
+queue as preview-only planning state. After the #74 thinking-phase scheduler
+and #75 English/Chinese/Rust coding evaluation profile baselines landed, the
+live default queue starts at:
 
-- #74 thinking-phase gene-chain execution scheduler
-- #75 English/Chinese/Rust coding evaluation profiles
 - #76 memory consolidation and forgetting worker
 - #78 local research deployment profiles and resource guards
 - R94 self-evolution writer gate consolidation

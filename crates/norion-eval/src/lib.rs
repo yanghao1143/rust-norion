@@ -2,6 +2,9 @@ use std::collections::BTreeMap;
 
 use norion_test::{StreamContinuityCheck, ValidationObservation, VerificationPhase};
 
+pub mod coding_profiles;
+pub use coding_profiles::*;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LedgerRecord {
     pub round: Option<u64>,
