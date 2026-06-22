@@ -2,8 +2,11 @@ use crate::hierarchy::TaskProfile;
 use crate::memory_admission::{
     MemoryAdmissionCandidate, MemoryAdmissionDecision, MemoryAdmissionKind, MemoryAdmissionPreview,
 };
+use std::collections::BTreeMap;
 
 const SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA: &str = "rust-norion-self-evolving-memory-store-v1";
+pub const SELF_EVOLVING_MEMORY_CONSOLIDATION_SCHEMA_VERSION: &str =
+    "self_evolving_memory_consolidation_v1";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelfEvolvingMemoryApproval {
@@ -358,6 +361,528 @@ impl SelfEvolvingMemoryMaintenanceReport {
             self.applied_to_disk,
             evidence_digest
         )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MemoryConsolidationEvidenceClass {
+    RetrospectiveEpisode,
+    ProceduralHeuristic,
+    ToolReliabilityObservation,
+    GeneSegmentAnchor,
+}
+
+impl MemoryConsolidationEvidenceClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RetrospectiveEpisode => "retrospective_episode",
+            Self::ProceduralHeuristic => "procedural_heuristic",
+            Self::ToolReliabilityObservation => "tool_reliability_observation",
+            Self::GeneSegmentAnchor => "gene_segment_anchor",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MemoryConsolidationRecord {
+    pub record_id: String,
+    pub tenant_scope: String,
+    pub evidence_class: MemoryConsolidationEvidenceClass,
+    pub source_digest: String,
+    pub content_digest: String,
+    pub profile: TaskProfile,
+    pub confidence: f32,
+    pub quality: f32,
+    pub last_touched_step: u64,
+    pub token_estimate: usize,
+    pub rollback_anchor_id: String,
+    pub validation_evidence_count: usize,
+    pub protected: bool,
+}
+
+impl MemoryConsolidationRecord {
+    pub fn new(
+        record_id: impl Into<String>,
+        tenant_scope: impl Into<String>,
+        evidence_class: MemoryConsolidationEvidenceClass,
+        source_digest: impl Into<String>,
+        content_digest: impl Into<String>,
+        profile: TaskProfile,
+    ) -> Self {
+        let record_id = sanitize_identifier(&record_id.into(), "memory-record");
+        Self {
+            rollback_anchor_id: format!("rollback:{record_id}"),
+            record_id,
+            tenant_scope: sanitize_identifier(&tenant_scope.into(), "tenant:local"),
+            evidence_class,
+            source_digest: digest_or_stable(&source_digest.into()),
+            content_digest: digest_or_stable(&content_digest.into()),
+            profile,
+            confidence: 0.50,
+            quality: 0.50,
+            last_touched_step: 0,
+            token_estimate: 1,
+            validation_evidence_count: 0,
+            protected: false,
+        }
+    }
+
+    pub fn with_scores(mut self, confidence: f32, quality: f32) -> Self {
+        self.confidence = clamp_unit(confidence);
+        self.quality = clamp_unit(quality);
+        self
+    }
+
+    pub fn with_last_touched_step(mut self, last_touched_step: u64) -> Self {
+        self.last_touched_step = last_touched_step;
+        self
+    }
+
+    pub fn with_token_estimate(mut self, token_estimate: usize) -> Self {
+        self.token_estimate = token_estimate.max(1);
+        self
+    }
+
+    pub fn with_rollback_anchor(mut self, rollback_anchor_id: impl Into<String>) -> Self {
+        let rollback_anchor_id = sanitize_identifier(&rollback_anchor_id.into(), "rollback");
+        if !rollback_anchor_id.trim().is_empty() {
+            self.rollback_anchor_id = rollback_anchor_id;
+        }
+        self
+    }
+
+    pub fn with_validation_evidence_count(mut self, validation_evidence_count: usize) -> Self {
+        self.validation_evidence_count = validation_evidence_count;
+        self
+    }
+
+    pub fn with_protected(mut self, protected: bool) -> Self {
+        self.protected = protected;
+        self
+    }
+
+    pub fn record_line(&self) -> String {
+        format!(
+            "{}\t{}\t{}\t{}\t{}\t{:?}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}",
+            self.record_id,
+            self.tenant_scope,
+            self.evidence_class.as_str(),
+            self.source_digest,
+            self.content_digest,
+            self.profile,
+            self.confidence,
+            self.quality,
+            self.last_touched_step,
+            self.token_estimate,
+            self.rollback_anchor_id,
+            self.validation_evidence_count,
+            self.protected
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryConsolidationDecisionKind {
+    Keep,
+    MergePreview,
+    DecayPreview,
+    TombstonePreview,
+    MergeRejected,
+}
+
+impl MemoryConsolidationDecisionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::MergePreview => "merge_preview",
+            Self::DecayPreview => "decay_preview",
+            Self::TombstonePreview => "tombstone_preview",
+            Self::MergeRejected => "merge_rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MemoryConsolidationDecision {
+    pub record_id: String,
+    pub decision: MemoryConsolidationDecisionKind,
+    pub evidence_class: MemoryConsolidationEvidenceClass,
+    pub tenant_scope: String,
+    pub source_digest: String,
+    pub content_digest: String,
+    pub primary_record_id: Option<String>,
+    pub compacted_summary_digest: String,
+    pub reason_codes: Vec<String>,
+    pub rollback_anchor_id: String,
+    pub tombstone_id: Option<String>,
+    pub confidence_before: f32,
+    pub confidence_after: f32,
+    pub retained_tokens: usize,
+    pub saved_tokens: usize,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl MemoryConsolidationDecision {
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn record_line(&self) -> String {
+        format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}",
+            self.record_id,
+            self.decision.as_str(),
+            self.evidence_class.as_str(),
+            self.tenant_scope,
+            self.source_digest,
+            self.content_digest,
+            self.primary_record_id.as_deref().unwrap_or("none"),
+            self.compacted_summary_digest,
+            self.confidence_before,
+            self.confidence_after,
+            self.retained_tokens,
+            self.saved_tokens,
+            self.rollback_anchor_id,
+            self.tombstone_id.as_deref().unwrap_or("none"),
+            self.reason_codes.join("|")
+        )
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "memory_consolidation_decision id={} decision={} class={} tenant={} source={} content={} primary={} summary={} confidence={:.3}->{:.3} retained={} saved={} rollback={} tombstone={} reasons={} read_only={} write_allowed={} applied={}",
+            self.record_id,
+            self.decision.as_str(),
+            self.evidence_class.as_str(),
+            self.tenant_scope,
+            self.source_digest,
+            self.content_digest,
+            self.primary_record_id.as_deref().unwrap_or("none"),
+            self.compacted_summary_digest,
+            self.confidence_before,
+            self.confidence_after,
+            self.retained_tokens,
+            self.saved_tokens,
+            self.rollback_anchor_id,
+            self.tombstone_id.as_deref().unwrap_or("none"),
+            self.reason_codes.join("|"),
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SelfEvolvingMemoryConsolidationPolicy {
+    pub current_step: u64,
+    pub stale_after_steps: u64,
+    pub decay_factor: f32,
+    pub tombstone_below_confidence: f32,
+    pub tombstone_below_quality: f32,
+    pub merge_duplicate_records: bool,
+}
+
+impl Default for SelfEvolvingMemoryConsolidationPolicy {
+    fn default() -> Self {
+        Self {
+            current_step: 0,
+            stale_after_steps: 10,
+            decay_factor: 0.90,
+            tombstone_below_confidence: 0.18,
+            tombstone_below_quality: 0.15,
+            merge_duplicate_records: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolvingMemoryConsolidationMetrics {
+    pub records_before: usize,
+    pub records_after_preview: usize,
+    pub token_estimate_before: usize,
+    pub token_estimate_after_preview: usize,
+    pub retrieval_precision_before_milli: i64,
+    pub retrieval_precision_after_milli: i64,
+    pub retrieval_precision_delta_milli: i64,
+    pub replay_safety_milli: i64,
+    pub benchmark_impact_milli: i64,
+}
+
+impl SelfEvolvingMemoryConsolidationMetrics {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "memory_consolidation_metrics records_before={} records_after_preview={} token_estimate_before={} token_estimate_after_preview={} retrieval_precision_before_milli={} retrieval_precision_after_milli={} retrieval_precision_delta_milli={} replay_safety_milli={} benchmark_impact_milli={}",
+            self.records_before,
+            self.records_after_preview,
+            self.token_estimate_before,
+            self.token_estimate_after_preview,
+            self.retrieval_precision_before_milli,
+            self.retrieval_precision_after_milli,
+            self.retrieval_precision_delta_milli,
+            self.replay_safety_milli,
+            self.benchmark_impact_milli
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelfEvolvingMemoryConsolidationReport {
+    pub schema_version: &'static str,
+    pub snapshot_digest: String,
+    pub plan_digest: String,
+    pub decisions: Vec<MemoryConsolidationDecision>,
+    pub metrics: SelfEvolvingMemoryConsolidationMetrics,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub durable_write_allowed: bool,
+    pub applied: bool,
+    pub applied_to_disk: bool,
+}
+
+impl SelfEvolvingMemoryConsolidationReport {
+    pub fn merge_count(&self) -> usize {
+        self.count_decision(MemoryConsolidationDecisionKind::MergePreview)
+    }
+
+    pub fn decay_count(&self) -> usize {
+        self.count_decision(MemoryConsolidationDecisionKind::DecayPreview)
+    }
+
+    pub fn tombstone_count(&self) -> usize {
+        self.count_decision(MemoryConsolidationDecisionKind::TombstonePreview)
+    }
+
+    pub fn merge_rejected_count(&self) -> usize {
+        self.count_decision(MemoryConsolidationDecisionKind::MergeRejected)
+    }
+
+    pub fn count_decision(&self, decision: MemoryConsolidationDecisionKind) -> usize {
+        self.decisions
+            .iter()
+            .filter(|item| item.decision == decision)
+            .count()
+    }
+
+    pub fn action_count(&self) -> usize {
+        self.merge_count()
+            .saturating_add(self.decay_count())
+            .saturating_add(self.tombstone_count())
+            .saturating_add(self.merge_rejected_count())
+    }
+
+    pub fn record_lines(&self) -> Vec<String> {
+        self.decisions
+            .iter()
+            .map(MemoryConsolidationDecision::record_line)
+            .collect()
+    }
+
+    pub fn replay_matches(&self, other: &Self) -> bool {
+        self.snapshot_digest == other.snapshot_digest
+            && self.plan_digest == other.plan_digest
+            && self.record_lines() == other.record_lines()
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only
+            && !self.write_allowed
+            && !self.durable_write_allowed
+            && !self.applied
+            && !self.applied_to_disk
+            && self
+                .decisions
+                .iter()
+                .all(MemoryConsolidationDecision::is_preview_only)
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolving_memory_consolidation schema={} snapshot={} plan={} decisions={} actions={} merges={} decays={} tombstones={} merge_rejected={} {} read_only={} write_allowed={} durable_write_allowed={} applied={} applied_to_disk={}",
+            self.schema_version,
+            self.snapshot_digest,
+            self.plan_digest,
+            self.decisions.len(),
+            self.action_count(),
+            self.merge_count(),
+            self.decay_count(),
+            self.tombstone_count(),
+            self.merge_rejected_count(),
+            self.metrics.summary_line(),
+            self.read_only,
+            self.write_allowed,
+            self.durable_write_allowed,
+            self.applied,
+            self.applied_to_disk
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let evidence_digest = stable_digest(&format!(
+            "{}:{}:{}:{}:{}:{}:{}:{}:{}",
+            self.schema_version,
+            self.snapshot_digest,
+            self.plan_digest,
+            self.decisions.len(),
+            self.action_count(),
+            self.merge_count(),
+            self.decay_count(),
+            self.tombstone_count(),
+            self.metrics.benchmark_impact_milli
+        ));
+        format!(
+            "{{\"schema\":\"{}\",\"operation\":\"consolidation_preview\",\"consolidation_actions\":{},\"records_before\":{},\"records_after_preview\":{},\"token_estimate_before\":{},\"token_estimate_after_preview\":{},\"merge_previews\":{},\"decay_previews\":{},\"tombstone_previews\":{},\"merge_rejections\":{},\"retrieval_precision_before_milli\":{},\"retrieval_precision_after_milli\":{},\"retrieval_precision_delta_milli\":{},\"replay_safety_milli\":{},\"benchmark_impact_milli\":{},\"snapshot_digest\":\"{}\",\"plan_digest\":\"{}\",\"redacted\":true,\"report_only\":true,\"read_only\":{},\"write_allowed\":false,\"durable_write_allowed\":false,\"applied\":false,\"applied_to_disk\":false,\"evidence_digest\":\"{}\"}}",
+            SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA,
+            self.action_count(),
+            self.metrics.records_before,
+            self.metrics.records_after_preview,
+            self.metrics.token_estimate_before,
+            self.metrics.token_estimate_after_preview,
+            self.merge_count(),
+            self.decay_count(),
+            self.tombstone_count(),
+            self.merge_rejected_count(),
+            self.metrics.retrieval_precision_before_milli,
+            self.metrics.retrieval_precision_after_milli,
+            self.metrics.retrieval_precision_delta_milli,
+            self.metrics.replay_safety_milli,
+            self.metrics.benchmark_impact_milli,
+            self.snapshot_digest,
+            self.plan_digest,
+            self.read_only,
+            evidence_digest
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelfEvolvingMemoryConsolidationWorker {
+    pub policy: SelfEvolvingMemoryConsolidationPolicy,
+}
+
+impl Default for SelfEvolvingMemoryConsolidationWorker {
+    fn default() -> Self {
+        Self::new(SelfEvolvingMemoryConsolidationPolicy::default())
+    }
+}
+
+impl SelfEvolvingMemoryConsolidationWorker {
+    pub fn new(policy: SelfEvolvingMemoryConsolidationPolicy) -> Self {
+        Self { policy }
+    }
+
+    pub fn plan(
+        &self,
+        records: &[MemoryConsolidationRecord],
+    ) -> SelfEvolvingMemoryConsolidationReport {
+        let mut records = records.to_vec();
+        records.sort_by(|left, right| left.record_line().cmp(&right.record_line()));
+        let snapshot_digest = stable_digest(
+            &records
+                .iter()
+                .map(MemoryConsolidationRecord::record_line)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+
+        let mut decisions_by_id = BTreeMap::<String, MemoryConsolidationDecision>::new();
+        for record in &records {
+            decisions_by_id.insert(record.record_id.clone(), keep_decision(record));
+        }
+
+        if self.policy.merge_duplicate_records {
+            for (primary_id, duplicate_ids) in compatible_duplicate_groups(&records) {
+                for duplicate_id in duplicate_ids {
+                    let Some(duplicate) = records
+                        .iter()
+                        .find(|record| record.record_id == duplicate_id)
+                    else {
+                        continue;
+                    };
+                    decisions_by_id.insert(
+                        duplicate.record_id.clone(),
+                        merge_decision(duplicate, &primary_id),
+                    );
+                }
+            }
+        }
+
+        let mut rejected_cross_tenant = Vec::new();
+        if self.policy.merge_duplicate_records {
+            rejected_cross_tenant = cross_tenant_merge_rejections(&records);
+        }
+
+        for record in &records {
+            if decisions_by_id
+                .get(&record.record_id)
+                .is_some_and(|decision| {
+                    decision.decision == MemoryConsolidationDecisionKind::MergePreview
+                })
+            {
+                continue;
+            }
+            let aged = self
+                .policy
+                .current_step
+                .saturating_sub(record.last_touched_step)
+                >= self.policy.stale_after_steps;
+            if record.protected {
+                if aged {
+                    if let Some(decision) = decisions_by_id.get_mut(&record.record_id) {
+                        push_unique_reason(&mut decision.reason_codes, "protected_rollback_anchor");
+                    }
+                }
+                continue;
+            }
+
+            let confidence_after = if aged {
+                clamp_unit(record.confidence * clamp_unit(self.policy.decay_factor))
+            } else {
+                record.confidence
+            };
+            let low_confidence = confidence_after < self.policy.tombstone_below_confidence;
+            let low_quality = record.quality < self.policy.tombstone_below_quality;
+
+            if low_confidence || low_quality {
+                decisions_by_id.insert(
+                    record.record_id.clone(),
+                    tombstone_decision(record, confidence_after, aged, low_confidence, low_quality),
+                );
+            } else if aged && confidence_after < record.confidence {
+                decisions_by_id.insert(
+                    record.record_id.clone(),
+                    decay_decision(record, confidence_after),
+                );
+            }
+        }
+
+        let mut decisions = decisions_by_id.into_values().collect::<Vec<_>>();
+        decisions.extend(rejected_cross_tenant);
+        decisions.sort_by(|left, right| left.record_line().cmp(&right.record_line()));
+
+        let metrics = consolidation_metrics(&records, &decisions);
+        let plan_digest = stable_digest(
+            &decisions
+                .iter()
+                .map(MemoryConsolidationDecision::record_line)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+
+        SelfEvolvingMemoryConsolidationReport {
+            schema_version: SELF_EVOLVING_MEMORY_CONSOLIDATION_SCHEMA_VERSION,
+            snapshot_digest,
+            plan_digest,
+            decisions,
+            metrics,
+            read_only: true,
+            write_allowed: false,
+            durable_write_allowed: false,
+            applied: false,
+            applied_to_disk: false,
+        }
     }
 }
 
@@ -862,6 +1387,79 @@ impl SelfEvolvingMemoryStore {
         }
     }
 
+    pub fn consolidation_snapshot(
+        &self,
+        tenant_scope: impl Into<String>,
+        current_step: u64,
+    ) -> Vec<MemoryConsolidationRecord> {
+        let tenant_scope = tenant_scope.into();
+        let mut records = Vec::new();
+
+        records.extend(self.episodes.iter().map(|episode| {
+            MemoryConsolidationRecord::new(
+                episode.record_id.clone(),
+                tenant_scope.clone(),
+                MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
+                episode.source_case_digest.clone(),
+                stable_digest(&format!(
+                    "{}:{}:{}",
+                    episode.problem_digest,
+                    episode.outcome_digest,
+                    episode.key_insight_digests.len()
+                )),
+                episode.profile,
+            )
+            .with_scores(episode.quality, episode.quality)
+            .with_last_touched_step(episode.sequence.min(current_step))
+            .with_token_estimate(episode.token_estimate)
+            .with_rollback_anchor(episode.rollback_anchor_id.clone())
+            .with_validation_evidence_count(episode.validation_evidence_count)
+            .with_protected(!episode.active)
+        }));
+
+        records.extend(self.heuristics.iter().map(|heuristic| {
+            MemoryConsolidationRecord::new(
+                heuristic.record_id.clone(),
+                tenant_scope.clone(),
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                heuristic.source_case_digest.clone(),
+                heuristic.rule_digest.clone(),
+                heuristic.profile,
+            )
+            .with_scores(heuristic.confidence, heuristic.priority)
+            .with_last_touched_step(heuristic.last_updated_step.min(current_step))
+            .with_token_estimate(32)
+            .with_rollback_anchor(heuristic.rollback_anchor_id.clone())
+            .with_validation_evidence_count(heuristic.validation_evidence_count)
+            .with_protected(heuristic.quarantined)
+        }));
+
+        records.extend(self.tool_reliability.iter().map(|tool| {
+            MemoryConsolidationRecord::new(
+                format!("sem:tool-reliability:{}", tool.tool_id),
+                tenant_scope.clone(),
+                MemoryConsolidationEvidenceClass::ToolReliabilityObservation,
+                tool.tool_digest.clone(),
+                stable_digest(&format!(
+                    "{}:{:?}:{}:{:.3}:{:.3}",
+                    tool.tool_id,
+                    tool.profile,
+                    tool.observations,
+                    tool.success_rate,
+                    tool.avg_quality
+                )),
+                tool.profile,
+            )
+            .with_scores(tool.trust_score, tool.avg_quality)
+            .with_last_touched_step(tool.last_used_step.min(current_step))
+            .with_token_estimate(24)
+            .with_rollback_anchor(format!("rollback:tool:{}", tool.tool_id))
+            .with_validation_evidence_count(tool.observations)
+        }));
+
+        records
+    }
+
     fn next_sequence(&mut self) -> u64 {
         if self.next_sequence == 0 {
             self.next_sequence = 1;
@@ -898,6 +1496,369 @@ impl SelfEvolvingMemoryStore {
             }
         }
         merged
+    }
+}
+
+fn compatible_duplicate_groups(
+    records: &[MemoryConsolidationRecord],
+) -> Vec<(String, Vec<String>)> {
+    let mut groups = BTreeMap::<String, Vec<&MemoryConsolidationRecord>>::new();
+    for record in records {
+        groups
+            .entry(compatible_merge_key(record))
+            .or_default()
+            .push(record);
+    }
+
+    groups
+        .into_values()
+        .filter_map(|mut group| {
+            if group.len() < 2 {
+                return None;
+            }
+            group.sort_by(|left, right| {
+                candidate_rank(right)
+                    .cmp(&candidate_rank(left))
+                    .then_with(|| left.record_id.cmp(&right.record_id))
+            });
+            let primary = group[0].record_id.clone();
+            let duplicate_ids = group
+                .into_iter()
+                .skip(1)
+                .filter(|record| !record.protected)
+                .map(|record| record.record_id.clone())
+                .collect::<Vec<_>>();
+            if duplicate_ids.is_empty() {
+                None
+            } else {
+                Some((primary, duplicate_ids))
+            }
+        })
+        .collect()
+}
+
+fn compatible_merge_key(record: &MemoryConsolidationRecord) -> String {
+    format!(
+        "{}:{}:{}:{}:{:?}",
+        record.tenant_scope,
+        record.evidence_class.as_str(),
+        record.source_digest,
+        record.content_digest,
+        record.profile
+    )
+}
+
+fn cross_tenant_merge_rejections(
+    records: &[MemoryConsolidationRecord],
+) -> Vec<MemoryConsolidationDecision> {
+    let mut rejections = Vec::new();
+    for left_index in 0..records.len() {
+        for right in records.iter().skip(left_index + 1) {
+            let left = &records[left_index];
+            if left.tenant_scope == right.tenant_scope
+                || left.evidence_class != right.evidence_class
+                || left.source_digest != right.source_digest
+                || left.content_digest != right.content_digest
+                || left.profile != right.profile
+            {
+                continue;
+            }
+            let record_id = sanitize_identifier(
+                &format!("merge-rejected:{}:{}", left.record_id, right.record_id),
+                "merge-rejected",
+            );
+            rejections.push(MemoryConsolidationDecision {
+                record_id,
+                decision: MemoryConsolidationDecisionKind::MergeRejected,
+                evidence_class: left.evidence_class,
+                tenant_scope: sanitize_identifier(
+                    &format!("{}_vs_{}", left.tenant_scope, right.tenant_scope),
+                    "tenant-conflict",
+                ),
+                source_digest: left.source_digest.clone(),
+                content_digest: left.content_digest.clone(),
+                primary_record_id: Some(left.record_id.clone()),
+                compacted_summary_digest: compacted_summary_digest([left, right]),
+                reason_codes: vec![
+                    "cross_tenant_merge_rejected".to_owned(),
+                    "tenant_scope_incompatible".to_owned(),
+                ],
+                rollback_anchor_id: sanitize_identifier(
+                    &format!(
+                        "rollback:cross-tenant:{}:{}",
+                        left.record_id, right.record_id
+                    ),
+                    "rollback",
+                ),
+                tombstone_id: None,
+                confidence_before: right.confidence,
+                confidence_after: right.confidence,
+                retained_tokens: 0,
+                saved_tokens: 0,
+                read_only: true,
+                write_allowed: false,
+                applied: false,
+            });
+        }
+    }
+    rejections
+}
+
+fn keep_decision(record: &MemoryConsolidationRecord) -> MemoryConsolidationDecision {
+    MemoryConsolidationDecision {
+        record_id: record.record_id.clone(),
+        decision: MemoryConsolidationDecisionKind::Keep,
+        evidence_class: record.evidence_class,
+        tenant_scope: record.tenant_scope.clone(),
+        source_digest: record.source_digest.clone(),
+        content_digest: record.content_digest.clone(),
+        primary_record_id: None,
+        compacted_summary_digest: compacted_summary_digest([record]),
+        reason_codes: vec!["retained_without_change".to_owned()],
+        rollback_anchor_id: record.rollback_anchor_id.clone(),
+        tombstone_id: None,
+        confidence_before: record.confidence,
+        confidence_after: record.confidence,
+        retained_tokens: record.token_estimate,
+        saved_tokens: 0,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn merge_decision(
+    record: &MemoryConsolidationRecord,
+    primary_record_id: &str,
+) -> MemoryConsolidationDecision {
+    MemoryConsolidationDecision {
+        record_id: record.record_id.clone(),
+        decision: MemoryConsolidationDecisionKind::MergePreview,
+        evidence_class: record.evidence_class,
+        tenant_scope: record.tenant_scope.clone(),
+        source_digest: record.source_digest.clone(),
+        content_digest: record.content_digest.clone(),
+        primary_record_id: Some(primary_record_id.to_owned()),
+        compacted_summary_digest: stable_digest(&format!(
+            "merge:{}:{}:{}:{}",
+            record.evidence_class.as_str(),
+            record.tenant_scope,
+            record.source_digest,
+            record.content_digest
+        )),
+        reason_codes: vec![
+            "compatible_duplicate".to_owned(),
+            "same_tenant_scope".to_owned(),
+            "same_source_digest".to_owned(),
+            "same_evidence_class".to_owned(),
+        ],
+        rollback_anchor_id: record.rollback_anchor_id.clone(),
+        tombstone_id: None,
+        confidence_before: record.confidence,
+        confidence_after: record.confidence,
+        retained_tokens: 0,
+        saved_tokens: record.token_estimate,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn decay_decision(
+    record: &MemoryConsolidationRecord,
+    confidence_after: f32,
+) -> MemoryConsolidationDecision {
+    MemoryConsolidationDecision {
+        record_id: record.record_id.clone(),
+        decision: MemoryConsolidationDecisionKind::DecayPreview,
+        evidence_class: record.evidence_class,
+        tenant_scope: record.tenant_scope.clone(),
+        source_digest: record.source_digest.clone(),
+        content_digest: record.content_digest.clone(),
+        primary_record_id: None,
+        compacted_summary_digest: compacted_summary_digest([record]),
+        reason_codes: vec!["stale_record_decay_preview".to_owned()],
+        rollback_anchor_id: record.rollback_anchor_id.clone(),
+        tombstone_id: None,
+        confidence_before: record.confidence,
+        confidence_after,
+        retained_tokens: record.token_estimate,
+        saved_tokens: 0,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn tombstone_decision(
+    record: &MemoryConsolidationRecord,
+    confidence_after: f32,
+    aged: bool,
+    low_confidence: bool,
+    low_quality: bool,
+) -> MemoryConsolidationDecision {
+    let mut reason_codes = Vec::new();
+    if aged {
+        reason_codes.push("stale_record".to_owned());
+    }
+    if low_confidence {
+        reason_codes.push("low_confidence".to_owned());
+    }
+    if low_quality {
+        reason_codes.push("low_quality".to_owned());
+    }
+    reason_codes.push("tombstone_requires_operator_approval".to_owned());
+
+    MemoryConsolidationDecision {
+        record_id: record.record_id.clone(),
+        decision: MemoryConsolidationDecisionKind::TombstonePreview,
+        evidence_class: record.evidence_class,
+        tenant_scope: record.tenant_scope.clone(),
+        source_digest: record.source_digest.clone(),
+        content_digest: record.content_digest.clone(),
+        primary_record_id: None,
+        compacted_summary_digest: compacted_summary_digest([record]),
+        reason_codes,
+        rollback_anchor_id: record.rollback_anchor_id.clone(),
+        tombstone_id: Some(sanitize_identifier(
+            &format!("tombstone:{}", record.record_id),
+            "tombstone",
+        )),
+        confidence_before: record.confidence,
+        confidence_after,
+        retained_tokens: 0,
+        saved_tokens: record.token_estimate,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn compacted_summary_digest<'a>(
+    records: impl IntoIterator<Item = &'a MemoryConsolidationRecord>,
+) -> String {
+    stable_digest(
+        &records
+            .into_iter()
+            .map(|record| {
+                format!(
+                    "{}:{}:{}:{}:{:.3}:{:.3}:{}",
+                    record.evidence_class.as_str(),
+                    record.tenant_scope,
+                    record.source_digest,
+                    record.content_digest,
+                    record.confidence,
+                    record.quality,
+                    record.validation_evidence_count
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("|"),
+    )
+}
+
+fn consolidation_metrics(
+    records: &[MemoryConsolidationRecord],
+    decisions: &[MemoryConsolidationDecision],
+) -> SelfEvolvingMemoryConsolidationMetrics {
+    let token_estimate_before = records
+        .iter()
+        .map(|record| record.token_estimate)
+        .sum::<usize>();
+    let removed_record_ids = decisions
+        .iter()
+        .filter(|decision| {
+            matches!(
+                decision.decision,
+                MemoryConsolidationDecisionKind::MergePreview
+                    | MemoryConsolidationDecisionKind::TombstonePreview
+            )
+        })
+        .map(|decision| decision.record_id.as_str())
+        .collect::<Vec<_>>();
+    let removed_records = records
+        .iter()
+        .filter(|record| removed_record_ids.iter().any(|id| *id == record.record_id))
+        .count();
+    let token_estimate_after_preview = token_estimate_before.saturating_sub(
+        decisions
+            .iter()
+            .filter(|decision| {
+                matches!(
+                    decision.decision,
+                    MemoryConsolidationDecisionKind::MergePreview
+                        | MemoryConsolidationDecisionKind::TombstonePreview
+                )
+            })
+            .map(|decision| decision.saved_tokens)
+            .sum::<usize>(),
+    );
+
+    let precision_before = average_precision_milli(
+        records
+            .iter()
+            .map(|record| (record.confidence, record.quality)),
+    );
+    let precision_after = average_precision_milli(records.iter().filter_map(|record| {
+        if removed_record_ids.iter().any(|id| *id == record.record_id) {
+            return None;
+        }
+        let confidence = decisions
+            .iter()
+            .find(|decision| decision.record_id == record.record_id)
+            .map(|decision| decision.confidence_after)
+            .unwrap_or(record.confidence);
+        Some((confidence, record.quality))
+    }));
+    let saved_tokens = token_estimate_before.saturating_sub(token_estimate_after_preview);
+    let retrieval_precision_delta_milli = precision_after - precision_before;
+
+    SelfEvolvingMemoryConsolidationMetrics {
+        records_before: records.len(),
+        records_after_preview: records.len().saturating_sub(removed_records),
+        token_estimate_before,
+        token_estimate_after_preview,
+        retrieval_precision_before_milli: precision_before,
+        retrieval_precision_after_milli: precision_after,
+        retrieval_precision_delta_milli,
+        replay_safety_milli: if decisions
+            .iter()
+            .all(MemoryConsolidationDecision::is_preview_only)
+        {
+            1000
+        } else {
+            0
+        },
+        benchmark_impact_milli: saved_tokens as i64 * 10 + retrieval_precision_delta_milli,
+    }
+}
+
+fn average_precision_milli(values: impl IntoIterator<Item = (f32, f32)>) -> i64 {
+    let values = values.into_iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        return 0;
+    }
+    let total = values
+        .iter()
+        .map(|(confidence, quality)| {
+            (clamp_unit(*confidence) * 0.45 + clamp_unit(*quality) * 0.55) * 1000.0
+        })
+        .sum::<f32>();
+    (total / values.len() as f32).round() as i64
+}
+
+fn candidate_rank(record: &MemoryConsolidationRecord) -> (u8, i64, usize, u64) {
+    (
+        u8::from(record.protected),
+        average_precision_milli([(record.confidence, record.quality)]),
+        record.validation_evidence_count,
+        record.last_touched_step,
+    )
+}
+
+fn push_unique_reason(reason_codes: &mut Vec<String>, reason: &str) {
+    if !reason_codes.iter().any(|item| item == reason) {
+        reason_codes.push(reason.to_owned());
     }
 }
 
@@ -1068,6 +2029,19 @@ fn stable_digest(value: &str) -> String {
         hash = hash.wrapping_mul(FNV_PRIME);
     }
     format!("fnv64:{hash:016x}")
+}
+
+fn digest_or_stable(value: &str) -> String {
+    let value = value.trim();
+    if value.starts_with("fnv64:")
+        || value.starts_with("sha256:")
+        || value.starts_with("blake3:")
+        || value.starts_with("redaction-digest:")
+    {
+        sanitize_identifier(value, "digest")
+    } else {
+        stable_digest(value)
+    }
 }
 
 #[cfg(test)]
@@ -1416,5 +2390,373 @@ mod tests {
                 "{line}"
             );
         }
+    }
+
+    #[test]
+    fn consolidation_worker_replays_same_snapshot_and_merges_compatible_records() {
+        let worker =
+            SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
+                current_step: 20,
+                stale_after_steps: 50,
+                ..SelfEvolvingMemoryConsolidationPolicy::default()
+            });
+        let records = vec![
+            consolidation_record(
+                "episode:a",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
+                "source:compiler-fix",
+                "content:borrow-check",
+                0.90,
+                0.92,
+                18,
+                64,
+            ),
+            consolidation_record(
+                "episode:b",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
+                "source:compiler-fix",
+                "content:borrow-check",
+                0.60,
+                0.66,
+                17,
+                48,
+            ),
+        ];
+
+        let first = worker.plan(&records);
+        let second = worker.plan(&records);
+
+        assert!(first.replay_matches(&second));
+        assert!(first.is_preview_only());
+        assert_eq!(first.merge_count(), 1);
+        assert_eq!(first.metrics.records_before, 2);
+        assert_eq!(first.metrics.records_after_preview, 1);
+        assert_eq!(first.metrics.token_estimate_before, 112);
+        assert_eq!(first.metrics.token_estimate_after_preview, 64);
+        assert!(
+            first.decisions.iter().any(|decision| {
+                decision.decision == MemoryConsolidationDecisionKind::MergePreview
+                    && decision
+                        .reason_codes
+                        .contains(&"same_tenant_scope".to_owned())
+                    && decision.primary_record_id.as_deref() == Some("episode:a")
+            }),
+            "{:?}",
+            first.decisions
+        );
+    }
+
+    #[test]
+    fn consolidation_worker_does_not_merge_incompatible_evidence_classes() {
+        let worker = SelfEvolvingMemoryConsolidationWorker::default();
+        let records = vec![
+            consolidation_record(
+                "heuristic:a",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                "source:shared",
+                "content:shared",
+                0.80,
+                0.80,
+                1,
+                32,
+            ),
+            consolidation_record(
+                "gene:a",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::GeneSegmentAnchor,
+                "source:shared",
+                "content:shared",
+                0.82,
+                0.82,
+                1,
+                32,
+            ),
+        ];
+
+        let report = worker.plan(&records);
+
+        assert_eq!(report.merge_count(), 0);
+        assert_eq!(report.merge_rejected_count(), 0);
+        assert_eq!(
+            report.count_decision(MemoryConsolidationDecisionKind::Keep),
+            2
+        );
+    }
+
+    #[test]
+    fn consolidation_worker_decays_stale_records_without_applying_mutation() {
+        let worker =
+            SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
+                current_step: 20,
+                stale_after_steps: 5,
+                decay_factor: 0.50,
+                tombstone_below_confidence: 0.10,
+                tombstone_below_quality: 0.10,
+                merge_duplicate_records: false,
+            });
+        let records = vec![consolidation_record(
+            "heuristic:old",
+            "tenant:alpha",
+            MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+            "source:trace",
+            "content:schema",
+            0.80,
+            0.70,
+            1,
+            32,
+        )];
+
+        let report = worker.plan(&records);
+        let decision = &report.decisions[0];
+
+        assert_eq!(report.decay_count(), 1);
+        assert_eq!(
+            decision.decision,
+            MemoryConsolidationDecisionKind::DecayPreview
+        );
+        assert!((decision.confidence_after - 0.40).abs() < 0.001);
+        assert!(decision.is_preview_only());
+        assert!(!report.applied);
+    }
+
+    #[test]
+    fn consolidation_worker_proposes_tombstone_with_reason_codes_and_rollback_anchor() {
+        let worker =
+            SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
+                current_step: 30,
+                stale_after_steps: 5,
+                decay_factor: 0.50,
+                tombstone_below_confidence: 0.20,
+                tombstone_below_quality: 0.15,
+                merge_duplicate_records: false,
+            });
+        let records = vec![
+            consolidation_record(
+                "tool:bad",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ToolReliabilityObservation,
+                "source:tool",
+                "content:tool",
+                0.30,
+                0.10,
+                1,
+                24,
+            )
+            .with_rollback_anchor("rollback:tool:bad"),
+        ];
+
+        let report = worker.plan(&records);
+        let decision = &report.decisions[0];
+
+        assert_eq!(report.tombstone_count(), 1);
+        assert_eq!(
+            decision.decision,
+            MemoryConsolidationDecisionKind::TombstonePreview
+        );
+        assert_eq!(decision.rollback_anchor_id, "rollback:tool:bad");
+        assert!(decision.tombstone_id.is_some());
+        assert!(decision.reason_codes.contains(&"low_quality".to_owned()));
+        assert!(
+            decision
+                .reason_codes
+                .contains(&"tombstone_requires_operator_approval".to_owned())
+        );
+        assert_eq!(report.metrics.records_after_preview, 0);
+    }
+
+    #[test]
+    fn consolidation_worker_rejects_unsafe_cross_tenant_merge() {
+        let worker = SelfEvolvingMemoryConsolidationWorker::default();
+        let records = vec![
+            consolidation_record(
+                "episode:tenant-a",
+                "tenant:a",
+                MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
+                "source:shared",
+                "content:shared",
+                0.90,
+                0.90,
+                1,
+                64,
+            ),
+            consolidation_record(
+                "episode:tenant-b",
+                "tenant:b",
+                MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
+                "source:shared",
+                "content:shared",
+                0.91,
+                0.91,
+                1,
+                64,
+            ),
+        ];
+
+        let report = worker.plan(&records);
+
+        assert_eq!(report.merge_count(), 0);
+        assert_eq!(report.merge_rejected_count(), 1);
+        assert!(
+            report.decisions.iter().any(|decision| {
+                decision.decision == MemoryConsolidationDecisionKind::MergeRejected
+                    && decision
+                        .reason_codes
+                        .contains(&"cross_tenant_merge_rejected".to_owned())
+                    && decision.is_preview_only()
+            }),
+            "{:?}",
+            report.decisions
+        );
+        assert_eq!(report.metrics.records_after_preview, 2);
+    }
+
+    #[test]
+    fn consolidation_worker_exports_metric_and_trace_gate_output() {
+        let worker =
+            SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
+                current_step: 20,
+                stale_after_steps: 5,
+                decay_factor: 0.50,
+                tombstone_below_confidence: 0.20,
+                tombstone_below_quality: 0.15,
+                merge_duplicate_records: true,
+            });
+        let records = vec![
+            consolidation_record(
+                "gene:old",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::GeneSegmentAnchor,
+                "source:gene-anchor",
+                "content:route-strategy",
+                0.90,
+                0.90,
+                1,
+                40,
+            ),
+            consolidation_record(
+                "gene:duplicate",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::GeneSegmentAnchor,
+                "source:gene-anchor",
+                "content:route-strategy",
+                0.80,
+                0.82,
+                2,
+                30,
+            ),
+            consolidation_record(
+                "heuristic:stale",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                "source:heuristic",
+                "content:threshold",
+                0.60,
+                0.70,
+                1,
+                32,
+            ),
+        ];
+
+        let report = worker.plan(&records);
+        let json = report.json_line();
+
+        assert_eq!(report.metrics.records_before, 3);
+        assert!(report.metrics.records_after_preview < report.metrics.records_before);
+        assert!(report.metrics.benchmark_impact_milli > 0);
+        assert!(
+            report
+                .summary_line()
+                .contains("memory_consolidation_metrics")
+        );
+        assert!(json.contains("\"operation\":\"consolidation_preview\""));
+        assert!(
+            crate::trace::evaluate_trace_schema_line(&json).is_empty(),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn store_projects_episode_heuristic_and_tool_reliability_into_consolidation_snapshot() {
+        let mut store = SelfEvolvingMemoryStore::new();
+        let approval = approval();
+        store.append_episode(
+            episode_input("snapshot episode", 0.80, &["rust", "snapshot"]),
+            &approval,
+        );
+        store.append_heuristic(
+            SelfEvolvingHeuristicInput {
+                rule: "Prefer digest-only maintenance previews.".to_owned(),
+                tags: vec!["memory".to_owned()],
+                profile: TaskProfile::Coding,
+                priority: 0.70,
+                confidence: 0.72,
+                source_case_id: "case:heuristic-snapshot".to_owned(),
+                updated_step: 2,
+            },
+            &approval,
+        );
+        store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: "cargo-test".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: 0.86,
+                source_case_id: "case:tool-snapshot".to_owned(),
+                observed_step: 3,
+            },
+            &approval,
+        );
+
+        let snapshot = store.consolidation_snapshot("tenant:alpha", 10);
+
+        assert_eq!(snapshot.len(), 3);
+        assert!(
+            snapshot
+                .iter()
+                .all(|record| record.tenant_scope == "tenant:alpha")
+        );
+        assert!(snapshot.iter().any(|record| {
+            record.evidence_class == MemoryConsolidationEvidenceClass::RetrospectiveEpisode
+        }));
+        assert!(snapshot.iter().any(|record| {
+            record.evidence_class == MemoryConsolidationEvidenceClass::ProceduralHeuristic
+        }));
+        assert!(snapshot.iter().any(|record| {
+            record.evidence_class == MemoryConsolidationEvidenceClass::ToolReliabilityObservation
+        }));
+        assert!(snapshot.iter().all(|record| {
+            record.source_digest.starts_with("fnv64:")
+                && record.content_digest.starts_with("fnv64:")
+                && !record.record_line().contains("snapshot episode")
+        }));
+    }
+
+    fn consolidation_record(
+        record_id: &str,
+        tenant_scope: &str,
+        evidence_class: MemoryConsolidationEvidenceClass,
+        source: &str,
+        content: &str,
+        confidence: f32,
+        quality: f32,
+        last_touched_step: u64,
+        token_estimate: usize,
+    ) -> MemoryConsolidationRecord {
+        MemoryConsolidationRecord::new(
+            record_id,
+            tenant_scope,
+            evidence_class,
+            source,
+            content,
+            TaskProfile::Coding,
+        )
+        .with_scores(confidence, quality)
+        .with_last_touched_step(last_touched_step)
+        .with_token_estimate(token_estimate)
+        .with_rollback_anchor(format!("rollback:{record_id}"))
+        .with_validation_evidence_count(1)
     }
 }

@@ -490,9 +490,10 @@ scheduler baseline.
   evidence, R89/#72 adds purpose ontology / relabel validation, R90/#73 adds
   reversible Gene Scissors transaction journaling, R93/#79 adds the
   deterministic pursuit-goal queue baseline, #74 adds the read-only
-  thinking-phase gene-chain scheduler baseline, and #75 adds the
-  English/Chinese/Rust coding evaluation profile baseline. The default queue
-  now advances to #76, #78, and R94 as the next bounded preview goals with
+  thinking-phase gene-chain scheduler baseline, #75 adds the
+  English/Chinese/Rust coding evaluation profile baseline, and #76 adds the
+  preview-only memory consolidation/forgetting worker baseline. The default
+  queue now advances to #78 and R94 as the next bounded preview goals with
   explicit success, stop, budget, rollback, approval, and conflict-isolation
   gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
@@ -500,8 +501,10 @@ scheduler baseline.
   thinking-phase phase scheduler above hierarchy, genome-chain, routing, and
   compute-budget evidence. #75 now provides local multilingual coding eval
   fixtures, scoring thresholds, redacted evidence packets, and overfit guards.
-  Continue with #76 memory consolidation next, then advance #78 and R94 only
-  after each active goal reaches its target or stops cleanly.
+  #76 now provides replayable digest-only memory consolidation, decay,
+  tombstone, cross-tenant merge rejection, and before/after metric evidence.
+  Continue with #78 local research deployment guardrails next, then advance
+  R94 only after the active goal reaches its target or stops cleanly.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -540,8 +543,8 @@ scheduler baseline.
   baseline for ordered pursuit goals. It adds deterministic `EvolutionGoal`
   records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
   for #74/#75/#76/#78/R94, budget and rollback stops, approval holds, and
-  conflict isolation between failed and later goals. With #74 and #75 now
-  completed, the live default queue begins at #76, then #78 and R94.
+  conflict isolation between failed and later goals. With #74, #75, and #76 now
+  completed, the live default queue begins at #78, then R94.
 - #74 `[Runtime] Add thinking-phase gene-chain execution scheduler` is now the
   completed baseline for deterministic planning, memory recall, genome
   expression, route selection, answer synthesis, verification, and reflection
@@ -556,6 +559,14 @@ scheduler baseline.
   compiler/test validation plans for Rust fixtures, redacted evidence packets,
   overfit guards, improvement comparison, and safe fixture-addition guidance in
   [`docs/governance/coding-eval-profiles.md`](docs/governance/coding-eval-profiles.md).
+- #76 `[Memory] Add memory consolidation and forgetting worker` is now the
+  completed baseline for preview-only memory consolidation. It adds digest-only
+  snapshot records, replayable merge/decay/tombstone/rejection decisions,
+  cross-tenant merge rejection evidence, GeneSegment-anchor-compatible
+  evidence classes, before/after memory-size, token, retrieval precision,
+  replay-safety, and benchmark-impact metrics, plus trace-gate-compatible
+  JSONL output. Policy is documented in
+  [`docs/governance/memory-consolidation-worker.md`](docs/governance/memory-consolidation-worker.md).
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open from
@@ -564,9 +575,9 @@ scheduler baseline.
   `MERGEABLE`, both focused validation checks are green, and merge still
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #75, #77,
-  and #79 as completed or landing baselines in this branch; issues #76 and #78
-  extend the next memory and deployment workstream.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #75, #76,
+  #77, and #79 as completed or landing baselines in this branch; issue #78
+  extends the next deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -832,8 +843,11 @@ scheduler baseline.
   disabled-mode adapter passthrough, and no durable writes. #75 is the
   completed multilingual coding-eval profile baseline with local fixtures,
   scoring thresholds, Rust compiler/test validation plans, redacted evidence
-  packets, and overfit guards. The live default pursuit queue now starts at
-  #76, then #78 and R94.)
+  packets, and overfit guards. #76 is the completed preview-only memory
+  consolidation baseline with replayable merge/decay/tombstone/rejection
+  plans, cross-tenant isolation, rollback anchors, before/after metrics, and
+  trace-gated JSONL. The live default pursuit queue now starts at #78, then
+  R94.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -914,9 +928,10 @@ scheduler baseline.
   repair, and multilingual coding explanation fixtures with scoring profiles,
   Rust compiler/test validation plans, redacted evidence packets, overfit
   guards, and safe fixture-addition guidance.
-- #76 `[Memory] Add memory consolidation and forgetting worker`: consolidate
-  useful durable memory, decay or forget stale/unsafe records, and keep local
-  memory growth bounded.
+- #76 `[Memory] Add memory consolidation and forgetting worker`: completed
+  baseline for digest-only consolidation snapshots, compatible duplicate merge
+  previews, stale decay previews, reversible tombstone previews, cross-tenant
+  merge rejection evidence, before/after metrics, and operator-approval flow.
 - #77 `[Governance] Add preview-to-write graduation checklist`: define the
   checklist for moving read-only preview evidence into durable write/admission
   paths. Completed / closed governance baseline for future writer admission.
@@ -997,9 +1012,10 @@ scheduler baseline.
   #75 provides the completed local scoring dataset/profile baseline. #19/#29
   continue the local service paths and compiler/test/benchmark validation for
   self-improving coding behavior.
-- R97 / #76/#36/#42: self-evolving memory consolidation. Add episodic,
-  heuristic, and tool-reliability stores with forgetting/consolidation workers
-  and A/B evaluation gates.
+- R97 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
+  completed preview-only consolidation/forgetting worker baseline. #36/#42
+  continue deeper episodic, heuristic, tool-reliability store evolution and A/B
+  evaluation gates.
 - R98 / #78/#62: local research deployment guardrails. Keep non-commercial
   deployment research bounded by explicit resource profiles, safety runbooks,
   and reviewable operator controls.

@@ -243,10 +243,14 @@ pub use self_evolution::{
     SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
 };
 pub use self_evolving_memory::{
+    MemoryConsolidationDecision, MemoryConsolidationDecisionKind, MemoryConsolidationEvidenceClass,
+    MemoryConsolidationRecord, SELF_EVOLVING_MEMORY_CONSOLIDATION_SCHEMA_VERSION,
     SelfEvolvingEpisodeContext, SelfEvolvingEpisodeInput, SelfEvolvingEpisodeRecord,
     SelfEvolvingHeuristicContext, SelfEvolvingHeuristicInput, SelfEvolvingHeuristicRecord,
     SelfEvolvingMemoryAdmissionCandidatePreview, SelfEvolvingMemoryAdmissionPreview,
-    SelfEvolvingMemoryApproval, SelfEvolvingMemoryMaintenancePolicy,
+    SelfEvolvingMemoryApproval, SelfEvolvingMemoryConsolidationMetrics,
+    SelfEvolvingMemoryConsolidationPolicy, SelfEvolvingMemoryConsolidationReport,
+    SelfEvolvingMemoryConsolidationWorker, SelfEvolvingMemoryMaintenancePolicy,
     SelfEvolvingMemoryMaintenanceReport, SelfEvolvingMemoryQuery,
     SelfEvolvingMemoryRetrievalReport, SelfEvolvingMemoryStore, SelfEvolvingMemoryWriteReport,
     ToolReliabilityContext, ToolReliabilityObservationInput, ToolReliabilityObservationRecord,

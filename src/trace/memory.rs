@@ -653,6 +653,9 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
     match operation.as_str() {
         "retrieval" => evaluate_self_evolving_memory_retrieval_trace(&mut failures, line),
         "maintenance" => evaluate_self_evolving_memory_maintenance_trace(&mut failures, line),
+        "consolidation_preview" => {
+            evaluate_self_evolving_memory_consolidation_trace(&mut failures, line)
+        }
         "admission_preview" => {
             evaluate_self_evolving_memory_admission_preview_trace(&mut failures, line)
         }
@@ -720,6 +723,49 @@ fn evaluate_self_evolving_memory_maintenance_trace(failures: &mut Vec<String>, l
         failures.push(format!(
             "self_evolving_memory_store maintenance actions {actions} does not match component total {expected_actions}"
         ));
+    }
+}
+
+fn evaluate_self_evolving_memory_consolidation_trace(failures: &mut Vec<String>, line: &str) {
+    let actions = extract_json_usize_field(line, "consolidation_actions").unwrap_or(0);
+    let expected_actions = extract_json_usize_field(line, "merge_previews")
+        .unwrap_or(0)
+        .saturating_add(extract_json_usize_field(line, "decay_previews").unwrap_or(0))
+        .saturating_add(extract_json_usize_field(line, "tombstone_previews").unwrap_or(0))
+        .saturating_add(extract_json_usize_field(line, "merge_rejections").unwrap_or(0));
+    let records_before = extract_json_usize_field(line, "records_before").unwrap_or(0);
+    let records_after = extract_json_usize_field(line, "records_after_preview").unwrap_or(0);
+    let tokens_before = extract_json_usize_field(line, "token_estimate_before").unwrap_or(0);
+    let tokens_after = extract_json_usize_field(line, "token_estimate_after_preview").unwrap_or(0);
+    let replay_safety = extract_json_usize_field(line, "replay_safety_milli").unwrap_or(0);
+    let snapshot_digest = extract_json_string_field(line, "snapshot_digest").unwrap_or_default();
+    let plan_digest = extract_json_string_field(line, "plan_digest").unwrap_or_default();
+
+    if actions != expected_actions {
+        failures.push(format!(
+            "self_evolving_memory_store consolidation actions {actions} does not match component total {expected_actions}"
+        ));
+    }
+    if records_after > records_before {
+        failures.push(format!(
+            "self_evolving_memory_store consolidation records_after_preview {records_after} exceeds records_before {records_before}"
+        ));
+    }
+    if tokens_after > tokens_before {
+        failures.push(format!(
+            "self_evolving_memory_store consolidation token_estimate_after_preview {tokens_after} exceeds token_estimate_before {tokens_before}"
+        ));
+    }
+    if replay_safety < 1000 {
+        failures.push(
+            "self_evolving_memory_store consolidation replay_safety_milli must be 1000".to_owned(),
+        );
+    }
+    if !snapshot_digest.starts_with("fnv64:") || !plan_digest.starts_with("fnv64:") {
+        failures.push(
+            "self_evolving_memory_store consolidation snapshot and plan digests must be stable fnv64"
+                .to_owned(),
+        );
     }
 }
 

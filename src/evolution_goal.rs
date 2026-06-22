@@ -600,22 +600,6 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
     vec![
         EvolutionGoal::new(
             10,
-            "#76 memory consolidation and forgetting worker",
-            EvolutionGoalSuccessGate::new([
-                EvolutionGoalEvidenceKind::CargoCheck,
-                EvolutionGoalEvidenceKind::FocusedTests,
-                EvolutionGoalEvidenceKind::BenchmarkGate,
-                EvolutionGoalEvidenceKind::TraceSchemaGate,
-                EvolutionGoalEvidenceKind::ExperimentLedger,
-            ]),
-            [
-                "roadmap:R97",
-                "issue:#76",
-                "pursuit:self-evolving-memory-consolidation",
-            ],
-        ),
-        EvolutionGoal::new(
-            20,
             "#78 local research deployment profiles and resource guards",
             EvolutionGoalSuccessGate::new([
                 EvolutionGoalEvidenceKind::CargoCheck,
@@ -631,7 +615,7 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
             ],
         ),
         EvolutionGoal::new(
-            30,
+            20,
             "R94 self-evolution writer gate consolidation",
             EvolutionGoalSuccessGate::new([
                 EvolutionGoalEvidenceKind::CargoCheck,
@@ -1050,10 +1034,9 @@ mod tests {
     fn default_noiron_pursuit_goal_queue_lists_multiple_roadmap_goals() {
         let queue = default_noiron_pursuit_goal_queue();
 
-        assert_eq!(queue.goals.len(), 3);
-        assert!(queue.goals[0].objective.contains("#76"));
-        assert!(queue.goals[1].objective.contains("#78"));
-        assert!(queue.goals[2].objective.contains("R94"));
+        assert_eq!(queue.goals.len(), 2);
+        assert!(queue.goals[0].objective.contains("#78"));
+        assert!(queue.goals[1].objective.contains("R94"));
 
         let report = queue.evaluate(&[]);
 
