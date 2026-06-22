@@ -139,6 +139,7 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
     assert_eq!(read.queue.as_ref().unwrap().goals.len(), 0);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert!(summary.contains("self_goal_queue_completion ready=true completed=1 retained=0"));
+    assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
     assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
     assert!(!trace.contains("R97 English/Chinese/Rust coding service"));
@@ -244,6 +245,7 @@ fn self_goal_queue_cli_completion_continuation_activates_retained_goal() {
     assert!(summary.contains(
         "self_goal_queue_continuation source=completion_resulting_queue ready=true goals=1"
     ));
+    assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(
         summary.contains("required=cargo_check|benchmark_gate|trace_schema_gate|operator_approval")
     );
@@ -282,6 +284,7 @@ fn self_goal_queue_cli_store_apply_remains_gated_without_admission_evidence() {
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert!(trace.contains("rust-norion-self-goal-queue-apply-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-append-execution-v1"));
+    assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
     assert!(!trace.contains("English/Chinese/Rust coding service"));
 
@@ -345,6 +348,7 @@ fn self_goal_queue_cli_uses_evidence_file_when_queue_is_clear() {
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert!(summary.contains("self_goal_queue_evidence packets=4 valid=4 invalid=0"));
     assert!(summary.contains("redaction-digest:"));
+    assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-append-execution-v1"));
     assert!(!summary.contains("R97 endpoint and CLI runner wiring"));
     assert!(!trace.contains("R97 endpoint and CLI runner wiring"));

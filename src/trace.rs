@@ -43,7 +43,7 @@ use runtime_kv::evaluate_trace_runtime_kv;
 use self_goal::{
     evaluate_evolution_goal_queue_store_write_schema_line,
     evaluate_self_goal_queue_append_execution_schema_line,
-    evaluate_self_goal_queue_apply_schema_line,
+    evaluate_self_goal_queue_apply_schema_line, evaluate_self_goal_queue_continuation_schema_line,
 };
 use writer_gate::evaluate_unified_writer_gate_schema_line;
 
@@ -162,6 +162,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-self-goal-queue-append-execution-v1\"") {
         failures.extend(evaluate_self_goal_queue_append_execution_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-goal-queue-continuation-plan-v1\"") {
+        failures.extend(evaluate_self_goal_queue_continuation_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-evolution-goal-queue-store-write-v1\"") {

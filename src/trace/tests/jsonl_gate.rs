@@ -1140,6 +1140,36 @@ fn trace_schema_gate_rejects_self_goal_queue_apply_write_allowed_trace() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_accepts_self_goal_queue_continuation_report() {
+    let path = temp_path("trace-schema-self-goal-queue-continuation");
+    let line = self_goal_queue_continuation_line();
+
+    fs::write(&path, format!("{line}\n")).unwrap();
+    let gate = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(gate.passed, "{:?}", gate.failures);
+    assert_eq!(gate.checked_lines, 1);
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_self_goal_queue_continuation_write_allowed_trace() {
+    let line = self_goal_queue_continuation_line().replacen(
+        "\"write_allowed\":false",
+        "\"write_allowed\":true",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("write_allowed=true expected false")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_jsonl_gate_accepts_self_goal_queue_append_execution_report() {
     let path = temp_path("trace-schema-self-goal-queue-append-execution");
     let report = self_goal_queue_append_execution_report();
@@ -1666,6 +1696,10 @@ fn self_goal_queue_append_execution_report() -> SelfGoalQueueAppendExecutionRepo
         &apply_report,
         Some(&approval),
     )
+}
+
+fn self_goal_queue_continuation_line() -> String {
+    "{\"schema\":\"rust-norion-self-goal-queue-continuation-plan-v1\",\"plan_schema\":\"self_goal_queue_continuation_plan_v1\",\"source\":\"completion_resulting_queue\",\"ready\":true,\"queue_digest\":\"redaction-digest:queue\",\"goals\":1,\"active\":true,\"active_goal_id\":\"redaction-digest:goal\",\"required_evidence_count\":4,\"required_evidence\":[\"cargo_check\",\"benchmark_gate\",\"trace_schema_gate\",\"operator_approval\"],\"evidence_template_digest\":\"redaction-digest:template\",\"continuation_digest\":\"redaction-digest:continuation\",\"budget_attempts\":3,\"budget_steps\":12,\"budget_tokens\":80000,\"budget_runtime_ms\":900000,\"reason_code_count\":2,\"reason_codes\":[\"completion_pruned_prefix\",\"next_goal_ready_for_evidence\"],\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"self_goal_queue_continuation source=completion_resulting_queue ready=true goals=1\"}".to_owned()
 }
 
 fn self_goal_passing_run_for_first_candidate(
