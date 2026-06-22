@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
+use std::process::Command;
 
 use rust_norion::{
     EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
@@ -17,7 +18,7 @@ use rust_norion::{
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     default_noiron_pursuit_goal_queue, default_self_goal_admission_report,
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
-    default_self_goal_queue_preview_report, stable_redaction_digest,
+    default_self_goal_queue_preview_report, evaluate_trace_schema_jsonl, stable_redaction_digest,
 };
 
 use crate::cli::args::Args;
@@ -41,6 +42,7 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) current_queue_loaded_from_store: bool,
     pub(crate) store_read: Option<EvolutionGoalQueueStoreReadReport>,
     pub(crate) evidence: SelfGoalQueueCliEvidenceReport,
+    pub(crate) local_evidence: SelfGoalQueueCliLocalEvidenceReport,
     pub(crate) queue_run: EvolutionGoalQueueReport,
     pub(crate) run_plan: SelfGoalQueueCliRunPlan,
     pub(crate) completion_preview: SelfGoalQueueCliCompletionPreview,
@@ -67,6 +69,7 @@ impl SelfGoalQueueCliReport {
                 self.current_queue_loaded_from_store
             ),
             self.evidence.summary_line(),
+            self.local_evidence.summary_line(),
             queue_run_summary_line(&self.queue_run),
             self.run_plan.summary_line(),
             self.completion_preview.summary_line(),
@@ -78,6 +81,12 @@ impl SelfGoalQueueCliReport {
             self.evidence_plan.summary_line(),
             self.evidence_collection.summary_line(),
         ];
+        lines.extend(
+            self.local_evidence
+                .steps
+                .iter()
+                .map(SelfGoalQueueCliLocalEvidenceStep::summary_line),
+        );
         lines.extend(
             self.evidence_plan
                 .steps
@@ -134,7 +143,17 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         .is_some_and(|read| read.found && read.decoded && read.queue.is_some());
 
     let proposal = default_self_goal_proposal_report(&current_queue);
-    let (evidence_runs, evidence) = load_self_goal_queue_evidence(args, &current_queue, &proposal)?;
+    let manual_packets = read_self_goal_queue_evidence_packets(args)?;
+    let (manual_evidence_runs, _manual_evidence) =
+        build_self_goal_queue_evidence(&manual_packets, &current_queue, &proposal);
+    let initial_queue_run = current_queue.evaluate(&manual_evidence_runs);
+    let initial_run_plan =
+        SelfGoalQueueCliRunPlan::from_queue_run(&current_queue, &initial_queue_run);
+    let local_evidence = SelfGoalQueueCliLocalEvidenceReport::collect(args, &initial_run_plan);
+    let mut evidence_packets = manual_packets;
+    evidence_packets.extend(local_evidence.generated_packets.iter().cloned());
+    let (evidence_runs, evidence) =
+        build_self_goal_queue_evidence(&evidence_packets, &current_queue, &proposal);
     let queue_run = current_queue.evaluate(&evidence_runs);
     let run_plan = SelfGoalQueueCliRunPlan::from_queue_run(&current_queue, &queue_run);
     let completion_preview =
@@ -210,6 +229,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         current_queue_loaded_from_store,
         store_read,
         evidence,
+        local_evidence,
         queue_run,
         run_plan,
         completion_preview,
@@ -1039,6 +1059,361 @@ fn queue_run_summary_line(report: &EvolutionGoalQueueReport) -> String {
     )
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliLocalEvidenceReport {
+    pub(crate) enabled: bool,
+    pub(crate) dry_run: bool,
+    pub(crate) ready: bool,
+    pub(crate) active_goal_id: Option<String>,
+    pub(crate) planned_step_count: usize,
+    pub(crate) attempted_step_count: usize,
+    pub(crate) generated_packet_count: usize,
+    pub(crate) passed_step_count: usize,
+    pub(crate) failed_step_count: usize,
+    pub(crate) skipped_step_count: usize,
+    pub(crate) manual_step_count: usize,
+    pub(crate) packet_digest: String,
+    pub(crate) runner_digest: String,
+    pub(crate) generated_packets: Vec<String>,
+    pub(crate) steps: Vec<SelfGoalQueueCliLocalEvidenceStep>,
+}
+
+impl SelfGoalQueueCliLocalEvidenceReport {
+    fn collect(args: &Args, run_plan: &SelfGoalQueueCliRunPlan) -> Self {
+        let enabled = args.self_goal_queue_local_evidence;
+        let dry_run = args.self_goal_queue_local_evidence_dry_run;
+        let active_goal_id = run_plan.active_goal_id.clone().filter(|_| run_plan.active);
+        if !enabled || active_goal_id.is_none() {
+            return Self::empty(enabled, dry_run, active_goal_id);
+        }
+
+        let goal_id = active_goal_id.as_deref().unwrap_or("none");
+        let steps = run_plan
+            .required_evidence
+            .iter()
+            .enumerate()
+            .map(|(index, kind)| {
+                SelfGoalQueueCliLocalEvidenceStep::collect(index + 1, goal_id, kind, args)
+            })
+            .collect::<Vec<_>>();
+        let generated_packets = steps
+            .iter()
+            .filter_map(|step| step.generated_packet.clone())
+            .collect::<Vec<_>>();
+        let packet_digest = stable_redaction_digest(
+            generated_packets
+                .iter()
+                .map(String::as_str)
+                .chain(["self-goal-local-evidence-packets-v1"]),
+        );
+        let status_text = steps
+            .iter()
+            .map(|step| step.status)
+            .collect::<Vec<_>>()
+            .join("|");
+        let packet_digest_text = steps
+            .iter()
+            .map(|step| step.generated_packet_digest.as_deref().unwrap_or("none"))
+            .collect::<Vec<_>>()
+            .join("|");
+        let runner_digest = stable_redaction_digest([
+            "self-goal-local-evidence-runner-v1",
+            goal_id,
+            &enabled.to_string(),
+            &dry_run.to_string(),
+            status_text.as_str(),
+            packet_digest_text.as_str(),
+        ]);
+
+        Self {
+            enabled,
+            dry_run,
+            ready: true,
+            active_goal_id,
+            planned_step_count: steps.len(),
+            attempted_step_count: steps.iter().filter(|step| step.attempted).count(),
+            generated_packet_count: generated_packets.len(),
+            passed_step_count: steps.iter().filter(|step| step.status == "passed").count(),
+            failed_step_count: steps.iter().filter(|step| step.status == "failed").count(),
+            skipped_step_count: steps.iter().filter(|step| step.status == "skipped").count(),
+            manual_step_count: steps.iter().filter(|step| step.status == "manual").count(),
+            packet_digest,
+            runner_digest,
+            generated_packets,
+            steps,
+        }
+    }
+
+    fn empty(enabled: bool, dry_run: bool, active_goal_id: Option<String>) -> Self {
+        let runner_digest = stable_redaction_digest([
+            "self-goal-local-evidence-runner-v1",
+            active_goal_id.as_deref().unwrap_or("none"),
+            &enabled.to_string(),
+            &dry_run.to_string(),
+            "empty",
+        ]);
+        Self {
+            enabled,
+            dry_run,
+            ready: enabled && active_goal_id.is_some(),
+            active_goal_id,
+            planned_step_count: 0,
+            attempted_step_count: 0,
+            generated_packet_count: 0,
+            passed_step_count: 0,
+            failed_step_count: 0,
+            skipped_step_count: 0,
+            manual_step_count: 0,
+            packet_digest: stable_redaction_digest(["self-goal-local-evidence-packets-v1"]),
+            runner_digest,
+            generated_packets: Vec::new(),
+            steps: Vec::new(),
+        }
+    }
+
+    pub(crate) fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_local_evidence enabled={} dry_run={} ready={} goal={} planned={} attempted={} generated={} passed={} failed={} skipped={} manual={} packets={} digest={}",
+            self.enabled,
+            self.dry_run,
+            self.ready,
+            self.active_goal_id.as_deref().unwrap_or("none"),
+            self.planned_step_count,
+            self.attempted_step_count,
+            self.generated_packet_count,
+            self.passed_step_count,
+            self.failed_step_count,
+            self.skipped_step_count,
+            self.manual_step_count,
+            self.packet_digest,
+            self.runner_digest
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliLocalEvidenceStep {
+    pub(crate) sequence: usize,
+    pub(crate) evidence_kind: String,
+    pub(crate) runner: &'static str,
+    pub(crate) status: &'static str,
+    pub(crate) attempted: bool,
+    pub(crate) generated_packet_digest: Option<String>,
+    pub(crate) generated_packet: Option<String>,
+    pub(crate) exit_digest: Option<String>,
+}
+
+impl SelfGoalQueueCliLocalEvidenceStep {
+    fn collect(sequence: usize, goal_id: &str, evidence_kind: &str, args: &Args) -> Self {
+        let runner = evidence_runner(evidence_kind);
+        if evidence_kind == "operator_approval" {
+            return Self::without_packet(sequence, evidence_kind, runner, "manual", false, None);
+        }
+        if runner == "unsupported" {
+            return Self::without_packet(sequence, evidence_kind, runner, "skipped", false, None);
+        }
+        if args.self_goal_queue_local_evidence_dry_run {
+            return Self::without_packet(sequence, evidence_kind, runner, "planned", false, None);
+        }
+
+        match evidence_kind {
+            "cargo_check" => Self::from_gate_outcome(
+                sequence,
+                goal_id,
+                evidence_kind,
+                runner,
+                run_cargo_gate(evidence_kind, &["check", "-q", "--package", "rust-norion"]),
+            ),
+            "focused_tests" => Self::from_gate_outcome(
+                sequence,
+                goal_id,
+                evidence_kind,
+                runner,
+                run_cargo_gate(
+                    evidence_kind,
+                    &[
+                        "test",
+                        "-q",
+                        "--package",
+                        "rust-norion",
+                        "self_goal_queue_cli",
+                    ],
+                ),
+            ),
+            "benchmark_gate" => Self::from_gate_outcome(
+                sequence,
+                goal_id,
+                evidence_kind,
+                runner,
+                run_cargo_gate(
+                    evidence_kind,
+                    &[
+                        "test",
+                        "-q",
+                        "--package",
+                        "rust-norion",
+                        "benchmark_self_evolution_admission_report_projects_preview_evidence",
+                    ],
+                ),
+            ),
+            "trace_schema_gate" => {
+                let outcome = run_trace_schema_gate(args);
+                Self::from_gate_outcome(sequence, goal_id, evidence_kind, runner, outcome)
+            }
+            "experiment_ledger" => {
+                Self::without_packet(sequence, evidence_kind, runner, "skipped", false, None)
+            }
+            _ => Self::without_packet(sequence, evidence_kind, runner, "skipped", false, None),
+        }
+    }
+
+    fn from_gate_outcome(
+        sequence: usize,
+        goal_id: &str,
+        evidence_kind: &str,
+        runner: &'static str,
+        outcome: LocalEvidenceGateOutcome,
+    ) -> Self {
+        let status = if outcome.passed { "passed" } else { "failed" };
+        let packet = format!(
+            "goal={};kind={};passed={};items={};failures={};label=self-goal-local-evidence:{}",
+            goal_id,
+            evidence_kind,
+            outcome.passed,
+            outcome.item_count,
+            outcome.failure_count,
+            evidence_kind
+        );
+        let generated_packet_digest = stable_redaction_digest([
+            "self-goal-local-evidence-packet-v1",
+            &packet,
+            outcome.exit_digest.as_str(),
+        ]);
+        Self {
+            sequence,
+            evidence_kind: evidence_kind.to_owned(),
+            runner,
+            status,
+            attempted: true,
+            generated_packet_digest: Some(generated_packet_digest),
+            generated_packet: Some(packet),
+            exit_digest: Some(outcome.exit_digest),
+        }
+    }
+
+    fn without_packet(
+        sequence: usize,
+        evidence_kind: &str,
+        runner: &'static str,
+        status: &'static str,
+        attempted: bool,
+        exit_digest: Option<String>,
+    ) -> Self {
+        Self {
+            sequence,
+            evidence_kind: evidence_kind.to_owned(),
+            runner,
+            status,
+            attempted,
+            generated_packet_digest: None,
+            generated_packet: None,
+            exit_digest,
+        }
+    }
+
+    fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_local_evidence_step index={} kind={} runner={} status={} attempted={} packet={} exit={}",
+            self.sequence,
+            self.evidence_kind,
+            self.runner,
+            self.status,
+            self.attempted,
+            self.generated_packet_digest.as_deref().unwrap_or("none"),
+            self.exit_digest.as_deref().unwrap_or("none")
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LocalEvidenceGateOutcome {
+    passed: bool,
+    item_count: u64,
+    failure_count: u64,
+    exit_digest: String,
+}
+
+fn run_cargo_gate(evidence_kind: &str, cargo_args: &[&str]) -> LocalEvidenceGateOutcome {
+    match Command::new("cargo").args(cargo_args).output() {
+        Ok(output) => {
+            let passed = output.status.success();
+            let code = output
+                .status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "signal".to_owned());
+            LocalEvidenceGateOutcome {
+                passed,
+                item_count: 1,
+                failure_count: u64::from(!passed),
+                exit_digest: stable_redaction_digest([
+                    "self-goal-local-cargo-gate-exit-v1",
+                    evidence_kind,
+                    &code,
+                    &output.stdout.len().to_string(),
+                    &output.stderr.len().to_string(),
+                ]),
+            }
+        }
+        Err(error) => LocalEvidenceGateOutcome {
+            passed: false,
+            item_count: 1,
+            failure_count: 1,
+            exit_digest: stable_redaction_digest([
+                "self-goal-local-cargo-gate-spawn-error-v1",
+                evidence_kind,
+                &format!("{:?}", error.kind()),
+            ]),
+        },
+    }
+}
+
+fn run_trace_schema_gate(args: &Args) -> LocalEvidenceGateOutcome {
+    let Some(path) = self_goal_trace_path(args) else {
+        return LocalEvidenceGateOutcome {
+            passed: false,
+            item_count: 1,
+            failure_count: 1,
+            exit_digest: stable_redaction_digest([
+                "self-goal-local-trace-schema-gate-v1",
+                "missing-path",
+            ]),
+        };
+    };
+    match evaluate_trace_schema_jsonl(path) {
+        Ok(report) => LocalEvidenceGateOutcome {
+            passed: report.passed,
+            item_count: report.checked_lines.max(1) as u64,
+            failure_count: report.failures.len() as u64,
+            exit_digest: stable_redaction_digest([
+                "self-goal-local-trace-schema-gate-v1",
+                path.to_string_lossy().as_ref(),
+                &report.checked_lines.to_string(),
+                &report.failures.len().to_string(),
+            ]),
+        },
+        Err(error) => LocalEvidenceGateOutcome {
+            passed: false,
+            item_count: 1,
+            failure_count: 1,
+            exit_digest: stable_redaction_digest([
+                "self-goal-local-trace-schema-gate-error-v1",
+                &format!("{:?}", error.kind()),
+            ]),
+        },
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct SelfGoalQueueCliEvidenceReport {
     pub(crate) packet_count: usize,
@@ -1078,15 +1453,14 @@ struct ParsedEvidencePacket {
     approval_granted: bool,
 }
 
-fn load_self_goal_queue_evidence(
-    args: &Args,
+fn build_self_goal_queue_evidence(
+    packets: &[String],
     current_queue: &EvolutionGoalQueue,
     proposal: &SelfGoalProposalReport,
-) -> io::Result<(
+) -> (
     Vec<EvolutionGoalRunEvidence>,
     SelfGoalQueueCliEvidenceReport,
-)> {
-    let packets = read_self_goal_queue_evidence_packets(args)?;
+) {
     let packet_digest = stable_redaction_digest(
         packets
             .iter()
@@ -1099,7 +1473,7 @@ fn load_self_goal_queue_evidence(
     let mut evidence_count = 0;
     let mut approval_count = 0;
 
-    for packet in &packets {
+    for packet in packets {
         match parse_self_goal_queue_evidence_packet(packet, current_queue, proposal) {
             Some(parsed) => {
                 valid_packet_count += 1;
@@ -1140,7 +1514,7 @@ fn load_self_goal_queue_evidence(
         approval_count,
         evidence_digest: packet_digest,
     };
-    Ok((runs, report))
+    (runs, report)
 }
 
 fn read_self_goal_queue_evidence_packets(args: &Args) -> io::Result<Vec<String>> {

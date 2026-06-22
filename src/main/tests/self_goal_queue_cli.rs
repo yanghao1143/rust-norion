@@ -60,6 +60,48 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
 }
 
 #[test]
+fn self_goal_queue_cli_local_evidence_dry_run_plans_auto_gates() {
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-local-evidence-dry-run".to_owned(),
+    ]);
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let summary = report.summary_lines().join("\n");
+
+    assert!(report.local_evidence.enabled);
+    assert!(report.local_evidence.dry_run);
+    assert!(report.local_evidence.ready);
+    assert_eq!(report.local_evidence.planned_step_count, 4);
+    assert_eq!(report.local_evidence.attempted_step_count, 0);
+    assert_eq!(report.local_evidence.generated_packet_count, 0);
+    assert_eq!(report.local_evidence.manual_step_count, 1);
+    assert!(
+        report
+            .local_evidence
+            .steps
+            .iter()
+            .any(|step| step.evidence_kind == "cargo_check"
+                && step.status == "planned"
+                && step.generated_packet.is_none())
+    );
+    assert!(
+        report
+            .local_evidence
+            .steps
+            .iter()
+            .any(|step| step.evidence_kind == "operator_approval"
+                && step.status == "manual"
+                && step.generated_packet.is_none())
+    );
+    assert!(report.evidence_collection.ready);
+    assert_eq!(report.evidence_collection.missing_steps(), 3);
+    assert_eq!(report.evidence_collection.manual_missing_steps(), 1);
+    assert!(summary.contains("self_goal_queue_local_evidence enabled=true dry_run=true"));
+    assert!(summary.contains("self_goal_queue_local_evidence_step index=1 kind=cargo_check"));
+    assert!(!summary.contains("cargo check"));
+}
+
+#[test]
 fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
     let args = Args::parse(vec![
         "--self-goal-queue".to_owned(),

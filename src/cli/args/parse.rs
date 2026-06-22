@@ -532,6 +532,17 @@ impl Args {
                     state.self_goal_queue_evidence_path = Some(PathBuf::from(&raw[index + 1]));
                     index += 2;
                 }
+                "--self-goal-queue-local-evidence" => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_local_evidence = true;
+                    index += 1;
+                }
+                "--self-goal-queue-local-evidence-dry-run" => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_local_evidence = true;
+                    state.self_goal_queue_local_evidence_dry_run = true;
+                    index += 1;
+                }
                 "--self-goal-queue-tenant" if index + 1 < raw.len() => {
                     state.self_goal_queue = true;
                     state.self_goal_queue_tenant = raw[index + 1].to_owned();

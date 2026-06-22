@@ -73,6 +73,8 @@ impl ParseState {
             self_goal_queue_store_apply: self.self_goal_queue_store_apply,
             self_goal_queue_evidence_packets: self.self_goal_queue_evidence_packets,
             self_goal_queue_evidence_path: self.self_goal_queue_evidence_path,
+            self_goal_queue_local_evidence: self.self_goal_queue_local_evidence,
+            self_goal_queue_local_evidence_dry_run: self.self_goal_queue_local_evidence_dry_run,
             self_goal_queue_tenant: self.self_goal_queue_tenant,
             self_goal_queue_workspace: self.self_goal_queue_workspace,
             self_goal_queue_session: self.self_goal_queue_session,
