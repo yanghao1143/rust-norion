@@ -1248,6 +1248,55 @@ impl SelfGoalQueueApplyReport {
             self.applied
         )
     }
+
+    pub fn json_line(&self) -> String {
+        let reason_code_count = self
+            .records
+            .iter()
+            .map(|record| record.reason_codes.len())
+            .sum::<usize>();
+        let mut digest_parts = vec![
+            SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA.to_owned(),
+            self.schema_version.to_owned(),
+            self.queue_preview_schema_version.to_owned(),
+            self.writer_gate_schema_version.to_owned(),
+            self.current_queue_digest.clone(),
+            self.writer_gate_decision.as_str().to_owned(),
+            self.decision.as_str().to_owned(),
+            self.record_count.to_string(),
+            self.ready_count.to_string(),
+            self.held_count.to_string(),
+            self.rejected_count.to_string(),
+            reason_code_count.to_string(),
+        ];
+        digest_parts.extend(
+            self.records
+                .iter()
+                .map(|record| record.apply_plan_digest.clone()),
+        );
+        let apply_plan_digest = stable_redaction_digest(digest_parts.iter().map(String::as_str));
+        format!(
+            "{{\"schema\":\"{}\",\"plan_schema\":\"{}\",\"queue_preview_schema\":\"{}\",\"writer_gate_schema\":\"{}\",\"decision\":\"{}\",\"writer_gate_decision\":\"{}\",\"records\":{},\"ready_records\":{},\"held_records\":{},\"rejected_records\":{},\"reason_code_count\":{},\"explicit_apply_required\":{},\"current_queue_digest\":\"{}\",\"apply_plan_digest\":\"{}\",\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"summary\":\"{}\"}}",
+            json_escape(SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA),
+            json_escape(self.schema_version),
+            json_escape(self.queue_preview_schema_version),
+            json_escape(self.writer_gate_schema_version),
+            json_escape(self.decision.as_str()),
+            json_escape(self.writer_gate_decision.as_str()),
+            self.record_count,
+            self.ready_count,
+            self.held_count,
+            self.rejected_count,
+            reason_code_count,
+            self.explicit_apply_required,
+            json_escape(&self.current_queue_digest),
+            json_escape(&apply_plan_digest),
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+            json_escape(&self.summary_line())
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2369,6 +2418,22 @@ fn escape_field(value: &str) -> String {
         .replace('|', "\\p")
 }
 
+fn json_escape(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out
+}
+
 fn bool_to_field(value: bool) -> &'static str {
     if value { "1" } else { "0" }
 }
@@ -2976,6 +3041,28 @@ mod tests {
                 .iter()
                 .all(SelfGoalQueueApplyRecord::is_preview_only)
         );
+    }
+
+    #[test]
+    fn queue_apply_plan_json_line_is_deterministic_and_digest_only() {
+        let (queue, preview) = queue_preview_with_append();
+        let writer_gate = writer_gate_report_for_preview(&preview, false);
+
+        let first = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+        let second = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+        let line = first.json_line();
+
+        assert_eq!(line, second.json_line());
+        assert!(line.contains("\"schema\":\"rust-norion-self-goal-queue-apply-plan-v1\""));
+        assert!(line.contains("\"plan_schema\":\"self_goal_queue_apply_plan_v1\""));
+        assert!(line.contains("\"records\":1"));
+        assert!(line.contains("\"held_records\":1"));
+        assert!(line.contains("\"ready_records\":0"));
+        assert!(line.contains("\"current_queue_digest\":\"redaction-digest:"));
+        assert!(line.contains("\"apply_plan_digest\":\"redaction-digest:"));
+        assert!(!line.contains("\"records\":["));
+        assert!(!line.contains("\"record_lines\":["));
+        assert!(!contains_private_or_executable_marker(&line));
     }
 
     fn proposal_report_without_active_queue() -> SelfGoalProposalReport {
