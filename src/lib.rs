@@ -25,6 +25,7 @@ pub mod production_runtime;
 pub mod reasoning_genome;
 pub mod recursive_scheduler;
 pub mod reflection;
+pub mod research_deployment;
 pub mod router;
 pub mod runtime;
 pub mod runtime_manifest;
@@ -193,6 +194,13 @@ pub use recursive_scheduler::{
 pub use reflection::{
     DraftToken, InferenceDraft, ReasoningStep, ReflectionIssue, ReflectionReport,
     ReflectionSeverity, Reflector, RuntimeDiagnostics,
+};
+pub use research_deployment::{
+    RESEARCH_DEPLOYMENT_SCHEMA_VERSION, ResearchDeploymentGuardDecision,
+    ResearchDeploymentGuardReport, ResearchDeploymentOperatorHealth, ResearchDeploymentProfile,
+    ResearchDeploymentProfileKind, ResearchDeploymentRequest, ResearchDeploymentResourceLimits,
+    ResearchDeploymentWriteGuards, ResearchDeploymentWriteMode,
+    default_research_deployment_profiles, parse_research_deployment_profile,
 };
 pub use router::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,

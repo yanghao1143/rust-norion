@@ -469,7 +469,8 @@ privacy-redaction corpus hardening, #50 malignant-gene recovery drills, #51
 genome aging/rejuvenation benchmark simulation baseline, #72 gene purpose
 relabel validator baseline, #73 reversible Gene Scissors transaction journal
 baseline, #79 pursuit-goal queue baseline, and #74 thinking-phase gene-chain
-scheduler baseline.
+scheduler baseline, plus #75 multilingual coding eval, #76 memory
+consolidation, and #78 local research deployment guardrail baselines.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -492,8 +493,9 @@ scheduler baseline.
   deterministic pursuit-goal queue baseline, #74 adds the read-only
   thinking-phase gene-chain scheduler baseline, #75 adds the
   English/Chinese/Rust coding evaluation profile baseline, and #76 adds the
-  preview-only memory consolidation/forgetting worker baseline. The default
-  queue now advances to #78 and R94 as the next bounded preview goals with
+  preview-only memory consolidation/forgetting worker baseline. #78 adds the
+  deterministic local research deployment profile and resource-guard baseline.
+  The default queue now advances to R94 as the next bounded preview goal with
   explicit success, stop, budget, rollback, approval, and conflict-isolation
   gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
@@ -503,8 +505,9 @@ scheduler baseline.
   fixtures, scoring thresholds, redacted evidence packets, and overfit guards.
   #76 now provides replayable digest-only memory consolidation, decay,
   tombstone, cross-tenant merge rejection, and before/after metric evidence.
-  Continue with #78 local research deployment guardrails next, then advance
-  R94 only after the active goal reaches its target or stops cleanly.
+  #78 now provides deterministic non-commercial local deployment profiles,
+  resource/backpressure guards, disabled durable-write defaults, and operator
+  health evidence. Continue with R94 writer gate consolidation next.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -543,8 +546,8 @@ scheduler baseline.
   baseline for ordered pursuit goals. It adds deterministic `EvolutionGoal`
   records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
   for #74/#75/#76/#78/R94, budget and rollback stops, approval holds, and
-  conflict isolation between failed and later goals. With #74, #75, and #76 now
-  completed, the live default queue begins at #78, then R94.
+  conflict isolation between failed and later goals. With #74, #75, #76, and
+  #78 now completed, the live default queue begins at R94.
 - #74 `[Runtime] Add thinking-phase gene-chain execution scheduler` is now the
   completed baseline for deterministic planning, memory recall, genome
   expression, route selection, answer synthesis, verification, and reflection
@@ -567,6 +570,13 @@ scheduler baseline.
   replay-safety, and benchmark-impact metrics, plus trace-gate-compatible
   JSONL output. Policy is documented in
   [`docs/governance/memory-consolidation-worker.md`](docs/governance/memory-consolidation-worker.md).
+- #78 `[Runtime] Add local research deployment profiles and resource guards` is
+  now the completed baseline for non-commercial local deployment guardrails. It
+  adds CPU-only, single-GPU, low-memory, and benchmark/replay profile templates,
+  resource and backpressure guard reports, disabled durable memory/genome/
+  experiment-ledger writes by default, operator health evidence, and policy
+  documentation in
+  [`docs/governance/local-research-deployment-profiles.md`](docs/governance/local-research-deployment-profiles.md).
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open from
@@ -576,8 +586,8 @@ scheduler baseline.
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
   Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #75, #76,
-  #77, and #79 as completed or landing baselines in this branch; issue #78
-  extends the next deployment workstream.
+  #77, #78, and #79 as completed or landing baselines in this branch; R94 is
+  the next active pursuit goal for writer gate consolidation.
 
 ## Version Plan / 版本计划
 
@@ -846,8 +856,10 @@ scheduler baseline.
   packets, and overfit guards. #76 is the completed preview-only memory
   consolidation baseline with replayable merge/decay/tombstone/rejection
   plans, cross-tenant isolation, rollback anchors, before/after metrics, and
-  trace-gated JSONL. The live default pursuit queue now starts at #78, then
-  R94.)
+  trace-gated JSONL. #78 is the completed local research deployment guardrail
+  baseline with deterministic CPU/GPU/low-memory/benchmark profiles, resource
+  guards, disabled write defaults, and operator-health evidence. The live
+  default pursuit queue now starts at R94.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -936,8 +948,9 @@ scheduler baseline.
   checklist for moving read-only preview evidence into durable write/admission
   paths. Completed / closed governance baseline for future writer admission.
 - #78 `[Runtime] Add local research deployment profiles and resource guards`:
-  add local research deployment profiles and resource guards so experimental
-  runtime work stays bounded on local hardware.
+  completed baseline for deterministic local research deployment profiles,
+  resource/backpressure guards, disabled durable-write defaults, and operator
+  health evidence so experimental runtime work stays bounded on local hardware.
 - #79 `[Evolution] Add pursuit goal queue and stop gates`: completed baseline
   for a deterministic multi-goal self-evolution queue with per-goal success
   gates, stop conditions, rollback conditions, budget caps, approval holds,

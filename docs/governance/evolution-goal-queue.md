@@ -30,13 +30,13 @@ replaced with `redaction-digest:*` before they enter the serialized record.
 
 `default_noiron_pursuit_goal_queue()` installs the current project pursuit
 queue as preview-only planning state. After the #74 thinking-phase scheduler,
-#75 English/Chinese/Rust coding evaluation profile, and #76 memory
-consolidation worker baselines landed, the live default queue starts at:
+#75 English/Chinese/Rust coding evaluation profile, #76 memory consolidation
+worker, and #78 local research deployment guardrail baselines landed, the live
+default queue now starts at:
 
-- #78 local research deployment profiles and resource guards
 - R94 self-evolution writer gate consolidation
 
-This gives rust-norion a bounded sequence of next objectives. The queue can
+This gives rust-norion a bounded next objective. The queue can
 advance only when the active goal has compiler/test/benchmark/trace or ledger
 evidence for its success gate and maintainer/operator approval for promotion.
 If a goal reaches its target, exhausts budget, fails a rollback gate, or waits

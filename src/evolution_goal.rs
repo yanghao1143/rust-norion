@@ -597,40 +597,22 @@ impl EvolutionGoalQueue {
 }
 
 pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
-    vec![
-        EvolutionGoal::new(
-            10,
-            "#78 local research deployment profiles and resource guards",
-            EvolutionGoalSuccessGate::new([
-                EvolutionGoalEvidenceKind::CargoCheck,
-                EvolutionGoalEvidenceKind::FocusedTests,
-                EvolutionGoalEvidenceKind::BenchmarkGate,
-                EvolutionGoalEvidenceKind::TraceSchemaGate,
-                EvolutionGoalEvidenceKind::OperatorApproval,
-            ]),
-            [
-                "roadmap:R98",
-                "issue:#78",
-                "pursuit:research-deployment-guardrails",
-            ],
-        ),
-        EvolutionGoal::new(
-            20,
-            "R94 self-evolution writer gate consolidation",
-            EvolutionGoalSuccessGate::new([
-                EvolutionGoalEvidenceKind::CargoCheck,
-                EvolutionGoalEvidenceKind::FocusedTests,
-                EvolutionGoalEvidenceKind::TraceSchemaGate,
-                EvolutionGoalEvidenceKind::ExperimentLedger,
-                EvolutionGoalEvidenceKind::OperatorApproval,
-            ]),
-            [
-                "roadmap:R94",
-                "issues:#77,#6,#20",
-                "pursuit:writer-gate-consolidation",
-            ],
-        ),
-    ]
+    vec![EvolutionGoal::new(
+        10,
+        "R94 self-evolution writer gate consolidation",
+        EvolutionGoalSuccessGate::new([
+            EvolutionGoalEvidenceKind::CargoCheck,
+            EvolutionGoalEvidenceKind::FocusedTests,
+            EvolutionGoalEvidenceKind::TraceSchemaGate,
+            EvolutionGoalEvidenceKind::ExperimentLedger,
+            EvolutionGoalEvidenceKind::OperatorApproval,
+        ]),
+        [
+            "roadmap:R94",
+            "issues:#77,#6,#20",
+            "pursuit:writer-gate-consolidation",
+        ],
+    )]
 }
 
 pub fn default_noiron_pursuit_goal_queue() -> EvolutionGoalQueue {
@@ -1031,12 +1013,11 @@ mod tests {
     }
 
     #[test]
-    fn default_noiron_pursuit_goal_queue_lists_multiple_roadmap_goals() {
+    fn default_noiron_pursuit_goal_queue_advances_to_writer_gate_consolidation() {
         let queue = default_noiron_pursuit_goal_queue();
 
-        assert_eq!(queue.goals.len(), 2);
-        assert!(queue.goals[0].objective.contains("#78"));
-        assert!(queue.goals[1].objective.contains("R94"));
+        assert_eq!(queue.goals.len(), 1);
+        assert!(queue.goals[0].objective.contains("R94"));
 
         let report = queue.evaluate(&[]);
 
@@ -1045,9 +1026,6 @@ mod tests {
             Some(queue.goals[0].stable_id.clone())
         );
         assert_eq!(report.decisions[0].status, EvolutionGoalStatus::Active);
-        assert!(report.decisions[1..].iter().all(|decision| {
-            decision.status == EvolutionGoalStatus::Queued && decision.conflict_isolated
-        }));
         assert!(report.is_preview_only());
     }
 
