@@ -180,7 +180,8 @@ impl BenchmarkSummary {
         self.live_evolution_evidence.record(outcome);
         self.routing_evidence.record(case, outcome);
         self.genome_evidence.record(case, outcome);
-        self.memory_governance_evidence.record(case, outcome);
+        self.memory_governance_evidence
+            .record(case, elapsed_ms, outcome);
         self.embedding_evidence.record(case, outcome);
         self.runtime_architecture_evidence.record(outcome);
         self.runtime_device_execution_evidence.record(case, outcome);

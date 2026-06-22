@@ -43,6 +43,15 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub total_compaction_merged: usize,
     pub total_compaction_removed: usize,
     pub total_compaction_pair_evidence: usize,
+    pub memory_storage_samples: usize,
+    pub memory_storage_entries_before: usize,
+    pub memory_storage_entries_after: usize,
+    pub memory_storage_entries_removed: usize,
+    pub memory_retrieval_latency_samples: usize,
+    pub total_memory_retrieval_latency_ms: u128,
+    pub max_memory_retrieval_latency_ms: u128,
+    pub memory_retained_usefulness_delta_milli: i64,
+    pub memory_retained_usefulness_abs_delta_milli: usize,
     pub failures: Vec<String>,
     pub(super) governance_devices: Vec<DeviceClass>,
     pub(super) memory_admission_devices: Vec<DeviceClass>,
@@ -51,10 +60,29 @@ pub struct BenchmarkMemoryGovernanceEvidence {
 }
 
 impl BenchmarkMemoryGovernanceEvidence {
-    pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
+    pub(super) fn record(
+        &mut self,
+        case: &BenchmarkCase,
+        elapsed_ms: u128,
+        outcome: &InferenceOutcome,
+    ) {
         self.cases += 1;
         let device = outcome.hardware_plan.device;
         push_unique_device(&mut self.governance_devices, device);
+        self.memory_retrieval_latency_samples += 1;
+        self.total_memory_retrieval_latency_ms = self
+            .total_memory_retrieval_latency_ms
+            .saturating_add(elapsed_ms);
+        self.max_memory_retrieval_latency_ms = self.max_memory_retrieval_latency_ms.max(elapsed_ms);
+        let retained_usefulness_delta =
+            outcome.memory_feedback.reinforcement_amount - outcome.memory_feedback.penalty_amount;
+        let retained_usefulness_delta_milli = (retained_usefulness_delta * 1000.0).round() as i64;
+        self.memory_retained_usefulness_delta_milli = self
+            .memory_retained_usefulness_delta_milli
+            .saturating_add(retained_usefulness_delta_milli);
+        self.memory_retained_usefulness_abs_delta_milli = self
+            .memory_retained_usefulness_abs_delta_milli
+            .saturating_add(retained_usefulness_delta_milli.unsigned_abs() as usize);
 
         let admission = &outcome.memory_admission;
         let admission_candidates = admission.candidate_count();
@@ -190,6 +218,17 @@ impl BenchmarkMemoryGovernanceEvidence {
         self.total_compaction_merged += compaction_merged;
         self.total_compaction_removed += compaction_removed;
         self.total_compaction_pair_evidence += compaction.merged.len();
+        self.memory_storage_samples += 1;
+        self.memory_storage_entries_before = self
+            .memory_storage_entries_before
+            .saturating_add(retention.before);
+        self.memory_storage_entries_after = self
+            .memory_storage_entries_after
+            .saturating_add(compaction.after);
+        self.memory_storage_entries_removed = self
+            .memory_storage_entries_removed
+            .saturating_add(retention_removed)
+            .saturating_add(compaction_removed);
         if compaction_merged > 0 || compaction_removed > 0 {
             self.compaction_activity_cases += 1;
             push_unique_device(&mut self.compaction_activity_devices, device);

@@ -167,6 +167,63 @@ impl BenchmarkSummary {
             .total_compaction_pair_evidence
     }
 
+    pub fn memory_storage_benchmark_samples(&self) -> usize {
+        self.memory_governance_evidence.memory_storage_samples
+    }
+
+    pub fn total_memory_storage_entries_before(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_storage_entries_before
+    }
+
+    pub fn total_memory_storage_entries_after(&self) -> usize {
+        self.memory_governance_evidence.memory_storage_entries_after
+    }
+
+    pub fn total_memory_storage_entries_removed(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_storage_entries_removed
+    }
+
+    pub fn total_memory_storage_reduction_entries(&self) -> usize {
+        self.total_memory_storage_entries_before()
+            .saturating_sub(self.total_memory_storage_entries_after())
+    }
+
+    pub fn memory_retrieval_latency_samples(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_retrieval_latency_samples
+    }
+
+    pub fn total_memory_retrieval_latency_ms(&self) -> u128 {
+        self.memory_governance_evidence
+            .total_memory_retrieval_latency_ms
+    }
+
+    pub fn max_memory_retrieval_latency_ms(&self) -> u128 {
+        self.memory_governance_evidence
+            .max_memory_retrieval_latency_ms
+    }
+
+    pub fn average_memory_retrieval_latency_ms(&self) -> u128 {
+        let samples = self.memory_retrieval_latency_samples() as u128;
+        if samples == 0 {
+            0
+        } else {
+            self.total_memory_retrieval_latency_ms() / samples
+        }
+    }
+
+    pub fn memory_retained_usefulness_delta_milli(&self) -> i64 {
+        self.memory_governance_evidence
+            .memory_retained_usefulness_delta_milli
+    }
+
+    pub fn memory_retained_usefulness_abs_delta_milli(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_retained_usefulness_abs_delta_milli
+    }
+
     pub fn total_live_memory_feedback_reinforcements(&self) -> usize {
         self.reflection_evidence.live_memory_feedback_reinforcements
     }
