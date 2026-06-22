@@ -290,9 +290,13 @@ pub use self_evolving_memory::{
     ToolReliabilityRecord,
 };
 pub use self_goal_proposal::{
-    SELF_GOAL_PROPOSAL_SCHEMA_VERSION, SELF_GOAL_PROPOSAL_TRACE_SCHEMA, SelfGoalProposalCandidate,
-    SelfGoalProposalPolicy, SelfGoalProposalReport, SelfGoalProposalSource,
-    default_noiron_self_goal_proposal_report, default_self_goal_proposal_report,
+    SELF_GOAL_ADMISSION_SCHEMA_VERSION, SELF_GOAL_ADMISSION_TRACE_SCHEMA,
+    SELF_GOAL_PROPOSAL_SCHEMA_VERSION, SELF_GOAL_PROPOSAL_TRACE_SCHEMA, SelfGoalAdmissionDecision,
+    SelfGoalAdmissionGate, SelfGoalAdmissionPolicy, SelfGoalAdmissionRecord,
+    SelfGoalAdmissionReport, SelfGoalProposalCandidate, SelfGoalProposalPolicy,
+    SelfGoalProposalReport, SelfGoalProposalSource, default_noiron_self_goal_admission_report,
+    default_noiron_self_goal_proposal_report, default_self_goal_admission_report,
+    default_self_goal_proposal_report,
 };
 pub use semantic_index::{
     DeterministicSemanticEmbeddingProvider, SemanticEmbeddingProvider, SemanticIndex,
