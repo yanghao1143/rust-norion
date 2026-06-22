@@ -464,8 +464,8 @@ These are algorithmic references, not product dependencies:
 ## Current Snapshot / 当前快照
 
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
-lineage-audit implementation, #77 graduation-checklist closure, and latest
-branch head `3e5abe5de` (`Add genome lineage audit export`).
+lineage-audit implementation, #77 graduation-checklist closure, and #47
+privacy-redaction corpus hardening.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -479,8 +479,8 @@ branch head `3e5abe5de` (`Add genome lineage audit export`).
   orchestration, disk-backed KV residency/compaction, Reasoning Genome
   splicing, model adapter execution, validation, reflection,
   approval-gated admission, compute-budget scheduling, and wasted-compute
-  telemetry. R87/#46 now adds the redacted lineage audit export baseline, and
-  R88/#47 is the current privacy-redaction hardening target.
+  telemetry. R87/#46 adds the redacted lineage audit export baseline, and
+  R88/#47 adds the shared privacy-redaction corpus and detector baseline.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -490,12 +490,14 @@ branch head `3e5abe5de` (`Add genome lineage audit export`).
   telemetry with explicit before/after benchmark fanout evidence.
 - Completed hardening lane #46 `[Genome] Add lineage graph, rollback anchors,
   and audit export` closed on GitHub after adding redacted JSON/Markdown
-  lineage packets for splice previews and dual-chain genome records. Current
-  active hardening lane is #47 privacy redaction corpus / regression suite,
-  which should broaden synthetic fixture coverage so memory reports, genome
-  mutation fixtures, trace events, benchmark artifacts, and review packets
-  cannot leak raw prompts, answers, secrets, hidden reasoning, executable
-  payloads, tenant identifiers, or unreviewed third-party source text.
+  lineage packets for splice previews and dual-chain genome records. #47
+  `[Governance] Add privacy redaction corpus for memory, genome, and trace
+  evidence` now adds a shared detector, synthetic redaction corpus, policy
+  documentation, and regression tests proving memory reports, genome mutation
+  fixtures, trace events, benchmark artifacts, audit exports, and review
+  packets do not leak raw prompts, answers, secrets, hidden reasoning,
+  executable payloads, tenant identifiers, or unreviewed third-party source
+  text.
 - #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
   Its checklist is the policy bridge for later memory/genome/evolution writes:
   preview evidence can graduate only after writer gates, validation evidence,
@@ -507,11 +509,12 @@ branch head `3e5abe5de` (`Add genome lineage audit export`).
   crates` check runs are green, but GitHub still reports review approval
   required before merge.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body now marks #43, #44, #45, #46, and #77 complete; issues #47,
-  #50/#51, and #72-#78 extend that tracker with the next
+  Its body now marks #43, #44, #45, #46, #47, and #77 complete; issues
+  #50/#51 and #72-#78 extend that tracker with the next
   audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
-  workstream. The next suggested order keeps #47 first so privacy redaction is
-  validated before broader evidence packets or outside collaboration.
+  workstream. The next suggested order moves to #50/#51/#72/#73 so malignant
+  gene defense, aging/rejuvenation simulation, purpose relabeling, and
+  reversible Gene Scissors transactions build on the redaction gate.
 
 ## Version Plan / 版本计划
 
@@ -765,8 +768,8 @@ branch head `3e5abe5de` (`Add genome lineage audit export`).
   completed KV residency/compaction baseline, #45 is the completed
   routing-budget and wasted-compute telemetry baseline, and #77 is the closed
   preview-to-write graduation checklist. #46 is the completed redacted
-  lineage/audit export baseline, #47 is the active privacy-redaction hardening
-  lane, and #50/#51/#72/#73 are queued for malignant-gene defense,
+  lineage/audit export baseline, #47 is the completed privacy-redaction corpus
+  baseline, and #50/#51/#72/#73 are queued for malignant-gene defense,
   rejuvenation simulation, purpose relabeling, and reversible Gene Scissors
   transactions.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
@@ -806,11 +809,12 @@ branch head `3e5abe5de` (`Add genome lineage audit export`).
   rollback-anchor evidence for splice previews and dual-chain genome records,
   with digest-only before/after evidence and preview/applied repair state.
 - #47 `[Governance] Add privacy redaction corpus for memory, genome, and trace
-  evidence`: current active paired hardening lane. Build fixtures and gates
-  that prove memory reports, genome mutation fixtures, trace events, benchmark
-  artifacts, audit exports, and review packets do not leak raw prompts,
-  answers, secrets, hidden reasoning, executable malicious fixtures, tenant
-  identifiers, or unreviewed external-source payloads.
+  evidence`: completed / closed v0.8 privacy-governance baseline. Adds the
+  shared `privacy_redaction` corpus, policy lines, stable redaction digests,
+  reason codes, and common private/executable payload detector used by memory
+  admission summaries, genome lineage audit exports, trace schema checks, and
+  benchmark evidence. Policy is documented in
+  [`docs/governance/privacy-redaction-corpus.md`](docs/governance/privacy-redaction-corpus.md).
 - #50 `[Genome] Add malignant-gene poisoning defense and recovery drills`:
   downstream genome-safety lane. Prove malignant or polluted GeneSegments are
   quarantined, cut, and regenerated without contaminating neighboring lineage
@@ -859,11 +863,12 @@ branch head `3e5abe5de` (`Add genome lineage audit export`).
   export. Produces redacted lineage packets that connect genome segment,
   dual-chain memory, mutation-plan, validation, and rollback evidence without
   leaking private payloads.
-- R88 / #47 active: privacy redaction corpus for memory, genome, and trace
-  evidence. Add synthetic fixture coverage and regression gates for memory
-  reports, genome mutation fixtures, trace events, benchmark artifacts, audit
-  exports, and review packets before broad audit exports or outside
-  collaboration depend on trace packets.
+- R88 / #47 completed baseline: privacy redaction corpus for memory, genome,
+  and trace evidence. Adds synthetic fixture coverage, stable
+  `redaction-digest:*` evidence, reason codes, policy documentation, and common
+  detector wiring for memory reports, genome mutation fixtures, trace events,
+  benchmark artifacts, audit exports, and review packets before broader audit
+  exports or outside collaboration depend on trace packets.
 - R89 / #12/#72: Reasoning DNA dual-chain stabilization. Normalize
   `express_chain` and `memory_chain` records with segment ids, source ids,
   purpose tags, version, confidence, last validation result, rollback anchors,

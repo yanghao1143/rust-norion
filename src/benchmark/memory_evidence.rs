@@ -1,5 +1,6 @@
 use crate::engine::InferenceOutcome;
 use crate::hardware::DeviceClass;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 
 use super::{BenchmarkCase, explicit_device_count, push_unique_device};
 
@@ -497,8 +498,7 @@ fn validate_memory_admission_preview(
         }
     }
     if fusion.score_summaries(12).iter().any(|summary| {
-        summary.contains("prompt:")
-            || summary.contains("answer:")
+        contains_private_or_executable_marker(summary)
             || (prompt_leak_check && summary.contains(prompt))
     }) {
         failures.push(format!(
@@ -511,7 +511,7 @@ fn validate_memory_admission_preview(
         .iter()
         .chain(review_summaries.iter())
         .chain(admission.ledger_summaries().iter())
-        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+        .any(|summary| contains_private_or_executable_marker(summary))
     {
         failures.push(format!(
             "{}:{} memory_admission summaries, review packets, or ledger rows must not leak raw prompt or answer payloads",

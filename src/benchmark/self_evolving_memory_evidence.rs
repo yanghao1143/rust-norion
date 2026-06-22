@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::hierarchy::TaskProfile;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::self_evolving_memory::{
     SelfEvolvingEpisodeInput, SelfEvolvingHeuristicInput, SelfEvolvingMemoryApproval,
     SelfEvolvingMemoryQuery, SelfEvolvingMemoryRetrievalReport, SelfEvolvingMemoryStore,
@@ -573,8 +574,7 @@ impl SelfEvolvingMemoryAbReport {
 
     pub fn ledger_is_digest_only(&self) -> bool {
         self.ledger_lines().iter().all(|line| {
-            !line.contains("prompt:")
-                && !line.contains("answer:")
+            !contains_private_or_executable_marker(line)
                 && !line.contains("solution:")
                 && !line.contains("cargo test fails")
                 && !line.contains("请")

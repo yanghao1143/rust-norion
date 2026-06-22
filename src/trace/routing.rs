@@ -1,4 +1,5 @@
 use super::fields::*;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 
 pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -90,7 +91,7 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
                 ));
             }
         }
-        if summary.contains("prompt:") || summary.contains("answer:") {
+        if contains_private_or_executable_marker(summary) {
             failures.push(format!(
                 "adaptive_routing score summary {index} must not leak raw prompt or answer payloads"
             ));
@@ -350,7 +351,7 @@ pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
                 ));
             }
         }
-        if summary.contains("prompt:") || summary.contains("answer:") {
+        if contains_private_or_executable_marker(summary) {
             failures.push(format!(
                 "task_hierarchy mutation summary {index} must not leak raw prompt or answer payloads"
             ));

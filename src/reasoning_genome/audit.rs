@@ -1,4 +1,5 @@
 use crate::hierarchy::TaskProfile;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 
 use super::model::{GeneScissorsIntent, GeneValidationStatus, MutationPlan};
 use super::schema::{DnaGeneChain, DnaGeneRecord};
@@ -646,24 +647,7 @@ fn redacted_ref(value: &str) -> (String, bool) {
 }
 
 pub fn contains_blocked_payload_marker(value: &str) -> bool {
-    let normalized = value.to_ascii_lowercase();
-    [
-        "prompt:",
-        "answer:",
-        "secret=",
-        "api_key",
-        "private key",
-        "-----begin",
-        "rm ",
-        "rm -",
-        "curl ",
-        "wget ",
-        "powershell",
-        "cmd.exe",
-        "sudo ",
-    ]
-    .iter()
-    .any(|marker| normalized.contains(marker))
+    contains_private_or_executable_marker(value)
 }
 
 fn stable_digest<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {

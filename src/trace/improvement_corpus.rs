@@ -2,6 +2,7 @@ use super::fields::{
     extract_json_bool_field, extract_json_string_array_field, extract_json_usize_field,
     json_object_after_field,
 };
+use crate::privacy_redaction::contains_private_or_executable_marker;
 
 pub(super) fn evaluate_improvement_corpus_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -296,19 +297,5 @@ fn require_bool(
 }
 
 fn contains_sensitive_payload(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    [
-        "api_key",
-        "apikey",
-        "secret",
-        "password",
-        "passwd",
-        "token=",
-        "private:",
-        "private_key",
-        "begin private key",
-        "sk-",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker))
+    contains_private_or_executable_marker(value)
 }

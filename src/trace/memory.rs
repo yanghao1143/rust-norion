@@ -1,6 +1,7 @@
 use super::TRACE_FLOAT_EPSILON;
 use super::evolution::require_usize_at_least;
 use super::fields::*;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 pub(super) fn evaluate_trace_memory_feedback(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
     let Some(memory) = json_object_after_field(line, "memory") else {
@@ -250,7 +251,7 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     }
     if summaries
         .iter()
-        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+        .any(|summary| contains_private_or_executable_marker(summary))
     {
         failures.push(
             "memory_admission candidate_summaries must not leak raw prompt or answer payloads"
@@ -259,7 +260,7 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     }
     if review_summaries
         .iter()
-        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+        .any(|summary| contains_private_or_executable_marker(summary))
     {
         failures.push(
             "memory_admission review_packet_summaries must not leak raw prompt or answer payloads"
@@ -268,7 +269,7 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     }
     if ledger_summaries
         .iter()
-        .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+        .any(|summary| contains_private_or_executable_marker(summary))
     {
         failures.push(
             "memory_admission ledger_summaries must not leak raw prompt or answer payloads"
@@ -405,7 +406,7 @@ pub(super) fn evaluate_trace_kv_fusion(line: &str) -> Vec<String> {
                 ));
             }
         }
-        if summary.contains("prompt:") || summary.contains("answer:") {
+        if contains_private_or_executable_marker(summary) {
             failures.push(format!(
                 "kv_fusion score summary {index} must not leak raw prompt or answer payloads"
             ));
@@ -753,17 +754,10 @@ fn evaluate_self_evolving_memory_admission_preview_trace(failures: &mut Vec<Stri
 }
 
 fn line_contains_raw_memory_payload(line: &str) -> bool {
-    [
-        "raw_prompt",
-        "prompt_text",
-        "answer_text",
-        "private prompt",
-        "private answer",
-        "solution_path",
-        "key_insights",
-    ]
-    .iter()
-    .any(|marker| line.contains(marker))
+    contains_private_or_executable_marker(line)
+        || ["solution_path", "key_insights"]
+            .iter()
+            .any(|marker| line.contains(marker))
 }
 
 pub(super) fn evaluate_trace_memory_governance(line: &str) -> Vec<String> {

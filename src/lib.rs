@@ -18,6 +18,7 @@ pub mod kv_quant;
 pub mod local_runtime;
 pub mod memory_admission;
 pub mod no_weight_retrain;
+pub mod privacy_redaction;
 pub mod process_reward;
 pub mod production_runtime;
 pub mod reasoning_genome;
@@ -136,6 +137,13 @@ pub use memory_admission::{
 pub use no_weight_retrain::{
     AdapterTrainingHandoffState, NoWeightImprovementCandidate, NoWeightImprovementLane,
     NoWeightRetrainDecision, NoWeightRetrainGate, NoWeightRetrainPolicy, NoWeightRetrainScorecard,
+};
+pub use privacy_redaction::{
+    PRIVACY_REDACTION_CORPUS_VERSION, PRIVACY_REDACTION_POLICY_VERSION, PrivacyRedactionCorpus,
+    PrivacyRedactionFixture, PrivacyRedactionFixtureKind, PrivacyRedactionFixtureResult,
+    PrivacyRedactionOutput, PrivacyRedactionReport, contains_private_or_executable_marker,
+    default_privacy_redaction_corpus, privacy_redaction_policy_lines,
+    privacy_redaction_reason_codes, stable_redaction_digest,
 };
 pub use process_reward::{
     ProcessRewardComponents, ProcessRewardInput, ProcessRewardReport, ProcessRewarder, RewardAction,

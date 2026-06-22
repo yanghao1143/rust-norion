@@ -1,4 +1,5 @@
 use super::fields::*;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 
 pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -348,10 +349,8 @@ fn require_splice_lifecycle_state(failures: &mut Vec<String>, states: &[String],
 }
 
 fn contains_raw_payload_marker(summary: &str) -> bool {
-    let lower = summary.to_ascii_lowercase();
-    lower.contains("prompt:")
-        || lower.contains("answer:")
-        || lower.contains("label=")
-        || lower.contains("purpose=")
-        || lower.contains("gist=")
+    contains_private_or_executable_marker(summary)
+        || summary.contains("label=")
+        || summary.contains("purpose=")
+        || summary.contains("gist=")
 }
