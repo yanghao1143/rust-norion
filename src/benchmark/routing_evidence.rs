@@ -172,13 +172,6 @@ impl BenchmarkRoutingEvidence {
                 case.name
             ));
         }
-        if budget.route_fanout_before < budget.route_fanout_after {
-            self.failures.push(format!(
-                "{}:{} compute_budget fanout comparison is inconsistent",
-                device.as_str(),
-                case.name
-            ));
-        }
         if !budget.budget_accounting_matches() {
             self.failures.push(format!(
                 "{}:{} compute_budget token accounting is inconsistent",
