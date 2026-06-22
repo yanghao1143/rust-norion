@@ -1673,6 +1673,35 @@ The optimized roadmap is tracked in [`ROADMAP.md`](ROADMAP.md).
 - 扩展全设备硬件 profile、执行计划和真实设备探测适配
 - 把内置 benchmark 套件扩展成回归门禁
 
+## Contributing / 贡献入口
+
+Contributions of any form are welcome. See
+[CONTRIBUTING.md](https://github.com/yanghao1143/rust-norion/blob/main/CONTRIBUTING.md)
+for review rules, clean-room requirements, validation expectations, and
+protected-branch merge policy.
+
+欢迎任何形式的贡献，详见
+[CONTRIBUTING.md](https://github.com/yanghao1143/rust-norion/blob/main/CONTRIBUTING.md)。
+
+- Report a bug / 报告 Bug:
+  [new issue](https://github.com/yanghao1143/rust-norion/issues/new?template=bug_report.md)
+- Propose a feature / 提议功能:
+  [new feature request](https://github.com/yanghao1143/rust-norion/issues/new?template=feature_request.md)
+- Submit a PR / 提交 PR: branch from `main`, follow Conventional Commits,
+  and wait for maintainer review before merge
+
+## License / 许可证
+
+This repository is currently released under the
+[Rust-Norion Research Deployment Non-Commercial License](https://github.com/yanghao1143/rust-norion/blob/main/LICENSE):
+non-commercial research, education, evaluation, benchmarking, and experimental
+deployment are allowed; commercial use requires explicit written permission from
+the copyright holder.
+
+本仓库代码当前采用
+[Rust-Norion Research Deployment Non-Commercial License](https://github.com/yanghao1143/rust-norion/blob/main/LICENSE)
+协议公开：允许非商用研究、教育、评估、基准测试和实验性部署；商用需要版权持有人明确书面许可。
+
 ## Links / 友情链接
 
 本项目在 [LINUX DO](https://linux.do/) 公益推广，[LINUX DO](https://linux.do/) 是一个真诚、友善、团结、专业的新型综合性社区，欢迎来玩。
