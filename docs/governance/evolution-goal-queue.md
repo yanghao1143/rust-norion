@@ -46,7 +46,10 @@ a scoped Norion-owned port plan, unknown-license sources remain blocked, and
 GPL-3.0 sources remain concept-only unless GPL obligations are explicitly
 accepted. R97 can now focus on local service/API behavior and multilingual
 coding evaluation without importing external source or mutating memory/genome
-state by default. The queue can advance only when the active goal has
+state by default. The first R97 readiness bridge maps the #75 corpus to
+deterministic service request plans and digest-only evidence while the queue
+remains on R97 for endpoint, runner, streaming/cancellation, and diagnostics
+wiring. The queue can advance only when the active goal has
 compiler/test/benchmark/trace or ledger evidence for its success gate and
 maintainer/operator approval for promotion. If a goal reaches its target,
 exhausts budget, fails a rollback gate, or waits for approval, later goals

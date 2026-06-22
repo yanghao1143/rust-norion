@@ -517,7 +517,10 @@ writer-gate consolidation baselines.
   layer and trace-schema counters. R95 now provides the reference fact/license
   verification gate and deterministic chunk-repair fixture catalog. R96 now
   provides the clean-room source-provenance scanner and contamination fixtures.
-  Continue with R97 English/Chinese/Rust coding service and eval harness next.
+  R97 now has the first coding service/eval readiness bridge that turns #75
+  fixtures into deterministic `ChatRequest` plans with streaming, cancellation,
+  max-token, diagnostics, health, model-capability, offline/mock, evidence, and
+  Rust-validation coverage. Continue with R97 endpoint/runner wiring next.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -1057,9 +1060,13 @@ writer-gate consolidation baselines.
   private-payload, or unreviewed source material cannot be promoted into
   implementation work.
 - R97 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
-  #75 provides the completed local scoring dataset/profile baseline. #19/#29
-  continue the local service paths and compiler/test/benchmark validation for
-  self-improving coding behavior.
+  #75 provides the completed local scoring dataset/profile baseline. The
+  `CodingServiceEvalReadinessReport` now maps that corpus to deterministic
+  service `ChatRequest` plans and digest-only request/eval evidence for
+  English, Chinese, Rust, and mixed-language coding lanes. #19/#29 continue the
+  local service endpoint, mock backend, streaming/cancellation, diagnostics,
+  runner, compiler/test, and benchmark validation work for self-improving
+  coding behavior.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B

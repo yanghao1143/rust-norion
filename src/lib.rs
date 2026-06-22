@@ -2,6 +2,7 @@ pub mod adaptive_state;
 pub mod agent_team;
 pub mod benchmark;
 pub mod clean_room_audit;
+pub mod coding_service_eval;
 pub mod disk_kv;
 pub mod drift;
 pub mod engine;
@@ -79,6 +80,12 @@ pub use clean_room_audit::{
     CLEAN_ROOM_AUDIT_SCHEMA_VERSION, CLEAN_ROOM_AUDIT_TRACE_SCHEMA, CleanRoomAuditDecision,
     CleanRoomAuditFinding, CleanRoomAuditRecord, CleanRoomAuditReport, CleanRoomLicenseClass,
     CleanRoomMaterialKind, default_clean_room_audit_records, default_clean_room_audit_report,
+};
+pub use coding_service_eval::{
+    CODING_SERVICE_EVAL_SCHEMA_VERSION, CODING_SERVICE_EVAL_TRACE_SCHEMA,
+    CodingServiceEvalCapability, CodingServiceEvalLanguage, CodingServiceEvalReadinessReport,
+    CodingServiceEvalRequestPlan, default_coding_service_eval_readiness_report,
+    default_coding_service_eval_request_plans,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
