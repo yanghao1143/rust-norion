@@ -4,6 +4,7 @@ pub mod benchmark;
 pub mod disk_kv;
 pub mod drift;
 pub mod engine;
+pub mod evolution_goal;
 pub mod experience;
 pub mod experience_replay;
 pub mod gemma_runtime;
@@ -77,6 +78,14 @@ pub use engine::{
     NoironContextTrace, NoironEngine, NoironGateTrace, NoironGenomeTrace, NoironKvTrace,
     NoironOrchestrationStage, NoironOrchestrationStageStatus, NoironOrchestrationTrace,
     NoironReflectionTrace, NoironRouteTrace,
+};
+pub use evolution_goal::{
+    EVOLUTION_GOAL_SCHEMA_VERSION, EvolutionGoal, EvolutionGoalApprovalGate,
+    EvolutionGoalBudgetCap, EvolutionGoalBudgetUsage, EvolutionGoalDecision, EvolutionGoalEvidence,
+    EvolutionGoalEvidenceKind, EvolutionGoalQueue, EvolutionGoalQueueReport,
+    EvolutionGoalRollbackCondition, EvolutionGoalRunEvidence, EvolutionGoalStatus,
+    EvolutionGoalStopCondition, EvolutionGoalSuccessGate, default_noiron_pursuit_goal_queue,
+    default_noiron_pursuit_goals,
 };
 pub use experience::{
     ExperienceHygieneFinding, ExperienceHygieneQuarantinePlan, ExperienceHygieneReport,

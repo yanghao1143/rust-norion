@@ -465,10 +465,10 @@ These are algorithmic references, not product dependencies:
 
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
 lineage-audit implementation, #77 graduation-checklist closure, #47
-privacy-redaction corpus hardening, #50 malignant-gene recovery drills, the #51
-genome aging/rejuvenation benchmark simulation baseline, and the #72 gene
-purpose relabel validator baseline, and the #73 reversible Gene Scissors
-transaction journal baseline.
+privacy-redaction corpus hardening, #50 malignant-gene recovery drills, #51
+genome aging/rejuvenation benchmark simulation baseline, #72 gene purpose
+relabel validator baseline, #73 reversible Gene Scissors transaction journal
+baseline, and #79 pursuit-goal queue baseline.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -486,15 +486,15 @@ transaction journal baseline.
   R88/#47 adds the shared privacy-redaction corpus and detector baseline,
   R92/#50 adds deterministic malignant-gene poisoning defense and recovery
   drills, R91/#51 adds deterministic genome aging/rejuvenation simulation
-  evidence, R89/#72 adds purpose ontology / relabel validation, and R90/#73 now
-  adds reversible Gene Scissors transaction journaling. The next active
-  evolution lane is #79 pursuit-goal queue scheduling so multiple bounded
-  self-evolution goals can run in order with explicit success, stop, budget,
-  rollback, and approval gates.
-- Active acceleration lane: #73 now provides deterministic transaction records
-  for quarantine, hold, reject, cut-preview, regenerate-preview,
-  rollback-preview, and promoted Gene Scissors states. Continue with #79
-  pursuit-goal queue scheduling above the experiment ledger and rollback gates.
+  evidence, R89/#72 adds purpose ontology / relabel validation, R90/#73 adds
+  reversible Gene Scissors transaction journaling, and R93/#79 now adds the
+  deterministic pursuit-goal queue baseline. The default queue installs #74,
+  #75, #76, #78, and R94 as bounded preview goals with explicit success, stop,
+  budget, rollback, approval, and conflict-isolation gates.
+- Active acceleration lane: #79 now provides deterministic queue records and
+  read-only queue reports for bounded self-evolution. Continue with #74
+  thinking-phase gene-chain execution scheduling first, then advance #75, #76,
+  #78, and R94 only after each active goal reaches its target or stops cleanly.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -529,6 +529,11 @@ transaction journal baseline.
   Its checklist is the policy bridge for later memory/genome/evolution writes:
   preview evidence can graduate only after writer gates, validation evidence,
   rollback anchors, privacy/license checks, and maintainer/operator approval.
+- #79 `[Evolution] Add pursuit goal queue and stop gates` is now the completed
+  baseline for ordered pursuit goals. It adds deterministic `EvolutionGoal`
+  records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
+  for #74/#75/#76/#78/R94, budget and rollback stops, approval holds, and
+  conflict isolation between failed and later goals.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open from
@@ -537,10 +542,9 @@ transaction journal baseline.
   `MERGEABLE`, both focused validation checks are green, and merge still
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, and #77 as
-  completed or landing baselines in this branch; issues #74-#79 extend the next
-  scheduler, evaluation, memory, governance, deployment, and pursuit-goal queue
-  workstream.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #77, and #79 as
+  completed or landing baselines in this branch; issues #74-#78 extend the next
+  scheduler, evaluation, memory, governance, and deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -798,9 +802,9 @@ transaction journal baseline.
   baseline, #50 is the completed malignant-gene recovery drill baseline, #51 is
   the deterministic genome rejuvenation simulation baseline, #72 is the purpose
   ontology / relabel validator baseline, and #73 is the reversible Gene
-  Scissors transaction journal baseline. #79 is queued above the evolution
-  ledger as the pursuit-goal scheduler with success, stop, budget, rollback,
-  and approval gates.)
+  Scissors transaction journal baseline. #79 is the completed pursuit-goal
+  scheduler baseline with default #74/#75/#76/#78/R94 queue records, success,
+  stop, budget, rollback, approval, and conflict-isolation gates.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -886,10 +890,12 @@ transaction journal baseline.
 - #78 `[Runtime] Add local research deployment profiles and resource guards`:
   add local research deployment profiles and resource guards so experimental
   runtime work stays bounded on local hardware.
-- #79 `[Evolution] Add pursuit goal queue and stop gates`: add a deterministic
-  multi-goal self-evolution queue with per-goal success gates, stop conditions,
-  rollback conditions, budget caps, approval holds, and isolation between
-  failed and later goals.
+- #79 `[Evolution] Add pursuit goal queue and stop gates`: completed baseline
+  for a deterministic multi-goal self-evolution queue with per-goal success
+  gates, stop conditions, rollback conditions, budget caps, approval holds,
+  default Noiron pursuit goals, and isolation between failed and later goals.
+  Policy is documented in
+  [`docs/governance/evolution-goal-queue.md`](docs/governance/evolution-goal-queue.md).
 
 ## R8x/R9x Milestone Backlog / R8x/R9x 里程碑候选
 
@@ -938,9 +944,10 @@ transaction journal baseline.
   digest-only reasons and rollback records; emits reversible cut/tombstone
   candidates and stable-anchor regeneration candidates while keeping
   re-admission held until validation and operator approval.
-- R93 / #79: pursuit-goal queue and stop gates. Queue bounded self-evolution
-  objectives, run one active goal at a time, stop on success/budget/rollback
-  conditions, and require maintainer/operator approval before durable mutation.
+- R93 / #79 completed baseline: pursuit-goal queue and stop gates. Queues
+  bounded self-evolution objectives, runs one active goal at a time, stops on
+  success/budget/rollback/approval-hold conditions, and requires
+  maintainer/operator approval before durable mutation.
 - R94 / #77/#6/#20: self-evolution writer gate consolidation. Unify memory,
   genome, and experiment-ledger writer gates so all durable writes remain
   preview/read-only until validation, rollback, privacy/license, and
