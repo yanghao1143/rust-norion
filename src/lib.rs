@@ -45,7 +45,10 @@ pub use agent_team::{
     AgentConflict, AgentEvolutionSignal, AgentHandoffAggregationReport, AgentHandoffContext,
     AgentHandoffInput, AgentHandoffReview, AgentHandoffSanitizer, AgentHandoffTrustState,
     AgentIsolationPolicy, AgentMessage, AgentMessageKind, AgentNode, AgentRole,
-    AgentTeamAggregation, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner,
+    AgentTeamAggregation, AgentTeamInput, AgentTeamPlan, AgentTeamPlanner, CrossWindowBudget,
+    CrossWindowBudgetReport, CrossWindowConflictClass, CrossWindowExchangeAggregator,
+    CrossWindowExchangeContext, CrossWindowExchangeReport, CrossWindowExperiencePacket,
+    CrossWindowPacketDecision, CrossWindowPacketReview,
 };
 pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,
