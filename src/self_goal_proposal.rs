@@ -1,12 +1,15 @@
 use crate::evolution_goal::{
     EvolutionGoal, EvolutionGoalApprovalGate, EvolutionGoalBudgetCap, EvolutionGoalEvidenceKind,
-    EvolutionGoalQueue, EvolutionGoalRollbackCondition, EvolutionGoalStopCondition,
-    EvolutionGoalSuccessGate, default_noiron_pursuit_goal_queue,
+    EvolutionGoalQueue, EvolutionGoalRollbackCondition, EvolutionGoalRunEvidence,
+    EvolutionGoalStatus, EvolutionGoalStopCondition, EvolutionGoalSuccessGate,
+    default_noiron_pursuit_goal_queue,
 };
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 pub const SELF_GOAL_PROPOSAL_SCHEMA_VERSION: &str = "self_goal_proposal_v1";
 pub const SELF_GOAL_PROPOSAL_TRACE_SCHEMA: &str = "rust-norion-self-goal-proposal-preview-v1";
+pub const SELF_GOAL_ADMISSION_SCHEMA_VERSION: &str = "self_goal_admission_v1";
+pub const SELF_GOAL_ADMISSION_TRACE_SCHEMA: &str = "rust-norion-self-goal-admission-preview-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelfGoalProposalSource {
@@ -355,12 +358,422 @@ impl SelfGoalProposalReport {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfGoalAdmissionPolicy {
+    pub max_preview_admissions: usize,
+    pub require_proposal_report_passed: bool,
+    pub require_current_queue_clear: bool,
+    pub require_candidate_governance: bool,
+    pub require_digest_only_evidence: bool,
+    pub require_operator_approval: bool,
+    pub allow_queue_write: bool,
+}
+
+impl Default for SelfGoalAdmissionPolicy {
+    fn default() -> Self {
+        Self {
+            max_preview_admissions: 1,
+            require_proposal_report_passed: true,
+            require_current_queue_clear: true,
+            require_candidate_governance: true,
+            require_digest_only_evidence: true,
+            require_operator_approval: true,
+            allow_queue_write: false,
+        }
+    }
+}
+
+impl SelfGoalAdmissionPolicy {
+    pub fn is_preview_safe(self) -> bool {
+        self.max_preview_admissions > 0
+            && self.require_proposal_report_passed
+            && self.require_current_queue_clear
+            && self.require_candidate_governance
+            && self.require_digest_only_evidence
+            && self.require_operator_approval
+            && !self.allow_queue_write
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SelfGoalAdmissionDecision {
+    PreviewAdmissible,
+    HeldForPriorGoal,
+    HeldForEvidence,
+    HeldForApproval,
+    HeldForAdmissionLimit,
+    Rejected,
+}
+
+impl SelfGoalAdmissionDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PreviewAdmissible => "preview_admissible",
+            Self::HeldForPriorGoal => "held_for_prior_goal",
+            Self::HeldForEvidence => "held_for_evidence",
+            Self::HeldForApproval => "held_for_approval",
+            Self::HeldForAdmissionLimit => "held_for_admission_limit",
+            Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn is_hold(self) -> bool {
+        matches!(
+            self,
+            Self::HeldForPriorGoal
+                | Self::HeldForEvidence
+                | Self::HeldForApproval
+                | Self::HeldForAdmissionLimit
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfGoalAdmissionRecord {
+    pub schema_version: &'static str,
+    pub candidate_id: String,
+    pub proposed_goal_id: String,
+    pub source: SelfGoalProposalSource,
+    pub target_release: String,
+    pub decision: SelfGoalAdmissionDecision,
+    pub reason_codes: Vec<String>,
+    pub evidence_digests: Vec<String>,
+    pub queue_insert_preview_digest: Option<String>,
+    pub admitted_goal_record_line: Option<String>,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfGoalAdmissionRecord {
+    pub fn record_line(&self) -> String {
+        let reasons = self.reason_codes.join("|");
+        let evidence = self.evidence_digests.join("|");
+        let record_digest = stable_redaction_digest([
+            "self-goal-admission-record",
+            self.candidate_id.as_str(),
+            self.proposed_goal_id.as_str(),
+            self.decision.as_str(),
+            reasons.as_str(),
+            evidence.as_str(),
+        ]);
+        [
+            self.schema_version.to_owned(),
+            self.candidate_id.clone(),
+            self.proposed_goal_id.clone(),
+            self.source.as_str().to_owned(),
+            self.target_release.clone(),
+            self.decision.as_str().to_owned(),
+            reasons,
+            evidence,
+            self.queue_insert_preview_digest
+                .clone()
+                .unwrap_or_else(|| "none".to_owned()),
+            self.admitted_goal_record_line
+                .as_ref()
+                .map(|line| stable_redaction_digest(["admitted-goal-record", line]))
+                .unwrap_or_else(|| "none".to_owned()),
+            record_digest,
+            bool_to_field(self.read_only).to_owned(),
+            bool_to_field(self.write_allowed).to_owned(),
+            bool_to_field(self.applied).to_owned(),
+        ]
+        .iter()
+        .map(|field| escape_field(field))
+        .collect::<Vec<_>>()
+        .join("\t")
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.evidence_digests
+            .iter()
+            .all(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .queue_insert_preview_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self.record_line().contains("redaction-digest:")
+            && !contains_private_or_executable_marker(&self.record_line())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfGoalAdmissionReport {
+    pub schema_version: &'static str,
+    pub trace_schema: &'static str,
+    pub proposal_schema_version: &'static str,
+    pub active_goal_id: Option<String>,
+    pub policy: SelfGoalAdmissionPolicy,
+    pub record_count: usize,
+    pub preview_admissible_count: usize,
+    pub held_count: usize,
+    pub rejected_count: usize,
+    pub records: Vec<SelfGoalAdmissionRecord>,
+    pub record_lines: Vec<String>,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfGoalAdmissionReport {
+    pub fn passed(&self) -> bool {
+        self.is_preview_only()
+            && self.policy.is_preview_safe()
+            && self.record_count == self.records.len()
+            && self.record_lines.len() == self.records.len()
+            && self.preview_admissible_count <= self.policy.max_preview_admissions
+            && self.records.iter().all(|record| {
+                record.is_preview_only()
+                    && record.evidence_is_redacted()
+                    && !matches!(record.decision, SelfGoalAdmissionDecision::Rejected)
+            })
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only
+            && !self.write_allowed
+            && !self.applied
+            && self
+                .records
+                .iter()
+                .all(SelfGoalAdmissionRecord::is_preview_only)
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.records
+            .iter()
+            .all(SelfGoalAdmissionRecord::evidence_is_redacted)
+            && self.record_lines.iter().all(|line| {
+                line.contains("redaction-digest:") && !contains_private_or_executable_marker(line)
+            })
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_goal_admission schema={} trace_schema={} passed={} records={} preview_admissible={} held={} rejected={} evidence_redacted={} read_only={} write_allowed={} applied={}",
+            self.schema_version,
+            self.trace_schema,
+            self.passed(),
+            self.record_count,
+            self.preview_admissible_count,
+            self.held_count,
+            self.rejected_count,
+            self.evidence_is_redacted(),
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfGoalAdmissionGate {
+    pub policy: SelfGoalAdmissionPolicy,
+}
+
+impl Default for SelfGoalAdmissionGate {
+    fn default() -> Self {
+        Self {
+            policy: SelfGoalAdmissionPolicy::default(),
+        }
+    }
+}
+
+impl SelfGoalAdmissionGate {
+    pub fn new(policy: SelfGoalAdmissionPolicy) -> Self {
+        Self { policy }
+    }
+
+    pub fn evaluate(
+        &self,
+        proposal_report: &SelfGoalProposalReport,
+        runs: &[EvolutionGoalRunEvidence],
+    ) -> SelfGoalAdmissionReport {
+        let mut preview_admissions = 0;
+        let mut records = Vec::with_capacity(proposal_report.candidates.len());
+
+        for candidate in &proposal_report.candidates {
+            let record =
+                self.evaluate_candidate(proposal_report, candidate, runs, &mut preview_admissions);
+            records.push(record);
+        }
+
+        let record_lines = records
+            .iter()
+            .map(SelfGoalAdmissionRecord::record_line)
+            .collect::<Vec<_>>();
+        let preview_admissible_count = records
+            .iter()
+            .filter(|record| record.decision == SelfGoalAdmissionDecision::PreviewAdmissible)
+            .count();
+        let held_count = records
+            .iter()
+            .filter(|record| record.decision.is_hold())
+            .count();
+        let rejected_count = records
+            .iter()
+            .filter(|record| record.decision == SelfGoalAdmissionDecision::Rejected)
+            .count();
+
+        SelfGoalAdmissionReport {
+            schema_version: SELF_GOAL_ADMISSION_SCHEMA_VERSION,
+            trace_schema: SELF_GOAL_ADMISSION_TRACE_SCHEMA,
+            proposal_schema_version: proposal_report.schema_version,
+            active_goal_id: proposal_report.active_goal_id.clone(),
+            policy: self.policy,
+            record_count: records.len(),
+            preview_admissible_count,
+            held_count,
+            rejected_count,
+            records,
+            record_lines,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    fn evaluate_candidate(
+        &self,
+        proposal_report: &SelfGoalProposalReport,
+        candidate: &SelfGoalProposalCandidate,
+        runs: &[EvolutionGoalRunEvidence],
+        preview_admissions: &mut usize,
+    ) -> SelfGoalAdmissionRecord {
+        if !self.policy.is_preview_safe() {
+            return admission_record(
+                candidate,
+                SelfGoalAdmissionDecision::Rejected,
+                ["admission_policy_not_preview_safe"],
+                Vec::new(),
+                None,
+            );
+        }
+
+        if self.policy.require_proposal_report_passed && !proposal_report.passed() {
+            return admission_record(
+                candidate,
+                SelfGoalAdmissionDecision::Rejected,
+                ["proposal_report_failed"],
+                Vec::new(),
+                None,
+            );
+        }
+
+        if self.policy.require_candidate_governance && !candidate.has_required_governance() {
+            return admission_record(
+                candidate,
+                SelfGoalAdmissionDecision::Rejected,
+                ["candidate_governance_missing"],
+                Vec::new(),
+                None,
+            );
+        }
+
+        if self.policy.require_digest_only_evidence && !candidate.evidence_is_redacted() {
+            return admission_record(
+                candidate,
+                SelfGoalAdmissionDecision::Rejected,
+                ["candidate_evidence_not_redacted"],
+                Vec::new(),
+                None,
+            );
+        }
+
+        if self.policy.require_current_queue_clear && proposal_report.active_goal_id.is_some() {
+            return admission_record(
+                candidate,
+                SelfGoalAdmissionDecision::HeldForPriorGoal,
+                ["current_queue_has_active_goal", "conflict_isolation_hold"],
+                Vec::new(),
+                None,
+            );
+        }
+
+        let matching_runs = runs
+            .iter()
+            .filter(|run| run.goal_id == candidate.proposed_goal.stable_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        let queue = EvolutionGoalQueue::new(vec![candidate.proposed_goal.clone()]);
+        let report = queue.evaluate(&matching_runs);
+        let decision = &report.decisions[0];
+
+        match decision.status {
+            EvolutionGoalStatus::Passed => {
+                if *preview_admissions >= self.policy.max_preview_admissions {
+                    return admission_record_from_vec(
+                        candidate,
+                        SelfGoalAdmissionDecision::HeldForAdmissionLimit,
+                        vec!["admission_limit_reached".to_owned()],
+                        decision.evidence_digests.clone(),
+                        None,
+                    );
+                }
+                *preview_admissions += 1;
+                let digest = stable_redaction_digest([
+                    SELF_GOAL_ADMISSION_SCHEMA_VERSION,
+                    candidate.stable_id.as_str(),
+                    candidate.proposed_goal.stable_id.as_str(),
+                    candidate.proposed_goal.provenance_digest.as_str(),
+                    "preview-queue-insert",
+                ]);
+                admission_record_from_vec(
+                    candidate,
+                    SelfGoalAdmissionDecision::PreviewAdmissible,
+                    vec!["success_gate_passed_for_queue_admission_preview".to_owned()],
+                    decision.evidence_digests.clone(),
+                    Some(digest),
+                )
+            }
+            EvolutionGoalStatus::BlockedForApproval => admission_record_from_vec(
+                candidate,
+                SelfGoalAdmissionDecision::HeldForApproval,
+                decision.reason_codes.clone(),
+                decision.evidence_digests.clone(),
+                None,
+            ),
+            EvolutionGoalStatus::Active | EvolutionGoalStatus::Queued => admission_record_from_vec(
+                candidate,
+                SelfGoalAdmissionDecision::HeldForEvidence,
+                decision.reason_codes.clone(),
+                decision.evidence_digests.clone(),
+                None,
+            ),
+            EvolutionGoalStatus::Failed
+            | EvolutionGoalStatus::RolledBack
+            | EvolutionGoalStatus::BudgetExhausted => admission_record_from_vec(
+                candidate,
+                SelfGoalAdmissionDecision::Rejected,
+                decision.reason_codes.clone(),
+                decision.evidence_digests.clone(),
+                None,
+            ),
+        }
+    }
+}
+
 pub fn default_self_goal_proposal_report(queue: &EvolutionGoalQueue) -> SelfGoalProposalReport {
     SelfGoalProposalReport::from_queue(queue, SelfGoalProposalPolicy::default())
 }
 
 pub fn default_noiron_self_goal_proposal_report() -> SelfGoalProposalReport {
     default_self_goal_proposal_report(&default_noiron_pursuit_goal_queue())
+}
+
+pub fn default_self_goal_admission_report(
+    proposal_report: &SelfGoalProposalReport,
+    runs: &[EvolutionGoalRunEvidence],
+) -> SelfGoalAdmissionReport {
+    SelfGoalAdmissionGate::default().evaluate(proposal_report, runs)
+}
+
+pub fn default_noiron_self_goal_admission_report() -> SelfGoalAdmissionReport {
+    default_self_goal_admission_report(&default_noiron_self_goal_proposal_report(), &[])
 }
 
 fn default_noiron_proposal_candidates(
@@ -491,6 +904,55 @@ fn safe_text(value: String) -> String {
     }
 }
 
+fn admission_record<'a>(
+    candidate: &SelfGoalProposalCandidate,
+    decision: SelfGoalAdmissionDecision,
+    reason_codes: impl IntoIterator<Item = &'a str>,
+    evidence_digests: Vec<String>,
+    queue_insert_preview_digest: Option<String>,
+) -> SelfGoalAdmissionRecord {
+    admission_record_from_vec(
+        candidate,
+        decision,
+        reason_codes
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>(),
+        evidence_digests,
+        queue_insert_preview_digest,
+    )
+}
+
+fn admission_record_from_vec(
+    candidate: &SelfGoalProposalCandidate,
+    decision: SelfGoalAdmissionDecision,
+    reason_codes: Vec<String>,
+    evidence_digests: Vec<String>,
+    queue_insert_preview_digest: Option<String>,
+) -> SelfGoalAdmissionRecord {
+    let admitted_goal_record_line = if decision == SelfGoalAdmissionDecision::PreviewAdmissible {
+        Some(candidate.proposed_goal.to_record_line())
+    } else {
+        None
+    };
+
+    SelfGoalAdmissionRecord {
+        schema_version: SELF_GOAL_ADMISSION_SCHEMA_VERSION,
+        candidate_id: candidate.stable_id.clone(),
+        proposed_goal_id: candidate.proposed_goal.stable_id.clone(),
+        source: candidate.source,
+        target_release: candidate.target_release.clone(),
+        decision,
+        reason_codes,
+        evidence_digests,
+        queue_insert_preview_digest,
+        admitted_goal_record_line,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
 fn evidence_kind_list(values: &[EvolutionGoalEvidenceKind]) -> String {
     values
         .iter()
@@ -548,6 +1010,7 @@ fn bool_to_field(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::evolution_goal::{EvolutionGoalBudgetUsage, EvolutionGoalEvidence};
 
     #[test]
     fn default_self_goal_proposal_report_is_preview_only_and_passes() {
@@ -662,5 +1125,199 @@ mod tests {
                 .iter()
                 .all(|line| !line.contains("private prompt"))
         );
+    }
+
+    #[test]
+    fn default_self_goal_admission_report_holds_while_current_queue_is_active() {
+        let report = default_noiron_self_goal_admission_report();
+
+        assert_eq!(report.schema_version, SELF_GOAL_ADMISSION_SCHEMA_VERSION);
+        assert_eq!(report.trace_schema, SELF_GOAL_ADMISSION_TRACE_SCHEMA);
+        assert_eq!(report.preview_admissible_count, 0);
+        assert_eq!(report.held_count, report.record_count);
+        assert_eq!(report.rejected_count, 0);
+        assert!(report.passed(), "{}", report.summary_line());
+        assert!(report.is_preview_only());
+        assert!(report.evidence_is_redacted());
+        assert!(
+            report
+                .records
+                .iter()
+                .all(|record| record.decision == SelfGoalAdmissionDecision::HeldForPriorGoal)
+        );
+    }
+
+    #[test]
+    fn admission_gate_previews_only_one_goal_after_required_evidence_passes() {
+        let proposal = proposal_report_without_active_queue();
+        let runs = proposal
+            .candidates
+            .iter()
+            .take(2)
+            .map(|candidate| passing_run_for_candidate(candidate).with_approval())
+            .collect::<Vec<_>>();
+
+        let report = default_self_goal_admission_report(&proposal, &runs);
+
+        assert_eq!(report.preview_admissible_count, 1);
+        assert_eq!(
+            report.records[0].decision,
+            SelfGoalAdmissionDecision::PreviewAdmissible
+        );
+        assert_eq!(
+            report.records[1].decision,
+            SelfGoalAdmissionDecision::HeldForAdmissionLimit
+        );
+        assert!(report.records[0].admitted_goal_record_line.is_some());
+        assert!(report.records[0].queue_insert_preview_digest.is_some());
+        assert!(report.passed(), "{}", report.summary_line());
+        assert!(report.is_preview_only());
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+    }
+
+    #[test]
+    fn admission_gate_holds_when_operator_approval_is_missing() {
+        let proposal = proposal_report_without_active_queue();
+        let run = passing_run_for_candidate(&proposal.candidates[0]);
+
+        let report = default_self_goal_admission_report(&proposal, &[run]);
+
+        assert_eq!(report.preview_admissible_count, 0);
+        assert_eq!(
+            report.records[0].decision,
+            SelfGoalAdmissionDecision::HeldForApproval
+        );
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"approval_required_before_promotion".to_owned())
+        );
+        assert!(report.passed(), "{}", report.summary_line());
+    }
+
+    #[test]
+    fn admission_gate_rejects_rollback_or_budget_exhausted_candidates() {
+        let proposal = proposal_report_without_active_queue();
+        let rollback_run = passing_run_for_candidate(&proposal.candidates[0])
+            .with_approval()
+            .with_rollback_signal();
+        let budget_run = passing_run_for_candidate(&proposal.candidates[1])
+            .with_approval()
+            .with_budget_usage(EvolutionGoalBudgetUsage::new(9, 1, 1, 1));
+
+        let report = default_self_goal_admission_report(&proposal, &[rollback_run, budget_run]);
+
+        assert_eq!(report.rejected_count, 2);
+        assert_eq!(
+            report.records[0].decision,
+            SelfGoalAdmissionDecision::Rejected
+        );
+        assert_eq!(
+            report.records[1].decision,
+            SelfGoalAdmissionDecision::Rejected
+        );
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"rollback_signal_triggered".to_owned())
+        );
+        assert!(
+            report.records[1]
+                .reason_codes
+                .contains(&"budget_cap_exhausted".to_owned())
+        );
+        assert!(!report.passed());
+        assert!(report.is_preview_only());
+    }
+
+    #[test]
+    fn unsafe_admission_policy_is_rejected_without_writing_queue() {
+        let proposal = proposal_report_without_active_queue();
+        let run = passing_run_for_candidate(&proposal.candidates[0]).with_approval();
+        let gate = SelfGoalAdmissionGate::new(SelfGoalAdmissionPolicy {
+            allow_queue_write: true,
+            ..SelfGoalAdmissionPolicy::default()
+        });
+
+        let report = gate.evaluate(&proposal, &[run]);
+
+        assert_eq!(report.rejected_count, report.record_count);
+        assert!(report.records.iter().all(|record| {
+            record
+                .reason_codes
+                .contains(&"admission_policy_not_preview_safe".to_owned())
+        }));
+        assert!(!report.passed());
+        assert!(report.is_preview_only());
+        assert!(!report.write_allowed);
+    }
+
+    #[test]
+    fn admission_record_lines_are_digest_only() {
+        let proposal = proposal_report_without_active_queue();
+        let runs = proposal
+            .candidates
+            .iter()
+            .map(|candidate| passing_run_for_candidate(candidate).with_approval())
+            .collect::<Vec<_>>();
+
+        let report = default_self_goal_admission_report(&proposal, &runs);
+
+        assert!(report.evidence_is_redacted());
+        assert!(
+            report
+                .record_lines
+                .iter()
+                .all(|line| line.contains("redaction-digest:"))
+        );
+        assert!(
+            report
+                .record_lines
+                .iter()
+                .all(|line| !contains_private_or_executable_marker(line))
+        );
+        assert!(
+            report
+                .records
+                .iter()
+                .all(SelfGoalAdmissionRecord::is_preview_only)
+        );
+    }
+
+    fn proposal_report_without_active_queue() -> SelfGoalProposalReport {
+        default_self_goal_proposal_report(&EvolutionGoalQueue::new(Vec::new()))
+    }
+
+    fn passing_run_for_candidate(
+        candidate: &SelfGoalProposalCandidate,
+    ) -> EvolutionGoalRunEvidence {
+        let evidence = candidate
+            .proposed_goal
+            .success_gate
+            .required_evidence
+            .iter()
+            .map(|kind| match kind {
+                EvolutionGoalEvidenceKind::CargoCheck => EvolutionGoalEvidence::cargo_check(true),
+                EvolutionGoalEvidenceKind::FocusedTests => {
+                    EvolutionGoalEvidence::focused_tests(true, 3, 0)
+                }
+                EvolutionGoalEvidenceKind::BenchmarkGate => {
+                    EvolutionGoalEvidence::benchmark_gate(true)
+                }
+                EvolutionGoalEvidenceKind::TraceSchemaGate => {
+                    EvolutionGoalEvidence::trace_schema_gate(true)
+                }
+                EvolutionGoalEvidenceKind::ExperimentLedger => {
+                    EvolutionGoalEvidence::experiment_ledger(true)
+                }
+                EvolutionGoalEvidenceKind::OperatorApproval => {
+                    EvolutionGoalEvidence::operator_approval(true)
+                }
+            })
+            .collect::<Vec<_>>();
+
+        EvolutionGoalRunEvidence::new(candidate.proposed_goal.stable_id.clone())
+            .with_evidence(evidence)
     }
 }
