@@ -1,8 +1,9 @@
 use super::*;
 use rust_norion::{
-    EvolutionGoalQueue, EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval,
-    EvolutionGoalQueueStorePolicy, EvolutionGoalStatus, SelfGoalAdmissionDecision,
-    TenantResourceLane, TenantScope, stable_redaction_digest,
+    EvolutionGoal, EvolutionGoalEvidenceKind, EvolutionGoalQueue, EvolutionGoalQueueDiskStore,
+    EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy, EvolutionGoalStatus,
+    EvolutionGoalSuccessGate, SelfGoalAdmissionDecision, TenantResourceLane, TenantScope,
+    stable_redaction_digest,
 };
 use std::fs;
 
@@ -18,6 +19,12 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
     assert!(report.queue_run.active_goal_id.is_some());
     assert!(report.run_plan.active);
     assert_eq!(report.run_plan.required_evidence.len(), 4);
+    assert_eq!(report.continuation_plan.source, "current_queue");
+    assert!(report.continuation_plan.ready);
+    assert_eq!(
+        report.continuation_plan.plan.active_goal_id,
+        report.run_plan.active_goal_id
+    );
     assert_eq!(report.admission.preview_admissible_count, 0);
     assert_eq!(report.queue_preview.append_preview_count, 0);
     assert!(!report.apply.explicit_apply_required);
@@ -65,6 +72,12 @@ fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
     assert!(report.completion_preview.ready);
     assert_eq!(report.completion_preview.completed_count, 1);
     assert_eq!(report.completion_preview.retained_count, 0);
+    assert_eq!(
+        report.continuation_plan.source,
+        "completion_resulting_queue"
+    );
+    assert!(!report.continuation_plan.ready);
+    assert!(!report.continuation_plan.plan.active);
     assert_eq!(
         report.completion_writer_gate.preview_only_records,
         1,
@@ -115,6 +128,11 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
     assert_eq!(report.completion_preview.completed_count, 1);
     assert_eq!(report.completion_preview.retained_count, 0);
     assert_eq!(report.completion_writer_gate.ready_records, 1);
+    assert_eq!(
+        report.continuation_plan.source,
+        "completion_resulting_queue"
+    );
+    assert!(!report.continuation_plan.ready);
     assert!(store_write.applied, "{:?}", store_write.reason_codes);
     assert!(read.found);
     assert!(read.decoded);
@@ -124,6 +142,113 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
     assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
     assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
     assert!(!trace.contains("R97 English/Chinese/Rust coding service"));
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn self_goal_queue_cli_completion_continuation_activates_retained_goal() {
+    let dir = temp_asset_dir("self-goal-queue-cli-continuation");
+    fs::create_dir_all(&dir).unwrap();
+    let store_path = dir.join("queue.ndkv");
+    let trace_path = dir.join("continuation-trace.jsonl");
+    let first = sample_self_goal_queue_goal(
+        10,
+        "first raw queue objective must stay out of summaries",
+        [
+            EvolutionGoalEvidenceKind::CargoCheck,
+            EvolutionGoalEvidenceKind::FocusedTests,
+            EvolutionGoalEvidenceKind::TraceSchemaGate,
+            EvolutionGoalEvidenceKind::OperatorApproval,
+        ],
+    );
+    let second = sample_self_goal_queue_goal(
+        20,
+        "second raw queue objective must stay out of summaries",
+        [
+            EvolutionGoalEvidenceKind::CargoCheck,
+            EvolutionGoalEvidenceKind::BenchmarkGate,
+            EvolutionGoalEvidenceKind::TraceSchemaGate,
+            EvolutionGoalEvidenceKind::OperatorApproval,
+        ],
+    );
+    let second_goal_id = second.stable_id.clone();
+    seed_self_goal_queue_store(
+        &store_path,
+        EvolutionGoalQueue::new(vec![second.clone(), first]),
+    );
+
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-store".to_owned(),
+        store_path.display().to_string(),
+        "--self-goal-queue-store-apply".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=cargo_check;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=focused_tests;passed=true;items=3;failures=0".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=trace_schema_gate;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=operator_approval;passed=true;approval=true".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+    ]);
+
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+    let scope = TenantScope::new("local", "default", "interactive");
+    let key = scope.scoped_key(TenantResourceLane::EvolutionGoalQueue, "pursuit");
+    let store = EvolutionGoalQueueDiskStore::open(&store_path).unwrap();
+    let read = store.read_queue(&scope, key.as_str()).unwrap();
+    let summary = report.summary_lines().join("\n");
+    let trace = fs::read_to_string(&trace_path).unwrap();
+
+    assert!(report.completion_preview.ready);
+    assert_eq!(report.completion_preview.completed_count, 1);
+    assert_eq!(report.completion_preview.retained_count, 1);
+    assert_eq!(
+        report.queue_run.active_goal_id,
+        Some(second_goal_id.clone())
+    );
+    assert_eq!(
+        report.continuation_plan.source,
+        "completion_resulting_queue"
+    );
+    assert!(report.continuation_plan.ready);
+    assert_eq!(report.continuation_plan.goal_count, 1);
+    assert_eq!(
+        report.continuation_plan.plan.active_goal_id,
+        Some(second_goal_id.clone())
+    );
+    assert!(
+        report
+            .continuation_plan
+            .plan
+            .required_evidence
+            .contains(&"benchmark_gate".to_owned())
+    );
+    assert!(
+        !report
+            .continuation_plan
+            .plan
+            .required_evidence
+            .contains(&"focused_tests".to_owned())
+    );
+    assert!(read.found);
+    assert!(read.decoded);
+    let queue = read.queue.as_ref().expect("retained queue");
+    assert_eq!(queue.goals.len(), 1);
+    assert_eq!(queue.goals[0].stable_id, second_goal_id);
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(summary.contains(
+        "self_goal_queue_continuation source=completion_resulting_queue ready=true goals=1"
+    ));
+    assert!(
+        summary.contains("required=cargo_check|benchmark_gate|trace_schema_gate|operator_approval")
+    );
+    assert!(!summary.contains("raw queue objective"));
+    assert!(!trace.contains("raw queue objective"));
 
     fs::remove_dir_all(dir).unwrap();
 }
@@ -317,11 +442,29 @@ fn self_goal_queue_cli_ignores_approval_flag_on_non_operator_evidence() {
     fs::remove_dir_all(dir).unwrap();
 }
 
+fn sample_self_goal_queue_goal(
+    priority: u32,
+    objective: &str,
+    required_evidence: impl IntoIterator<Item = EvolutionGoalEvidenceKind>,
+) -> EvolutionGoal {
+    EvolutionGoal::new(
+        priority,
+        objective,
+        EvolutionGoalSuccessGate::new(required_evidence),
+        ["self-goal-cli-test", objective],
+    )
+}
+
 fn seed_empty_self_goal_queue_store(path: &std::path::Path) {
+    seed_self_goal_queue_store(path, EvolutionGoalQueue::new(Vec::new()));
+}
+
+fn seed_self_goal_queue_store(path: &std::path::Path, queue: EvolutionGoalQueue) {
     let scope = TenantScope::new("local", "default", "interactive");
     let key = scope.scoped_key(TenantResourceLane::EvolutionGoalQueue, "pursuit");
-    let queue = EvolutionGoalQueue::new(Vec::new());
-    let rollback_anchor = stable_redaction_digest(["self-goal-cli-empty-queue-test"]);
+    let queue_digest = queue.redaction_digest();
+    let rollback_anchor =
+        stable_redaction_digest(["self-goal-cli-queue-test", queue_digest.as_str()]);
     let approval = EvolutionGoalQueueStoreApproval::for_queue(
         "operator:local",
         "ticket:self-goal-queue-cli",
