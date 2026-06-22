@@ -521,7 +521,12 @@ writer-gate consolidation baselines.
   runner that turn #75 fixtures into deterministic `ChatRequest` plans, execute
   those plans through `ChatSession` streaming/cancellation paths, and score the
   resulting observations with digest-only evidence. Continue with R97 endpoint,
-  CLI runner, and benchmark gate feed wiring next.
+  CLI runner, and benchmark gate feed wiring next. The first safe answer to
+  "when can it set its own goals?" is now in place as
+  `SelfGoalProposalReport`: rust-norion can propose the next R97/R98 goals as
+  preview-only, digest-only candidate records, while execution and queue
+  admission remain blocked behind validation, budget, rollback,
+  trace/schema, privacy/license, and maintainer/operator approval gates.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -1070,6 +1075,13 @@ writer-gate consolidation baselines.
   model-capability, max-token, and Rust-validation coverage. #19/#29 continue
   the local service endpoint, CLI runner, compiler/test, benchmark gate feed,
   and artifact serialization work for self-improving coding behavior.
+- R97/R98 self-goal proposal preview: `SelfGoalProposalReport` generates the
+  next bounded candidate goals from the active pursuit queue, including R97
+  endpoint/CLI wiring, R97 benchmark feed wiring, the R98 memory-consolidation
+  successor, and a governance gate for future autonomous execution. This is the
+  proposal phase only: no branch creation, durable memory/genome mutation,
+  experiment-ledger write, or queue admission happens without the existing
+  approval and rollback gates.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B

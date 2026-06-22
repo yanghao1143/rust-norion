@@ -57,6 +57,14 @@ maintainer/operator approval for promotion. If a goal reaches its target,
 exhausts budget, fails a rollback gate, or waits for approval, later goals
 remain isolated.
 
+The first self-goal mechanism is now available as preview-only planning through
+`default_noiron_self_goal_proposal_report()`. It proposes R97 endpoint/CLI
+wiring, R97 benchmark feed wiring, the R98 memory-consolidation successor, and
+a self-goal admission gate before autonomous execution. These proposals are not
+queue mutations. They are digest-only candidate records that still require
+normal validation, rollback, budget, trace/schema, privacy/license, and
+maintainer/operator approval before any goal can be admitted or executed.
+
 ## Queue Evaluation
 
 `EvolutionGoalQueue::evaluate()` returns a read-only
