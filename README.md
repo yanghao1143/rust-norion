@@ -1674,24 +1674,24 @@ Contributions of any form are welcome. See
 欢迎任何形式的贡献，详见
 [CONTRIBUTING.md](https://github.com/yanghao1143/rust-norion/blob/main/CONTRIBUTING.md)。
 
-- Report a bug / 报告 Bug:
-  [new issue](https://github.com/yanghao1143/rust-norion/issues/new?template=bug_report.md)
-- Propose a feature / 提议功能:
-  [new feature request](https://github.com/yanghao1143/rust-norion/issues/new?template=feature_request.md)
-- Submit a PR / 提交 PR: branch from `main`, follow Conventional Commits,
-  and wait for maintainer approval before merge
+报告 Bug：[新建 Issue](https://github.com/yanghao1143/rust-norion/issues/new?template=bug_report.md)
 
-## License / 许可证
+提议功能：[新建 Feature Request](https://github.com/yanghao1143/rust-norion/issues/new?template=feature_request.md)
+
+提交 PR：从 `main` 切出特性分支，遵循 Conventional Commits，并等待维护者审核批准后合并。
+
+## License
 
 This repository is released under the
 [GNU General Public License v3.0](https://github.com/yanghao1143/rust-norion/blob/main/LICENSE).
-Commercial use is allowed under GPL-3.0 terms, and derivative works must also
-remain open source under GPL-3.0-compatible terms.
+Commercial use, deployment research, modification, and redistribution are
+allowed under GPL-3.0 terms. Derivative works and redistributed modifications
+must remain open source under GPL-3.0-compatible terms.
 
-本仓库代码当前采用
+本仓库代码采用
 [GNU General Public License v3.0](https://github.com/yanghao1143/rust-norion/blob/main/LICENSE)
-协议开源，允许商用、部署研究和二次开发；任何派生作品也必须在 GPL-3.0 兼容条款下开源。
+协议开源，允许商用、部署研究和二次开发；任何派生作品或再分发修改也必须在 GPL-3.0 兼容条款下开源。
 
-## Links / 友情链接
+## 友情链接
 
 本项目在 [LINUX DO](https://linux.do/) 公益推广，[LINUX DO](https://linux.do/) 是一个真诚、友善、团结、专业的新型综合性社区，欢迎来玩。
