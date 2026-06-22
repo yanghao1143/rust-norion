@@ -88,12 +88,6 @@ pub(super) fn evaluate_self_goal_queue_apply_schema_line(line: &str) -> Vec<Stri
         failures
             .push("self_goal_queue_apply decision record counts do not match records".to_owned());
     }
-    if ready_records > 0 {
-        failures.push(
-            "self_goal_queue_apply ready_records require a separate append executor issue"
-                .to_owned(),
-        );
-    }
     if ready_records > 0 && !explicit_apply_required {
         failures.push("self_goal_queue_apply ready records must require explicit apply".to_owned());
     }
