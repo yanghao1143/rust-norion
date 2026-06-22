@@ -98,4 +98,4 @@ must still attach:
 - a separate writer/apply gate scoped to the requested side effect
 
 This keeps fast self-evolution work auditable while preserving the repository's
-single-writer and non-commercial research governance.
+single-writer, GPL-3.0, and third-party license governance.

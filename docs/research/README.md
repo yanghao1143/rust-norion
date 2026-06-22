@@ -23,8 +23,7 @@ Purpose:
 Before external submission, confirm:
 
 - final author list, affiliations, and contact email;
-- whether the repository license will remain non-commercial or transition to a
-  permissive core license;
+- whether the paper reuse statement matches the repository's GPL-3.0 license;
 - which benchmark numbers, if any, are ready to publish;
 - whether the report should be submitted as architecture, systems, or AI
   infrastructure work;

@@ -16,8 +16,8 @@ drafts, and admits reusable experience.
   separate strategy genomes instead of overwriting one global heuristic.
 - Let the engine evolve by editing control genes under evidence gates rather
   than mutating weights after every interaction.
-- Keep every durable genome edit local, auditable, non-commercial-research
-  friendly, and approved before shared or public adoption.
+- Keep every durable genome edit local, auditable, GPL-3.0-compatible, and
+  approved before shared or public adoption.
 
 ## Concepts
 
@@ -193,7 +193,8 @@ details unless license review and attribution are explicit.
   - SpliceBERT and SpliceTransformer: splice/variant-effect ideas inspire
     `dna_splicer`, `MutDetector`, and local edit impact scoring.
   - AlphaGenome: variant scoring inspires read-only mutation impact previews;
-    model/API terms require non-commercial caution.
+    model/API terms require separate review before any implementation relies
+    on service output, code, datasets, or model artifacts.
   - GeneFormer: hierarchy and perturbation ideas inspire networked gene
     fitness and task-context expression.
   - TrinityDNA: paper-level multi-scale genome modeling reference only; do not
@@ -214,9 +215,9 @@ details unless license review and attribution are explicit.
 - External agent codebases:
   - `fortunto2/rust-code` can only be used after MIT/license attribution review
     and a small Norion-owned port plan.
-  - `Kuberwastaken/claurst` is GPL-3.0 concept reference only. Do not copy
-    source, tests, prompts, assets, docs text, schemas, or command/tool
-    implementations unless the project explicitly accepts GPL obligations.
+  - `Kuberwastaken/claurst` is a GPL-3.0 reference. Source-level work requires
+    a dedicated issue or pull request, attribution, compatibility review, and
+    maintainer approval.
 
 ## Safety Gates
 
@@ -282,7 +283,7 @@ details unless license review and attribution are explicit.
 
 - It is not biological simulation.
 - It is not automatic weight retraining.
-- It is not a path for bypassing review, licensing, non-commercial limits, or
+- It is not a path for bypassing review, licensing, GPL-3.0 obligations, or
   human approval.
 - It is not allowed to store raw private prompts or copied third-party project
   internals as genes.
