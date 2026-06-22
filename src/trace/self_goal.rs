@@ -1,5 +1,7 @@
 use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::self_goal_proposal::{
+    SELF_GOAL_PROPOSAL_SCHEMA_VERSION, SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
+    SELF_GOAL_QUEUE_APPEND_EXECUTION_SCHEMA_VERSION, SELF_GOAL_QUEUE_APPEND_EXECUTION_TRACE_SCHEMA,
     SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION, SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA,
     SELF_GOAL_QUEUE_PREVIEW_SCHEMA_VERSION,
 };
@@ -164,6 +166,235 @@ pub(super) fn evaluate_self_goal_queue_apply_schema_line(line: &str) -> Vec<Stri
     let summary = extract_json_string_field(line, "summary").unwrap_or_default();
     if contains_private_or_executable_marker(&summary) {
         failures.push("self_goal_queue_apply summary leaked private marker".to_owned());
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_self_goal_queue_append_execution_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-goal-queue-append-execution-v1\"",
+        ),
+        ("execution_schema", "\"execution_schema\":"),
+        ("approval_schema", "\"approval_schema\":"),
+        ("apply_plan_schema", "\"apply_plan_schema\":"),
+        ("queue_preview_schema", "\"queue_preview_schema\":"),
+        ("proposal_schema", "\"proposal_schema\":"),
+        ("decision", "\"decision\":"),
+        ("records", "\"records\":"),
+        ("applied_records", "\"applied_records\":"),
+        ("held_records", "\"held_records\":"),
+        ("rejected_records", "\"rejected_records\":"),
+        ("reason_code_count", "\"reason_code_count\":"),
+        ("current_queue_digest", "\"current_queue_digest\":"),
+        ("rollback_anchor_digest", "\"rollback_anchor_digest\":"),
+        ("append_record_digest", "\"append_record_digest\":"),
+        ("resulting_queue_digest", "\"resulting_queue_digest\":"),
+        ("apply_plan_digest", "\"apply_plan_digest\":"),
+        (
+            "approval_attestation_digest",
+            "\"approval_attestation_digest\":",
+        ),
+        ("durable_write_allowed", "\"durable_write_allowed\":"),
+        ("in_memory_write_allowed", "\"in_memory_write_allowed\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("summary", "\"summary\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_goal_queue_append_execution field {name}"
+            ));
+        }
+    }
+
+    if line.contains("\"records\":[")
+        || line.contains("\"record_lines\":[")
+        || line.contains("\"resulting_queue\":")
+    {
+        failures.push(
+            "self_goal_queue_append_execution must expose count/digest execution evidence only"
+                .to_owned(),
+        );
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "durable_write_allowed",
+        false,
+        "self_goal_queue_append_execution",
+    );
+
+    let records = extract_json_usize_field(line, "records").unwrap_or(0);
+    let applied_records = extract_json_usize_field(line, "applied_records").unwrap_or(0);
+    let held_records = extract_json_usize_field(line, "held_records").unwrap_or(0);
+    let rejected_records = extract_json_usize_field(line, "rejected_records").unwrap_or(0);
+    let reason_code_count = extract_json_usize_field(line, "reason_code_count").unwrap_or(0);
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    let read_only = extract_json_bool_field(line, "read_only").unwrap_or(false);
+    let write_allowed = extract_json_bool_field(line, "write_allowed").unwrap_or(false);
+    let in_memory_write_allowed =
+        extract_json_bool_field(line, "in_memory_write_allowed").unwrap_or(false);
+    let applied = extract_json_bool_field(line, "applied").unwrap_or(false);
+
+    if records == 0 {
+        failures.push("self_goal_queue_append_execution records must be nonzero".to_owned());
+    }
+    if applied_records
+        .saturating_add(held_records)
+        .saturating_add(rejected_records)
+        != records
+    {
+        failures.push(
+            "self_goal_queue_append_execution decision record counts do not match records"
+                .to_owned(),
+        );
+    }
+
+    match decision.as_str() {
+        "applied" => {
+            if applied_records == 0 || held_records > 0 || rejected_records > 0 {
+                failures.push(
+                    "self_goal_queue_append_execution applied counters are inconsistent".to_owned(),
+                );
+            }
+            if read_only || !write_allowed || !in_memory_write_allowed || !applied {
+                failures.push(
+                    "self_goal_queue_append_execution applied trace requires in-memory write/applied flags"
+                        .to_owned(),
+                );
+            }
+            if reason_code_count != 0 {
+                failures.push(
+                    "self_goal_queue_append_execution applied trace must not carry reason codes"
+                        .to_owned(),
+                );
+            }
+        }
+        "hold" => {
+            if held_records == 0 || applied_records > 0 || rejected_records > 0 {
+                failures.push(
+                    "self_goal_queue_append_execution hold counters are inconsistent".to_owned(),
+                );
+            }
+            if !read_only || write_allowed || in_memory_write_allowed || applied {
+                failures.push(
+                    "self_goal_queue_append_execution hold trace must remain read-only".to_owned(),
+                );
+            }
+            if reason_code_count == 0 {
+                failures.push(
+                    "self_goal_queue_append_execution hold trace requires reason codes".to_owned(),
+                );
+            }
+        }
+        "rejected" => {
+            if rejected_records == 0 || applied_records > 0 || held_records > 0 {
+                failures.push(
+                    "self_goal_queue_append_execution rejected counters are inconsistent"
+                        .to_owned(),
+                );
+            }
+            if !read_only || write_allowed || in_memory_write_allowed || applied {
+                failures.push(
+                    "self_goal_queue_append_execution rejected trace must remain read-only"
+                        .to_owned(),
+                );
+            }
+            if reason_code_count == 0 {
+                failures.push(
+                    "self_goal_queue_append_execution rejected trace requires reason codes"
+                        .to_owned(),
+                );
+            }
+        }
+        _ => failures.push(format!(
+            "self_goal_queue_append_execution decision {decision} is not supported"
+        )),
+    }
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_APPEND_EXECUTION_TRACE_SCHEMA => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_append_execution schema {value} is not supported"
+        )),
+        None => failures.push("self_goal_queue_append_execution schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "execution_schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_APPEND_EXECUTION_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_append_execution execution_schema {value} is not supported"
+        )),
+        None => {
+            failures.push("self_goal_queue_append_execution execution_schema missing".to_owned())
+        }
+    }
+    match extract_json_string_field(line, "approval_schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_append_execution approval_schema {value} is not supported"
+        )),
+        None => {
+            failures.push("self_goal_queue_append_execution approval_schema missing".to_owned())
+        }
+    }
+    match extract_json_string_field(line, "apply_plan_schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_append_execution apply_plan_schema {value} is not supported"
+        )),
+        None => {
+            failures.push("self_goal_queue_append_execution apply_plan_schema missing".to_owned())
+        }
+    }
+    match extract_json_string_field(line, "queue_preview_schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_PREVIEW_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_append_execution queue_preview_schema {value} is not supported"
+        )),
+        None => failures
+            .push("self_goal_queue_append_execution queue_preview_schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "proposal_schema") {
+        Some(value) if value == SELF_GOAL_PROPOSAL_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_append_execution proposal_schema {value} is not supported"
+        )),
+        None => {
+            failures.push("self_goal_queue_append_execution proposal_schema missing".to_owned())
+        }
+    }
+
+    for field in [
+        "current_queue_digest",
+        "rollback_anchor_digest",
+        "append_record_digest",
+        "resulting_queue_digest",
+        "apply_plan_digest",
+        "approval_attestation_digest",
+    ] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if value != "none" && !value.starts_with("redaction-digest:") {
+            failures.push(format!(
+                "self_goal_queue_append_execution {field} must be redaction digest or none"
+            ));
+        }
+        if contains_private_or_executable_marker(&value) {
+            failures.push(format!(
+                "self_goal_queue_append_execution {field} leaked private marker"
+            ));
+        }
+    }
+
+    let summary = extract_json_string_field(line, "summary").unwrap_or_default();
+    if contains_private_or_executable_marker(&summary) {
+        failures.push("self_goal_queue_append_execution summary leaked private marker".to_owned());
     }
 
     failures

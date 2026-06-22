@@ -20,6 +20,12 @@ pub const SELF_GOAL_QUEUE_PREVIEW_TRACE_SCHEMA: &str = "rust-norion-self-goal-qu
 pub const SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION: &str = "self_goal_queue_apply_plan_v1";
 pub const SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-apply-plan-v1";
+pub const SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION: &str =
+    "self_goal_queue_append_approval_v1";
+pub const SELF_GOAL_QUEUE_APPEND_EXECUTION_SCHEMA_VERSION: &str =
+    "self_goal_queue_append_execution_v1";
+pub const SELF_GOAL_QUEUE_APPEND_EXECUTION_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-append-execution-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelfGoalProposalSource {
@@ -1249,7 +1255,7 @@ impl SelfGoalQueueApplyReport {
         )
     }
 
-    pub fn json_line(&self) -> String {
+    pub fn apply_plan_digest(&self) -> String {
         let reason_code_count = self
             .records
             .iter()
@@ -1274,7 +1280,16 @@ impl SelfGoalQueueApplyReport {
                 .iter()
                 .map(|record| record.apply_plan_digest.clone()),
         );
-        let apply_plan_digest = stable_redaction_digest(digest_parts.iter().map(String::as_str));
+        stable_redaction_digest(digest_parts.iter().map(String::as_str))
+    }
+
+    pub fn json_line(&self) -> String {
+        let reason_code_count = self
+            .records
+            .iter()
+            .map(|record| record.reason_codes.len())
+            .sum::<usize>();
+        let apply_plan_digest = self.apply_plan_digest();
         format!(
             "{{\"schema\":\"{}\",\"plan_schema\":\"{}\",\"queue_preview_schema\":\"{}\",\"writer_gate_schema\":\"{}\",\"decision\":\"{}\",\"writer_gate_decision\":\"{}\",\"records\":{},\"ready_records\":{},\"held_records\":{},\"rejected_records\":{},\"reason_code_count\":{},\"explicit_apply_required\":{},\"current_queue_digest\":\"{}\",\"apply_plan_digest\":\"{}\",\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"summary\":\"{}\"}}",
             json_escape(SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA),
@@ -1296,6 +1311,495 @@ impl SelfGoalQueueApplyReport {
             self.applied,
             json_escape(&self.summary_line())
         )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfGoalQueueAppendApproval {
+    pub schema_version: &'static str,
+    pub operator_id: String,
+    pub approval_ticket_id: String,
+    pub approved_apply_plan_digest: String,
+    pub approved_current_queue_digest: String,
+    pub approved_append_record_digest: String,
+    pub approved_resulting_queue_digest: String,
+    pub approved_writer_gate_refs_digest: String,
+    pub approval_attestation_digest: String,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfGoalQueueAppendApproval {
+    pub fn from_apply_report(
+        operator_id: impl Into<String>,
+        approval_ticket_id: impl Into<String>,
+        apply_report: &SelfGoalQueueApplyReport,
+    ) -> Self {
+        let operator_id = safe_text(operator_id.into());
+        let approval_ticket_id = safe_text(approval_ticket_id.into());
+        let ready_record = ready_apply_record(apply_report);
+        let approved_apply_plan_digest = apply_report.apply_plan_digest();
+        let approved_current_queue_digest = apply_report.current_queue_digest.clone();
+        let approved_append_record_digest = ready_record
+            .and_then(|record| record.append_record_digest.clone())
+            .unwrap_or_else(|| "none".to_owned());
+        let approved_resulting_queue_digest = ready_record
+            .and_then(|record| record.expected_resulting_queue_digest.clone())
+            .unwrap_or_else(|| "none".to_owned());
+        let approved_writer_gate_refs_digest = ready_record
+            .and_then(|record| record.writer_gate_refs_digest.clone())
+            .unwrap_or_else(|| "none".to_owned());
+        let approval_attestation_digest = self_goal_queue_append_approval_digest(
+            &operator_id,
+            &approval_ticket_id,
+            &approved_apply_plan_digest,
+            &approved_current_queue_digest,
+            &approved_append_record_digest,
+            &approved_resulting_queue_digest,
+            &approved_writer_gate_refs_digest,
+        );
+
+        Self {
+            schema_version: SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
+            operator_id,
+            approval_ticket_id,
+            approved_apply_plan_digest,
+            approved_current_queue_digest,
+            approved_append_record_digest,
+            approved_resulting_queue_digest,
+            approved_writer_gate_refs_digest,
+            approval_attestation_digest,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    fn expected_attestation_digest(&self) -> String {
+        self_goal_queue_append_approval_digest(
+            &self.operator_id,
+            &self.approval_ticket_id,
+            &self.approved_apply_plan_digest,
+            &self.approved_current_queue_digest,
+            &self.approved_append_record_digest,
+            &self.approved_resulting_queue_digest,
+            &self.approved_writer_gate_refs_digest,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfGoalQueueAppendPolicy {
+    pub require_apply_report_passed: bool,
+    pub require_preview_report_passed: bool,
+    pub require_ready_plan: bool,
+    pub require_explicit_apply: bool,
+    pub require_operator_approval: bool,
+    pub require_current_queue_digest_match: bool,
+    pub require_append_digest_match: bool,
+    pub require_resulting_queue_digest_match: bool,
+    pub reject_duplicate_goal: bool,
+    pub require_digest_only_evidence: bool,
+    pub allow_in_memory_apply: bool,
+    pub allow_durable_queue_write: bool,
+}
+
+impl Default for SelfGoalQueueAppendPolicy {
+    fn default() -> Self {
+        Self {
+            require_apply_report_passed: true,
+            require_preview_report_passed: true,
+            require_ready_plan: true,
+            require_explicit_apply: true,
+            require_operator_approval: true,
+            require_current_queue_digest_match: true,
+            require_append_digest_match: true,
+            require_resulting_queue_digest_match: true,
+            reject_duplicate_goal: true,
+            require_digest_only_evidence: true,
+            allow_in_memory_apply: true,
+            allow_durable_queue_write: false,
+        }
+    }
+}
+
+impl SelfGoalQueueAppendPolicy {
+    pub fn is_apply_safe(self) -> bool {
+        self.require_apply_report_passed
+            && self.require_preview_report_passed
+            && self.require_ready_plan
+            && self.require_explicit_apply
+            && self.require_operator_approval
+            && self.require_current_queue_digest_match
+            && self.require_append_digest_match
+            && self.require_resulting_queue_digest_match
+            && self.reject_duplicate_goal
+            && self.require_digest_only_evidence
+            && self.allow_in_memory_apply
+            && !self.allow_durable_queue_write
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SelfGoalQueueAppendDecision {
+    Applied,
+    Hold,
+    Rejected,
+}
+
+impl SelfGoalQueueAppendDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Hold => "hold",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfGoalQueueAppendExecutionReport {
+    pub schema_version: &'static str,
+    pub approval_schema_version: &'static str,
+    pub apply_plan_schema_version: &'static str,
+    pub queue_preview_schema_version: &'static str,
+    pub proposal_schema_version: &'static str,
+    pub decision: SelfGoalQueueAppendDecision,
+    pub policy: SelfGoalQueueAppendPolicy,
+    pub record_count: usize,
+    pub applied_records: usize,
+    pub held_records: usize,
+    pub rejected_records: usize,
+    pub reason_codes: Vec<String>,
+    pub current_queue_digest: String,
+    pub rollback_anchor_digest: String,
+    pub append_record_digest: Option<String>,
+    pub resulting_queue_digest: Option<String>,
+    pub apply_plan_digest: String,
+    pub approval_attestation_digest: Option<String>,
+    pub resulting_queue: Option<EvolutionGoalQueue>,
+    pub durable_write_allowed: bool,
+    pub in_memory_write_allowed: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfGoalQueueAppendExecutionReport {
+    pub fn passed(&self) -> bool {
+        self.decision == SelfGoalQueueAppendDecision::Applied
+            && self.applied
+            && self.write_allowed
+            && self.in_memory_write_allowed
+            && !self.read_only
+            && !self.durable_write_allowed
+            && self.applied_records == 1
+            && self.held_records == 0
+            && self.rejected_records == 0
+            && self.reason_codes.is_empty()
+            && self.resulting_queue.is_some()
+            && self.evidence_is_redacted()
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.current_queue_digest.starts_with("redaction-digest:")
+            && self.rollback_anchor_digest.starts_with("redaction-digest:")
+            && self.apply_plan_digest.starts_with("redaction-digest:")
+            && self
+                .append_record_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .resulting_queue_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .approval_attestation_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .reason_codes
+                .iter()
+                .all(|reason| !contains_private_or_executable_marker(reason))
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_append_execution schema={} decision={} passed={} records={} applied_records={} held_records={} rejected_records={} reasons={} evidence_redacted={} durable_write_allowed={} in_memory_write_allowed={} read_only={} write_allowed={} applied={}",
+            self.schema_version,
+            self.decision.as_str(),
+            self.passed(),
+            self.record_count,
+            self.applied_records,
+            self.held_records,
+            self.rejected_records,
+            self.reason_codes.len(),
+            self.evidence_is_redacted(),
+            self.durable_write_allowed,
+            self.in_memory_write_allowed,
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let append_digest = self.append_record_digest.as_deref().unwrap_or("none");
+        let resulting_digest = self.resulting_queue_digest.as_deref().unwrap_or("none");
+        let approval_digest = self
+            .approval_attestation_digest
+            .as_deref()
+            .unwrap_or("none");
+        format!(
+            "{{\"schema\":\"{}\",\"execution_schema\":\"{}\",\"approval_schema\":\"{}\",\"apply_plan_schema\":\"{}\",\"queue_preview_schema\":\"{}\",\"proposal_schema\":\"{}\",\"decision\":\"{}\",\"records\":{},\"applied_records\":{},\"held_records\":{},\"rejected_records\":{},\"reason_code_count\":{},\"current_queue_digest\":\"{}\",\"rollback_anchor_digest\":\"{}\",\"append_record_digest\":\"{}\",\"resulting_queue_digest\":\"{}\",\"apply_plan_digest\":\"{}\",\"approval_attestation_digest\":\"{}\",\"durable_write_allowed\":{},\"in_memory_write_allowed\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"summary\":\"{}\"}}",
+            json_escape(SELF_GOAL_QUEUE_APPEND_EXECUTION_TRACE_SCHEMA),
+            json_escape(self.schema_version),
+            json_escape(self.approval_schema_version),
+            json_escape(self.apply_plan_schema_version),
+            json_escape(self.queue_preview_schema_version),
+            json_escape(self.proposal_schema_version),
+            json_escape(self.decision.as_str()),
+            self.record_count,
+            self.applied_records,
+            self.held_records,
+            self.rejected_records,
+            self.reason_codes.len(),
+            json_escape(&self.current_queue_digest),
+            json_escape(&self.rollback_anchor_digest),
+            json_escape(append_digest),
+            json_escape(resulting_digest),
+            json_escape(&self.apply_plan_digest),
+            json_escape(approval_digest),
+            self.durable_write_allowed,
+            self.in_memory_write_allowed,
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+            json_escape(&self.summary_line())
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfGoalQueueAppendExecutor {
+    pub policy: SelfGoalQueueAppendPolicy,
+}
+
+impl Default for SelfGoalQueueAppendExecutor {
+    fn default() -> Self {
+        Self {
+            policy: SelfGoalQueueAppendPolicy::default(),
+        }
+    }
+}
+
+impl SelfGoalQueueAppendExecutor {
+    pub fn new(policy: SelfGoalQueueAppendPolicy) -> Self {
+        Self { policy }
+    }
+
+    pub fn evaluate(
+        &self,
+        current_queue: &EvolutionGoalQueue,
+        proposal_report: &SelfGoalProposalReport,
+        queue_preview_report: &SelfGoalQueuePreviewReport,
+        apply_report: &SelfGoalQueueApplyReport,
+        approval: Option<&SelfGoalQueueAppendApproval>,
+    ) -> SelfGoalQueueAppendExecutionReport {
+        let current_queue_digest = queue_digest(current_queue);
+        let apply_plan_digest = apply_report.apply_plan_digest();
+        let ready_record = ready_apply_record(apply_report);
+        let preview_record = ready_record.and_then(|record| {
+            queue_preview_report.records.iter().find(|preview| {
+                preview.candidate_id == record.candidate_id
+                    && preview.proposed_goal_id == record.proposed_goal_id
+            })
+        });
+        let candidate = ready_record.and_then(|record| {
+            proposal_report.candidates.iter().find(|candidate| {
+                candidate.stable_id == record.candidate_id
+                    && candidate.proposed_goal.stable_id == record.proposed_goal_id
+            })
+        });
+        let mut reason_codes = Vec::new();
+
+        if !self.policy.is_apply_safe() {
+            reason_codes.push("append_policy_not_apply_safe".to_owned());
+        }
+        if self.policy.require_apply_report_passed && !apply_report.passed() {
+            reason_codes.push("append_apply_report_failed".to_owned());
+        }
+        if self.policy.require_preview_report_passed && !queue_preview_report.passed() {
+            reason_codes.push("append_queue_preview_report_failed".to_owned());
+        }
+        if self.policy.require_ready_plan
+            && (apply_report.decision != SelfGoalQueueApplyDecision::ReadyForExplicitApply
+                || apply_report.ready_count != 1
+                || ready_record.is_none())
+        {
+            reason_codes.push("append_ready_plan_missing".to_owned());
+        }
+        if self.policy.require_explicit_apply
+            && (!apply_report.explicit_apply_required
+                || ready_record.is_none_or(|record| !record.explicit_apply_required))
+        {
+            reason_codes.push("append_explicit_apply_required_missing".to_owned());
+        }
+        if !current_queue.read_only || current_queue.write_allowed || current_queue.applied {
+            reason_codes.push("append_current_queue_not_preview_only".to_owned());
+        }
+        if !apply_report.is_preview_only() {
+            reason_codes.push("append_apply_report_not_preview_only".to_owned());
+        }
+        if self.policy.require_current_queue_digest_match
+            && (apply_report.current_queue_digest != current_queue_digest
+                || queue_preview_report.existing_queue_digest != current_queue_digest)
+        {
+            reason_codes.push("append_current_queue_digest_mismatch".to_owned());
+        }
+        if self.policy.require_digest_only_evidence
+            && (!apply_report.evidence_is_redacted()
+                || !queue_preview_report.evidence_is_redacted()
+                || contains_private_or_executable_marker(&apply_report.summary_line())
+                || contains_private_or_executable_marker(&queue_preview_report.summary_line()))
+        {
+            reason_codes.push("append_evidence_not_redacted".to_owned());
+        }
+        if ready_record.is_some() && preview_record.is_none() {
+            reason_codes.push("append_preview_record_missing".to_owned());
+        }
+        if ready_record.is_some() && candidate.is_none() {
+            reason_codes.push("append_proposal_candidate_missing".to_owned());
+        }
+
+        let mut append_record_digest =
+            ready_record.and_then(|record| record.append_record_digest.clone());
+        let mut resulting_queue_digest =
+            ready_record.and_then(|record| record.expected_resulting_queue_digest.clone());
+        let mut computed_resulting_queue = None;
+
+        if let (Some(record), Some(preview), Some(candidate)) =
+            (ready_record, preview_record, candidate)
+        {
+            let goal_record_line = candidate.proposed_goal.to_record_line();
+            let expected_append_digest = queue_append_record_digest(
+                &preview.candidate_id,
+                &preview.proposed_goal_id,
+                &goal_record_line,
+            );
+            let computed_queue =
+                queue_with_appended_goal(current_queue, candidate.proposed_goal.clone());
+            let computed_resulting_digest = queue_digest(&computed_queue);
+
+            append_record_digest = Some(expected_append_digest.clone());
+            resulting_queue_digest = Some(computed_resulting_digest.clone());
+
+            if preview.append_record_line.as_deref() != Some(goal_record_line.as_str()) {
+                reason_codes.push("append_record_line_mismatch".to_owned());
+            }
+            if self.policy.require_append_digest_match
+                && (preview.append_record_digest.as_deref()
+                    != Some(expected_append_digest.as_str())
+                    || record.append_record_digest.as_deref()
+                        != Some(expected_append_digest.as_str()))
+            {
+                reason_codes.push("append_record_digest_mismatch".to_owned());
+            }
+            if self.policy.require_resulting_queue_digest_match
+                && (preview.resulting_queue_preview_digest.as_deref()
+                    != Some(computed_resulting_digest.as_str())
+                    || record.expected_resulting_queue_digest.as_deref()
+                        != Some(computed_resulting_digest.as_str()))
+            {
+                reason_codes.push("append_resulting_queue_digest_mismatch".to_owned());
+            }
+            if self.policy.reject_duplicate_goal
+                && current_queue
+                    .goals
+                    .iter()
+                    .any(|goal| goal.stable_id == candidate.proposed_goal.stable_id)
+            {
+                reason_codes.push("append_duplicate_goal_already_in_queue".to_owned());
+            }
+
+            computed_resulting_queue = Some(computed_queue);
+        }
+
+        if self.policy.require_operator_approval {
+            match approval {
+                Some(approval) => push_append_approval_reasons(
+                    &mut reason_codes,
+                    approval,
+                    &apply_plan_digest,
+                    &current_queue_digest,
+                    append_record_digest.as_deref().unwrap_or("none"),
+                    resulting_queue_digest.as_deref().unwrap_or("none"),
+                    ready_record
+                        .and_then(|record| record.writer_gate_refs_digest.as_deref())
+                        .unwrap_or("none"),
+                ),
+                None => reason_codes.push("append_operator_approval_missing".to_owned()),
+            }
+        }
+
+        let rejected = reason_codes
+            .iter()
+            .any(|reason| append_execution_rejection_reason(reason));
+        let resulting_queue = if reason_codes.is_empty() {
+            computed_resulting_queue
+        } else {
+            None
+        };
+        let applied = resulting_queue.is_some();
+        let decision = if applied {
+            SelfGoalQueueAppendDecision::Applied
+        } else if rejected {
+            SelfGoalQueueAppendDecision::Rejected
+        } else {
+            SelfGoalQueueAppendDecision::Hold
+        };
+        let record_count = apply_report.record_count.max(1);
+        let applied_records = usize::from(applied);
+        let held_records = if decision == SelfGoalQueueAppendDecision::Hold {
+            record_count
+        } else {
+            0
+        };
+        let rejected_records = if decision == SelfGoalQueueAppendDecision::Rejected {
+            record_count
+        } else {
+            0
+        };
+        let approval_attestation_digest =
+            approval.map(|approval| approval.approval_attestation_digest.clone());
+
+        SelfGoalQueueAppendExecutionReport {
+            schema_version: SELF_GOAL_QUEUE_APPEND_EXECUTION_SCHEMA_VERSION,
+            approval_schema_version: SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
+            apply_plan_schema_version: apply_report.schema_version,
+            queue_preview_schema_version: queue_preview_report.schema_version,
+            proposal_schema_version: proposal_report.schema_version,
+            decision,
+            policy: self.policy,
+            record_count,
+            applied_records,
+            held_records,
+            rejected_records,
+            reason_codes,
+            current_queue_digest: current_queue_digest.clone(),
+            rollback_anchor_digest: current_queue_digest,
+            append_record_digest,
+            resulting_queue_digest,
+            apply_plan_digest,
+            approval_attestation_digest,
+            resulting_queue,
+            durable_write_allowed: false,
+            in_memory_write_allowed: applied,
+            read_only: !applied,
+            write_allowed: applied,
+            applied,
+        }
     }
 }
 
@@ -1924,12 +2428,11 @@ impl SelfGoalQueuePreviewGate {
 
         *append_previews += 1;
         let append_record_line = candidate.proposed_goal.to_record_line();
-        let append_record_digest = stable_redaction_digest([
-            "self-goal-queue-append-record",
+        let append_record_digest = queue_append_record_digest(
             admission_record.candidate_id.as_str(),
             admission_record.proposed_goal_id.as_str(),
             append_record_line.as_str(),
-        ]);
+        );
         let resulting_queue =
             queue_with_appended_goal(current_queue, candidate.proposed_goal.clone());
         let resulting_queue_digest = queue_digest(&resulting_queue);
@@ -2287,6 +2790,135 @@ fn apply_record_from_vec(
         write_allowed: false,
         applied: false,
     }
+}
+
+fn ready_apply_record(report: &SelfGoalQueueApplyReport) -> Option<&SelfGoalQueueApplyRecord> {
+    let mut records = report
+        .records
+        .iter()
+        .filter(|record| record.decision == SelfGoalQueueApplyDecision::ReadyForExplicitApply);
+    let first = records.next()?;
+    if records.next().is_none() {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+fn queue_append_record_digest(
+    candidate_id: &str,
+    proposed_goal_id: &str,
+    append_record_line: &str,
+) -> String {
+    stable_redaction_digest([
+        "self-goal-queue-append-record",
+        candidate_id,
+        proposed_goal_id,
+        append_record_line,
+    ])
+}
+
+fn self_goal_queue_append_approval_digest(
+    operator_id: &str,
+    approval_ticket_id: &str,
+    approved_apply_plan_digest: &str,
+    approved_current_queue_digest: &str,
+    approved_append_record_digest: &str,
+    approved_resulting_queue_digest: &str,
+    approved_writer_gate_refs_digest: &str,
+) -> String {
+    stable_redaction_digest([
+        SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
+        operator_id,
+        approval_ticket_id,
+        approved_apply_plan_digest,
+        approved_current_queue_digest,
+        approved_append_record_digest,
+        approved_resulting_queue_digest,
+        approved_writer_gate_refs_digest,
+    ])
+}
+
+fn push_append_approval_reasons(
+    reasons: &mut Vec<String>,
+    approval: &SelfGoalQueueAppendApproval,
+    expected_apply_plan_digest: &str,
+    expected_current_queue_digest: &str,
+    expected_append_record_digest: &str,
+    expected_resulting_queue_digest: &str,
+    expected_writer_gate_refs_digest: &str,
+) {
+    if approval.schema_version != SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION {
+        reasons.push("append_approval_schema_mismatch".to_owned());
+    }
+    if approval.operator_id.trim().is_empty() {
+        reasons.push("append_approval_operator_id_empty".to_owned());
+    }
+    if approval.approval_ticket_id.trim().is_empty() {
+        reasons.push("append_approval_ticket_id_empty".to_owned());
+    }
+    if !approval.read_only || approval.write_allowed || approval.applied {
+        reasons.push("append_approval_not_preview_only".to_owned());
+    }
+    if contains_private_or_executable_marker(&approval.operator_id)
+        || contains_private_or_executable_marker(&approval.approval_ticket_id)
+        || contains_private_or_executable_marker(&approval.approval_attestation_digest)
+    {
+        reasons.push("append_approval_private_marker".to_owned());
+    }
+    if approval.approved_apply_plan_digest != expected_apply_plan_digest {
+        reasons.push("append_approval_apply_plan_digest_mismatch".to_owned());
+    }
+    if approval.approved_current_queue_digest != expected_current_queue_digest {
+        reasons.push("append_approval_current_queue_digest_mismatch".to_owned());
+    }
+    if approval.approved_append_record_digest != expected_append_record_digest {
+        reasons.push("append_approval_record_digest_mismatch".to_owned());
+    }
+    if approval.approved_resulting_queue_digest != expected_resulting_queue_digest {
+        reasons.push("append_approval_resulting_queue_digest_mismatch".to_owned());
+    }
+    if approval.approved_writer_gate_refs_digest != expected_writer_gate_refs_digest {
+        reasons.push("append_approval_writer_gate_refs_mismatch".to_owned());
+    }
+    let expected_attestation = approval.expected_attestation_digest();
+    if !approval
+        .approval_attestation_digest
+        .starts_with("redaction-digest:")
+        || approval.approval_attestation_digest != expected_attestation
+    {
+        reasons.push("append_approval_attestation_digest_mismatch".to_owned());
+    }
+}
+
+fn append_execution_rejection_reason(reason: &str) -> bool {
+    matches!(
+        reason,
+        "append_policy_not_apply_safe"
+            | "append_apply_report_failed"
+            | "append_queue_preview_report_failed"
+            | "append_current_queue_not_preview_only"
+            | "append_apply_report_not_preview_only"
+            | "append_current_queue_digest_mismatch"
+            | "append_evidence_not_redacted"
+            | "append_preview_record_missing"
+            | "append_proposal_candidate_missing"
+            | "append_record_line_mismatch"
+            | "append_record_digest_mismatch"
+            | "append_resulting_queue_digest_mismatch"
+            | "append_duplicate_goal_already_in_queue"
+            | "append_approval_schema_mismatch"
+            | "append_approval_operator_id_empty"
+            | "append_approval_ticket_id_empty"
+            | "append_approval_not_preview_only"
+            | "append_approval_private_marker"
+            | "append_approval_apply_plan_digest_mismatch"
+            | "append_approval_current_queue_digest_mismatch"
+            | "append_approval_record_digest_mismatch"
+            | "append_approval_resulting_queue_digest_mismatch"
+            | "append_approval_writer_gate_refs_mismatch"
+            | "append_approval_attestation_digest_mismatch"
+    )
 }
 
 fn has_rejection_reason(reasons: &[String]) -> bool {
@@ -3065,11 +3697,163 @@ mod tests {
         assert!(!contains_private_or_executable_marker(&line));
     }
 
+    #[test]
+    fn queue_append_executor_applies_ready_plan_with_matching_approval() {
+        let (queue, proposal, preview) = queue_preview_with_append_and_proposal();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+        let apply_report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+        let approval = SelfGoalQueueAppendApproval::from_apply_report(
+            "operator-jy",
+            "approval-ticket-self-goal-append",
+            &apply_report,
+        );
+
+        let report = SelfGoalQueueAppendExecutor::default().evaluate(
+            &queue,
+            &proposal,
+            &preview,
+            &apply_report,
+            Some(&approval),
+        );
+
+        assert_eq!(report.decision, SelfGoalQueueAppendDecision::Applied);
+        assert!(report.passed(), "{}", report.summary_line());
+        assert!(report.reason_codes.is_empty());
+        assert!(report.write_allowed);
+        assert!(report.in_memory_write_allowed);
+        assert!(!report.durable_write_allowed);
+        assert!(report.applied);
+        assert_eq!(report.applied_records, 1);
+        assert_eq!(report.held_records, 0);
+        assert_eq!(report.rejected_records, 0);
+        assert_eq!(
+            report.resulting_queue_digest,
+            apply_report.records[0].expected_resulting_queue_digest
+        );
+        let resulting_queue = report
+            .resulting_queue
+            .as_ref()
+            .expect("applied append should return next queue snapshot");
+        assert_eq!(resulting_queue.goals.len(), 1);
+        assert_eq!(
+            resulting_queue.goals[0].stable_id,
+            apply_report.records[0].proposed_goal_id
+        );
+        let line = report.json_line();
+        assert!(line.contains("\"schema\":\"rust-norion-self-goal-queue-append-execution-v1\""));
+        assert!(line.contains("\"decision\":\"applied\""));
+        assert!(line.contains("\"durable_write_allowed\":false"));
+        assert!(line.contains("\"in_memory_write_allowed\":true"));
+        assert!(!line.contains("\"resulting_queue\":"));
+        assert!(!contains_private_or_executable_marker(&line));
+    }
+
+    #[test]
+    fn queue_append_executor_holds_ready_plan_without_approval() {
+        let (queue, proposal, preview) = queue_preview_with_append_and_proposal();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+        let apply_report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+
+        let report = SelfGoalQueueAppendExecutor::default().evaluate(
+            &queue,
+            &proposal,
+            &preview,
+            &apply_report,
+            None,
+        );
+
+        assert_eq!(report.decision, SelfGoalQueueAppendDecision::Hold);
+        assert!(!report.passed());
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(report.resulting_queue.is_none());
+        assert!(
+            report
+                .reason_codes
+                .contains(&"append_operator_approval_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn queue_append_executor_rejects_stale_queue_after_preview() {
+        let (queue, proposal, preview) = queue_preview_with_append_and_proposal();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+        let apply_report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+        let approval = SelfGoalQueueAppendApproval::from_apply_report(
+            "operator-jy",
+            "approval-ticket-self-goal-append",
+            &apply_report,
+        );
+        let stale_queue = queue_with_appended_goal(&queue, previewed_goal(&preview));
+
+        let report = SelfGoalQueueAppendExecutor::default().evaluate(
+            &stale_queue,
+            &proposal,
+            &preview,
+            &apply_report,
+            Some(&approval),
+        );
+
+        assert_eq!(report.decision, SelfGoalQueueAppendDecision::Rejected);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(report.resulting_queue.is_none());
+        assert!(
+            report
+                .reason_codes
+                .contains(&"append_current_queue_digest_mismatch".to_owned())
+        );
+    }
+
+    #[test]
+    fn queue_append_executor_rejects_tampered_approval_digest() {
+        let (queue, proposal, preview) = queue_preview_with_append_and_proposal();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+        let apply_report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+        let mut approval = SelfGoalQueueAppendApproval::from_apply_report(
+            "operator-jy",
+            "approval-ticket-self-goal-append",
+            &apply_report,
+        );
+        approval.approved_apply_plan_digest = "redaction-digest:tampered".to_owned();
+
+        let report = SelfGoalQueueAppendExecutor::default().evaluate(
+            &queue,
+            &proposal,
+            &preview,
+            &apply_report,
+            Some(&approval),
+        );
+
+        assert_eq!(report.decision, SelfGoalQueueAppendDecision::Rejected);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(
+            report
+                .reason_codes
+                .contains(&"append_approval_apply_plan_digest_mismatch".to_owned())
+        );
+        assert!(
+            report
+                .reason_codes
+                .contains(&"append_approval_attestation_digest_mismatch".to_owned())
+        );
+    }
+
     fn proposal_report_without_active_queue() -> SelfGoalProposalReport {
         default_self_goal_proposal_report(&EvolutionGoalQueue::new(Vec::new()))
     }
 
     fn queue_preview_with_append() -> (EvolutionGoalQueue, SelfGoalQueuePreviewReport) {
+        let (queue, _, preview) = queue_preview_with_append_and_proposal();
+        (queue, preview)
+    }
+
+    fn queue_preview_with_append_and_proposal() -> (
+        EvolutionGoalQueue,
+        SelfGoalProposalReport,
+        SelfGoalQueuePreviewReport,
+    ) {
         let queue = EvolutionGoalQueue::new(Vec::new());
         let proposal = proposal_report_without_active_queue();
         let runs = [passing_run_for_candidate(&proposal.candidates[0]).with_approval()];
@@ -3077,7 +3861,7 @@ mod tests {
         let preview = default_self_goal_queue_preview_report(&queue, &proposal, &admission);
 
         assert_eq!(preview.append_preview_count, 1);
-        (queue, preview)
+        (queue, proposal, preview)
     }
 
     fn writer_gate_report_for_preview(
