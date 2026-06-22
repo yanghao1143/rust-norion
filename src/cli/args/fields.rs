@@ -20,6 +20,8 @@ pub(crate) struct Args {
     pub(crate) self_goal_queue_store_apply: bool,
     pub(crate) self_goal_queue_evidence_packets: Vec<String>,
     pub(crate) self_goal_queue_evidence_path: Option<PathBuf>,
+    pub(crate) self_goal_queue_local_evidence: bool,
+    pub(crate) self_goal_queue_local_evidence_dry_run: bool,
     pub(crate) self_goal_queue_tenant: String,
     pub(crate) self_goal_queue_workspace: String,
     pub(crate) self_goal_queue_session: String,

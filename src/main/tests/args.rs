@@ -11,6 +11,8 @@ fn parses_self_goal_queue_flags() {
         "candidate_index=0;kind=cargo_check;passed=true".to_owned(),
         "--self-goal-queue-evidence-file".to_owned(),
         "target/self-goal-evidence.txt".to_owned(),
+        "--self-goal-queue-local-evidence".to_owned(),
+        "--self-goal-queue-local-evidence-dry-run".to_owned(),
         "--self-goal-queue-tenant".to_owned(),
         "tenant-a".to_owned(),
         "--self-goal-queue-workspace".to_owned(),
@@ -39,6 +41,8 @@ fn parses_self_goal_queue_flags() {
         args.self_goal_queue_evidence_path.as_deref(),
         Some(Path::new("target/self-goal-evidence.txt"))
     );
+    assert!(args.self_goal_queue_local_evidence);
+    assert!(args.self_goal_queue_local_evidence_dry_run);
     assert_eq!(args.self_goal_queue_tenant, "tenant-a");
     assert_eq!(args.self_goal_queue_workspace, "workspace-b");
     assert_eq!(args.self_goal_queue_session, "session-c");
