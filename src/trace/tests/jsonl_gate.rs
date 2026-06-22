@@ -1142,13 +1142,82 @@ fn trace_schema_gate_rejects_self_goal_queue_apply_write_allowed_trace() {
 #[test]
 fn trace_schema_jsonl_gate_accepts_self_goal_queue_continuation_report() {
     let path = temp_path("trace-schema-self-goal-queue-continuation");
-    let line = self_goal_queue_continuation_line();
+    let ready_line = self_goal_queue_continuation_line();
+    let held_line = ready_line
+        .replacen(
+            "\"source\":\"completion_resulting_queue\"",
+            "\"source\":\"current_queue\"",
+            1,
+        )
+        .replacen("\"ready\":true", "\"ready\":false", 1)
+        .replacen("\"goals\":1", "\"goals\":0", 1)
+        .replacen("\"active\":true", "\"active\":false", 1)
+        .replacen(
+            "\"active_goal_id\":\"redaction-digest:goal\"",
+            "\"active_goal_id\":\"none\"",
+            1,
+        )
+        .replacen("\"required_evidence_count\":4", "\"required_evidence_count\":0", 1)
+        .replacen(
+            "\"required_evidence\":[\"cargo_check\",\"benchmark_gate\",\"trace_schema_gate\",\"operator_approval\"]",
+            "\"required_evidence\":[]",
+            1,
+        )
+        .replacen("ready=true goals=1", "ready=false goals=0", 1);
 
-    fs::write(&path, format!("{line}\n")).unwrap();
+    fs::write(&path, format!("{ready_line}\n{held_line}\n")).unwrap();
     let gate = evaluate_trace_schema_jsonl(&path).unwrap();
+    let self_goal_queue = gate
+        .operator_health_snapshot()
+        .section("self_goal_queue")
+        .unwrap()
+        .clone();
 
     assert!(gate.passed, "{:?}", gate.failures);
-    assert_eq!(gate.checked_lines, 1);
+    assert_eq!(gate.checked_lines, 2);
+    assert_eq!(gate.self_goal_queue_continuation_events, 2);
+    assert_eq!(gate.self_goal_queue_continuation_ready, 1);
+    assert_eq!(gate.self_goal_queue_continuation_held, 1);
+    assert_eq!(gate.self_goal_queue_continuation_current_queue, 1);
+    assert_eq!(
+        gate.self_goal_queue_continuation_completion_resulting_queue,
+        1
+    );
+    assert_eq!(gate.self_goal_queue_continuation_goals, 1);
+    assert_eq!(gate.self_goal_queue_continuation_required_evidence, 4);
+    assert_eq!(gate.self_goal_queue_continuation_reason_codes, 4);
+    assert_eq!(gate.self_goal_queue_continuation_budget_attempts, 6);
+    assert_eq!(gate.self_goal_queue_continuation_budget_steps, 24);
+    assert_eq!(gate.self_goal_queue_continuation_budget_tokens, 160_000);
+    assert_eq!(
+        gate.self_goal_queue_continuation_budget_runtime_ms,
+        1_800_000
+    );
+    assert_eq!(gate.self_goal_queue_continuation_write_allowed, 0);
+    assert_eq!(gate.self_goal_queue_continuation_applied, 0);
+    assert!(
+        gate.summary_line()
+            .contains("self_goal_queue_continuation_ready=1")
+    );
+    assert!(
+        gate.summary_line()
+            .contains("self_goal_queue_continuation_held=1")
+    );
+    assert!(self_goal_queue.data_present);
+    assert!(self_goal_queue.review_required);
+    assert!(!self_goal_queue.blocked);
+    assert_eq!(
+        self_goal_queue.metric("continuation_events"),
+        Some(gate.self_goal_queue_continuation_events)
+    );
+    assert_eq!(
+        self_goal_queue.metric("continuation_required_evidence"),
+        Some(gate.self_goal_queue_continuation_required_evidence)
+    );
+    assert!(
+        gate.operator_health_json()
+            .contains("\"name\":\"self_goal_queue\"")
+    );
     cleanup(path);
 }
 
