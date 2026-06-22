@@ -69,7 +69,9 @@ pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
     HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
-    NoironEngine,
+    NoironContextTrace, NoironEngine, NoironGateTrace, NoironGenomeTrace, NoironKvTrace,
+    NoironOrchestrationStage, NoironOrchestrationStageStatus, NoironOrchestrationTrace,
+    NoironReflectionTrace, NoironRouteTrace,
 };
 pub use experience::{
     ExperienceHygieneFinding, ExperienceHygieneQuarantinePlan, ExperienceHygieneReport,

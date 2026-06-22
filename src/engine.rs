@@ -29,6 +29,7 @@ mod embedder;
 mod inference;
 mod memory_keys;
 mod metrics;
+mod orchestration;
 mod recursive;
 mod replay;
 mod replay_feedback;
@@ -38,6 +39,11 @@ mod types;
 
 pub use backend::HeuristicBackend;
 pub use core::NoironEngine;
+pub use orchestration::{
+    NoironContextTrace, NoironGateTrace, NoironGenomeTrace, NoironKvTrace,
+    NoironOrchestrationStage, NoironOrchestrationStageStatus, NoironOrchestrationTrace,
+    NoironReflectionTrace, NoironRouteTrace,
+};
 pub use types::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
     InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
