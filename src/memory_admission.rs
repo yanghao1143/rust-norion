@@ -2162,7 +2162,18 @@ mod tests {
     }
 
     #[test]
-    fn writer_gate_refuses_missing_privacy_rollback_or_validation() {
+    fn writer_gate_refuses_missing_review_privacy_source_rollback_validation_or_operator_approval()
+    {
+        let mut missing_review_packet = ready_preview();
+        missing_review_packet.review_packets.clear();
+        let missing_review_packet_plan =
+            MemoryKvLedgerWritePlan::from_preview(&missing_review_packet, approved_writer_policy());
+
+        let mut missing_source_hash = ready_preview();
+        missing_source_hash.candidates[0].source_hash.clear();
+        let missing_source_hash_plan =
+            MemoryKvLedgerWritePlan::from_preview(&missing_source_hash, approved_writer_policy());
+
         let mut missing_privacy = ready_preview();
         missing_privacy.candidates[0].privacy_checked = false;
         let privacy_plan =
@@ -2178,16 +2189,49 @@ mod tests {
         let validation_plan =
             MemoryKvLedgerWritePlan::from_preview(&missing_validation, approved_writer_policy());
 
-        for (plan, marker) in [
-            (privacy_plan, "privacy_gate_failed"),
-            (rollback_plan, "rollback_anchor_missing"),
-            (validation_plan, "validation_evidence_missing"),
+        let missing_operator_approval_plan = MemoryKvLedgerWritePlan::from_preview(
+            &ready_preview(),
+            MemoryKvLedgerWritePolicy {
+                durable_writes_enabled: true,
+                operator_approved: false,
+                ..MemoryKvLedgerWritePolicy::default()
+            },
+        );
+
+        for (plan, decision, marker) in [
+            (
+                missing_review_packet_plan,
+                MemoryKvLedgerWriteDecision::Rejected,
+                "review_packet_missing",
+            ),
+            (
+                missing_source_hash_plan,
+                MemoryKvLedgerWriteDecision::Rejected,
+                "source_hash_missing",
+            ),
+            (
+                privacy_plan,
+                MemoryKvLedgerWriteDecision::Rejected,
+                "privacy_gate_failed",
+            ),
+            (
+                rollback_plan,
+                MemoryKvLedgerWriteDecision::Rejected,
+                "rollback_anchor_missing",
+            ),
+            (
+                validation_plan,
+                MemoryKvLedgerWriteDecision::Rejected,
+                "validation_evidence_missing",
+            ),
+            (
+                missing_operator_approval_plan,
+                MemoryKvLedgerWriteDecision::Held,
+                "operator_approval_missing",
+            ),
         ] {
             assert_eq!(plan.authorized_count(), 0);
-            assert_eq!(
-                plan.records[0].write_decision,
-                MemoryKvLedgerWriteDecision::Rejected
-            );
+            assert_eq!(plan.records[0].write_decision, decision);
             assert!(
                 plan.records[0]
                     .rejection_reasons
@@ -2197,6 +2241,30 @@ mod tests {
                 plan.records[0].rejection_reasons
             );
         }
+    }
+
+    #[test]
+    fn writer_gate_defaults_to_preview_only_when_durable_writes_are_disabled() {
+        let plan = MemoryKvLedgerWritePlan::from_preview(
+            &ready_preview(),
+            MemoryKvLedgerWritePolicy::default(),
+        );
+
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(plan.applied_count(), 0);
+        assert!(plan.is_read_only_preview());
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::PreviewOnly
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .iter()
+                .any(|reason| reason == "durable_writes_disabled"),
+            "{:?}",
+            plan.records[0].rejection_reasons
+        );
     }
 
     #[test]
