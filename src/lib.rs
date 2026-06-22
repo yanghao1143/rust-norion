@@ -30,6 +30,7 @@ pub mod rust_validation;
 pub mod self_evolution;
 pub mod self_evolving_memory;
 pub mod semantic_index;
+pub mod session_state;
 pub mod split;
 pub mod state_inspect;
 pub mod tenant_scope;
@@ -217,6 +218,12 @@ pub use semantic_index::{
     SemanticIndexRetrievalReport, SemanticIndexSkip, SemanticVectorCache,
     SemanticVectorCacheBuildReport, SemanticVectorCacheKey, SemanticVectorCacheRecord,
     SemanticVectorCacheSkippedRecord,
+};
+pub use session_state::{
+    SessionAnchorKind, SessionReplayPlanner, SessionReplayPreview, SessionRuntimeProfile,
+    SessionStateAnchor, SessionStateDecodeError, SessionStateInput, SessionStateReadReport,
+    SessionStateRecord, SessionStateStore, SessionStateWritePolicy, SessionStateWriteReport,
+    SessionTurnDigest, SessionTurnRole,
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
