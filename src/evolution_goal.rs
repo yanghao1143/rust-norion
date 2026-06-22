@@ -1,6 +1,7 @@
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 pub const EVOLUTION_GOAL_SCHEMA_VERSION: &str = "evolution_goal_v1";
+pub const EVOLUTION_GOAL_QUEUE_RECORD_SCHEMA_VERSION: &str = "evolution_goal_queue_records_v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum EvolutionGoalEvidenceKind {
@@ -21,6 +22,18 @@ impl EvolutionGoalEvidenceKind {
             Self::TraceSchemaGate => "trace_schema_gate",
             Self::ExperimentLedger => "experiment_ledger",
             Self::OperatorApproval => "operator_approval",
+        }
+    }
+
+    fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "cargo_check" => Some(Self::CargoCheck),
+            "focused_tests" => Some(Self::FocusedTests),
+            "benchmark_gate" => Some(Self::BenchmarkGate),
+            "trace_schema_gate" => Some(Self::TraceSchemaGate),
+            "experiment_ledger" => Some(Self::ExperimentLedger),
+            "operator_approval" => Some(Self::OperatorApproval),
+            _ => None,
         }
     }
 }
@@ -246,6 +259,123 @@ impl EvolutionGoal {
             .map(|field| escape_field(field))
             .collect::<Vec<_>>()
             .join("\t")
+    }
+
+    pub fn from_record_line(line: &str) -> Result<Self, EvolutionGoalRecordDecodeError> {
+        let fields = split_record_fields(line)?;
+        if fields.len() != 25 {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_record_field_count",
+                line,
+            ));
+        }
+        if fields[0] != EVOLUTION_GOAL_SCHEMA_VERSION {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_record_schema_mismatch",
+                line,
+            ));
+        }
+        if contains_private_or_executable_marker(&fields[3]) {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_record_private_marker",
+                line,
+            ));
+        }
+
+        let goal = Self {
+            schema_version: EVOLUTION_GOAL_SCHEMA_VERSION,
+            stable_id: require_redaction_digest(&fields[1], "stable_id", line)?,
+            priority: parse_u32_field(&fields[2], "priority", line)?,
+            objective: fields[3].trim().to_owned(),
+            success_gate: EvolutionGoalSuccessGate {
+                required_evidence: parse_evidence_kinds(&fields[4], line)?,
+                require_all_required: parse_bool_field(&fields[5], "require_all_required", line)?,
+                min_passed_evidence: parse_usize_field(&fields[6], "min_passed_evidence", line)?,
+            },
+            stop_condition: EvolutionGoalStopCondition {
+                success_stops_goal: parse_bool_field(&fields[7], "success_stops_goal", line)?,
+                budget_exhaustion_stops_goal: parse_bool_field(
+                    &fields[8],
+                    "budget_exhaustion_stops_goal",
+                    line,
+                )?,
+                rollback_stops_goal: parse_bool_field(&fields[9], "rollback_stops_goal", line)?,
+                approval_hold_stops_queue: parse_bool_field(
+                    &fields[10],
+                    "approval_hold_stops_queue",
+                    line,
+                )?,
+            },
+            rollback_condition: EvolutionGoalRollbackCondition {
+                rollback_on_failed_required_evidence: parse_bool_field(
+                    &fields[11],
+                    "rollback_on_failed_required_evidence",
+                    line,
+                )?,
+                rollback_on_trace_schema_failure: parse_bool_field(
+                    &fields[12],
+                    "rollback_on_trace_schema_failure",
+                    line,
+                )?,
+                rollback_on_explicit_signal: parse_bool_field(
+                    &fields[13],
+                    "rollback_on_explicit_signal",
+                    line,
+                )?,
+            },
+            budget_cap: EvolutionGoalBudgetCap {
+                max_attempts: parse_u32_field(&fields[14], "max_attempts", line)?,
+                max_steps: parse_u32_field(&fields[15], "max_steps", line)?,
+                max_tokens: parse_u64_field(&fields[16], "max_tokens", line)?,
+                max_runtime_ms: parse_u64_field(&fields[17], "max_runtime_ms", line)?,
+            },
+            approval_gate: EvolutionGoalApprovalGate {
+                maintainer_required: parse_bool_field(&fields[18], "maintainer_required", line)?,
+                operator_required: parse_bool_field(&fields[19], "operator_required", line)?,
+                approval_evidence_required: parse_bool_field(
+                    &fields[20],
+                    "approval_evidence_required",
+                    line,
+                )?,
+            },
+            provenance_digest: require_redaction_digest(&fields[21], "provenance_digest", line)?,
+            read_only: parse_bool_field(&fields[22], "read_only", line)?,
+            write_allowed: parse_bool_field(&fields[23], "write_allowed", line)?,
+            applied: parse_bool_field(&fields[24], "applied", line)?,
+        };
+
+        if !goal.read_only || goal.write_allowed || goal.applied {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_record_write_flags",
+                line,
+            ));
+        }
+        if goal.objective.is_empty() {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_record_objective_empty",
+                line,
+            ));
+        }
+        Ok(goal)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvolutionGoalRecordDecodeError {
+    pub redacted_error: String,
+    pub error_digest: String,
+}
+
+impl EvolutionGoalRecordDecodeError {
+    fn new(reason: &str, payload: &str) -> Self {
+        Self {
+            redacted_error: reason.to_owned(),
+            error_digest: stable_redaction_digest([
+                "evolution-goal-record-decode",
+                reason,
+                payload,
+            ]),
+        }
     }
 }
 
@@ -594,6 +724,100 @@ impl EvolutionGoalQueue {
             applied: self.applied,
         }
     }
+
+    pub fn redaction_digest(&self) -> String {
+        let lines = self
+            .goals
+            .iter()
+            .map(EvolutionGoal::to_record_line)
+            .collect::<Vec<_>>();
+        let mut parts = Vec::with_capacity(lines.len() + 4);
+        parts.push(self.schema_version);
+        parts.push(bool_to_field(self.read_only));
+        parts.push(bool_to_field(self.write_allowed));
+        parts.push(bool_to_field(self.applied));
+        parts.extend(lines.iter().map(String::as_str));
+        stable_redaction_digest(parts)
+    }
+
+    pub fn to_record_text(&self) -> String {
+        let mut lines = Vec::with_capacity(self.goals.len() + 1);
+        lines.push(
+            [
+                EVOLUTION_GOAL_QUEUE_RECORD_SCHEMA_VERSION.to_owned(),
+                self.schema_version.to_owned(),
+                bool_to_field(self.read_only).to_owned(),
+                bool_to_field(self.write_allowed).to_owned(),
+                bool_to_field(self.applied).to_owned(),
+                self.goals.len().to_string(),
+                self.redaction_digest(),
+            ]
+            .iter()
+            .map(|field| escape_field(field))
+            .collect::<Vec<_>>()
+            .join("\t"),
+        );
+        lines.extend(self.goals.iter().map(EvolutionGoal::to_record_line));
+        lines.join("\n")
+    }
+
+    pub fn from_record_text(text: &str) -> Result<Self, EvolutionGoalRecordDecodeError> {
+        let mut lines = text.lines();
+        let Some(header) = lines.next() else {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_empty",
+                text,
+            ));
+        };
+        let fields = split_record_fields(header)?;
+        if fields.len() != 7 {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_header_field_count",
+                text,
+            ));
+        }
+        if fields[0] != EVOLUTION_GOAL_QUEUE_RECORD_SCHEMA_VERSION {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_schema_mismatch",
+                text,
+            ));
+        }
+        if fields[1] != EVOLUTION_GOAL_SCHEMA_VERSION {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_goal_schema_mismatch",
+                text,
+            ));
+        }
+        let read_only = parse_bool_field(&fields[2], "queue_read_only", text)?;
+        let write_allowed = parse_bool_field(&fields[3], "queue_write_allowed", text)?;
+        let applied = parse_bool_field(&fields[4], "queue_applied", text)?;
+        if !read_only || write_allowed || applied {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_write_flags",
+                text,
+            ));
+        }
+        let expected_count = parse_usize_field(&fields[5], "queue_goal_count", text)?;
+        let expected_digest = require_redaction_digest(&fields[6], "queue_digest", text)?;
+        let goals = lines
+            .filter(|line| !line.trim().is_empty())
+            .map(EvolutionGoal::from_record_line)
+            .collect::<Result<Vec<_>, _>>()?;
+        if goals.len() != expected_count {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_goal_count_mismatch",
+                text,
+            ));
+        }
+        let queue = EvolutionGoalQueue::new(goals);
+        if queue.redaction_digest() != expected_digest {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_queue_digest_mismatch",
+                text,
+            ));
+        }
+        Ok(queue)
+    }
 }
 
 pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
@@ -866,6 +1090,135 @@ fn escape_field(value: &str) -> String {
         .replace('|', "\\p")
 }
 
+fn split_record_fields(line: &str) -> Result<Vec<String>, EvolutionGoalRecordDecodeError> {
+    line.split('\t')
+        .map(|field| unescape_field(field, line))
+        .collect()
+}
+
+fn unescape_field(value: &str, payload: &str) -> Result<String, EvolutionGoalRecordDecodeError> {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        let Some(escaped) = chars.next() else {
+            return Err(EvolutionGoalRecordDecodeError::new(
+                "evolution_goal_record_bad_escape",
+                payload,
+            ));
+        };
+        match escaped {
+            '\\' => out.push('\\'),
+            't' => out.push('\t'),
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            'p' => out.push('|'),
+            _ => {
+                return Err(EvolutionGoalRecordDecodeError::new(
+                    "evolution_goal_record_bad_escape",
+                    payload,
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn parse_evidence_kinds(
+    value: &str,
+    payload: &str,
+) -> Result<Vec<EvolutionGoalEvidenceKind>, EvolutionGoalRecordDecodeError> {
+    if value.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut kinds = value
+        .split('|')
+        .map(|kind| {
+            EvolutionGoalEvidenceKind::from_str(kind).ok_or_else(|| {
+                EvolutionGoalRecordDecodeError::new(
+                    "evolution_goal_record_unknown_evidence_kind",
+                    payload,
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    kinds.sort();
+    kinds.dedup();
+    Ok(kinds)
+}
+
+fn parse_bool_field(
+    value: &str,
+    field: &str,
+    payload: &str,
+) -> Result<bool, EvolutionGoalRecordDecodeError> {
+    match value {
+        "1" => Ok(true),
+        "0" => Ok(false),
+        _ => Err(EvolutionGoalRecordDecodeError::new(
+            &format!("evolution_goal_record_bad_bool:{field}"),
+            payload,
+        )),
+    }
+}
+
+fn parse_u32_field(
+    value: &str,
+    field: &str,
+    payload: &str,
+) -> Result<u32, EvolutionGoalRecordDecodeError> {
+    value.parse::<u32>().map_err(|_| {
+        EvolutionGoalRecordDecodeError::new(
+            &format!("evolution_goal_record_bad_u32:{field}"),
+            payload,
+        )
+    })
+}
+
+fn parse_u64_field(
+    value: &str,
+    field: &str,
+    payload: &str,
+) -> Result<u64, EvolutionGoalRecordDecodeError> {
+    value.parse::<u64>().map_err(|_| {
+        EvolutionGoalRecordDecodeError::new(
+            &format!("evolution_goal_record_bad_u64:{field}"),
+            payload,
+        )
+    })
+}
+
+fn parse_usize_field(
+    value: &str,
+    field: &str,
+    payload: &str,
+) -> Result<usize, EvolutionGoalRecordDecodeError> {
+    value.parse::<usize>().map_err(|_| {
+        EvolutionGoalRecordDecodeError::new(
+            &format!("evolution_goal_record_bad_usize:{field}"),
+            payload,
+        )
+    })
+}
+
+fn require_redaction_digest(
+    value: &str,
+    field: &str,
+    payload: &str,
+) -> Result<String, EvolutionGoalRecordDecodeError> {
+    if value.starts_with("redaction-digest:") && !contains_private_or_executable_marker(value) {
+        Ok(value.to_owned())
+    } else {
+        Err(EvolutionGoalRecordDecodeError::new(
+            &format!("evolution_goal_record_bad_digest:{field}"),
+            payload,
+        ))
+    }
+}
+
 fn bool_to_field(value: bool) -> &'static str {
     if value { "1" } else { "0" }
 }
@@ -886,6 +1239,52 @@ mod tests {
         assert!(goal.read_only);
         assert!(!goal.write_allowed);
         assert!(!goal.applied);
+    }
+
+    #[test]
+    fn evolution_goal_record_round_trips_without_write_flags() {
+        let goal = sample_goal(10, "ship transaction queue");
+        let parsed = EvolutionGoal::from_record_line(&goal.to_record_line()).unwrap();
+
+        assert_eq!(parsed, goal);
+        assert!(parsed.read_only);
+        assert!(!parsed.write_allowed);
+        assert!(!parsed.applied);
+    }
+
+    #[test]
+    fn evolution_goal_queue_record_text_round_trips_and_checks_digest() {
+        let first = sample_goal(10, "first");
+        let second = sample_goal(20, "second");
+        let queue = EvolutionGoalQueue::new(vec![second, first]);
+        let text = queue.to_record_text();
+        let parsed = EvolutionGoalQueue::from_record_text(&text).unwrap();
+
+        assert_eq!(parsed, queue);
+        assert_eq!(parsed.redaction_digest(), queue.redaction_digest());
+        assert!(text.contains(EVOLUTION_GOAL_QUEUE_RECORD_SCHEMA_VERSION));
+    }
+
+    #[test]
+    fn evolution_goal_record_decode_rejects_write_flags_and_digest_tampering() {
+        let goal = sample_goal(10, "ship transaction queue");
+        let mut fields = goal
+            .to_record_line()
+            .split('\t')
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        fields[23] = "1".to_owned();
+        let write_allowed = fields.join("\t");
+        let bad_digest = goal
+            .to_record_line()
+            .replacen("redaction-digest:", "fnv64:", 1);
+        let queue_bad_digest = EvolutionGoalQueue::new(vec![goal])
+            .to_record_text()
+            .replacen("redaction-digest:", "fnv64:", 1);
+
+        assert!(EvolutionGoal::from_record_line(&write_allowed).is_err());
+        assert!(EvolutionGoal::from_record_line(&bad_digest).is_err());
+        assert!(EvolutionGoalQueue::from_record_text(&queue_bad_digest).is_err());
     }
 
     #[test]
