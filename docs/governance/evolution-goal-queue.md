@@ -65,6 +65,13 @@ queue mutations. They are digest-only candidate records that still require
 normal validation, rollback, budget, trace/schema, privacy/license, and
 maintainer/operator approval before any goal can be admitted or executed.
 
+`SelfGoalAdmissionGate` now adds the corresponding preview-only admission
+review: it can mark a candidate as `preview_admissible`, held for prior goal,
+held for missing evidence, held for approval, held for the one-goal admission
+limit, or rejected. The default report remains held while R97 is active, and
+even a preview-admissible record keeps `write_allowed=false` and `applied=false`
+until a future queue writer gate is added.
+
 ## Queue Evaluation
 
 `EvolutionGoalQueue::evaluate()` returns a read-only
