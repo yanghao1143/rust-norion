@@ -112,4 +112,14 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_compute_budget_fanout_reduction) = gate.min_compute_budget_fanout_reduction {
+        let observed = summary.total_compute_budget_fanout_reduction();
+        if observed < min_compute_budget_fanout_reduction {
+            failures.push(format!(
+                "compute_budget_fanout_reduction {} below minimum {}",
+                observed, min_compute_budget_fanout_reduction
+            ));
+        }
+    }
 }

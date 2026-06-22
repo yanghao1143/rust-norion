@@ -92,4 +92,16 @@ impl BenchmarkSummary {
     pub fn total_compute_budget_avoided_tokens(&self) -> usize {
         self.routing_evidence.compute_budget_avoided_tokens
     }
+
+    pub fn total_compute_budget_fanout_before(&self) -> usize {
+        self.routing_evidence.compute_budget_fanout_before
+    }
+
+    pub fn total_compute_budget_fanout_after(&self) -> usize {
+        self.routing_evidence.compute_budget_fanout_after
+    }
+
+    pub fn total_compute_budget_fanout_reduction(&self) -> usize {
+        self.routing_evidence.compute_budget_fanout_reduction
+    }
 }

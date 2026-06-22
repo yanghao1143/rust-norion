@@ -25,6 +25,9 @@ pub struct BenchmarkRoutingEvidence {
     pub compute_budget_validation_cost_tokens: usize,
     pub compute_budget_saved_tokens: usize,
     pub compute_budget_avoided_tokens: usize,
+    pub compute_budget_fanout_before: usize,
+    pub compute_budget_fanout_after: usize,
+    pub compute_budget_fanout_reduction: usize,
     pub failures: Vec<String>,
     pub(super) devices: Vec<DeviceClass>,
     pub(super) saved_token_devices: Vec<DeviceClass>,
@@ -151,9 +154,27 @@ impl BenchmarkRoutingEvidence {
         self.compute_budget_avoided_tokens = self
             .compute_budget_avoided_tokens
             .saturating_add(budget.wasted_compute_avoided_tokens);
+        self.compute_budget_fanout_before = self
+            .compute_budget_fanout_before
+            .saturating_add(budget.route_fanout_before);
+        self.compute_budget_fanout_after = self
+            .compute_budget_fanout_after
+            .saturating_add(budget.route_fanout_after);
+        self.compute_budget_fanout_reduction = self.compute_budget_fanout_reduction.saturating_add(
+            budget
+                .route_fanout_before
+                .saturating_sub(budget.route_fanout_after),
+        );
         if !budget.anchors_preserved() {
             self.failures.push(format!(
                 "{}:{} compute_budget must preserve correctness anchors",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if budget.route_fanout_before < budget.route_fanout_after {
+            self.failures.push(format!(
+                "{}:{} compute_budget fanout comparison is inconsistent",
                 device.as_str(),
                 case.name
             ));

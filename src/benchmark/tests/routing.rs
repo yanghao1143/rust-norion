@@ -24,6 +24,9 @@ fn gate_accepts_adaptive_routing_evidence() {
             compute_budget_validation_cost_tokens: 96,
             compute_budget_saved_tokens: 64,
             compute_budget_avoided_tokens: 96,
+            compute_budget_fanout_before: 6,
+            compute_budget_fanout_after: 3,
+            compute_budget_fanout_reduction: 3,
             devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             saved_token_devices: vec![DeviceClass::CpuOnly],
             ..BenchmarkRoutingEvidence::default()
@@ -48,6 +51,7 @@ fn gate_accepts_adaptive_routing_evidence() {
         min_task_hierarchy_mutation_records: Some(6),
         min_task_hierarchy_compute_reduction_milli: Some(100),
         min_compute_budget_avoided_tokens: Some(64),
+        min_compute_budget_fanout_reduction: Some(2),
         ..BenchmarkGate::default()
     };
 
@@ -77,6 +81,14 @@ fn gate_accepts_adaptive_routing_evidence() {
             .summary_line()
             .contains("compute_budget_avoided_tokens=96")
     );
+    assert_eq!(summary.total_compute_budget_fanout_before(), 6);
+    assert_eq!(summary.total_compute_budget_fanout_after(), 3);
+    assert_eq!(summary.total_compute_budget_fanout_reduction(), 3);
+    assert!(
+        summary
+            .summary_line()
+            .contains("compute_budget_fanout_reduction=3")
+    );
 }
 
 #[test]
@@ -92,6 +104,7 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         min_task_hierarchy_mutation_records: Some(1),
         min_task_hierarchy_compute_reduction_milli: Some(1),
         min_compute_budget_avoided_tokens: Some(1),
+        min_compute_budget_fanout_reduction: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -108,6 +121,7 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         "task_hierarchy_mutation_records",
         "task_hierarchy_compute_reduction_milli",
         "compute_budget_avoided_tokens",
+        "compute_budget_fanout_reduction",
     ] {
         assert!(
             report
