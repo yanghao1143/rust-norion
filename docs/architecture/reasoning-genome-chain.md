@@ -43,6 +43,11 @@ drafts, and admits reusable experience.
   operator feedback.
 - `GenomeLedger`: append-only local history for proposed, rejected, admitted,
   quarantined, and rolled-back genome edits.
+- `GeneSegment`: an auditable segment derived from long-term experience,
+  routing fragments, KV/gist memory, reflection heuristics, validation evidence,
+  or rollback anchors. Segments are represented by ids, hashes, summaries,
+  purpose tags, confidence, version, and last validation result, never by raw
+  private prompt payloads or hidden reasoning.
 
 ## Gene Scissors
 
@@ -117,18 +122,26 @@ simulation:
   from: stable anchor id, source experience ids, KV/gist memory ids, fitness
   summaries, validation gates, rejection reasons, and rollback links.
 
-The express chain is small and fast enough to project during inference. The
-memory chain is larger and append-only, so it can preserve provenance without
-loading raw private prompts, raw `.ndkv` payloads, or copied third-party
-internals. A future admitted mutation must update both chains atomically:
-expression metadata for runtime use, and memory-chain evidence for audit and
-rollback.
+The express chain is small and fast enough to project during inference. It is
+the visible reasoning-control chain: task profile, selected route fragments,
+threshold bias, KV admission posture, reflection heuristic, budget posture,
+validation gate, and outcome digest. It explains which strategy atoms were
+active without exposing hidden reasoning.
+
+The memory chain is larger and append-only, so it can preserve provenance
+without loading raw private prompts, raw `.ndkv` payloads, secrets, hidden
+reasoning, or copied third-party internals. It stores source ids, sanitized
+evidence summaries, version, purpose tags, confidence, last validation result,
+fitness/drift summaries, rejection reasons, and rollback links. A future
+admitted mutation must update both chains atomically: expression metadata for
+runtime use, and memory-chain evidence for audit and rollback.
 
 ## Splicing and Variant Repair
 
 `dna_splicer` treats long context and memory as `GeneSegment` records: token
 range, source hash, profile, tenant/session scope, semantic gist, KV residency
-hint, fitness score, drift score, privacy risk, and validation status.
+hint, fitness score, drift score, privacy risk, version, confidence,
+last-validation result, and validation status.
 Segments can be classified as:
 
 - `exon`: useful segment allowed into expression or KV prefill.
@@ -140,15 +153,33 @@ Segments can be classified as:
 The first Rust model is read-only and is now wired into inference evidence.
 `DnaSplicer::preview` classifies prompt chunks, retrieved memory, gist records,
 and runtime-KV exports into splice segments. `MutDetector` reports insertion,
-deletion, truncation, stale-label, drift, privacy, KV-shape, schema,
-empty-range, and missing-source-hash variants as read-only findings, and
-`MutFixer` converts those findings into preview `MutationPlan` values. It can
-propose re-slicing with bounded overlap, relabeling stale metadata,
-quarantining malignant segments, regenerating from a stable anchor, or
-repairing invalid metadata, but it cannot apply the change or authorize
-persisted writes. Trace schema and benchmark gates emit splice segment,
-exon/intron/variant, finding, proposal, and read-only status evidence so
-splicing cannot silently disappear from control-plane runs.
+deletion, mislabel, truncation, format-drift, stale-label, drift, privacy,
+KV-shape, schema, empty-range, and missing-source-hash variants as read-only
+findings, and `MutFixer` converts those findings into preview `MutationPlan`
+values. It can propose variable splicing with bounded overlap, intron
+filtering, segment isolation, relabeling stale metadata, quarantining malignant
+segments, regenerating from a stable anchor, or repairing invalid metadata, but
+it cannot apply the change or authorize persisted writes. Trace schema and
+benchmark gates emit splice segment, exon/intron/variant, finding, proposal,
+and read-only status evidence so splicing cannot silently disappear from
+control-plane runs.
+
+## Relabel, Quarantine, and Regeneration
+
+DNA aging maps to software freshness. When a memory or gene segment expires,
+drifts, loses semantic precision, or keeps an obsolete purpose label, the first
+action is a read-only relabel/rejuvenation plan. The plan must summarize the
+evidence, current version, proposed purpose tags, confidence, last validation
+result, and rollback anchor. Useful but old segments should be refreshed before
+they are discarded.
+
+Malignant mutation is handled by isolation, not blind repair in place. Harmful,
+polluted, low-confidence, privacy-risk, or secret-risk segments are quarantined
+with digest-only evidence, reason codes, validation requirements, and rollback
+records. Repair, regeneration, and re-admission are separate later steps. They
+can only use stable anchors, validated high-fitness siblings, sanitized
+summaries, and explicit approval; they must not leak raw prompts, secrets,
+copied source text, raw `.ndkv` payloads, or hidden reasoning.
 
 ## Reference Mapping
 
@@ -168,17 +199,24 @@ details unless license review and attribution are explicit.
   - TrinityDNA: paper-level multi-scale genome modeling reference only; do not
     assume reusable code.
 - Long-context and KV references:
-  - CEPE and StreamingLLM are the safest engineering references for parallel
-    context chunks, attention sinks, sliding windows, and segment-local KV.
-  - RAPID, Omni-DNA/SEQPACK, and ChunkRAG-style work should be used as
-    algorithmic inspiration unless license and official code status are
-    independently cleared.
+  - CEPE, RAPID, SEQPACK, StreamingLLM, and ChunkedRAG are backlog references
+    for parallel context chunks, attention sinks, sliding windows, segment-local
+    KV, packing, and retrieval chunking.
+  - These references need fact, license, and official-code-status verification
+    before any implementation issue treats them as more than behavior
+    inspiration.
 - Rust runtime and gateway references:
-  - Candle, mistral.rs, FastLLM, and Axum/OpenAI-compatible gateway projects
+  - Candle, mistral.rs, and Axum/OpenAI-compatible gateway projects
     inform runtime traits, pipeline stages, prompt/KV cache metadata,
     telemetry, and tenant isolation.
   - Migration should be by behavior specification and tests: no direct source
     copying, no third-party weight dependency in the core path.
+- External agent codebases:
+  - `fortunto2/rust-code` can only be used after MIT/license attribution review
+    and a small Norion-owned port plan.
+  - `Kuberwastaken/claurst` is GPL-3.0 concept reference only. Do not copy
+    source, tests, prompts, assets, docs text, schemas, or command/tool
+    implementations unless the project explicitly accepts GPL obligations.
 
 ## Safety Gates
 
@@ -187,6 +225,9 @@ details unless license review and attribution are explicit.
   metrics only.
 - Gene Scissors proposals start as read-only plans. `admission_write_authorized`
   remains false until validation and operator approval are explicit.
+- Genome, memory, and experiment-ledger writes default to preview/read-only.
+  Durable writes require a writer gate, validation evidence, rollback plan,
+  privacy/license checks, and maintainer/operator approval.
 - A proposal that touches routing, memory, reflection, Toolsmith, Agent Team, or
   adaptive state must pass trace/schema gates before it can be persisted.
 - Rust-facing genome changes require `cargo fmt`, focused tests, and the
@@ -196,6 +237,8 @@ details unless license review and attribution are explicit.
   must lower gene priority or trigger quarantine.
 - Rollback is part of the edit, not a later wish. Each admitted mutation must
   name the stable ledger entry it can restore.
+- Quarantine records preserve only digest, reason, evidence summary, and
+  rollback metadata; they must not preserve raw private payloads.
 
 ## Integration
 
