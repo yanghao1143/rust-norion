@@ -5,6 +5,11 @@ use crate::evolution_goal::{
     default_noiron_pursuit_goal_queue,
 };
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
+use crate::writer_gate::{
+    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDecision,
+    UnifiedWriterGateDomain, UnifiedWriterGateRecord, UnifiedWriterGateReport,
+    UnifiedWriterGateWriteScope,
+};
 
 pub const SELF_GOAL_PROPOSAL_SCHEMA_VERSION: &str = "self_goal_proposal_v1";
 pub const SELF_GOAL_PROPOSAL_TRACE_SCHEMA: &str = "rust-norion-self-goal-proposal-preview-v1";
@@ -12,6 +17,9 @@ pub const SELF_GOAL_ADMISSION_SCHEMA_VERSION: &str = "self_goal_admission_v1";
 pub const SELF_GOAL_ADMISSION_TRACE_SCHEMA: &str = "rust-norion-self-goal-admission-preview-v1";
 pub const SELF_GOAL_QUEUE_PREVIEW_SCHEMA_VERSION: &str = "self_goal_queue_preview_v1";
 pub const SELF_GOAL_QUEUE_PREVIEW_TRACE_SCHEMA: &str = "rust-norion-self-goal-queue-preview-v1";
+pub const SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION: &str = "self_goal_queue_apply_plan_v1";
+pub const SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-apply-plan-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelfGoalProposalSource {
@@ -976,6 +984,698 @@ impl SelfGoalQueuePreviewReport {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfGoalQueueApplyPolicy {
+    pub max_apply_records: usize,
+    pub require_preview_report_passed: bool,
+    pub require_writer_gate_ready: bool,
+    pub require_evolution_goal_queue_domain: bool,
+    pub require_matching_writer_candidate: bool,
+    pub require_single_append_packet: bool,
+    pub require_current_queue_digest_match: bool,
+    pub reject_duplicate_goal: bool,
+    pub require_digest_only_evidence: bool,
+    pub allow_durable_queue_write: bool,
+}
+
+impl Default for SelfGoalQueueApplyPolicy {
+    fn default() -> Self {
+        Self {
+            max_apply_records: 1,
+            require_preview_report_passed: true,
+            require_writer_gate_ready: true,
+            require_evolution_goal_queue_domain: true,
+            require_matching_writer_candidate: true,
+            require_single_append_packet: true,
+            require_current_queue_digest_match: true,
+            reject_duplicate_goal: true,
+            require_digest_only_evidence: true,
+            allow_durable_queue_write: false,
+        }
+    }
+}
+
+impl SelfGoalQueueApplyPolicy {
+    pub fn is_preview_safe(self) -> bool {
+        self.max_apply_records > 0
+            && self.require_preview_report_passed
+            && self.require_writer_gate_ready
+            && self.require_evolution_goal_queue_domain
+            && self.require_matching_writer_candidate
+            && self.require_single_append_packet
+            && self.require_current_queue_digest_match
+            && self.reject_duplicate_goal
+            && self.require_digest_only_evidence
+            && !self.allow_durable_queue_write
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SelfGoalQueueApplyDecision {
+    ReadyForExplicitApply,
+    HeldForWriterGate,
+    HeldForAppendPacket,
+    HeldForDuplicateGoal,
+    Rejected,
+}
+
+impl SelfGoalQueueApplyDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadyForExplicitApply => "ready_for_explicit_apply",
+            Self::HeldForWriterGate => "held_for_writer_gate",
+            Self::HeldForAppendPacket => "held_for_append_packet",
+            Self::HeldForDuplicateGoal => "held_for_duplicate_goal",
+            Self::Rejected => "rejected",
+        }
+    }
+
+    pub fn is_hold(self) -> bool {
+        matches!(
+            self,
+            Self::HeldForWriterGate | Self::HeldForAppendPacket | Self::HeldForDuplicateGoal
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfGoalQueueApplyRecord {
+    pub schema_version: &'static str,
+    pub candidate_id: String,
+    pub proposed_goal_id: String,
+    pub decision: SelfGoalQueueApplyDecision,
+    pub reason_codes: Vec<String>,
+    pub current_queue_digest: String,
+    pub rollback_anchor_digest: String,
+    pub append_record_digest: Option<String>,
+    pub resulting_queue_preview_digest: Option<String>,
+    pub expected_resulting_queue_digest: Option<String>,
+    pub writer_gate_candidate_id: Option<String>,
+    pub writer_gate_refs_digest: Option<String>,
+    pub apply_plan_digest: String,
+    pub explicit_apply_required: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfGoalQueueApplyRecord {
+    pub fn record_line(&self) -> String {
+        let reasons = self.reason_codes.join("|");
+        let append_digest = self
+            .append_record_digest
+            .clone()
+            .unwrap_or_else(|| "none".to_owned());
+        let resulting_digest = self
+            .resulting_queue_preview_digest
+            .clone()
+            .unwrap_or_else(|| "none".to_owned());
+        let expected_digest = self
+            .expected_resulting_queue_digest
+            .clone()
+            .unwrap_or_else(|| "none".to_owned());
+        let writer_candidate = self
+            .writer_gate_candidate_id
+            .clone()
+            .unwrap_or_else(|| "none".to_owned());
+        let writer_refs = self
+            .writer_gate_refs_digest
+            .clone()
+            .unwrap_or_else(|| "none".to_owned());
+        let record_digest = stable_redaction_digest([
+            "self-goal-queue-apply-record",
+            self.candidate_id.as_str(),
+            self.proposed_goal_id.as_str(),
+            self.decision.as_str(),
+            reasons.as_str(),
+            self.current_queue_digest.as_str(),
+            self.rollback_anchor_digest.as_str(),
+            append_digest.as_str(),
+            resulting_digest.as_str(),
+            expected_digest.as_str(),
+            writer_candidate.as_str(),
+            writer_refs.as_str(),
+            self.apply_plan_digest.as_str(),
+        ]);
+        [
+            self.schema_version.to_owned(),
+            self.candidate_id.clone(),
+            self.proposed_goal_id.clone(),
+            self.decision.as_str().to_owned(),
+            reasons,
+            self.current_queue_digest.clone(),
+            self.rollback_anchor_digest.clone(),
+            append_digest,
+            resulting_digest,
+            expected_digest,
+            writer_candidate,
+            writer_refs,
+            self.apply_plan_digest.clone(),
+            bool_to_field(self.explicit_apply_required).to_owned(),
+            record_digest,
+            bool_to_field(self.read_only).to_owned(),
+            bool_to_field(self.write_allowed).to_owned(),
+            bool_to_field(self.applied).to_owned(),
+        ]
+        .iter()
+        .map(|field| escape_field(field))
+        .collect::<Vec<_>>()
+        .join("\t")
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.current_queue_digest.starts_with("redaction-digest:")
+            && self.rollback_anchor_digest.starts_with("redaction-digest:")
+            && self
+                .append_record_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .resulting_queue_preview_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .expected_resulting_queue_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self
+                .writer_gate_refs_digest
+                .as_ref()
+                .is_none_or(|digest| digest.starts_with("redaction-digest:"))
+            && self.apply_plan_digest.starts_with("redaction-digest:")
+            && self.record_line().contains("redaction-digest:")
+            && !contains_private_or_executable_marker(&self.record_line())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfGoalQueueApplyReport {
+    pub schema_version: &'static str,
+    pub trace_schema: &'static str,
+    pub queue_preview_schema_version: &'static str,
+    pub writer_gate_schema_version: &'static str,
+    pub current_queue_digest: String,
+    pub writer_gate_decision: UnifiedWriterGateDecision,
+    pub policy: SelfGoalQueueApplyPolicy,
+    pub decision: SelfGoalQueueApplyDecision,
+    pub record_count: usize,
+    pub ready_count: usize,
+    pub held_count: usize,
+    pub rejected_count: usize,
+    pub records: Vec<SelfGoalQueueApplyRecord>,
+    pub record_lines: Vec<String>,
+    pub explicit_apply_required: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfGoalQueueApplyReport {
+    pub fn passed(&self) -> bool {
+        self.is_preview_only()
+            && self.policy.is_preview_safe()
+            && self.record_count == self.records.len()
+            && self.record_lines.len() == self.records.len()
+            && self.ready_count <= self.policy.max_apply_records
+            && self.rejected_count == 0
+            && (self.ready_count == 0 || self.explicit_apply_required)
+            && self
+                .records
+                .iter()
+                .all(|record| record.is_preview_only() && record.evidence_is_redacted())
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only
+            && !self.write_allowed
+            && !self.applied
+            && self
+                .records
+                .iter()
+                .all(SelfGoalQueueApplyRecord::is_preview_only)
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.current_queue_digest.starts_with("redaction-digest:")
+            && self
+                .records
+                .iter()
+                .all(SelfGoalQueueApplyRecord::evidence_is_redacted)
+            && self.record_lines.iter().all(|line| {
+                line.contains("redaction-digest:") && !contains_private_or_executable_marker(line)
+            })
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_apply_plan schema={} trace_schema={} passed={} decision={} writer_gate_decision={} records={} ready={} held={} rejected={} explicit_apply_required={} evidence_redacted={} read_only={} write_allowed={} applied={}",
+            self.schema_version,
+            self.trace_schema,
+            self.passed(),
+            self.decision.as_str(),
+            self.writer_gate_decision.as_str(),
+            self.record_count,
+            self.ready_count,
+            self.held_count,
+            self.rejected_count,
+            self.explicit_apply_required,
+            self.evidence_is_redacted(),
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfGoalQueueApplyPlanner {
+    pub policy: SelfGoalQueueApplyPolicy,
+}
+
+impl Default for SelfGoalQueueApplyPlanner {
+    fn default() -> Self {
+        Self {
+            policy: SelfGoalQueueApplyPolicy::default(),
+        }
+    }
+}
+
+impl SelfGoalQueueApplyPlanner {
+    pub fn new(policy: SelfGoalQueueApplyPolicy) -> Self {
+        Self { policy }
+    }
+
+    pub fn evaluate(
+        &self,
+        current_queue: &EvolutionGoalQueue,
+        queue_preview_report: &SelfGoalQueuePreviewReport,
+        writer_gate_report: &UnifiedWriterGateReport,
+    ) -> SelfGoalQueueApplyReport {
+        let current_queue_digest = queue_digest(current_queue);
+        let expected_writer_candidate_id = queue_writer_candidate_id(queue_preview_report);
+        let writer_record =
+            matching_queue_writer_record(writer_gate_report, &expected_writer_candidate_id);
+
+        let append_records = queue_preview_report
+            .records
+            .iter()
+            .filter(|record| record.decision == SelfGoalQueuePreviewDecision::AppendPreview)
+            .collect::<Vec<_>>();
+        let mut records = Vec::with_capacity(append_records.len().max(1));
+        if queue_preview_report.records.is_empty() {
+            records.push(self.evaluate_missing_record(
+                current_queue,
+                queue_preview_report,
+                writer_gate_report,
+                writer_record,
+                &current_queue_digest,
+                &expected_writer_candidate_id,
+            ));
+        } else if append_records.is_empty() {
+            records.extend(queue_preview_report.records.iter().map(|preview_record| {
+                self.evaluate_record(
+                    current_queue,
+                    queue_preview_report,
+                    writer_gate_report,
+                    writer_record,
+                    preview_record,
+                    &current_queue_digest,
+                    &expected_writer_candidate_id,
+                )
+            }));
+        } else {
+            for preview_record in append_records {
+                records.push(self.evaluate_record(
+                    current_queue,
+                    queue_preview_report,
+                    writer_gate_report,
+                    writer_record,
+                    preview_record,
+                    &current_queue_digest,
+                    &expected_writer_candidate_id,
+                ));
+            }
+        }
+
+        let record_lines = records
+            .iter()
+            .map(SelfGoalQueueApplyRecord::record_line)
+            .collect::<Vec<_>>();
+        let ready_count = records
+            .iter()
+            .filter(|record| record.decision == SelfGoalQueueApplyDecision::ReadyForExplicitApply)
+            .count();
+        let held_count = records
+            .iter()
+            .filter(|record| record.decision.is_hold())
+            .count();
+        let rejected_count = records
+            .iter()
+            .filter(|record| record.decision == SelfGoalQueueApplyDecision::Rejected)
+            .count();
+        let decision = if rejected_count > 0 {
+            SelfGoalQueueApplyDecision::Rejected
+        } else if ready_count > 0 && held_count == 0 {
+            SelfGoalQueueApplyDecision::ReadyForExplicitApply
+        } else {
+            records
+                .iter()
+                .find(|record| record.decision.is_hold())
+                .map(|record| record.decision)
+                .unwrap_or(SelfGoalQueueApplyDecision::HeldForAppendPacket)
+        };
+        let explicit_apply_required =
+            ready_count > 0 || records.iter().any(|record| record.explicit_apply_required);
+
+        SelfGoalQueueApplyReport {
+            schema_version: SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION,
+            trace_schema: SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA,
+            queue_preview_schema_version: queue_preview_report.schema_version,
+            writer_gate_schema_version: writer_gate_report.schema_version,
+            current_queue_digest,
+            writer_gate_decision: writer_gate_report.decision,
+            policy: self.policy,
+            decision,
+            record_count: records.len(),
+            ready_count,
+            held_count,
+            rejected_count,
+            records,
+            record_lines,
+            explicit_apply_required,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    fn evaluate_missing_record(
+        &self,
+        current_queue: &EvolutionGoalQueue,
+        queue_preview_report: &SelfGoalQueuePreviewReport,
+        writer_gate_report: &UnifiedWriterGateReport,
+        writer_record: Option<&UnifiedWriterGateRecord>,
+        current_queue_digest: &str,
+        expected_writer_candidate_id: &str,
+    ) -> SelfGoalQueueApplyRecord {
+        let candidate_id = stable_redaction_digest([
+            "self-goal-queue-apply-missing-record",
+            current_queue_digest,
+            queue_preview_report.existing_queue_digest.as_str(),
+        ]);
+        let mut reasons = self.source_rejection_reasons(
+            current_queue,
+            queue_preview_report,
+            writer_gate_report,
+            writer_record,
+            current_queue_digest,
+            expected_writer_candidate_id,
+        );
+        if reasons.is_empty() {
+            reasons.push("append_packet_missing".to_owned());
+        }
+        let decision = if has_rejection_reason(&reasons) {
+            SelfGoalQueueApplyDecision::Rejected
+        } else {
+            SelfGoalQueueApplyDecision::HeldForAppendPacket
+        };
+        apply_record_from_vec(
+            candidate_id,
+            "none".to_owned(),
+            decision,
+            reasons,
+            current_queue_digest,
+            None,
+            None,
+            None,
+            writer_record,
+            false,
+        )
+    }
+
+    fn evaluate_record(
+        &self,
+        current_queue: &EvolutionGoalQueue,
+        queue_preview_report: &SelfGoalQueuePreviewReport,
+        writer_gate_report: &UnifiedWriterGateReport,
+        writer_record: Option<&UnifiedWriterGateRecord>,
+        preview_record: &SelfGoalQueuePreviewRecord,
+        current_queue_digest: &str,
+        expected_writer_candidate_id: &str,
+    ) -> SelfGoalQueueApplyRecord {
+        let mut rejection_reasons = self.source_rejection_reasons(
+            current_queue,
+            queue_preview_report,
+            writer_gate_report,
+            writer_record,
+            current_queue_digest,
+            expected_writer_candidate_id,
+        );
+
+        if preview_record.decision != SelfGoalQueuePreviewDecision::AppendPreview {
+            let mut reasons = vec![
+                format!("preview_decision:{}", preview_record.decision.as_str()),
+                "append_packet_not_ready".to_owned(),
+            ];
+            reasons.append(&mut rejection_reasons);
+            let decision = if has_rejection_reason(&reasons) {
+                SelfGoalQueueApplyDecision::Rejected
+            } else {
+                SelfGoalQueueApplyDecision::HeldForAppendPacket
+            };
+            return apply_record_from_vec(
+                preview_record.candidate_id.clone(),
+                preview_record.proposed_goal_id.clone(),
+                decision,
+                reasons,
+                current_queue_digest,
+                preview_record.append_record_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                writer_record,
+                false,
+            );
+        }
+
+        if preview_record.append_record_digest.is_none()
+            || preview_record.resulting_queue_preview_digest.is_none()
+            || preview_record.append_record_line.is_none()
+        {
+            rejection_reasons.push("append_packet_incomplete".to_owned());
+        }
+
+        if self.policy.require_single_append_packet
+            && queue_preview_report.append_preview_count != 1
+        {
+            rejection_reasons.push(format!(
+                "append_packet_count_invalid:{}",
+                queue_preview_report.append_preview_count
+            ));
+        }
+
+        if has_rejection_reason(&rejection_reasons) {
+            return apply_record_from_vec(
+                preview_record.candidate_id.clone(),
+                preview_record.proposed_goal_id.clone(),
+                SelfGoalQueueApplyDecision::Rejected,
+                rejection_reasons,
+                current_queue_digest,
+                preview_record.append_record_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                writer_record,
+                false,
+            );
+        }
+
+        if self.policy.reject_duplicate_goal
+            && current_queue
+                .goals
+                .iter()
+                .any(|goal| goal.stable_id == preview_record.proposed_goal_id)
+        {
+            return apply_record_from_vec(
+                preview_record.candidate_id.clone(),
+                preview_record.proposed_goal_id.clone(),
+                SelfGoalQueueApplyDecision::HeldForDuplicateGoal,
+                ["duplicate_goal_already_in_queue"]
+                    .into_iter()
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>(),
+                current_queue_digest,
+                preview_record.append_record_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                writer_record,
+                false,
+            );
+        }
+
+        let writer_reasons = self.writer_gate_hold_reasons(writer_gate_report, writer_record);
+        if !writer_reasons.is_empty() {
+            return apply_record_from_vec(
+                preview_record.candidate_id.clone(),
+                preview_record.proposed_goal_id.clone(),
+                SelfGoalQueueApplyDecision::HeldForWriterGate,
+                writer_reasons,
+                current_queue_digest,
+                preview_record.append_record_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                preview_record.resulting_queue_preview_digest.clone(),
+                writer_record,
+                false,
+            );
+        }
+
+        apply_record_from_vec(
+            preview_record.candidate_id.clone(),
+            preview_record.proposed_goal_id.clone(),
+            SelfGoalQueueApplyDecision::ReadyForExplicitApply,
+            ["explicit_apply_plan_ready"]
+                .into_iter()
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>(),
+            current_queue_digest,
+            preview_record.append_record_digest.clone(),
+            preview_record.resulting_queue_preview_digest.clone(),
+            preview_record.resulting_queue_preview_digest.clone(),
+            writer_record,
+            true,
+        )
+    }
+
+    fn source_rejection_reasons(
+        &self,
+        current_queue: &EvolutionGoalQueue,
+        queue_preview_report: &SelfGoalQueuePreviewReport,
+        writer_gate_report: &UnifiedWriterGateReport,
+        writer_record: Option<&UnifiedWriterGateRecord>,
+        current_queue_digest: &str,
+        expected_writer_candidate_id: &str,
+    ) -> Vec<String> {
+        let mut reasons = Vec::new();
+        if !self.policy.is_preview_safe() {
+            reasons.push("apply_policy_not_preview_safe".to_owned());
+        }
+        if self.policy.require_preview_report_passed && !queue_preview_report.passed() {
+            reasons.push("queue_preview_report_failed".to_owned());
+        }
+        if !current_queue.read_only || current_queue.write_allowed || current_queue.applied {
+            reasons.push("current_queue_not_preview_only".to_owned());
+        }
+        if !queue_preview_report.read_only
+            || queue_preview_report.write_allowed
+            || queue_preview_report.applied
+            || queue_preview_report
+                .records
+                .iter()
+                .any(|record| !record.read_only || record.write_allowed || record.applied)
+        {
+            reasons.push("queue_preview_source_not_preview_only".to_owned());
+        }
+        if self.policy.require_current_queue_digest_match
+            && queue_preview_report.existing_queue_digest != current_queue_digest
+        {
+            reasons.push("current_queue_digest_mismatch".to_owned());
+        }
+        if self.policy.require_digest_only_evidence
+            && (!queue_preview_report.evidence_is_redacted()
+                || contains_private_or_executable_marker(&queue_preview_report.summary_line())
+                || contains_private_or_executable_marker(&writer_gate_report.summary_line())
+                || writer_gate_report
+                    .records
+                    .iter()
+                    .any(|record| contains_private_or_executable_marker(&record.summary_line())))
+        {
+            reasons.push("apply_plan_evidence_not_redacted".to_owned());
+        }
+        if writer_gate_report.applied
+            || writer_gate_report
+                .records
+                .iter()
+                .any(|record| record.applied)
+        {
+            reasons.push("writer_gate_already_applied".to_owned());
+        }
+        let queue_writer_records = writer_gate_report
+            .records
+            .iter()
+            .filter(|record| record.domain == UnifiedWriterGateDomain::EvolutionGoalQueue)
+            .count();
+        if self.policy.require_evolution_goal_queue_domain && queue_writer_records == 0 {
+            reasons.push("writer_gate_queue_record_missing".to_owned());
+        }
+        if queue_writer_records > 1 {
+            reasons.push("writer_gate_queue_record_count_invalid".to_owned());
+        }
+        if let Some(record) = writer_record {
+            if self.policy.require_matching_writer_candidate
+                && record.candidate_id != expected_writer_candidate_id
+            {
+                reasons.push("writer_gate_candidate_mismatch".to_owned());
+            }
+            if !record
+                .requested_writes
+                .contains(&UnifiedWriterGateWriteScope::EvolutionGoalQueue)
+            {
+                reasons.push("writer_gate_write_scope_mismatch".to_owned());
+            }
+            if record.decision == UnifiedWriterGateDecision::ReadyForExplicitApply
+                && (record.review_packet_count == 0
+                    || record.evidence_id_count == 0
+                    || record.rollback_anchor_count == 0
+                    || record.content_digest_count == 0
+                    || record.source_report_schema_count == 0)
+            {
+                reasons.push("writer_gate_ready_refs_incomplete".to_owned());
+            }
+        }
+        if writer_gate_report.decision == UnifiedWriterGateDecision::Reject
+            || writer_record
+                .is_some_and(|record| record.decision == UnifiedWriterGateDecision::Reject)
+        {
+            reasons.push("writer_gate_rejected".to_owned());
+        }
+        reasons
+    }
+
+    fn writer_gate_hold_reasons(
+        &self,
+        writer_gate_report: &UnifiedWriterGateReport,
+        writer_record: Option<&UnifiedWriterGateRecord>,
+    ) -> Vec<String> {
+        let Some(record) = writer_record else {
+            return vec!["writer_gate_record_missing".to_owned()];
+        };
+        if !self.policy.require_writer_gate_ready {
+            return Vec::new();
+        }
+        if writer_gate_report.decision == UnifiedWriterGateDecision::ReadyForExplicitApply
+            && record.decision == UnifiedWriterGateDecision::ReadyForExplicitApply
+            && writer_gate_report.durable_write_allowed
+            && writer_gate_report.explicit_apply_required
+            && record.durable_write_allowed
+            && record.explicit_apply_required
+        {
+            Vec::new()
+        } else {
+            let mut reasons = vec![
+                format!(
+                    "writer_gate_decision:{}",
+                    writer_gate_report.decision.as_str()
+                ),
+                format!("writer_record_decision:{}", record.decision.as_str()),
+            ];
+            reasons.extend(record.reason_codes.iter().cloned());
+            reasons
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelfGoalQueuePreviewGate {
     pub policy: SelfGoalQueuePreviewPolicy,
 }
@@ -1232,6 +1932,32 @@ pub fn default_noiron_self_goal_queue_preview_report() -> SelfGoalQueuePreviewRe
     )
 }
 
+pub fn default_self_goal_queue_apply_report(
+    current_queue: &EvolutionGoalQueue,
+    queue_preview_report: &SelfGoalQueuePreviewReport,
+    writer_gate_report: &UnifiedWriterGateReport,
+) -> SelfGoalQueueApplyReport {
+    SelfGoalQueueApplyPlanner::default().evaluate(
+        current_queue,
+        queue_preview_report,
+        writer_gate_report,
+    )
+}
+
+pub fn default_noiron_self_goal_queue_apply_report() -> SelfGoalQueueApplyReport {
+    let current_queue = default_noiron_pursuit_goal_queue();
+    let queue_preview_report = default_self_goal_queue_preview_report(
+        &current_queue,
+        &default_noiron_self_goal_proposal_report(),
+        &default_noiron_self_goal_admission_report(),
+    );
+    let writer_gate_report =
+        UnifiedWriterGate::new().evaluate([UnifiedWriterGateCandidate::self_goal_queue_preview(
+            &queue_preview_report,
+        )]);
+    default_self_goal_queue_apply_report(&current_queue, &queue_preview_report, &writer_gate_report)
+}
+
 fn default_noiron_proposal_candidates(
     active_objective: Option<&str>,
 ) -> Vec<SelfGoalProposalCandidate> {
@@ -1455,6 +2181,121 @@ fn queue_preview_record_from_vec(
         write_allowed: false,
         applied: false,
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_record_from_vec(
+    candidate_id: String,
+    proposed_goal_id: String,
+    decision: SelfGoalQueueApplyDecision,
+    reason_codes: Vec<String>,
+    current_queue_digest: &str,
+    append_record_digest: Option<String>,
+    resulting_queue_preview_digest: Option<String>,
+    expected_resulting_queue_digest: Option<String>,
+    writer_record: Option<&UnifiedWriterGateRecord>,
+    explicit_apply_required: bool,
+) -> SelfGoalQueueApplyRecord {
+    let writer_gate_candidate_id = writer_record.map(|record| record.candidate_id.clone());
+    let writer_gate_refs_digest = writer_record.map(|record| record.refs_digest.clone());
+    let append_digest = append_record_digest.as_deref().unwrap_or("none");
+    let resulting_digest = resulting_queue_preview_digest.as_deref().unwrap_or("none");
+    let expected_digest = expected_resulting_queue_digest.as_deref().unwrap_or("none");
+    let writer_candidate = writer_gate_candidate_id.as_deref().unwrap_or("none");
+    let writer_refs = writer_gate_refs_digest.as_deref().unwrap_or("none");
+    let reasons = reason_codes.join("|");
+    let apply_plan_digest = stable_redaction_digest([
+        SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION,
+        candidate_id.as_str(),
+        proposed_goal_id.as_str(),
+        decision.as_str(),
+        reasons.as_str(),
+        current_queue_digest,
+        append_digest,
+        resulting_digest,
+        expected_digest,
+        writer_candidate,
+        writer_refs,
+        bool_to_field(explicit_apply_required),
+    ]);
+
+    SelfGoalQueueApplyRecord {
+        schema_version: SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION,
+        candidate_id,
+        proposed_goal_id,
+        decision,
+        reason_codes,
+        current_queue_digest: current_queue_digest.to_owned(),
+        rollback_anchor_digest: current_queue_digest.to_owned(),
+        append_record_digest,
+        resulting_queue_preview_digest,
+        expected_resulting_queue_digest,
+        writer_gate_candidate_id,
+        writer_gate_refs_digest,
+        apply_plan_digest,
+        explicit_apply_required,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn has_rejection_reason(reasons: &[String]) -> bool {
+    reasons.iter().any(|reason| {
+        matches!(
+            reason.as_str(),
+            "apply_policy_not_preview_safe"
+                | "queue_preview_report_failed"
+                | "current_queue_not_preview_only"
+                | "queue_preview_source_not_preview_only"
+                | "current_queue_digest_mismatch"
+                | "apply_plan_evidence_not_redacted"
+                | "writer_gate_already_applied"
+                | "writer_gate_queue_record_missing"
+                | "writer_gate_queue_record_count_invalid"
+                | "writer_gate_candidate_mismatch"
+                | "writer_gate_write_scope_mismatch"
+                | "writer_gate_ready_refs_incomplete"
+                | "writer_gate_rejected"
+                | "append_packet_incomplete"
+        ) || reason.starts_with("append_packet_count_invalid:")
+    })
+}
+
+fn matching_queue_writer_record<'a>(
+    writer_gate_report: &'a UnifiedWriterGateReport,
+    expected_writer_candidate_id: &str,
+) -> Option<&'a UnifiedWriterGateRecord> {
+    writer_gate_report
+        .records
+        .iter()
+        .find(|record| {
+            record.domain == UnifiedWriterGateDomain::EvolutionGoalQueue
+                && record.candidate_id == expected_writer_candidate_id
+        })
+        .or_else(|| {
+            let mut records = writer_gate_report
+                .records
+                .iter()
+                .filter(|record| record.domain == UnifiedWriterGateDomain::EvolutionGoalQueue);
+            let first = records.next()?;
+            if records.next().is_none() {
+                Some(first)
+            } else {
+                None
+            }
+        })
+}
+
+fn queue_writer_candidate_id(report: &SelfGoalQueuePreviewReport) -> String {
+    let record_count = report.record_count.to_string();
+    let append_preview_count = report.append_preview_count.to_string();
+    stable_redaction_digest([
+        "self-goal-queue-preview",
+        report.existing_queue_digest.as_str(),
+        record_count.as_str(),
+        append_preview_count.as_str(),
+    ])
 }
 
 fn queue_digest(queue: &EvolutionGoalQueue) -> String {
@@ -1993,8 +2834,187 @@ mod tests {
         );
     }
 
+    #[test]
+    fn queue_apply_plan_holds_behind_default_writer_gate() {
+        let (queue, preview) = queue_preview_with_append();
+        let writer_gate = writer_gate_report_for_preview(&preview, false);
+
+        let report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+
+        assert_eq!(
+            report.decision,
+            SelfGoalQueueApplyDecision::HeldForWriterGate
+        );
+        assert_eq!(report.ready_count, 0);
+        assert_eq!(report.held_count, 1);
+        assert_eq!(report.rejected_count, 0);
+        assert!(report.passed(), "{}", report.summary_line());
+        assert!(report.is_preview_only());
+        assert!(!report.explicit_apply_required);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"durable_writes_disabled".to_owned())
+        );
+    }
+
+    #[test]
+    fn queue_apply_plan_reaches_ready_without_applying_when_writer_gate_is_ready() {
+        let (queue, preview) = queue_preview_with_append();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+
+        let report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+
+        assert_eq!(
+            report.decision,
+            SelfGoalQueueApplyDecision::ReadyForExplicitApply
+        );
+        assert_eq!(report.ready_count, 1);
+        assert_eq!(report.held_count, 0);
+        assert_eq!(report.rejected_count, 0);
+        assert!(report.explicit_apply_required);
+        assert!(report.passed(), "{}", report.summary_line());
+        assert!(report.is_preview_only());
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert_eq!(
+            report.records[0].append_record_digest,
+            preview.records[0].append_record_digest
+        );
+        assert_eq!(
+            report.records[0].expected_resulting_queue_digest,
+            preview.records[0].resulting_queue_preview_digest
+        );
+        assert_eq!(
+            report.records[0].rollback_anchor_digest,
+            report.current_queue_digest
+        );
+    }
+
+    #[test]
+    fn default_noiron_queue_apply_plan_holds_without_append_packet() {
+        let report = default_noiron_self_goal_queue_apply_report();
+
+        assert_eq!(
+            report.decision,
+            SelfGoalQueueApplyDecision::HeldForAppendPacket
+        );
+        assert_eq!(report.ready_count, 0);
+        assert_eq!(report.rejected_count, 0);
+        assert!(report.held_count > 0);
+        assert!(report.passed(), "{}", report.summary_line());
+        assert!(report.records.iter().all(|record| {
+            record
+                .reason_codes
+                .contains(&"append_packet_not_ready".to_owned())
+        }));
+    }
+
+    #[test]
+    fn queue_apply_plan_rejects_stale_preview_after_queue_changes() {
+        let (queue, preview) = queue_preview_with_append();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+        let stale_queue = queue_with_appended_goal(&queue, previewed_goal(&preview));
+
+        let report = default_self_goal_queue_apply_report(&stale_queue, &preview, &writer_gate);
+
+        assert_eq!(report.decision, SelfGoalQueueApplyDecision::Rejected);
+        assert_eq!(report.rejected_count, 1);
+        assert!(!report.passed());
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"current_queue_digest_mismatch".to_owned())
+        );
+    }
+
+    #[test]
+    fn queue_apply_plan_rejects_source_write_flags() {
+        let (queue, mut preview) = queue_preview_with_append();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+        preview.write_allowed = true;
+
+        let report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+
+        assert_eq!(report.decision, SelfGoalQueueApplyDecision::Rejected);
+        assert_eq!(report.rejected_count, 1);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"queue_preview_source_not_preview_only".to_owned())
+        );
+        assert!(report.is_preview_only());
+    }
+
+    #[test]
+    fn queue_apply_plan_records_are_deterministic_and_digest_only() {
+        let (queue, preview) = queue_preview_with_append();
+        let writer_gate = writer_gate_report_for_preview(&preview, true);
+
+        let first = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+        let second = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+
+        assert_eq!(first.record_lines, second.record_lines);
+        assert!(first.evidence_is_redacted());
+        assert!(
+            first
+                .record_lines
+                .iter()
+                .all(|line| line.contains("redaction-digest:"))
+        );
+        assert!(
+            first
+                .record_lines
+                .iter()
+                .all(|line| !contains_private_or_executable_marker(line))
+        );
+        assert!(
+            first
+                .records
+                .iter()
+                .all(SelfGoalQueueApplyRecord::is_preview_only)
+        );
+    }
+
     fn proposal_report_without_active_queue() -> SelfGoalProposalReport {
         default_self_goal_proposal_report(&EvolutionGoalQueue::new(Vec::new()))
+    }
+
+    fn queue_preview_with_append() -> (EvolutionGoalQueue, SelfGoalQueuePreviewReport) {
+        let queue = EvolutionGoalQueue::new(Vec::new());
+        let proposal = proposal_report_without_active_queue();
+        let runs = [passing_run_for_candidate(&proposal.candidates[0]).with_approval()];
+        let admission = default_self_goal_admission_report(&proposal, &runs);
+        let preview = default_self_goal_queue_preview_report(&queue, &proposal, &admission);
+
+        assert_eq!(preview.append_preview_count, 1);
+        (queue, preview)
+    }
+
+    fn writer_gate_report_for_preview(
+        preview: &SelfGoalQueuePreviewReport,
+        durable_writes_enabled: bool,
+    ) -> UnifiedWriterGateReport {
+        let policy = crate::writer_gate::UnifiedWriterGatePolicy {
+            durable_writes_enabled,
+            ..crate::writer_gate::UnifiedWriterGatePolicy::default()
+        };
+        UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([UnifiedWriterGateCandidate::self_goal_queue_preview(preview)])
+    }
+
+    fn previewed_goal(preview: &SelfGoalQueuePreviewReport) -> EvolutionGoal {
+        let goal_id = preview.records[0].proposed_goal_id.as_str();
+        let proposal = proposal_report_without_active_queue();
+        proposal
+            .candidates
+            .into_iter()
+            .find(|candidate| candidate.proposed_goal.stable_id == goal_id)
+            .map(|candidate| candidate.proposed_goal)
+            .expect("previewed goal must come from proposal fixture")
     }
 
     fn passing_run_for_candidate(
