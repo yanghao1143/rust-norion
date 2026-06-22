@@ -1893,6 +1893,90 @@ mod tests {
     }
 
     #[test]
+    fn reinforced_kv_fusion_seeded_inputs_are_deterministic_and_preserve_required_anchors() {
+        let policy = ReinforcedKvFusionPolicy::default();
+        let candidates = seeded_kv_fusion_candidates(0x25F0_CAFE, 8);
+
+        let first = ReinforcedKvFusionPlan::from_candidates(policy, candidates.clone());
+        let second = ReinforcedKvFusionPlan::from_candidates(policy, candidates.clone());
+        let mut reversed = candidates;
+        reversed.reverse();
+        let reversed = ReinforcedKvFusionPlan::from_candidates(policy, reversed);
+
+        assert_eq!(first.decisions, second.decisions);
+        assert_eq!(first.decisions, reversed.decisions);
+        assert!(first.decision_count_matches());
+        assert!(first.token_accounting_matches());
+        assert!(first.is_read_only_preview());
+        assert!(
+            first
+                .score_summaries(8)
+                .iter()
+                .all(|summary| summary.contains("decision=")
+                    && summary.contains("score=")
+                    && summary.contains("components=")
+                    && summary.contains("retained=")
+                    && summary.contains("saved=")
+                    && summary.contains("rollback="))
+        );
+
+        let required_anchor = first
+            .decisions
+            .iter()
+            .find(|decision| decision.candidate_id == "seeded-fusion-00")
+            .unwrap();
+
+        assert!(matches!(
+            required_anchor.decision,
+            ReinforcedKvFusionDecision::Fuse | ReinforcedKvFusionDecision::Compress
+        ));
+        assert!(required_anchor.retained_tokens > 0);
+        assert!(required_anchor.reason.starts_with("required_anchor_"));
+    }
+
+    fn seeded_kv_fusion_candidates(seed: u32, count: usize) -> Vec<ReinforcedKvFusionCandidate> {
+        let mut state = seed;
+        (0..count)
+            .map(|index| {
+                let source = match index % 5 {
+                    0 => ReinforcedKvFusionSource::SemanticMemory,
+                    1 => ReinforcedKvFusionSource::GistMemory,
+                    2 => ReinforcedKvFusionSource::RuntimeKv,
+                    3 => ReinforcedKvFusionSource::ColdEvidence,
+                    _ => ReinforcedKvFusionSource::GenomeSegment,
+                };
+                let estimated_tokens = 32 + (seeded_u32(&mut state) as usize % 192);
+                let reinforcement = seeded_unit(&mut state) * 2.0 - 1.0;
+
+                ReinforcedKvFusionCandidate::new(
+                    format!("seeded-fusion-{index:02}"),
+                    source,
+                    estimated_tokens,
+                )
+                .with_scores(
+                    seeded_unit(&mut state),
+                    seeded_unit(&mut state),
+                    seeded_unit(&mut state),
+                    seeded_unit(&mut state),
+                    reinforcement,
+                )
+                .with_rollback_anchor(format!("anchor:seeded:{index:02}"))
+                .with_source_hash(format!("sha256:seeded:{index:02}"))
+                .with_required_anchor(index == 0)
+            })
+            .collect()
+    }
+
+    fn seeded_unit(state: &mut u32) -> f32 {
+        (seeded_u32(state) % 1000) as f32 / 1000.0
+    }
+
+    fn seeded_u32(state: &mut u32) -> u32 {
+        *state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        *state
+    }
+
+    #[test]
     fn critical_feedback_quarantines_episode_and_holds_repair_heuristic() {
         let report = ReflectionReport {
             quality: 0.18,
