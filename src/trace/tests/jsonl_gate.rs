@@ -1114,17 +1114,13 @@ fn trace_schema_jsonl_gate_aggregates_self_goal_queue_apply_held_reports() {
 }
 
 #[test]
-fn trace_schema_gate_rejects_self_goal_queue_apply_ready_until_executor_exists() {
+fn trace_schema_gate_accepts_self_goal_queue_apply_ready_after_executor_exists() {
     let ready = self_goal_queue_apply_report(true);
     let failures = evaluate_trace_schema_line(&ready.json_line());
 
     assert_eq!(ready.ready_count, 1);
-    assert!(
-        failures
-            .iter()
-            .any(|failure| failure.contains("ready_records require a separate append executor")),
-        "{failures:?}"
-    );
+    assert!(ready.explicit_apply_required);
+    assert!(failures.is_empty(), "{failures:?}");
 }
 
 #[test]
