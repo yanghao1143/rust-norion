@@ -5,14 +5,14 @@ use std::path::Path;
 
 use rust_norion::{
     EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
-    EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy,
-    EvolutionGoalQueueStoreReadReport, EvolutionGoalQueueStoreWriteReport,
-    EvolutionGoalRunEvidence, SelfGoalAdmissionReport, SelfGoalProposalCandidate,
-    SelfGoalProposalReport, SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport,
-    SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport, SelfGoalQueuePreviewReport,
-    TenantResourceLane, TenantScope, TenantScopedKey, UnifiedWriterGate,
-    UnifiedWriterGateCandidate, UnifiedWriterGatePolicy, UnifiedWriterGateReport,
-    append_evolution_goal_queue_store_write_trace_jsonl,
+    EvolutionGoalQueueDiskStore, EvolutionGoalQueueReport, EvolutionGoalQueueStoreApproval,
+    EvolutionGoalQueueStorePolicy, EvolutionGoalQueueStoreReadReport,
+    EvolutionGoalQueueStoreWriteReport, EvolutionGoalRunEvidence, SelfGoalAdmissionReport,
+    SelfGoalProposalCandidate, SelfGoalProposalReport, SelfGoalQueueAppendApproval,
+    SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport,
+    SelfGoalQueuePreviewReport, TenantResourceLane, TenantScope, TenantScopedKey,
+    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGatePolicy,
+    UnifiedWriterGateReport, append_evolution_goal_queue_store_write_trace_jsonl,
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     default_noiron_pursuit_goal_queue, default_self_goal_admission_report,
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
@@ -28,6 +28,8 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) current_queue_loaded_from_store: bool,
     pub(crate) store_read: Option<EvolutionGoalQueueStoreReadReport>,
     pub(crate) evidence: SelfGoalQueueCliEvidenceReport,
+    pub(crate) queue_run: EvolutionGoalQueueReport,
+    pub(crate) run_plan: SelfGoalQueueCliRunPlan,
     pub(crate) proposal: SelfGoalProposalReport,
     pub(crate) admission: SelfGoalAdmissionReport,
     pub(crate) queue_preview: SelfGoalQueuePreviewReport,
@@ -47,13 +49,23 @@ impl SelfGoalQueueCliReport {
                 self.current_queue_loaded_from_store
             ),
             self.evidence.summary_line(),
+            queue_run_summary_line(&self.queue_run),
+            self.run_plan.summary_line(),
+        ];
+        lines.extend(
+            self.queue_run
+                .decisions
+                .iter()
+                .map(|decision| format!("self_goal_queue_run_{}", decision.summary_line())),
+        );
+        lines.extend([
             self.proposal.summary_line(),
             self.admission.summary_line(),
             self.queue_preview.summary_line(),
             self.writer_gate.summary_line(),
             self.apply.summary_line(),
             self.append_execution.summary_line(),
-        ];
+        ]);
         if let Some(store_read) = &self.store_read {
             lines.push(store_read.summary_line());
         }
@@ -84,7 +96,9 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         .is_some_and(|read| read.found && read.decoded && read.queue.is_some());
 
     let proposal = default_self_goal_proposal_report(&current_queue);
-    let (evidence_runs, evidence) = load_self_goal_queue_evidence(args, &proposal)?;
+    let (evidence_runs, evidence) = load_self_goal_queue_evidence(args, &current_queue, &proposal)?;
+    let queue_run = current_queue.evaluate(&evidence_runs);
+    let run_plan = SelfGoalQueueCliRunPlan::from_queue_run(&current_queue, &queue_run);
     let admission = default_self_goal_admission_report(&proposal, &evidence_runs);
     let queue_preview =
         default_self_goal_queue_preview_report(&current_queue, &proposal, &admission);
@@ -131,6 +145,8 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         current_queue_loaded_from_store,
         store_read,
         evidence,
+        queue_run,
+        run_plan,
         proposal,
         admission,
         queue_preview,
@@ -145,6 +161,89 @@ pub(crate) fn print_self_goal_queue_report(report: &SelfGoalQueueCliReport) {
     for line in report.summary_lines() {
         println!("{line}");
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliRunPlan {
+    pub(crate) active: bool,
+    pub(crate) active_goal_id: Option<String>,
+    pub(crate) required_evidence: Vec<String>,
+    pub(crate) evidence_template_digest: String,
+    pub(crate) max_attempts: u32,
+    pub(crate) max_steps: u32,
+    pub(crate) max_tokens: u64,
+    pub(crate) max_runtime_ms: u64,
+}
+
+impl SelfGoalQueueCliRunPlan {
+    fn from_queue_run(queue: &EvolutionGoalQueue, queue_run: &EvolutionGoalQueueReport) -> Self {
+        let active_goal = queue_run
+            .active_goal_id
+            .as_deref()
+            .and_then(|goal_id| queue.goals.iter().find(|goal| goal.stable_id == goal_id));
+        let required_evidence = active_goal
+            .map(|goal| {
+                goal.success_gate
+                    .required_evidence
+                    .iter()
+                    .map(|kind| kind.as_str().to_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let required_joined = required_evidence.join("|");
+        let evidence_template_digest = stable_redaction_digest([
+            "self-goal-queue-run-plan-v1",
+            active_goal
+                .map(|goal| goal.stable_id.as_str())
+                .unwrap_or("no-active-goal"),
+            required_joined.as_str(),
+        ]);
+        let budget_cap = active_goal.map(|goal| goal.budget_cap).unwrap_or_default();
+
+        Self {
+            active: active_goal.is_some(),
+            active_goal_id: active_goal.map(|goal| goal.stable_id.clone()),
+            required_evidence,
+            evidence_template_digest,
+            max_attempts: budget_cap.max_attempts,
+            max_steps: budget_cap.max_steps,
+            max_tokens: budget_cap.max_tokens,
+            max_runtime_ms: budget_cap.max_runtime_ms,
+        }
+    }
+
+    pub(crate) fn summary_line(&self) -> String {
+        let required = if self.required_evidence.is_empty() {
+            "none".to_owned()
+        } else {
+            self.required_evidence.join("|")
+        };
+        format!(
+            "self_goal_queue_run_plan active={} goal={} required={} template={} budget_attempts={} budget_steps={} budget_tokens={} budget_runtime_ms={}",
+            self.active,
+            self.active_goal_id.as_deref().unwrap_or("none"),
+            required,
+            self.evidence_template_digest,
+            self.max_attempts,
+            self.max_steps,
+            self.max_tokens,
+            self.max_runtime_ms
+        )
+    }
+}
+
+fn queue_run_summary_line(report: &EvolutionGoalQueueReport) -> String {
+    format!(
+        "self_goal_queue_run decisions={} active={} passed={} failed={} rolled_back={} budget_exhausted={} approval_holds={} preview_only={}",
+        report.decisions.len(),
+        report.active_goal_id.as_deref().unwrap_or("none"),
+        report.passed_count,
+        report.failed_count,
+        report.rolled_back_count,
+        report.budget_exhausted_count,
+        report.approval_hold_count,
+        report.is_preview_only()
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -188,6 +287,7 @@ struct ParsedEvidencePacket {
 
 fn load_self_goal_queue_evidence(
     args: &Args,
+    current_queue: &EvolutionGoalQueue,
     proposal: &SelfGoalProposalReport,
 ) -> io::Result<(
     Vec<EvolutionGoalRunEvidence>,
@@ -207,7 +307,7 @@ fn load_self_goal_queue_evidence(
     let mut approval_count = 0;
 
     for packet in &packets {
-        match parse_self_goal_queue_evidence_packet(packet, proposal) {
+        match parse_self_goal_queue_evidence_packet(packet, current_queue, proposal) {
             Some(parsed) => {
                 valid_packet_count += 1;
                 evidence_count += 1;
@@ -268,10 +368,11 @@ fn read_self_goal_queue_evidence_packets(args: &Args) -> io::Result<Vec<String>>
 
 fn parse_self_goal_queue_evidence_packet(
     packet: &str,
+    current_queue: &EvolutionGoalQueue,
     proposal: &SelfGoalProposalReport,
 ) -> Option<ParsedEvidencePacket> {
     let fields = parse_packet_fields(packet)?;
-    let goal_id = evidence_packet_goal_id(&fields, proposal)?;
+    let goal_id = evidence_packet_goal_id(&fields, current_queue, proposal)?;
     let kind = fields
         .get("kind")
         .and_then(|value| parse_evidence_kind(value))?;
@@ -327,10 +428,31 @@ fn parse_packet_fields(packet: &str) -> Option<BTreeMap<String, String>> {
 
 fn evidence_packet_goal_id(
     fields: &BTreeMap<String, String>,
+    current_queue: &EvolutionGoalQueue,
     proposal: &SelfGoalProposalReport,
 ) -> Option<String> {
     if let Some(goal_id) = fields.get("goal").or_else(|| fields.get("goal_id")) {
         return Some(goal_id.to_owned());
+    }
+    if let Some(queue_goal_id) = fields
+        .get("queue_goal")
+        .or_else(|| fields.get("queue_goal_id"))
+    {
+        return current_queue
+            .goals
+            .iter()
+            .find(|goal| goal.stable_id == *queue_goal_id)
+            .map(|goal| goal.stable_id.clone());
+    }
+    if let Some(queue_index) = fields
+        .get("queue_index")
+        .or_else(|| fields.get("goal_index"))
+        .and_then(|value| value.parse::<usize>().ok())
+    {
+        return current_queue
+            .goals
+            .get(queue_index)
+            .map(|goal| goal.stable_id.clone());
     }
     if let Some(candidate_id) = fields
         .get("candidate")
