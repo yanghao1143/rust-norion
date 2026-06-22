@@ -41,6 +41,8 @@ Each PR must include:
 
 - behavior summary
 - linked issue or roadmap item, when applicable
+- preview-to-write checklist evidence for any durable write or active behavior
+  change request, using `docs/governance/preview-to-write-graduation.md`
 - validation commands and outcomes
 - rollback plan for self-evolution, memory, genome, routing, or durable-state
   changes
@@ -75,6 +77,7 @@ The roadmap issues define the main safety surfaces:
 - #11 public collaboration governance
 - #20 experiment ledger and approval gates
 - #27 non-commercial research license and contributor controls
+- #77 preview-to-write graduation checklist
 
 Durable memory or genome mutation must remain preview-only until the related
 writer gates, validation evidence, rollback anchors, and maintainer approval
