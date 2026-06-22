@@ -30,6 +30,32 @@ Before external submission, confirm:
   infrastructure work;
 - final title, abstract, and references.
 
+Current arXiv submission metadata:
+
+- account: `asd8841315`
+- author name: Hao Yang YangHao
+- email: `2499510083@qq.com`
+- affiliation: Independent Researcher
+- URL: <https://claude.chiddns.com>
+- default category: `cs.AI`
+- group: `cs`
+- country: People's Republic of China
+- career status: Staff
+
+Submission checklist:
+
+- Upload TeX source, not only a PDF produced from TeX.
+- Prepare a clean upload folder containing only the files intended for the
+  archival arXiv submission.
+- Remove private notes, unused drafts, local paths, secrets, and unwanted TeX
+  comments before upload; announced arXiv content is archival.
+- Double-check missing files, missing references, figures, and generated
+  artifacts before final submit.
+- Create a stable repository tag or commit snapshot and cite it in the report
+  before external submission.
+- Keep the repository license statement and the paper's reuse statement in
+  sync.
+
 Local compile command when a TeX toolchain is installed:
 
 ```bash
