@@ -468,7 +468,8 @@ lineage-audit implementation, #77 graduation-checklist closure, #47
 privacy-redaction corpus hardening, #50 malignant-gene recovery drills, #51
 genome aging/rejuvenation benchmark simulation baseline, #72 gene purpose
 relabel validator baseline, #73 reversible Gene Scissors transaction journal
-baseline, and #79 pursuit-goal queue baseline.
+baseline, #79 pursuit-goal queue baseline, and #74 thinking-phase gene-chain
+scheduler baseline.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -487,14 +488,17 @@ baseline, and #79 pursuit-goal queue baseline.
   R92/#50 adds deterministic malignant-gene poisoning defense and recovery
   drills, R91/#51 adds deterministic genome aging/rejuvenation simulation
   evidence, R89/#72 adds purpose ontology / relabel validation, R90/#73 adds
-  reversible Gene Scissors transaction journaling, and R93/#79 now adds the
-  deterministic pursuit-goal queue baseline. The default queue installs #74,
-  #75, #76, #78, and R94 as bounded preview goals with explicit success, stop,
-  budget, rollback, approval, and conflict-isolation gates.
+  reversible Gene Scissors transaction journaling, R93/#79 adds the
+  deterministic pursuit-goal queue baseline, and #74 now adds the read-only
+  thinking-phase gene-chain scheduler baseline. The default queue installs #75,
+  #76, #78, and R94 as the next bounded preview goals with explicit success,
+  stop, budget, rollback, approval, and conflict-isolation gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
-  read-only queue reports for bounded self-evolution. Continue with #74
-  thinking-phase gene-chain execution scheduling first, then advance #75, #76,
-  #78, and R94 only after each active goal reaches its target or stops cleanly.
+  read-only queue reports for bounded self-evolution, and #74 now provides the
+  thinking-phase phase scheduler above hierarchy, genome-chain, routing, and
+  compute-budget evidence. Continue with #75 English/Chinese/Rust evaluation
+  profiles next, then advance #76, #78, and R94 only after each active goal
+  reaches its target or stops cleanly.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -534,6 +538,13 @@ baseline, and #79 pursuit-goal queue baseline.
   records, a preview-only `EvolutionGoalQueue`, default Noiron pursuit goals
   for #74/#75/#76/#78/R94, budget and rollback stops, approval holds, and
   conflict isolation between failed and later goals.
+- #74 `[Runtime] Add thinking-phase gene-chain execution scheduler` is now the
+  completed baseline for deterministic planning, memory recall, genome
+  expression, route selection, answer synthesis, verification, and reflection
+  phase reports. It selects express-chain and memory-chain records through
+  task-aware hierarchy thresholds and adaptive route evidence, emits
+  digest-only selected segment/route traces, supports disabled adapter
+  passthrough mode, and remains read-only.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open from
@@ -542,9 +553,9 @@ baseline, and #79 pursuit-goal queue baseline.
   `MERGEABLE`, both focused validation checks are green, and merge still
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #77, and #79 as
-  completed or landing baselines in this branch; issues #74-#78 extend the next
-  scheduler, evaluation, memory, governance, and deployment workstream.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, #73, #74, #77, and
+  #79 as completed or landing baselines in this branch; issues #75-#78 extend
+  the next evaluation, memory, governance, and deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -804,7 +815,10 @@ baseline, and #79 pursuit-goal queue baseline.
   ontology / relabel validator baseline, and #73 is the reversible Gene
   Scissors transaction journal baseline. #79 is the completed pursuit-goal
   scheduler baseline with default #74/#75/#76/#78/R94 queue records, success,
-  stop, budget, rollback, approval, and conflict-isolation gates.)
+  stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
+  completed thinking-phase scheduler baseline with deterministic phase
+  contracts, digest-only segment and route traces, budget exhaustion reporting,
+  disabled-mode adapter passthrough, and no durable writes.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -875,9 +889,11 @@ baseline, and #79 pursuit-goal queue baseline.
   rollback previews, and redacted trace lines for cut/quarantine/regenerate/
   splice operations. Policy is documented in
   [`docs/governance/gene-scissors-transaction-journal.md`](docs/governance/gene-scissors-transaction-journal.md).
-- #74 `[Runtime] Add thinking-phase gene-chain execution scheduler`: schedule
-  genome-chain expression during thinking/runtime phases without bypassing the
-  existing trace, reward, and drift gates.
+- #74 `[Runtime] Add thinking-phase gene-chain execution scheduler`:
+  completed baseline for scheduling genome-chain expression during
+  thinking/runtime phases without bypassing hierarchy, routing, budget, trace,
+  reward, drift, or writer gates. Policy is documented in
+  [`docs/governance/thinking-phase-gene-chain-scheduler.md`](docs/governance/thinking-phase-gene-chain-scheduler.md).
 - #75 `[Benchmark] Add English Chinese Rust coding eval datasets and scoring
   profiles`: add English, Chinese, and Rust coding evaluation datasets with
   scoring profiles for benchmark and test-time scaling evidence.

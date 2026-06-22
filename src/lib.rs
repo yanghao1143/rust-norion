@@ -36,6 +36,7 @@ pub mod session_state;
 pub mod split;
 pub mod state_inspect;
 pub mod tenant_scope;
+pub mod thinking_scheduler;
 pub mod tiered_cache;
 pub mod token_stream;
 pub mod toolsmith;
@@ -275,6 +276,11 @@ pub use tenant_scope::{
     TenantIsolationReport, TenantMigrationAction, TenantMigrationPlan, TenantMigrationRecord,
     TenantResourceLane, TenantScope, TenantScopedKey, TenantScopedKvReadReport,
     TenantScopedKvWriteReport, tenant_scoped_delete, tenant_scoped_get, tenant_scoped_put,
+};
+pub use thinking_scheduler::{
+    THINKING_SCHEDULER_SCHEMA_VERSION, ThinkingGeneSelection, ThinkingPhase, ThinkingPhaseBudget,
+    ThinkingPhaseStatus, ThinkingPhaseTrace, ThinkingRouteSelection, ThinkingScheduleReport,
+    ThinkingScheduler, ThinkingSchedulerInput, ThinkingSchedulerPolicy,
 };
 pub use tiered_cache::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction, TieredCachePlan,
