@@ -520,6 +520,18 @@ impl Args {
                     state.self_goal_queue_store_apply = true;
                     index += 1;
                 }
+                "--self-goal-queue-evidence" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state
+                        .self_goal_queue_evidence_packets
+                        .push(raw[index + 1].to_owned());
+                    index += 2;
+                }
+                "--self-goal-queue-evidence-file" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_evidence_path = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
                 "--self-goal-queue-tenant" if index + 1 < raw.len() => {
                     state.self_goal_queue = true;
                     state.self_goal_queue_tenant = raw[index + 1].to_owned();
