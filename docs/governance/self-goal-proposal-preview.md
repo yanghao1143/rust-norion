@@ -12,7 +12,9 @@ This answers the autonomy question in stages:
 - Phase 2, available now as preview: evaluate whether one proposed goal would
   be admitted after trace, test, benchmark or experiment-ledger evidence plus
   operator approval.
-- Phase 3, later: execute admitted goals automatically inside budget,
+- Phase 3, available now as preview: emit a queue append preview packet for one
+  preview-admissible goal without mutating the durable queue.
+- Phase 4, later: execute admitted goals automatically inside budget,
   rollback, branch-protection, and writer-gate limits.
 
 ## Rust Surface
@@ -26,10 +28,14 @@ The executable companion is `src/self_goal_proposal.rs`, which exposes:
 - `SelfGoalProposalReport`
 - `SelfGoalAdmissionGate`
 - `SelfGoalAdmissionReport`
+- `SelfGoalQueuePreviewGate`
+- `SelfGoalQueuePreviewReport`
 - `default_self_goal_proposal_report(queue)`
 - `default_noiron_self_goal_proposal_report()`
 - `default_self_goal_admission_report(proposal_report, runs)`
 - `default_noiron_self_goal_admission_report()`
+- `default_self_goal_queue_preview_report(queue, proposal_report, admission_report)`
+- `default_noiron_self_goal_queue_preview_report()`
 
 ## Candidate Contract
 
@@ -109,3 +115,31 @@ but the report still sets:
 
 The output includes digest-only record lines and an optional queue-insert
 preview digest. It never appends to the durable goal queue by itself.
+
+## Queue Preview Packet
+
+`SelfGoalQueuePreviewGate` is the third safe step. It consumes the current
+`EvolutionGoalQueue`, a proposal report, and an admission report. If one
+candidate is `preview_admissible`, not already present in the queue, and the
+preview append limit has not been used, it emits an append packet with:
+
+- existing queue digest;
+- proposed goal id;
+- append-record digest;
+- resulting queue preview digest;
+- redacted append record line;
+- read-only, write-denied, unapplied flags.
+
+The gate can classify a candidate as:
+
+- `append_preview`: the candidate is ready as a writer-gate input;
+- `held_for_admission_gate`: the admission gate has not made the candidate
+  preview-admissible;
+- `held_for_duplicate_goal`: the goal is already in the queue;
+- `held_for_append_limit`: another candidate already consumed the one-goal
+  preview slot;
+- `rejected`: unsafe policy, failed admission report, non-preview queue state,
+  missing candidate, or unredacted evidence blocked the packet.
+
+This is still not a durable queue write. It only turns a fully reviewed
+self-goal into the exact digest-only packet a future writer gate must approve.

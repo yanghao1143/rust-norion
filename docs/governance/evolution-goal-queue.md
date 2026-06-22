@@ -72,6 +72,14 @@ limit, or rejected. The default report remains held while R97 is active, and
 even a preview-admissible record keeps `write_allowed=false` and `applied=false`
 until a future queue writer gate is added.
 
+`SelfGoalQueuePreviewGate` now turns a preview-admissible candidate into a
+digest-only append packet for the future writer gate. It records the existing
+queue digest, append-record digest, resulting queue preview digest, and redacted
+goal record line while still keeping `read_only=true`, `write_allowed=false`,
+and `applied=false`. The gate holds on admission-gate waits, duplicate goals,
+or append-limit pressure, and rejects unsafe policy or failed admission reports
+instead of mutating the durable queue.
+
 ## Queue Evaluation
 
 `EvolutionGoalQueue::evaluate()` returns a read-only
