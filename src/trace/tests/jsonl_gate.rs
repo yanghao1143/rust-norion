@@ -1297,6 +1297,66 @@ fn trace_schema_gate_rejects_self_goal_queue_evidence_plan_command_leak() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_aggregates_self_goal_queue_evidence_collection_report() {
+    let path = temp_path("trace-schema-self-goal-queue-evidence-collection");
+    let line = self_goal_queue_evidence_collection_line();
+
+    fs::write(&path, format!("{line}\n")).unwrap();
+    let gate = evaluate_trace_schema_jsonl(&path).unwrap();
+    let self_goal_queue = gate
+        .operator_health_snapshot()
+        .section("self_goal_queue")
+        .unwrap()
+        .clone();
+
+    assert!(gate.passed, "{:?}", gate.failures);
+    assert_eq!(gate.checked_lines, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_events, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_ready, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_complete, 0);
+    assert_eq!(gate.self_goal_queue_evidence_collection_steps, 4);
+    assert_eq!(gate.self_goal_queue_evidence_collection_collected, 2);
+    assert_eq!(gate.self_goal_queue_evidence_collection_passed, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_failed, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_missing, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_manual_missing, 1);
+    assert_eq!(gate.self_goal_queue_evidence_collection_write_allowed, 0);
+    assert_eq!(gate.self_goal_queue_evidence_collection_applied, 0);
+    assert!(
+        gate.summary_line()
+            .contains("self_goal_queue_evidence_collection_events=1")
+    );
+    assert_eq!(
+        self_goal_queue.metric("evidence_collection_passed"),
+        Some(gate.self_goal_queue_evidence_collection_passed)
+    );
+    assert_eq!(
+        self_goal_queue.metric("evidence_collection_manual_missing"),
+        Some(gate.self_goal_queue_evidence_collection_manual_missing)
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_self_goal_queue_evidence_collection_command_leak() {
+    let line = self_goal_queue_evidence_collection_line().replacen(
+        "\"collection_packet_digests\":[",
+        "\"commands\":[\"cargo check\"],\"collection_packet_digests\":[",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| {
+            failure.contains(
+                "self_goal_queue_evidence_collection must expose collection counts/digests only",
+            )
+        }),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_jsonl_gate_accepts_self_goal_queue_append_execution_report() {
     let path = temp_path("trace-schema-self-goal-queue-append-execution");
     let report = self_goal_queue_append_execution_report();
@@ -1831,6 +1891,10 @@ fn self_goal_queue_continuation_line() -> String {
 
 fn self_goal_queue_evidence_plan_line() -> String {
     "{\"schema\":\"rust-norion-self-goal-queue-evidence-plan-v1\",\"plan_schema\":\"self_goal_queue_evidence_plan_v1\",\"source\":\"completion_resulting_queue\",\"ready\":true,\"active_goal_id\":\"redaction-digest:goal\",\"required_evidence_count\":4,\"required_evidence\":[\"cargo_check\",\"benchmark_gate\",\"trace_schema_gate\",\"operator_approval\"],\"planned_step_count\":4,\"step_kinds\":[\"cargo_check\",\"benchmark_gate\",\"trace_schema_gate\",\"operator_approval\"],\"auto_collectible_steps\":3,\"manual_steps\":1,\"evidence_template_digest\":\"redaction-digest:template\",\"evidence_plan_digest\":\"redaction-digest:evidence-plan\",\"packet_template_digests\":[\"redaction-digest:packet-1\",\"redaction-digest:packet-2\",\"redaction-digest:packet-3\",\"redaction-digest:packet-4\"],\"command_digests\":[\"redaction-digest:command-1\",\"redaction-digest:command-2\",\"redaction-digest:command-3\",\"redaction-digest:command-4\"],\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"self_goal_queue_evidence_plan source=completion_resulting_queue ready=true steps=4\"}".to_owned()
+}
+
+fn self_goal_queue_evidence_collection_line() -> String {
+    "{\"schema\":\"rust-norion-self-goal-queue-evidence-collection-v1\",\"collection_schema\":\"self_goal_queue_evidence_collection_v1\",\"source\":\"completion_resulting_queue\",\"ready\":true,\"collection_complete\":false,\"active_goal_id\":\"redaction-digest:goal\",\"planned_step_count\":4,\"step_kinds\":[\"cargo_check\",\"benchmark_gate\",\"trace_schema_gate\",\"operator_approval\"],\"step_statuses\":[\"passed\",\"failed\",\"missing\",\"manual_missing\"],\"passed_steps\":1,\"failed_steps\":1,\"missing_steps\":1,\"manual_missing_steps\":1,\"auto_collectible_steps\":3,\"manual_required_steps\":1,\"collected_evidence_count\":2,\"collected_evidence_digests\":[\"redaction-digest:evidence-1\",\"redaction-digest:evidence-2\"],\"collection_packet_digests\":[\"redaction-digest:packet-1\",\"redaction-digest:packet-2\",\"redaction-digest:packet-3\",\"redaction-digest:packet-4\"],\"evidence_collection_digest\":\"redaction-digest:collection\",\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"self_goal_queue_evidence_collection source=completion_resulting_queue ready=true planned=4\"}".to_owned()
 }
 
 fn self_goal_passing_run_for_first_candidate(

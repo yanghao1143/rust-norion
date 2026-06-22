@@ -22,6 +22,10 @@ const SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA: &str =
 const SELF_GOAL_QUEUE_EVIDENCE_PLAN_SCHEMA_VERSION: &str = "self_goal_queue_evidence_plan_v1";
 const SELF_GOAL_QUEUE_EVIDENCE_PLAN_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-evidence-plan-v1";
+const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_SCHEMA_VERSION: &str =
+    "self_goal_queue_evidence_collection_v1";
+const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-evidence-collection-v1";
 
 pub(super) fn evaluate_self_goal_queue_apply_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -789,6 +793,273 @@ pub(super) fn evaluate_self_goal_queue_evidence_plan_schema_line(line: &str) -> 
     let summary = extract_json_string_field(line, "summary").unwrap_or_default();
     if contains_private_or_executable_marker(&summary) {
         failures.push("self_goal_queue_evidence_plan summary leaked private marker".to_owned());
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_self_goal_queue_evidence_collection_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-goal-queue-evidence-collection-v1\"",
+        ),
+        ("collection_schema", "\"collection_schema\":"),
+        ("source", "\"source\":"),
+        ("ready", "\"ready\":"),
+        ("collection_complete", "\"collection_complete\":"),
+        ("active_goal_id", "\"active_goal_id\":"),
+        ("planned_step_count", "\"planned_step_count\":"),
+        ("step_kinds", "\"step_kinds\":"),
+        ("step_statuses", "\"step_statuses\":"),
+        ("passed_steps", "\"passed_steps\":"),
+        ("failed_steps", "\"failed_steps\":"),
+        ("missing_steps", "\"missing_steps\":"),
+        ("manual_missing_steps", "\"manual_missing_steps\":"),
+        ("auto_collectible_steps", "\"auto_collectible_steps\":"),
+        ("manual_required_steps", "\"manual_required_steps\":"),
+        ("collected_evidence_count", "\"collected_evidence_count\":"),
+        (
+            "collected_evidence_digests",
+            "\"collected_evidence_digests\":",
+        ),
+        (
+            "collection_packet_digests",
+            "\"collection_packet_digests\":",
+        ),
+        (
+            "evidence_collection_digest",
+            "\"evidence_collection_digest\":",
+        ),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("summary", "\"summary\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_goal_queue_evidence_collection field {name}"
+            ));
+        }
+    }
+
+    if line.contains("\"records\":[")
+        || line.contains("\"record_lines\":[")
+        || line.contains("\"objective\":")
+        || line.contains("\"command\":")
+        || line.contains("\"commands\":[")
+        || line.contains("\"resulting_queue\":")
+        || line.contains("\"evidence_packets\":[")
+    {
+        failures.push(
+            "self_goal_queue_evidence_collection must expose collection counts/digests only"
+                .to_owned(),
+        );
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_goal_queue_evidence_collection",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_goal_queue_evidence_collection",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_goal_queue_evidence_collection",
+    );
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_TRACE_SCHEMA => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_evidence_collection schema {value} is not supported"
+        )),
+        None => failures.push("self_goal_queue_evidence_collection schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "collection_schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_evidence_collection collection_schema {value} is not supported"
+        )),
+        None => failures
+            .push("self_goal_queue_evidence_collection collection_schema missing".to_owned()),
+    }
+
+    let source = extract_json_string_field(line, "source").unwrap_or_default();
+    if !matches!(
+        source.as_str(),
+        "current_queue" | "completion_resulting_queue"
+    ) {
+        failures.push("self_goal_queue_evidence_collection source is not supported".to_owned());
+    }
+
+    let ready = extract_json_bool_field(line, "ready").unwrap_or(false);
+    let collection_complete = extract_json_bool_field(line, "collection_complete").unwrap_or(false);
+    let planned_step_count = extract_json_usize_field(line, "planned_step_count").unwrap_or(0);
+    let step_kinds = extract_json_string_array_field(line, "step_kinds").unwrap_or_default();
+    let step_statuses = extract_json_string_array_field(line, "step_statuses").unwrap_or_default();
+    let collected_evidence =
+        extract_json_string_array_field(line, "collected_evidence_digests").unwrap_or_default();
+    let collection_packets =
+        extract_json_string_array_field(line, "collection_packet_digests").unwrap_or_default();
+    let passed_steps = extract_json_usize_field(line, "passed_steps").unwrap_or(0);
+    let failed_steps = extract_json_usize_field(line, "failed_steps").unwrap_or(0);
+    let missing_steps = extract_json_usize_field(line, "missing_steps").unwrap_or(0);
+    let manual_missing_steps = extract_json_usize_field(line, "manual_missing_steps").unwrap_or(0);
+    let auto_collectible_steps =
+        extract_json_usize_field(line, "auto_collectible_steps").unwrap_or(0);
+    let manual_required_steps =
+        extract_json_usize_field(line, "manual_required_steps").unwrap_or(0);
+    let collected_evidence_count =
+        extract_json_usize_field(line, "collected_evidence_count").unwrap_or(0);
+
+    if planned_step_count != step_kinds.len()
+        || planned_step_count != step_statuses.len()
+        || planned_step_count != collection_packets.len()
+    {
+        failures.push("self_goal_queue_evidence_collection step count mismatch".to_owned());
+    }
+    if collected_evidence_count != collected_evidence.len() {
+        failures.push("self_goal_queue_evidence_collection collected evidence mismatch".to_owned());
+    }
+    if passed_steps
+        .saturating_add(failed_steps)
+        .saturating_add(missing_steps)
+        .saturating_add(manual_missing_steps)
+        != planned_step_count
+    {
+        failures.push("self_goal_queue_evidence_collection status count mismatch".to_owned());
+    }
+    if auto_collectible_steps.saturating_add(manual_required_steps) != planned_step_count {
+        failures.push("self_goal_queue_evidence_collection auto/manual count mismatch".to_owned());
+    }
+    if collected_evidence_count > passed_steps.saturating_add(failed_steps) {
+        failures.push(
+            "self_goal_queue_evidence_collection collected evidence exceeds terminal steps"
+                .to_owned(),
+        );
+    }
+    if ready && planned_step_count == 0 {
+        failures.push("self_goal_queue_evidence_collection ready plan requires steps".to_owned());
+    }
+    if !ready && planned_step_count > 0 {
+        failures.push(
+            "self_goal_queue_evidence_collection held plan must not include steps".to_owned(),
+        );
+    }
+    if collection_complete
+        && (!ready
+            || planned_step_count == 0
+            || failed_steps > 0
+            || missing_steps > 0
+            || manual_missing_steps > 0
+            || passed_steps != planned_step_count)
+    {
+        failures.push(
+            "self_goal_queue_evidence_collection complete flag conflicts with step status"
+                .to_owned(),
+        );
+    }
+    if !collection_complete
+        && ready
+        && planned_step_count > 0
+        && failed_steps == 0
+        && missing_steps == 0
+        && manual_missing_steps == 0
+        && passed_steps == planned_step_count
+    {
+        failures.push(
+            "self_goal_queue_evidence_collection complete plan must set collection_complete"
+                .to_owned(),
+        );
+    }
+
+    for evidence in &step_kinds {
+        if !matches!(
+            evidence.as_str(),
+            "cargo_check"
+                | "focused_tests"
+                | "benchmark_gate"
+                | "trace_schema_gate"
+                | "experiment_ledger"
+                | "operator_approval"
+        ) {
+            failures.push(format!(
+                "self_goal_queue_evidence_collection evidence kind {evidence} is not supported"
+            ));
+        }
+        if contains_private_or_executable_marker(evidence) {
+            failures
+                .push("self_goal_queue_evidence_collection evidence kind leaked marker".to_owned());
+        }
+    }
+    for status in &step_statuses {
+        if !matches!(
+            status.as_str(),
+            "passed" | "failed" | "missing" | "manual_missing"
+        ) {
+            failures.push(format!(
+                "self_goal_queue_evidence_collection status {status} is not supported"
+            ));
+        }
+    }
+
+    let active_goal_id = extract_json_string_field(line, "active_goal_id").unwrap_or_default();
+    if active_goal_id != "none" && !active_goal_id.starts_with("redaction-digest:") {
+        failures.push(
+            "self_goal_queue_evidence_collection active_goal_id must be redaction digest or none"
+                .to_owned(),
+        );
+    }
+    if ready && active_goal_id == "none" {
+        failures.push("self_goal_queue_evidence_collection ready plan must name a goal".to_owned());
+    }
+    if !ready && active_goal_id != "none" {
+        failures
+            .push("self_goal_queue_evidence_collection held plan must not name a goal".to_owned());
+    }
+
+    let digest = extract_json_string_field(line, "evidence_collection_digest").unwrap_or_default();
+    if !digest.starts_with("redaction-digest:") {
+        failures.push(
+            "self_goal_queue_evidence_collection evidence_collection_digest must be redaction digest"
+                .to_owned(),
+        );
+    }
+    if contains_private_or_executable_marker(&digest) {
+        failures.push(
+            "self_goal_queue_evidence_collection evidence_collection_digest leaked private marker"
+                .to_owned(),
+        );
+    }
+    for value in collected_evidence.iter().chain(collection_packets.iter()) {
+        if !value.starts_with("redaction-digest:") {
+            failures.push(
+                "self_goal_queue_evidence_collection collection digest must be redaction digest"
+                    .to_owned(),
+            );
+        }
+        if contains_private_or_executable_marker(value) {
+            failures.push("self_goal_queue_evidence_collection digest leaked marker".to_owned());
+        }
+    }
+
+    let summary = extract_json_string_field(line, "summary").unwrap_or_default();
+    if contains_private_or_executable_marker(&summary) {
+        failures
+            .push("self_goal_queue_evidence_collection summary leaked private marker".to_owned());
     }
 
     failures

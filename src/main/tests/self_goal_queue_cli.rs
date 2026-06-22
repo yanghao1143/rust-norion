@@ -29,6 +29,12 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
     assert_eq!(report.evidence_plan.steps.len(), 4);
     assert_eq!(report.evidence_plan.auto_collectible_steps(), 3);
     assert_eq!(report.evidence_plan.manual_steps(), 1);
+    assert!(report.evidence_collection.ready);
+    assert!(!report.evidence_collection.collection_complete);
+    assert_eq!(report.evidence_collection.steps.len(), 4);
+    assert_eq!(report.evidence_collection.missing_steps(), 3);
+    assert_eq!(report.evidence_collection.manual_missing_steps(), 1);
+    assert_eq!(report.evidence_collection.passed_steps(), 0);
     assert!(
         report
             .evidence_plan
@@ -45,6 +51,10 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
     assert!(summary.contains("redaction-digest:"));
     assert!(summary.contains("self_goal_queue_evidence_plan source=current_queue ready=true"));
     assert!(summary.contains("self_goal_queue_evidence_step index=1 kind=cargo_check"));
+    assert!(
+        summary.contains("self_goal_queue_evidence_collection source=current_queue ready=true")
+    );
+    assert!(summary.contains("self_goal_queue_evidence_collection_step index=1 kind=cargo_check"));
     assert!(!summary.contains("English/Chinese/Rust coding service"));
     assert!(!summary.contains("local model can persist useful experience"));
 }
@@ -83,6 +93,8 @@ fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
     );
     assert!(!report.run_plan.active);
     assert!(report.completion_preview.ready);
+    assert!(!report.evidence_collection.ready);
+    assert!(!report.evidence_collection.collection_complete);
     assert_eq!(report.completion_preview.completed_count, 1);
     assert_eq!(report.completion_preview.retained_count, 0);
     assert_eq!(
@@ -102,6 +114,48 @@ fn self_goal_queue_cli_evaluates_current_queue_evidence_by_queue_index() {
     assert!(summary.contains("self_goal_queue_run_evolution_goal_decision_v1"));
     assert!(summary.contains("status=passed"));
     assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
+}
+
+#[test]
+fn self_goal_queue_cli_collection_keeps_operator_approval_manual_until_granted() {
+    let dir = temp_asset_dir("self-goal-queue-cli-collection-approval");
+    fs::create_dir_all(&dir).unwrap();
+    let trace_path = dir.join("collection-approval-trace.jsonl");
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=cargo_check;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=focused_tests;passed=true;items=3;failures=0".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=trace_schema_gate;passed=true".to_owned(),
+        "--self-goal-queue-evidence".to_owned(),
+        "queue_index=0;kind=operator_approval;passed=true".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+    ]);
+
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+    assert_eq!(report.queue_run.approval_hold_count, 1);
+    assert!(report.evidence_collection.ready);
+    assert!(!report.evidence_collection.collection_complete);
+    assert_eq!(report.evidence_collection.passed_steps(), 3);
+    assert_eq!(report.evidence_collection.collected_evidence_count(), 3);
+    assert_eq!(report.evidence_collection.manual_missing_steps(), 1);
+    assert!(
+        report
+            .evidence_collection
+            .steps
+            .iter()
+            .any(|step| step.evidence_kind == "operator_approval"
+                && step.status == "manual_missing"
+                && step.evidence_digest.is_none())
+    );
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+
+    fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
@@ -154,6 +208,7 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
     assert!(summary.contains("self_goal_queue_completion ready=true completed=1 retained=0"));
     assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-evidence-plan-v1"));
+    assert!(trace.contains("rust-norion-self-goal-queue-evidence-collection-v1"));
     assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
     assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
     assert!(!trace.contains("R97 English/Chinese/Rust coding service"));
@@ -248,6 +303,14 @@ fn self_goal_queue_cli_completion_continuation_activates_retained_goal() {
     assert_eq!(report.evidence_plan.steps.len(), 4);
     assert_eq!(report.evidence_plan.auto_collectible_steps(), 3);
     assert_eq!(report.evidence_plan.manual_steps(), 1);
+    assert!(report.evidence_collection.ready);
+    assert!(!report.evidence_collection.collection_complete);
+    assert_eq!(
+        report.evidence_collection.source,
+        "completion_resulting_queue"
+    );
+    assert_eq!(report.evidence_collection.missing_steps(), 3);
+    assert_eq!(report.evidence_collection.manual_missing_steps(), 1);
     assert!(
         !report
             .continuation_plan
@@ -266,6 +329,7 @@ fn self_goal_queue_cli_completion_continuation_activates_retained_goal() {
     ));
     assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-evidence-plan-v1"));
+    assert!(trace.contains("rust-norion-self-goal-queue-evidence-collection-v1"));
     assert!(
         summary.contains("required=cargo_check|benchmark_gate|trace_schema_gate|operator_approval")
     );
@@ -306,6 +370,7 @@ fn self_goal_queue_cli_store_apply_remains_gated_without_admission_evidence() {
     assert!(trace.contains("rust-norion-self-goal-queue-append-execution-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-evidence-plan-v1"));
+    assert!(trace.contains("rust-norion-self-goal-queue-evidence-collection-v1"));
     assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
     assert!(!trace.contains("English/Chinese/Rust coding service"));
 
