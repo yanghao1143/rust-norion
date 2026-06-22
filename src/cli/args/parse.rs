@@ -543,6 +543,14 @@ impl Args {
                     state.self_goal_queue_local_evidence_dry_run = true;
                     index += 1;
                 }
+                "--coding-service-eval-readiness" => {
+                    state.coding_service_eval_readiness = true;
+                    index += 1;
+                }
+                "--coding-service-eval-runner" => {
+                    state.coding_service_eval_runner = true;
+                    index += 1;
+                }
                 "--self-goal-queue-tenant" if index + 1 < raw.len() => {
                     state.self_goal_queue = true;
                     state.self_goal_queue_tenant = raw[index + 1].to_owned();

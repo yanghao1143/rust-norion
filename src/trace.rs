@@ -5,6 +5,7 @@ const TRACE_FLOAT_EPSILON: f32 = 0.000_001;
 mod adapter;
 mod admission;
 mod agent_team;
+mod coding_service_eval;
 mod device_contract;
 mod embedding;
 mod evolution;
@@ -32,6 +33,7 @@ use admission::{
     evaluate_self_evolution_rollback_replay_schema_line,
 };
 use agent_team::evaluate_trace_agent_team;
+use coding_service_eval::evaluate_coding_service_eval_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
@@ -65,10 +67,11 @@ use specialized::{
 };
 
 pub use jsonl::{
-    append_business_contract_trace_jsonl, append_evolution_goal_queue_store_write_trace_jsonl,
-    append_improvement_corpus_trace_jsonl, append_memory_residency_trace_jsonl,
-    append_rust_check_trace_jsonl, append_self_evolution_admission_trace_jsonl,
-    append_self_evolution_experiment_trace_jsonl,
+    append_business_contract_trace_jsonl, append_coding_service_eval_readiness_trace_jsonl,
+    append_coding_service_eval_runner_trace_jsonl,
+    append_evolution_goal_queue_store_write_trace_jsonl, append_improvement_corpus_trace_jsonl,
+    append_memory_residency_trace_jsonl, append_rust_check_trace_jsonl,
+    append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
     append_self_evolution_operator_approval_trace_jsonl,
     append_self_evolution_promotion_preflight_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
@@ -76,7 +79,8 @@ pub use jsonl::{
     append_self_evolution_rollback_replay_trace_jsonl,
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     append_trace_jsonl, append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
-    business_contract_trace_json_line, evolution_goal_queue_store_write_trace_json_line,
+    business_contract_trace_json_line, coding_service_eval_readiness_trace_json_line,
+    coding_service_eval_runner_trace_json_line, evolution_goal_queue_store_write_trace_json_line,
     improvement_corpus_trace_json_line, memory_residency_trace_json_line,
     rust_check_trace_json_line, self_evolution_admission_trace_json_line,
     self_evolution_experiment_trace_json_line, self_evolution_operator_approval_trace_json_line,
@@ -183,6 +187,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-self-goal-local-evidence-v1\"") {
         failures.extend(evaluate_self_goal_local_evidence_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-coding-service-eval-readiness-v1\"") {
+        failures.extend(evaluate_coding_service_eval_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-evolution-goal-queue-store-write-v1\"") {
