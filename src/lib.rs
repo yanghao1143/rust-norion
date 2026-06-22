@@ -110,7 +110,8 @@ pub use evolution_goal::{
 };
 pub use evolution_goal_queue_store::{
     EVOLUTION_GOAL_QUEUE_STORE_APPROVAL_SCHEMA_VERSION, EVOLUTION_GOAL_QUEUE_STORE_SCHEMA_VERSION,
-    EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy,
+    EVOLUTION_GOAL_QUEUE_STORE_WRITE_TRACE_SCHEMA, EvolutionGoalQueueDiskStore,
+    EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy,
     EvolutionGoalQueueStoreReadReport, EvolutionGoalQueueStoreWriteDecision,
     EvolutionGoalQueueStoreWriteReport,
 };
@@ -356,9 +357,9 @@ pub use toolsmith::{
 };
 pub use trace::{
     SelfEvolutionOperatorApprovalServiceCounters, TraceSchemaGateReport,
-    append_business_contract_trace_jsonl, append_improvement_corpus_trace_jsonl,
-    append_rust_check_trace_jsonl, append_self_evolution_admission_trace_jsonl,
-    append_self_evolution_experiment_trace_jsonl,
+    append_business_contract_trace_jsonl, append_evolution_goal_queue_store_write_trace_jsonl,
+    append_improvement_corpus_trace_jsonl, append_rust_check_trace_jsonl,
+    append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
     append_self_evolution_operator_approval_trace_jsonl,
     append_self_evolution_promotion_preflight_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
@@ -367,9 +368,9 @@ pub use trace::{
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     append_trace_jsonl, append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
     business_contract_trace_json_line, evaluate_trace_schema_jsonl, evaluate_trace_schema_line,
-    improvement_corpus_trace_json_line, rust_check_trace_json_line,
-    self_evolution_admission_trace_json_line, self_evolution_experiment_trace_json_line,
-    self_evolution_operator_approval_trace_json_line,
+    evolution_goal_queue_store_write_trace_json_line, improvement_corpus_trace_json_line,
+    rust_check_trace_json_line, self_evolution_admission_trace_json_line,
+    self_evolution_experiment_trace_json_line, self_evolution_operator_approval_trace_json_line,
     self_evolution_promotion_preflight_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,

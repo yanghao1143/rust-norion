@@ -8,13 +8,14 @@ use crate::self_evolving_memory::{
     SelfEvolvingMemoryStore,
 };
 use crate::{
-    EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue, EvolutionGoalRunEvidence,
-    SelfGoalProposalReport, SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport,
-    SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport, UnifiedWriterGate,
-    UnifiedWriterGateCandidate, UnifiedWriterGateDomain, UnifiedWriterGatePolicy,
-    UnifiedWriterGateWriteScope, default_self_goal_admission_report,
-    default_self_goal_proposal_report, default_self_goal_queue_apply_report,
-    default_self_goal_queue_preview_report,
+    EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
+    EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy,
+    EvolutionGoalRunEvidence, SelfGoalProposalReport, SelfGoalQueueAppendApproval,
+    SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport,
+    TenantResourceLane, TenantScope, UnifiedWriterGate, UnifiedWriterGateCandidate,
+    UnifiedWriterGateDomain, UnifiedWriterGatePolicy, UnifiedWriterGateWriteScope,
+    default_self_goal_admission_report, default_self_goal_proposal_report,
+    default_self_goal_queue_apply_report, default_self_goal_queue_preview_report,
 };
 
 #[test]
@@ -1173,6 +1174,96 @@ fn trace_schema_gate_rejects_self_goal_queue_append_execution_durable_write() {
             .any(|failure| failure.contains("durable_write_allowed=true expected false")),
         "{failures:?}"
     );
+}
+
+#[test]
+fn trace_schema_jsonl_gate_accepts_evolution_goal_queue_store_write_report() {
+    let trace_path = temp_path("trace-schema-evolution-goal-queue-store-write");
+    let store_path = temp_path("evolution-goal-queue-store-write");
+    let mut store = EvolutionGoalQueueDiskStore::open_with_policy(
+        &store_path,
+        EvolutionGoalQueueStorePolicy::explicit_durable_write(),
+    )
+    .unwrap();
+    let scope = TenantScope::local_single_user();
+    let key = scope.scoped_key(TenantResourceLane::EvolutionGoalQueue, "active");
+    let append_report = self_goal_queue_append_execution_report();
+    let resulting_queue = append_report
+        .resulting_queue
+        .as_ref()
+        .expect("append executor produced queue");
+    let approval = EvolutionGoalQueueStoreApproval::for_queue(
+        "operator",
+        "queue-store-ticket",
+        &key,
+        resulting_queue,
+        &append_report.rollback_anchor_digest,
+    );
+    let write = store
+        .write_append_execution_result(&scope, &key, &append_report, Some(&approval))
+        .unwrap();
+
+    append_evolution_goal_queue_store_write_trace_jsonl(&trace_path, &write).unwrap();
+    let gate = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+    assert!(append_report.passed(), "{}", append_report.summary_line());
+    assert!(write.passed(), "{}", write.summary_line());
+    assert!(gate.passed, "{:?}", gate.failures);
+    assert_eq!(gate.checked_lines, 1);
+    assert_eq!(gate.evolution_goal_queue_store_write_events, 1);
+    assert_eq!(gate.evolution_goal_queue_store_write_applied, 1);
+    assert_eq!(
+        gate.evolution_goal_queue_store_write_durable_write_allowed,
+        1
+    );
+    assert_eq!(gate.evolution_goal_queue_store_write_applied_to_disk, 1);
+    assert!(
+        gate.summary_line()
+            .contains("evolution_goal_queue_store_write_events=1")
+    );
+    cleanup(trace_path);
+    cleanup(store_path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_evolution_goal_queue_store_write_raw_digest() {
+    let store_path = temp_path("evolution-goal-queue-store-raw-digest");
+    let mut store = EvolutionGoalQueueDiskStore::open_with_policy(
+        &store_path,
+        EvolutionGoalQueueStorePolicy::explicit_durable_write(),
+    )
+    .unwrap();
+    let scope = TenantScope::local_single_user();
+    let key = scope.scoped_key(TenantResourceLane::EvolutionGoalQueue, "active");
+    let append_report = self_goal_queue_append_execution_report();
+    let resulting_queue = append_report
+        .resulting_queue
+        .as_ref()
+        .expect("append executor produced queue");
+    let approval = EvolutionGoalQueueStoreApproval::for_queue(
+        "operator",
+        "queue-store-ticket",
+        &key,
+        resulting_queue,
+        &append_report.rollback_anchor_digest,
+    );
+    let write = store
+        .write_append_execution_result(&scope, &key, &append_report, Some(&approval))
+        .unwrap();
+    let line = write.json_line().replacen(
+        "\"queue_digest\":\"redaction-digest:",
+        "\"queue_digest\":\"raw-queue:",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("queue_digest must be redaction digest")),
+        "{failures:?}"
+    );
+    cleanup(store_path);
 }
 
 #[test]
