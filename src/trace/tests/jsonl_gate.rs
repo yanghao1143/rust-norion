@@ -9,7 +9,8 @@ use crate::self_evolving_memory::{
 };
 use crate::{
     EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue, EvolutionGoalRunEvidence,
-    SelfGoalProposalReport, SelfGoalQueueApplyReport, UnifiedWriterGate,
+    SelfGoalProposalReport, SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport,
+    SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport, UnifiedWriterGate,
     UnifiedWriterGateCandidate, UnifiedWriterGateDomain, UnifiedWriterGatePolicy,
     UnifiedWriterGateWriteScope, default_self_goal_admission_report,
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
@@ -1142,6 +1143,39 @@ fn trace_schema_gate_rejects_self_goal_queue_apply_write_allowed_trace() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_accepts_self_goal_queue_append_execution_report() {
+    let path = temp_path("trace-schema-self-goal-queue-append-execution");
+    let report = self_goal_queue_append_execution_report();
+
+    append_self_goal_queue_append_execution_trace_jsonl(&path, &report).unwrap();
+
+    let gate = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed(), "{}", report.summary_line());
+    assert!(gate.passed, "{:?}", gate.failures);
+    assert_eq!(gate.checked_lines, 1);
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_self_goal_queue_append_execution_durable_write() {
+    let report = self_goal_queue_append_execution_report();
+    let line = report.json_line().replacen(
+        "\"durable_write_allowed\":false",
+        "\"durable_write_allowed\":true",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("durable_write_allowed=true expected false")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_jsonl_gate_exports_redacted_operator_health_snapshot() {
     let path = temp_path("trace-schema-operator-health");
     let mut engine = NoironEngine::new();
@@ -1515,6 +1549,36 @@ fn self_goal_queue_apply_report(write_enabled: bool) -> SelfGoalQueueApplyReport
     };
 
     default_self_goal_queue_apply_report(&queue, &preview, &writer_gate)
+}
+
+fn self_goal_queue_append_execution_report() -> SelfGoalQueueAppendExecutionReport {
+    let queue = EvolutionGoalQueue::new(Vec::new());
+    let proposal = default_self_goal_proposal_report(&queue);
+    let run = self_goal_passing_run_for_first_candidate(&proposal);
+    let admission = default_self_goal_admission_report(&proposal, &[run]);
+    let preview = default_self_goal_queue_preview_report(&queue, &proposal, &admission);
+    let writer_gate = UnifiedWriterGate::new()
+        .with_policy(UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        })
+        .evaluate([UnifiedWriterGateCandidate::self_goal_queue_preview(
+            &preview,
+        )]);
+    let apply_report = default_self_goal_queue_apply_report(&queue, &preview, &writer_gate);
+    let approval = SelfGoalQueueAppendApproval::from_apply_report(
+        "operator-jy",
+        "approval-ticket-self-goal-append",
+        &apply_report,
+    );
+
+    SelfGoalQueueAppendExecutor::default().evaluate(
+        &queue,
+        &proposal,
+        &preview,
+        &apply_report,
+        Some(&approval),
+    )
 }
 
 fn self_goal_passing_run_for_first_candidate(
