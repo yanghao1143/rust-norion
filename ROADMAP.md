@@ -472,32 +472,34 @@ Status date: 2026-06-22.
   runtimes, self-owned runtime ABI, model-side embeddings, production manifest
   gates, reference/local production kernels, all-device benchmark coverage, and
   device/quantization budget planning have substantially landed.
-- The roadmap is now at the v0.7/v0.8 boundary. The v0.7 runtime/memory/eval
-  substrate is broad enough to support the next v0.8 goal: a unified Noiron
-  orchestration loop that deterministically connects routing, disk-backed KV
-  memory, Reasoning Genome splicing, model adapter execution, validation,
-  reflection, and approval-gated memory/genome admission.
+- The roadmap has crossed into the v0.8 integration band. The v0.7
+  runtime/memory/eval substrate is broad enough to support the current Noiron
+  orchestration baseline, and #43/#44/#45 now provide deterministic routing,
+  disk-backed KV memory, Reasoning Genome splicing, model adapter execution,
+  validation, reflection, approval-gated admission, KV residency, compaction,
+  retention, replay-safe evidence, compute-budget scheduling, and
+  wasted-compute telemetry.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
   reinforced KV-Fusion scoring and admission arbitration, #43 unified Noiron
-  engine orchestration loop, and #44 KV residency / compaction /
-  replay-safe retention policy.
-- Current active lane and next priority is #45 `[Routing] Add compute-budget
-  scheduler and wasted-compute telemetry`. The implementation evidence should
-  be checked against the issue acceptance criteria: deterministic budget-driven
-  route fanout changes, benchmark comparison with and without budget-aware
-  routing, saved-context / skipped-chunk / validation-cost telemetry, and
-  correctness-anchor preservation when work is pruned.
+  engine orchestration loop, #44 KV residency / compaction / replay-safe
+  retention policy, and #45 compute-budget scheduler / wasted-compute
+  telemetry with explicit before/after benchmark fanout evidence.
+- Current active hardening lane is #46 `[Genome] Add lineage graph, rollback
+  anchors, and audit export`, followed by #47 privacy redaction corpus. These
+  should make the completed orchestration, memory, and compute-budget evidence
+  exportable without leaking raw prompts, secrets, hidden reasoning, or
+  unreviewed payloads.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
 - PR #1 is currently open and mergeable, but still needs review approval before
   merge. The `focused Rust crates` checks are still `IN_PROGRESS`, so the PR
   must not be treated as green yet.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body now marks #43 and #44 complete while #45 remains open; issues #45
-  and #72-#78 extend that tracker with the next routing/gene/eval/memory/
-  governance/deployment workstream.
+  Its body now marks #43, #44, and #45 complete; issues #46/#47 and #72-#78
+  extend that tracker with the next audit/privacy/gene/eval/memory/governance/
+  deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -748,8 +750,9 @@ Status date: 2026-06-22.
   approval-gated memory/genome admission. Durable writes stay preview-only
   until writer gates, validation evidence, rollback anchors, privacy/license
   checks, and maintainer/operator approval are all present. Issue #44 is the
-  completed KV residency/compaction baseline, and #45 is the active follow-on
-  routing-budget and wasted-compute telemetry lane.)
+  completed KV residency/compaction baseline, #45 is the completed
+  routing-budget and wasted-compute telemetry baseline, and #46/#47 are the
+  active lineage/audit and privacy-redaction hardening lanes.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -778,10 +781,17 @@ Status date: 2026-06-22.
   residency, deterministic compaction, stale retirement, replay-safe retention,
   and rollback-anchor preservation.
 - #45 `[Routing] Add compute-budget scheduler and wasted-compute telemetry`:
-  current active lane. Verify the already reported implementation evidence
-  against the acceptance criteria before closing: deterministic fanout changes,
-  before/after compute benchmarks, saved-context / skipped-low-value-chunk /
-  validation-cost telemetry, and correctness anchors preserved under pruning.
+  completed / closed v0.8 compute-governance baseline. Gates budget-aware
+  fanout changes, before/after compute benchmark comparison,
+  saved-context / skipped-low-value-chunk / validation-cost telemetry, and
+  correctness-anchor preservation under pruning.
+- #46 `[Genome] Add lineage graph, rollback anchors, and audit export`:
+  current active hardening lane. Export redacted lineage and rollback-anchor
+  evidence for genome, memory, routing, and compute-budget decisions.
+- #47 `[Governance] Add privacy redaction corpus for memory, genome, and trace
+  evidence`: next paired hardening lane. Build fixtures and gates that prove
+  audit exports do not leak raw prompts, answers, secrets, hidden reasoning, or
+  unreviewed external-source payloads.
 - #72 `[Genome] Add gene purpose ontology and relabel validator`: make gene
   purpose explicit, validate relabel operations, and reduce stale-label drift
   before Gene Scissors edits become durable.
@@ -814,32 +824,38 @@ Status date: 2026-06-22.
   Normalizes hot/warm/cold memory residency, deterministic compaction, stale
   retirement, benchmark reporting, and rollback-anchor preservation for the
   orchestration baseline.
-- Next active / #45: compute-budget scheduler and wasted-compute telemetry.
-  Verify budget-aware route fanout, before/after compute benchmarks,
-  saved-context and skipped-work telemetry, validation-cost reporting, and
-  correctness-anchor preservation before closing the issue.
-- R86: Reasoning DNA dual-chain stabilization. Normalize `express_chain` and
+- R86 / #45 completed baseline: compute-budget scheduler and wasted-compute
+  telemetry. Verifies budget-aware route fanout, before/after compute
+  benchmarks, saved-context and skipped-work telemetry, validation-cost
+  reporting, and correctness-anchor preservation.
+- Next active / #46: lineage graph, rollback anchors, and audit export. Produce
+  redacted lineage packets that connect genome, memory, routing, compute-budget,
+  validation, and rollback evidence without leaking private payloads.
+- Next paired / #47: privacy redaction corpus for memory, genome, and trace
+  evidence. Add fixture coverage before broad audit exports or outside
+  collaboration depend on trace packets.
+- R87: Reasoning DNA dual-chain stabilization. Normalize `express_chain` and
   `memory_chain` records with segment ids, source ids, purpose tags, version,
   confidence, last validation result, and rollback anchors.
-- R87: Gene splicing and mutation taxonomy. Gate variable splicing, intron
+- R88: Gene splicing and mutation taxonomy. Gate variable splicing, intron
   filtering, segment isolation, insertion/deletion, mislabel, truncation, format
   drift, stale-label, schema, privacy, and KV-shape findings as read-only
   `MutationPlan` evidence.
-- R88: DNA aging and relabel/rejuvenation. Add relabel plans for expired,
+- R89: DNA aging and relabel/rejuvenation. Add relabel plans for expired,
   drifting, or semantically aged memory/gene segments based on evidence
   summaries, purpose tags, confidence, version, and validation state.
-- R89: malignant mutation quarantine and regeneration. Quarantine harmful,
+- R90: malignant mutation quarantine and regeneration. Quarantine harmful,
   polluted, low-confidence, or secret-risk segments with digest-only reasons and
   rollback records; allow repair/regeneration/re-admission only after validation
   and operator approval.
-- R90: self-evolution writer gate consolidation. Unify memory, genome, and
+- R91: self-evolution writer gate consolidation. Unify memory, genome, and
   experiment-ledger writer gates so all durable writes remain preview/read-only
   until validation, rollback, privacy/license, and maintainer/operator approval
   requirements pass.
-- R91: reference backlog verification. Fact-check and license-review
+- R92: reference backlog verification. Fact-check and license-review
   DNA-inspired, chunk/KV, and Rust inference references before any behavior spec
   is promoted to an implementation issue.
-- R92: clean-room implementation audit. Reconfirm `fortunto2/rust-code` stays
+- R93: clean-room implementation audit. Reconfirm `fortunto2/rust-code` stays
   behind MIT attribution review and `Kuberwastaken/claurst` remains GPL-3.0
   concept-only unless GPL obligations are explicitly accepted.
 
