@@ -33,6 +33,7 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) run_plan: SelfGoalQueueCliRunPlan,
     pub(crate) completion_preview: SelfGoalQueueCliCompletionPreview,
     pub(crate) completion_writer_gate: UnifiedWriterGateReport,
+    pub(crate) continuation_plan: SelfGoalQueueCliContinuationPlan,
     pub(crate) proposal: SelfGoalProposalReport,
     pub(crate) admission: SelfGoalAdmissionReport,
     pub(crate) queue_preview: SelfGoalQueuePreviewReport,
@@ -59,6 +60,7 @@ impl SelfGoalQueueCliReport {
                 "self_goal_queue_completion_{}",
                 self.completion_writer_gate.summary_line()
             ),
+            self.continuation_plan.summary_line(),
         ];
         lines.extend(
             self.queue_run
@@ -115,6 +117,8 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
             ..UnifiedWriterGatePolicy::default()
         })
         .evaluate([completion_preview.writer_gate_candidate()]);
+    let continuation_plan =
+        SelfGoalQueueCliContinuationPlan::from_completion(&current_queue, &completion_preview);
     let admission = default_self_goal_admission_report(&proposal, &evidence_runs);
     let queue_preview =
         default_self_goal_queue_preview_report(&current_queue, &proposal, &admission);
@@ -176,6 +180,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         run_plan,
         completion_preview,
         completion_writer_gate,
+        continuation_plan,
         proposal,
         admission,
         queue_preview,
@@ -241,6 +246,11 @@ impl SelfGoalQueueCliRunPlan {
         }
     }
 
+    fn from_queue_without_evidence(queue: &EvolutionGoalQueue) -> Self {
+        let queue_run = queue.evaluate(&[]);
+        Self::from_queue_run(queue, &queue_run)
+    }
+
     pub(crate) fn summary_line(&self) -> String {
         let required = if self.required_evidence.is_empty() {
             "none".to_owned()
@@ -257,6 +267,85 @@ impl SelfGoalQueueCliRunPlan {
             self.max_steps,
             self.max_tokens,
             self.max_runtime_ms
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliContinuationPlan {
+    pub(crate) source: &'static str,
+    pub(crate) ready: bool,
+    pub(crate) queue_digest: String,
+    pub(crate) goal_count: usize,
+    pub(crate) plan: SelfGoalQueueCliRunPlan,
+    pub(crate) continuation_digest: String,
+    pub(crate) reason_codes: Vec<String>,
+}
+
+impl SelfGoalQueueCliContinuationPlan {
+    fn from_completion(
+        current_queue: &EvolutionGoalQueue,
+        completion_preview: &SelfGoalQueueCliCompletionPreview,
+    ) -> Self {
+        let (source, queue, mut reason_codes) = match completion_preview.resulting_queue.as_ref() {
+            Some(resulting_queue) if completion_preview.ready => (
+                "completion_resulting_queue",
+                resulting_queue,
+                vec!["completion_pruned_prefix".to_owned()],
+            ),
+            _ => (
+                "current_queue",
+                current_queue,
+                vec!["completion_not_ready".to_owned()],
+            ),
+        };
+        let plan = SelfGoalQueueCliRunPlan::from_queue_without_evidence(queue);
+        let queue_digest = queue.redaction_digest();
+        if plan.active {
+            reason_codes.push("next_goal_ready_for_evidence".to_owned());
+        } else {
+            reason_codes.push("no_next_goal_ready".to_owned());
+        }
+        let goal_count_text = queue.goals.len().to_string();
+        let reason_text = reason_codes.join("|");
+        let continuation_digest = stable_redaction_digest([
+            "self-goal-queue-continuation-plan-v1",
+            source,
+            queue_digest.as_str(),
+            goal_count_text.as_str(),
+            plan.evidence_template_digest.as_str(),
+            reason_text.as_str(),
+        ]);
+
+        Self {
+            source,
+            ready: plan.active,
+            queue_digest,
+            goal_count: queue.goals.len(),
+            plan,
+            continuation_digest,
+            reason_codes,
+        }
+    }
+
+    pub(crate) fn summary_line(&self) -> String {
+        let required = if self.plan.required_evidence.is_empty() {
+            "none".to_owned()
+        } else {
+            self.plan.required_evidence.join("|")
+        };
+        format!(
+            "self_goal_queue_continuation source={} ready={} goals={} queue={} active={} goal={} required={} template={} digest={} reasons={}",
+            self.source,
+            self.ready,
+            self.goal_count,
+            self.queue_digest,
+            self.plan.active,
+            self.plan.active_goal_id.as_deref().unwrap_or("none"),
+            required,
+            self.plan.evidence_template_digest,
+            self.continuation_digest,
+            self.reason_codes.join("|")
         )
     }
 }
