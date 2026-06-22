@@ -156,6 +156,62 @@ fn rollback_replay_apply_trace_line(ready: bool) -> String {
     rollback_replay_apply_trace_report(ready).json_line()
 }
 
+fn promotion_preflight_trace_report(ready: bool) -> SelfEvolutionPromotionPreflightReport {
+    let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        NoironRouter::new().state(),
+        TaskProfile::Coding,
+        GenerationMetrics {
+            perplexity: 36.0,
+            semantic_consistency: 0.20,
+            contradiction_count: 2,
+            token_count: 64,
+        },
+    );
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        "promotion-preflight-trace",
+        EvolutionLedger {
+            replay_rust_check_items: 2,
+            replay_rust_check_passed: 2,
+            replay_rust_check_failed: 0,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(3, 3, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ))
+    .with_router_threshold_preview_report(&router_preview);
+    let admission = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    let experiment = ledger.append_admission_report("promotion-preflight-experiment", &admission);
+    let mut approval_evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+        "maintainer-jy",
+        "promotion-preflight-ticket",
+        &admission.review_packet,
+        "approved for promotion preflight trace schema validation",
+    );
+    if !ready {
+        approval_evidence.approval_ticket_id.clear();
+    }
+    let approval = SelfEvolutionOperatorApprovalGate::new()
+        .evaluate(&admission.review_packet, &approval_evidence);
+    let report =
+        SelfEvolutionPromotionPreflightGate::new().evaluate(&admission, &experiment, &approval);
+
+    assert_eq!(report.ready_for_explicit_promotion, ready);
+    report
+}
+
+fn promotion_preflight_trace_line(ready: bool) -> String {
+    promotion_preflight_trace_report(ready).json_line()
+}
+
 #[test]
 fn self_evolution_admission_trace_schema_accepts_read_only_packet() {
     let line = admitted_self_evolution_admission_line();
@@ -333,6 +389,163 @@ fn self_evolution_rollback_replay_apply_trace_schema_rejects_mismatched_ready_de
         failures.iter().any(
             |failure| failure.contains("ready decision requires ready_for_operator_apply=true")
         ),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn self_evolution_promotion_preflight_trace_schema_accepts_ready_preflight() {
+    let line = promotion_preflight_trace_line(true);
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"schema\":\"rust-norion-self-evolution-promotion-preflight-v1\""));
+    assert!(line.contains("\"decision\":\"ready_for_explicit_promotion\""));
+    assert!(line.contains("\"ready_for_explicit_promotion\":true"));
+    assert!(line.contains("\"explicit_promotion_required\":true"));
+    assert!(line.contains("\"admission_admitted_for_human_review\":true"));
+    assert!(line.contains("\"experiment_admitted_for_human_review\":true"));
+    assert!(line.contains("\"operator_approved\":true"));
+    assert!(line.contains("\"rust_validation_passed\":true"));
+    assert!(line.contains("\"validation_passed\":true"));
+    assert!(line.contains("\"benchmark_gate_passed\":true"));
+    assert!(line.contains("\"adaptive_preview_evidence_present\":true"));
+    assert!(line.contains("\"read_only\":true"));
+    assert!(line.contains("\"report_only\":true"));
+    assert!(line.contains("\"preview_only\":true"));
+    assert!(line.contains("\"activation_write_allowed\":false"));
+    assert!(line.contains("\"write_allowed\":false"));
+    assert!(line.contains("\"applied\":false"));
+    assert!(line.contains("\"blocked_reasons_count\":0"));
+    assert!(line.contains("\"blocked_reasons_digest\":\"fnv64:"));
+    assert!(!line.contains("\"approval_review_packet_ids\":["));
+    assert!(!line.contains("\"blocked_reasons\":["));
+    assert!(!line.contains("promotion-preflight-ticket"));
+    assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("self-evolution-promotion-preflight-trace-schema");
+    fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.self_evolution_promotion_preflight_events, 1);
+    assert_eq!(report.self_evolution_promotion_preflight_ready, 1);
+    assert_eq!(report.self_evolution_promotion_preflight_held, 0);
+    assert_eq!(report.self_evolution_promotion_preflight_missing_refs, 0);
+    assert_eq!(report.self_evolution_promotion_preflight_blocked_reasons, 0);
+    assert_eq!(report.self_evolution_promotion_preflight_write_allowed, 0);
+    assert_eq!(report.self_evolution_promotion_preflight_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_promotion_preflight_ready=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn self_evolution_promotion_preflight_trace_schema_accepts_hold() {
+    let line = promotion_preflight_trace_line(false);
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"decision\":\"hold\""));
+    assert!(line.contains("\"ready_for_explicit_promotion\":false"));
+    assert!(line.contains("\"operator_approved\":false"));
+    assert!(line.contains("\"blocked_reasons_count\":"));
+    assert!(!line.contains("\"blocked_reasons\":["));
+    assert!(!line.contains("promotion-preflight-ticket"));
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn self_evolution_promotion_preflight_trace_append_is_gate_consumable() {
+    let preflight = promotion_preflight_trace_report(true);
+    let path = temp_path("self-evolution-promotion-preflight-trace-append");
+
+    crate::append_self_evolution_promotion_preflight_trace_jsonl(&path, &preflight).unwrap();
+    let gate = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(gate.passed, "{:?}", gate.failures);
+    assert_eq!(gate.checked_lines, 1);
+    assert_eq!(gate.self_evolution_promotion_preflight_events, 1);
+    assert_eq!(gate.self_evolution_promotion_preflight_ready, 1);
+    assert_eq!(gate.self_evolution_promotion_preflight_held, 0);
+    assert_eq!(
+        gate.self_evolution_promotion_preflight_review_packets,
+        preflight.review_packet_count
+    );
+    assert_eq!(
+        gate.self_evolution_promotion_preflight_evidence_ids,
+        preflight.evidence_id_count
+    );
+    assert_eq!(
+        gate.self_evolution_promotion_preflight_rollback_anchor_ids,
+        preflight.rollback_anchor_count
+    );
+    assert_eq!(
+        gate.self_evolution_promotion_preflight_content_digests,
+        preflight.content_digest_count
+    );
+    assert_eq!(
+        gate.self_evolution_promotion_preflight_source_report_schemas,
+        preflight.source_report_schema_count
+    );
+    assert_eq!(gate.self_evolution_promotion_preflight_missing_refs, 0);
+    assert_eq!(gate.self_evolution_promotion_preflight_write_allowed, 0);
+    assert_eq!(gate.self_evolution_promotion_preflight_applied, 0);
+    cleanup(path);
+}
+
+#[test]
+fn self_evolution_promotion_preflight_trace_schema_rejects_write_or_raw_refs() {
+    let line = promotion_preflight_trace_line(true)
+        .replacen("\"write_allowed\":false", "\"write_allowed\":true", 1)
+        .replacen(
+            "\"review_packet_count\":",
+            "\"approval_review_packet_ids\":[\"raw-ref\"],\"review_packet_count\":",
+            1,
+        )
+        .replacen(
+            "\"blocked_reasons_count\":0",
+            "\"blocked_reasons\":[\"raw-reason\"],\"blocked_reasons_count\":0",
+            1,
+        );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("write_allowed=true")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("approval_review_packet_ids as count/digest only")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("blocked_reasons as count/digest only")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn self_evolution_promotion_preflight_trace_schema_rejects_mismatched_ready_decision() {
+    let line = promotion_preflight_trace_line(true).replacen(
+        "\"ready_for_explicit_promotion\":true",
+        "\"ready_for_explicit_promotion\":false",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure
+                .contains("ready decision requires ready_for_explicit_promotion=true")),
         "{failures:?}"
     );
 }

@@ -24,6 +24,7 @@ use adapter::evaluate_trace_adapter_observations;
 use admission::{
     evaluate_self_evolution_admission_schema_line, evaluate_self_evolution_experiment_schema_line,
     evaluate_self_evolution_operator_approval_schema_line,
+    evaluate_self_evolution_promotion_preflight_schema_line,
     evaluate_self_evolution_rollback_replay_apply_schema_line,
     evaluate_self_evolution_rollback_replay_gate_schema_line,
     evaluate_self_evolution_rollback_replay_schema_line,
@@ -57,6 +58,7 @@ pub use jsonl::{
     append_memory_residency_trace_jsonl, append_rust_check_trace_jsonl,
     append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
     append_self_evolution_operator_approval_trace_jsonl,
+    append_self_evolution_promotion_preflight_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
     append_self_evolution_rollback_replay_trace_jsonl, append_trace_jsonl,
@@ -64,6 +66,7 @@ pub use jsonl::{
     improvement_corpus_trace_json_line, memory_residency_trace_json_line,
     rust_check_trace_json_line, self_evolution_admission_trace_json_line,
     self_evolution_experiment_trace_json_line, self_evolution_operator_approval_trace_json_line,
+    self_evolution_promotion_preflight_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
     self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
@@ -110,6 +113,12 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-self-evolution-operator-approval-v1\"") {
         failures.extend(evaluate_self_evolution_operator_approval_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-evolution-promotion-preflight-v1\"") {
+        failures.extend(evaluate_self_evolution_promotion_preflight_schema_line(
+            line,
+        ));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-self-evolution-rollback-replay-apply-v1\"") {

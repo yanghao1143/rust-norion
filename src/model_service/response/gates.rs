@@ -177,6 +177,26 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 &format!("{apply_fields},\"improvement_corpus_events\""),
                 1,
             );
+            let promotion_preflight_fields = format!(
+                "\"self_evolution_promotion_preflight_events\":{},\"self_evolution_promotion_preflight_ready\":{},\"self_evolution_promotion_preflight_held\":{},\"self_evolution_promotion_preflight_review_packets\":{},\"self_evolution_promotion_preflight_evidence_ids\":{},\"self_evolution_promotion_preflight_rollback_anchor_ids\":{},\"self_evolution_promotion_preflight_content_digests\":{},\"self_evolution_promotion_preflight_source_report_schemas\":{},\"self_evolution_promotion_preflight_missing_refs\":{},\"self_evolution_promotion_preflight_blocked_reasons\":{},\"self_evolution_promotion_preflight_write_allowed\":{},\"self_evolution_promotion_preflight_applied\":{}",
+                report.self_evolution_promotion_preflight_events,
+                report.self_evolution_promotion_preflight_ready,
+                report.self_evolution_promotion_preflight_held,
+                report.self_evolution_promotion_preflight_review_packets,
+                report.self_evolution_promotion_preflight_evidence_ids,
+                report.self_evolution_promotion_preflight_rollback_anchor_ids,
+                report.self_evolution_promotion_preflight_content_digests,
+                report.self_evolution_promotion_preflight_source_report_schemas,
+                report.self_evolution_promotion_preflight_missing_refs,
+                report.self_evolution_promotion_preflight_blocked_reasons,
+                report.self_evolution_promotion_preflight_write_allowed,
+                report.self_evolution_promotion_preflight_applied,
+            );
+            let json = json.replacen(
+                "\"improvement_corpus_events\"",
+                &format!("{promotion_preflight_fields},\"improvement_corpus_events\""),
+                1,
+            );
             let operator_approval_counters = format!(
                 "\"self_evolution_operator_approval_counters\":{}",
                 report
@@ -242,10 +262,25 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                 report.self_evolution_rollback_replay_apply_write_allowed,
                 report.self_evolution_rollback_replay_apply_applied,
             );
+            let promotion_preflight_counters = format!(
+                "\"self_evolution_promotion_preflight_counters\":{{\"events\":{},\"ready\":{},\"held\":{},\"review_packets\":{},\"evidence_ids\":{},\"rollback_anchor_ids\":{},\"content_digests\":{},\"source_report_schemas\":{},\"missing_refs\":{},\"blocked_reasons\":{},\"write_allowed\":{},\"applied\":{}}}",
+                report.self_evolution_promotion_preflight_events,
+                report.self_evolution_promotion_preflight_ready,
+                report.self_evolution_promotion_preflight_held,
+                report.self_evolution_promotion_preflight_review_packets,
+                report.self_evolution_promotion_preflight_evidence_ids,
+                report.self_evolution_promotion_preflight_rollback_anchor_ids,
+                report.self_evolution_promotion_preflight_content_digests,
+                report.self_evolution_promotion_preflight_source_report_schemas,
+                report.self_evolution_promotion_preflight_missing_refs,
+                report.self_evolution_promotion_preflight_blocked_reasons,
+                report.self_evolution_promotion_preflight_write_allowed,
+                report.self_evolution_promotion_preflight_applied,
+            );
             json.replacen(
                 "\"summary\"",
                 &format!(
-                    "{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{rollback_replay_apply_counters},\"summary\""
+                    "{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{promotion_preflight_counters},{rollback_replay_apply_counters},\"summary\""
                 ),
                 1,
             )
@@ -341,6 +376,18 @@ mod tests {
             self_evolution_operator_approval_missing_review_packet_refs: 0,
             self_evolution_operator_approval_write_allowed: 0,
             self_evolution_operator_approval_applied: 0,
+            self_evolution_promotion_preflight_events: 2,
+            self_evolution_promotion_preflight_ready: 1,
+            self_evolution_promotion_preflight_held: 1,
+            self_evolution_promotion_preflight_review_packets: 2,
+            self_evolution_promotion_preflight_evidence_ids: 4,
+            self_evolution_promotion_preflight_rollback_anchor_ids: 4,
+            self_evolution_promotion_preflight_content_digests: 6,
+            self_evolution_promotion_preflight_source_report_schemas: 4,
+            self_evolution_promotion_preflight_missing_refs: 0,
+            self_evolution_promotion_preflight_blocked_reasons: 1,
+            self_evolution_promotion_preflight_write_allowed: 0,
+            self_evolution_promotion_preflight_applied: 0,
             self_evolution_rollback_replay_apply_events: 2,
             self_evolution_rollback_replay_apply_ready: 1,
             self_evolution_rollback_replay_apply_held: 1,
@@ -469,6 +516,18 @@ mod tests {
         assert!(json.contains("\"self_evolution_operator_approval_missing_review_packet_refs\":0"));
         assert!(json.contains("\"self_evolution_operator_approval_write_allowed\":0"));
         assert!(json.contains("\"self_evolution_operator_approval_applied\":0"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_events\":2"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_ready\":1"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_held\":1"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_review_packets\":2"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_evidence_ids\":4"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_rollback_anchor_ids\":4"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_content_digests\":6"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_source_report_schemas\":4"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_missing_refs\":0"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_blocked_reasons\":1"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_write_allowed\":0"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_applied\":0"));
         assert!(json.contains("\"self_evolution_rollback_replay_apply_events\":2"));
         assert!(json.contains("\"self_evolution_rollback_replay_apply_ready\":1"));
         assert!(json.contains("\"self_evolution_rollback_replay_apply_held\":1"));
@@ -510,6 +569,8 @@ mod tests {
         assert!(json.contains("self_evolution_operator_approval_events=2"));
         assert!(json.contains("self_evolution_operator_approval_held=1"));
         assert!(json.contains("self_evolution_operator_approval_review_packets=2"));
+        assert!(json.contains("self_evolution_promotion_preflight_events=2"));
+        assert!(json.contains("self_evolution_promotion_preflight_ready=1"));
         assert!(json.contains("self_evolution_rollback_replay_apply_events=2"));
         assert!(json.contains("self_evolution_rollback_replay_apply_ready=1"));
         assert!(json.contains("adaptive_routing_candidates=5"));
@@ -626,6 +687,18 @@ mod tests {
             self_evolution_rollback_replay_apply_blocked_reasons: 1,
             self_evolution_rollback_replay_apply_write_allowed: 0,
             self_evolution_rollback_replay_apply_applied: 0,
+            self_evolution_promotion_preflight_events: 2,
+            self_evolution_promotion_preflight_ready: 1,
+            self_evolution_promotion_preflight_held: 1,
+            self_evolution_promotion_preflight_review_packets: 2,
+            self_evolution_promotion_preflight_evidence_ids: 4,
+            self_evolution_promotion_preflight_rollback_anchor_ids: 2,
+            self_evolution_promotion_preflight_content_digests: 3,
+            self_evolution_promotion_preflight_source_report_schemas: 2,
+            self_evolution_promotion_preflight_missing_refs: 0,
+            self_evolution_promotion_preflight_blocked_reasons: 1,
+            self_evolution_promotion_preflight_write_allowed: 0,
+            self_evolution_promotion_preflight_applied: 0,
             failures: Vec::new(),
             ..TraceSchemaGateReport::default()
         };
@@ -652,5 +725,8 @@ mod tests {
         assert!(json.contains("\"blocked_reasons\":1"));
         assert!(json.contains("\"write_allowed\":0"));
         assert!(json.contains("\"applied\":0"));
+        assert!(json.contains("\"self_evolution_promotion_preflight_counters\":{"));
+        assert!(json.contains("\"review_packets\":2"));
+        assert!(json.contains("\"content_digests\":3"));
     }
 }

@@ -2742,7 +2742,7 @@ impl SelfEvolutionPromotionPreflightReport {
 
     pub fn json_line(&self) -> String {
         let candidate_id = self_evolution_json_escape(&self.candidate_id);
-        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+        let blocked_reasons_digest = self_evolution_json_escape(&self.blocked_reasons_digest());
         let content_digest = self_evolution_json_escape(&self.content_digest);
 
         format!(
@@ -2771,7 +2771,8 @@ impl SelfEvolutionPromotionPreflightReport {
              \"active_candidate\":{},\
              \"write_allowed\":{},\
              \"applied\":{},\
-             \"blocked_reasons\":{blocked_reasons},\
+             \"blocked_reasons_count\":{},\
+             \"blocked_reasons_digest\":\"{blocked_reasons_digest}\",\
              \"content_digest\":\"{content_digest}\"\
              }}",
             self.decision.as_str(),
@@ -2796,6 +2797,7 @@ impl SelfEvolutionPromotionPreflightReport {
             self.active_candidate,
             self.write_allowed,
             self.applied,
+            self.blocked_reasons.len(),
         )
     }
 
@@ -2807,6 +2809,10 @@ impl SelfEvolutionPromotionPreflightReport {
             && !self.active_candidate
             && !self.write_allowed
             && !self.applied
+    }
+
+    fn blocked_reasons_digest(&self) -> String {
+        self_evolution_stable_digest(&format!("blocked_reasons={:?}", self.blocked_reasons))
     }
 }
 

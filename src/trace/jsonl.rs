@@ -11,10 +11,12 @@ mod writer;
 pub use admission::{
     append_self_evolution_admission_trace_jsonl, append_self_evolution_experiment_trace_jsonl,
     append_self_evolution_operator_approval_trace_jsonl,
+    append_self_evolution_promotion_preflight_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
     append_self_evolution_rollback_replay_trace_jsonl, self_evolution_admission_trace_json_line,
     self_evolution_experiment_trace_json_line, self_evolution_operator_approval_trace_json_line,
+    self_evolution_promotion_preflight_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
     self_evolution_rollback_replay_trace_json_line,

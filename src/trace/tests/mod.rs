@@ -18,6 +18,7 @@ use crate::self_evolution::{
     SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate, SelfEvolutionAdmissionReport,
     SelfEvolutionExperimentLedger, SelfEvolutionOperatorApprovalEvidence,
     SelfEvolutionOperatorApprovalGate, SelfEvolutionOperatorApprovalReport,
+    SelfEvolutionPromotionPreflightGate, SelfEvolutionPromotionPreflightReport,
     SelfEvolutionRollbackReplayApplyGate, SelfEvolutionRollbackReplayApplyReport,
     SelfEvolutionRollbackReplayGate, SelfEvolutionRollbackReplayPlan,
     SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,

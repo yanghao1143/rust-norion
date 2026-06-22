@@ -753,6 +753,62 @@ fn trace_schema_jsonl_gate_aggregates_self_evolution_rollback_replay_apply_prefl
 }
 
 #[test]
+fn trace_schema_jsonl_gate_aggregates_self_evolution_promotion_preflights() {
+    let path = temp_path("trace-schema-self-evolution-promotion-preflight");
+    let ready = self_evolution_promotion_preflight_report(true, "candidate-promotion-ready");
+    let held = self_evolution_promotion_preflight_report(false, "candidate-promotion-held");
+
+    append_self_evolution_promotion_preflight_trace_jsonl(&path, &ready).unwrap();
+    append_self_evolution_promotion_preflight_trace_jsonl(&path, &held).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 2);
+    assert_eq!(report.self_evolution_promotion_preflight_events, 2);
+    assert_eq!(report.self_evolution_promotion_preflight_ready, 1);
+    assert_eq!(report.self_evolution_promotion_preflight_held, 1);
+    assert_eq!(
+        report.self_evolution_promotion_preflight_review_packets,
+        ready.review_packet_count + held.review_packet_count
+    );
+    assert_eq!(
+        report.self_evolution_promotion_preflight_evidence_ids,
+        ready.evidence_id_count + held.evidence_id_count
+    );
+    assert_eq!(
+        report.self_evolution_promotion_preflight_rollback_anchor_ids,
+        ready.rollback_anchor_count + held.rollback_anchor_count
+    );
+    assert_eq!(
+        report.self_evolution_promotion_preflight_content_digests,
+        ready.content_digest_count + held.content_digest_count
+    );
+    assert_eq!(
+        report.self_evolution_promotion_preflight_source_report_schemas,
+        ready.source_report_schema_count + held.source_report_schema_count
+    );
+    assert_eq!(report.self_evolution_promotion_preflight_missing_refs, 0);
+    assert_eq!(
+        report.self_evolution_promotion_preflight_blocked_reasons,
+        held.blocked_reasons.len()
+    );
+    assert_eq!(report.self_evolution_promotion_preflight_write_allowed, 0);
+    assert_eq!(report.self_evolution_promotion_preflight_applied, 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_promotion_preflight_events=2")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("self_evolution_promotion_preflight_ready=1")
+    );
+    cleanup(path);
+}
+
+#[test]
 fn trace_schema_jsonl_gate_aggregates_self_evolving_memory_store_reports() {
     let path = temp_path("trace-schema-self-evolving-memory-store");
     let mut store = SelfEvolvingMemoryStore::new();
@@ -1116,6 +1172,61 @@ fn operator_health_snapshot_reports_failed_trace_gate_without_leaking_failures()
     assert!(!json.contains("missing trace field"));
     assert!(!json.contains("prompt_preview"));
     cleanup(path);
+}
+
+fn self_evolution_promotion_preflight_report(
+    ready: bool,
+    candidate_id: &str,
+) -> SelfEvolutionPromotionPreflightReport {
+    let router_preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        NoironRouter::new().state(),
+        TaskProfile::Coding,
+        GenerationMetrics {
+            perplexity: 36.0,
+            semantic_consistency: 0.20,
+            contradiction_count: 2,
+            token_count: 64,
+        },
+    );
+    let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+        candidate_id,
+        EvolutionLedger {
+            replay_rust_check_items: 2,
+            replay_rust_check_passed: 2,
+            replay_rust_check_failed: 0,
+            ..EvolutionLedger::default()
+        },
+        &BenchmarkGateReport {
+            passed: true,
+            failures: Vec::new(),
+        },
+    )
+    .with_validation_evidence(SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(2, 2, 0),
+        SelfEvolutionValidationLane::new(3, 3, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+        SelfEvolutionValidationLane::new(1, 1, 0),
+    ))
+    .with_router_threshold_preview_report(&router_preview);
+    let admission = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+    let mut ledger = SelfEvolutionExperimentLedger::new();
+    let experiment = ledger.append_admission_report("promotion-preflight-jsonl", &admission);
+    let mut approval_evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+        "maintainer-jy",
+        "promotion-preflight-jsonl-ticket",
+        &admission.review_packet,
+        "approved for promotion preflight trace aggregation",
+    );
+    if !ready {
+        approval_evidence.approval_ticket_id.clear();
+    }
+    let approval = SelfEvolutionOperatorApprovalGate::new()
+        .evaluate(&admission.review_packet, &approval_evidence);
+    let report =
+        SelfEvolutionPromotionPreflightGate::new().evaluate(&admission, &experiment, &approval);
+
+    assert_eq!(report.ready_for_explicit_promotion, ready);
+    report
 }
 
 fn self_evolution_experiment_passing_report(candidate_id: &str) -> SelfEvolutionAdmissionReport {

@@ -960,6 +960,249 @@ pub(super) fn evaluate_self_evolution_operator_approval_schema_line(line: &str) 
     failures
 }
 
+pub(super) fn evaluate_self_evolution_promotion_preflight_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolution-promotion-preflight-v1\"",
+        ),
+        ("decision", "\"decision\":"),
+        (
+            "ready_for_explicit_promotion",
+            "\"ready_for_explicit_promotion\":",
+        ),
+        (
+            "explicit_promotion_required",
+            "\"explicit_promotion_required\":",
+        ),
+        ("candidate_id", "\"candidate_id\":"),
+        (
+            "admission_admitted_for_human_review",
+            "\"admission_admitted_for_human_review\":",
+        ),
+        (
+            "experiment_admitted_for_human_review",
+            "\"experiment_admitted_for_human_review\":",
+        ),
+        ("operator_approved", "\"operator_approved\":"),
+        ("rust_validation_passed", "\"rust_validation_passed\":"),
+        ("validation_passed", "\"validation_passed\":"),
+        ("benchmark_gate_passed", "\"benchmark_gate_passed\":"),
+        (
+            "adaptive_preview_evidence_present",
+            "\"adaptive_preview_evidence_present\":",
+        ),
+        ("review_packet_count", "\"review_packet_count\":"),
+        ("evidence_id_count", "\"evidence_id_count\":"),
+        ("rollback_anchor_count", "\"rollback_anchor_count\":"),
+        ("content_digest_count", "\"content_digest_count\":"),
+        (
+            "source_report_schema_count",
+            "\"source_report_schema_count\":",
+        ),
+        ("read_only", "\"read_only\":"),
+        ("report_only", "\"report_only\":"),
+        ("preview_only", "\"preview_only\":"),
+        ("activation_write_allowed", "\"activation_write_allowed\":"),
+        ("active_candidate", "\"active_candidate\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("blocked_reasons_count", "\"blocked_reasons_count\":"),
+        ("blocked_reasons_digest", "\"blocked_reasons_digest\":"),
+        ("content_digest", "\"content_digest\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_evolution_promotion_preflight field {name}"
+            ));
+        }
+    }
+
+    for raw_array in [
+        "approval_review_packet_ids",
+        "evidence_ids",
+        "rollback_anchor_ids",
+        "content_digests",
+        "source_report_schemas",
+        "blocked_reasons",
+    ] {
+        if line.contains(&format!("\"{raw_array}\":[")) {
+            failures.push(format!(
+                "self_evolution_promotion_preflight must expose {raw_array} as count/digest only"
+            ));
+        }
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "report_only",
+        true,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "preview_only",
+        true,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "explicit_promotion_required",
+        true,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "activation_write_allowed",
+        false,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "active_candidate",
+        false,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_evolution_promotion_preflight",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_evolution_promotion_preflight",
+    );
+
+    let candidate_id = extract_json_string_field(line, "candidate_id").unwrap_or_default();
+    if candidate_id.trim().is_empty() {
+        failures.push("self_evolution_promotion_preflight candidate_id is empty".to_owned());
+    }
+    for field in ["blocked_reasons_digest", "content_digest"] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if !value.starts_with("fnv64:") {
+            failures.push(format!(
+                "self_evolution_promotion_preflight {field} must be stable fnv64"
+            ));
+        }
+    }
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    let ready = extract_json_bool_field(line, "ready_for_explicit_promotion").unwrap_or(false);
+    let admission_admitted =
+        extract_json_bool_field(line, "admission_admitted_for_human_review").unwrap_or(false);
+    let experiment_admitted =
+        extract_json_bool_field(line, "experiment_admitted_for_human_review").unwrap_or(false);
+    let operator_approved = extract_json_bool_field(line, "operator_approved").unwrap_or(false);
+    let rust_validation_passed =
+        extract_json_bool_field(line, "rust_validation_passed").unwrap_or(false);
+    let validation_passed = extract_json_bool_field(line, "validation_passed").unwrap_or(false);
+    let benchmark_gate_passed =
+        extract_json_bool_field(line, "benchmark_gate_passed").unwrap_or(false);
+    let adaptive_preview_evidence_present =
+        extract_json_bool_field(line, "adaptive_preview_evidence_present").unwrap_or(false);
+    let blocked_reasons_count =
+        extract_json_usize_field(line, "blocked_reasons_count").unwrap_or(0);
+
+    match decision.as_str() {
+        "ready_for_explicit_promotion" => {
+            if !ready {
+                failures.push(
+                    "self_evolution_promotion_preflight ready decision requires ready_for_explicit_promotion=true"
+                        .to_owned(),
+                );
+            }
+            if !admission_admitted || !experiment_admitted || !operator_approved {
+                failures.push(
+                    "self_evolution_promotion_preflight ready decision requires admission, experiment, and operator approval"
+                        .to_owned(),
+                );
+            }
+            if !rust_validation_passed
+                || !validation_passed
+                || !benchmark_gate_passed
+                || !adaptive_preview_evidence_present
+            {
+                failures.push(
+                    "self_evolution_promotion_preflight ready decision requires validation, benchmark, and adaptive preview evidence"
+                        .to_owned(),
+                );
+            }
+            for (field, count) in [
+                (
+                    "review_packet_count",
+                    extract_json_usize_field(line, "review_packet_count").unwrap_or(0),
+                ),
+                (
+                    "evidence_id_count",
+                    extract_json_usize_field(line, "evidence_id_count").unwrap_or(0),
+                ),
+                (
+                    "rollback_anchor_count",
+                    extract_json_usize_field(line, "rollback_anchor_count").unwrap_or(0),
+                ),
+                (
+                    "content_digest_count",
+                    extract_json_usize_field(line, "content_digest_count").unwrap_or(0),
+                ),
+                (
+                    "source_report_schema_count",
+                    extract_json_usize_field(line, "source_report_schema_count").unwrap_or(0),
+                ),
+            ] {
+                if count == 0 {
+                    failures.push(format!(
+                        "self_evolution_promotion_preflight ready decision requires {field}>0"
+                    ));
+                }
+            }
+            if blocked_reasons_count != 0 {
+                failures.push(
+                    "self_evolution_promotion_preflight ready decision must not have blocked reasons"
+                        .to_owned(),
+                );
+            }
+        }
+        "hold" => {
+            if ready {
+                failures.push(
+                    "self_evolution_promotion_preflight hold decision requires ready_for_explicit_promotion=false"
+                        .to_owned(),
+                );
+            }
+            if blocked_reasons_count == 0 {
+                failures.push(
+                    "self_evolution_promotion_preflight hold decision requires blocked reasons"
+                        .to_owned(),
+                );
+            }
+        }
+        _ => failures.push(format!(
+            "self_evolution_promotion_preflight decision {decision} is not supported"
+        )),
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_self_evolution_rollback_replay_apply_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
 
