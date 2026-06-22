@@ -909,13 +909,25 @@ impl MutFixer {
                             "replace the quarantined segment only after validation gates pass",
                             stable_anchor_id.clone(),
                         )
-                        .with_sources([stable_anchor_id.clone(), finding.segment_id.clone()])
+                        .with_sources([stable_anchor_id.clone()])
                         .with_replacement(regenerated_segment_id(&finding.segment_id))
                         .with_repair_payload(
                             format!("regenerated {}", finding.segment_id),
                             "young replacement segment rebuilt from the stable genome anchor",
                             ["regenerate", "stable_anchor", finding.kind.as_str()],
                         ),
+                    );
+                    push_plan_once(
+                        &mut plans,
+                        MutationPlan::preview(
+                            format!("mutation:{}:cut", finding.segment_id),
+                            GeneScissorsIntent::Cut,
+                            finding.segment_id.clone(),
+                            "quarantined variant requires a reversible cut candidate",
+                            "remove the variant from active expression only after replay validation, rollback evidence, and operator approval",
+                            stable_anchor_id.clone(),
+                        )
+                        .with_sources([stable_anchor_id.clone()]),
                     );
                 }
                 GeneScissorsIntent::Relabel => {

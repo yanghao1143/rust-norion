@@ -464,8 +464,8 @@ These are algorithmic references, not product dependencies:
 ## Current Snapshot / 当前快照
 
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
-lineage-audit implementation, #77 graduation-checklist closure, and #47
-privacy-redaction corpus hardening.
+lineage-audit implementation, #77 graduation-checklist closure, #47
+privacy-redaction corpus hardening, and #50 malignant-gene recovery drills.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -479,8 +479,9 @@ privacy-redaction corpus hardening.
   orchestration, disk-backed KV residency/compaction, Reasoning Genome
   splicing, model adapter execution, validation, reflection,
   approval-gated admission, compute-budget scheduling, and wasted-compute
-  telemetry. R87/#46 adds the redacted lineage audit export baseline, and
-  R88/#47 adds the shared privacy-redaction corpus and detector baseline.
+  telemetry. R87/#46 adds the redacted lineage audit export baseline,
+  R88/#47 adds the shared privacy-redaction corpus and detector baseline, and
+  R92/#50 adds deterministic malignant-gene poisoning defense drills.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -509,12 +510,12 @@ privacy-redaction corpus hardening.
   crates` check runs are green, but GitHub still reports review approval
   required before merge.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body now marks #43, #44, #45, #46, #47, and #77 complete; issues
-  #50/#51 and #72-#78 extend that tracker with the next
+  Its body now marks #43, #44, #45, #46, #47, #50, and #77 complete; issues
+  #51 and #72-#78 extend that tracker with the next
   audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
-  workstream. The next suggested order moves to #50/#51/#72/#73 so malignant
-  gene defense, aging/rejuvenation simulation, purpose relabeling, and
-  reversible Gene Scissors transactions build on the redaction gate.
+  workstream. The next suggested order moves to #51/#72/#73 so aging/
+  rejuvenation simulation, purpose relabeling, and reversible Gene Scissors
+  transactions build on the redaction and malignant-defense gates.
 
 ## Version Plan / 版本计划
 
@@ -769,9 +770,9 @@ privacy-redaction corpus hardening.
   routing-budget and wasted-compute telemetry baseline, and #77 is the closed
   preview-to-write graduation checklist. #46 is the completed redacted
   lineage/audit export baseline, #47 is the completed privacy-redaction corpus
-  baseline, and #50/#51/#72/#73 are queued for malignant-gene defense,
-  rejuvenation simulation, purpose relabeling, and reversible Gene Scissors
-  transactions.)
+  baseline, #50 is the completed malignant-gene recovery drill baseline, and
+  #51/#72/#73 are queued for rejuvenation simulation, purpose relabeling, and
+  reversible Gene Scissors transactions.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -816,9 +817,14 @@ privacy-redaction corpus hardening.
   benchmark evidence. Policy is documented in
   [`docs/governance/privacy-redaction-corpus.md`](docs/governance/privacy-redaction-corpus.md).
 - #50 `[Genome] Add malignant-gene poisoning defense and recovery drills`:
-  downstream genome-safety lane. Prove malignant or polluted GeneSegments are
-  quarantined, cut, and regenerated without contaminating neighboring lineage
-  branches.
+  completed / closed v0.8 genome-safety drill baseline. Adds
+  `MalignantGeneRecoveryDrillCorpus` fixtures for malicious instruction
+  segments, false memory, bad routing thresholds, contradictory rules, stale
+  labels, and irreversible-delete attempts. Each drill proves detect,
+  quarantine, reversible cut candidate, stable-anchor regeneration, replay
+  validation hold/reject, rollback/tombstone evidence, redaction status, and
+  preview-only admission. Policy is documented in
+  [`docs/governance/malignant-gene-recovery-drills.md`](docs/governance/malignant-gene-recovery-drills.md).
 - #51 `[Benchmark] Add genome aging and rejuvenation simulation suite`:
   downstream rejuvenation lane. Exercise stale labels, aged purpose tags,
   low-fitness drift, relabel plans, stable-anchor regeneration, and benchmark
@@ -883,10 +889,12 @@ privacy-redaction corpus hardening.
   expired, drifting, or semantically aged memory/gene segments based on
   evidence summaries, purpose tags, confidence, version, and validation state.
   Simulate youth-retagging and stable-anchor regeneration before durable edits.
-- R92 / #50/#73: malignant mutation quarantine and regeneration. Quarantine
-  harmful, polluted, low-confidence, or secret-risk segments with digest-only
-  reasons and rollback records; allow repair/regeneration/re-admission only
-  after validation and operator approval.
+- R92 / #50 completed baseline: malignant mutation quarantine and regeneration.
+  Quarantines harmful, polluted, low-confidence, false-memory, routing-drift,
+  stale-label, contradictory, secret-risk, or destructive-delete segments with
+  digest-only reasons and rollback records; emits reversible cut/tombstone
+  candidates and stable-anchor regeneration candidates while keeping
+  re-admission held until validation and operator approval.
 - R93 / #77/#6/#20: self-evolution writer gate consolidation. Unify memory,
   genome, and experiment-ledger writer gates so all durable writes remain
   preview/read-only until validation, rollback, privacy/license, and

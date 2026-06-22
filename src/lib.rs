@@ -158,10 +158,12 @@ pub use reasoning_genome::{
     DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
     DnaGeneSchemaError, DnaGeneSourceEvidence, GeneLifecycleAction, GeneLifecycleRecord,
     GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
-    GenomeExpression, GenomeExpressionInput, MutationFixtureKind, MutationPlan,
-    MutationRepairCandidateFixture, MutationRepairFixture, MutationRepairFixtureCorpus,
-    MutationRepairFixtureGateReport, MutationRepairFixtureReport, MutationRepairFixtureResult,
-    ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
+    GenomeExpression, GenomeExpressionInput, MalignantGeneDrillKind, MalignantGeneRecoveryDrill,
+    MalignantGeneRecoveryDrillCorpus, MalignantGeneRecoveryDrillReport,
+    MalignantGeneRecoveryResult, MutationFixtureKind, MutationPlan, MutationRepairCandidateFixture,
+    MutationRepairFixture, MutationRepairFixtureCorpus, MutationRepairFixtureGateReport,
+    MutationRepairFixtureReport, MutationRepairFixtureResult, ReasoningGene, ReasoningGeneKind,
+    ReasoningGeneStatus, ReasoningGenome, default_malignant_gene_recovery_drill_corpus,
     default_mutation_repair_fixture_corpus,
 };
 pub use recursive_scheduler::{

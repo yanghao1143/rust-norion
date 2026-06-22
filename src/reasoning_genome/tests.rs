@@ -1,6 +1,7 @@
 use super::*;
 use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::RuntimeKvBlock;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 
 #[test]
 fn default_genome_expresses_read_only_profile_genes() {
@@ -1336,6 +1337,122 @@ fn mutation_fixture_gate_fails_when_required_coverage_is_missing() {
     assert!(gate.failures.iter().any(|failure| {
         failure.contains("mutation_fixture_coverage_missing:malicious_instruction")
     }));
+}
+
+#[test]
+fn malignant_gene_recovery_drills_cover_all_poisoning_categories() {
+    let report = MalignantGeneRecoveryDrillCorpus::default().evaluate();
+
+    assert!(report.passed(), "{:?}", report.failures);
+    assert_eq!(report.results.len(), 6);
+    assert_eq!(report.missing_fixture_kinds, Vec::new());
+    assert_eq!(report.quarantined_count, 6);
+    assert_eq!(report.cut_candidate_count, 6);
+    assert_eq!(report.regeneration_candidate_count, 6);
+    assert_eq!(report.failed_replay_count, 1);
+    assert!(report.preview_only);
+    assert!(
+        report
+            .summary()
+            .contains("malignant_gene_recovery_drills passed=true")
+    );
+}
+
+#[test]
+fn malignant_gene_recovery_quarantines_cuts_and_regenerates_without_promotion() {
+    let report = MalignantGeneRecoveryDrillCorpus::default().evaluate();
+
+    for result in &report.results {
+        assert_eq!(result.classification, "malignant_quarantined");
+        assert!(result.confidence >= 0.90, "{:?}", result);
+        assert!(result.quarantine_plan_present, "{:?}", result);
+        assert!(result.cut_candidate_present, "{:?}", result);
+        assert!(result.regeneration_candidate_present, "{:?}", result);
+        assert!(result.tombstone_id.is_some(), "{:?}", result);
+        assert_eq!(result.rollback_anchor_id, "genome:malignant-drill:stable");
+        assert!(result.preview_only, "{:?}", result);
+        assert!(
+            !result.evidence_packet_lines.iter().any(|line| {
+                line.contains("write_allowed=true") || line.contains("applied=true")
+            })
+        );
+    }
+}
+
+#[test]
+fn malignant_gene_recovery_regenerates_from_anchor_not_bad_payload() {
+    let report = MalignantGeneRecoveryDrillCorpus::default().evaluate();
+
+    for result in &report.results {
+        assert!(
+            result
+                .trusted_regeneration_sources
+                .contains(&"genome:malignant-drill:stable".to_owned()),
+            "{:?}",
+            result.trusted_regeneration_sources
+        );
+        assert!(
+            !result.copied_bad_payload_source,
+            "{} copied target into regeneration sources {:?}",
+            result.fixture_id, result.trusted_regeneration_sources
+        );
+        assert!(
+            !result
+                .trusted_regeneration_sources
+                .contains(&result.target_segment_id),
+            "{} target leaked into regeneration sources",
+            result.fixture_id
+        );
+    }
+}
+
+#[test]
+fn malignant_gene_recovery_failed_delete_attempt_keeps_hold_reasons() {
+    let report = MalignantGeneRecoveryDrillCorpus::default().evaluate();
+    let delete_attempt = report
+        .result_for_kind(MalignantGeneDrillKind::IrreversibleDeleteAttempt)
+        .expect("irreversible-delete drill");
+
+    assert_eq!(
+        delete_attempt.validation_status,
+        GeneValidationStatus::Failed
+    );
+    assert_eq!(delete_attempt.approval_decision, "rejected_hold");
+    for reason in [
+        "destructive_intent_blocked",
+        "replay_validation_failed",
+        "operator_approval_required",
+        "preview_only",
+    ] {
+        assert!(
+            delete_attempt.hold_reasons.contains(&reason.to_owned()),
+            "{:?}",
+            delete_attempt.hold_reasons
+        );
+    }
+}
+
+#[test]
+fn malignant_gene_recovery_evidence_packets_are_redacted() {
+    let report = MalignantGeneRecoveryDrillCorpus::default().evaluate();
+
+    for result in &report.results {
+        assert_eq!(result.redaction_status, "redacted");
+        assert!(result.payload_digest.starts_with("redaction-digest:"));
+        assert!(result.protected_segments_retained);
+        for line in &result.evidence_packet_lines {
+            assert!(
+                !contains_private_or_executable_marker(line),
+                "{} leaked private marker in {line}",
+                result.fixture_id
+            );
+            assert!(line.contains("redaction_status=redacted"));
+            assert!(
+                line.contains("payload_digest=redaction-digest:")
+                    || line.contains("summary=digest-only")
+            );
+        }
+    }
 }
 
 fn contains_executable_payload_marker(line: &str) -> bool {

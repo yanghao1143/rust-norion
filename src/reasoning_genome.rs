@@ -10,9 +10,11 @@ pub use audit::{
     contains_blocked_payload_marker,
 };
 pub use fixtures::{
-    MutationFixtureKind, MutationRepairCandidateFixture, MutationRepairFixture,
-    MutationRepairFixtureCorpus, MutationRepairFixtureGateReport, MutationRepairFixtureReport,
-    MutationRepairFixtureResult, default_mutation_repair_fixture_corpus,
+    MalignantGeneDrillKind, MalignantGeneRecoveryDrill, MalignantGeneRecoveryDrillCorpus,
+    MalignantGeneRecoveryDrillReport, MalignantGeneRecoveryResult, MutationFixtureKind,
+    MutationRepairCandidateFixture, MutationRepairFixture, MutationRepairFixtureCorpus,
+    MutationRepairFixtureGateReport, MutationRepairFixtureReport, MutationRepairFixtureResult,
+    default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
 };
 pub use model::{
     GeneLifecycleAction, GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,

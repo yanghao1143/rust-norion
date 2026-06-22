@@ -1,4 +1,5 @@
 use crate::hierarchy::TaskProfile;
+use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 use super::model::{GeneScissorsIntent, GeneValidationStatus, MutationPlan};
 use super::splicing::{
@@ -169,6 +170,230 @@ pub struct MutationRepairFixtureGateReport {
     pub failures: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MalignantGeneDrillKind {
+    MaliciousInstructionSegment,
+    FalseMemory,
+    BadRoutingThreshold,
+    ContradictoryRule,
+    StaleLabel,
+    IrreversibleDeleteAttempt,
+}
+
+impl MalignantGeneDrillKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MaliciousInstructionSegment => "malicious_instruction_segment",
+            Self::FalseMemory => "false_memory",
+            Self::BadRoutingThreshold => "bad_routing_threshold",
+            Self::ContradictoryRule => "contradictory_rule",
+            Self::StaleLabel => "stale_label",
+            Self::IrreversibleDeleteAttempt => "irreversible_delete_attempt",
+        }
+    }
+
+    pub fn expected_kinds() -> [Self; 6] {
+        [
+            Self::MaliciousInstructionSegment,
+            Self::FalseMemory,
+            Self::BadRoutingThreshold,
+            Self::ContradictoryRule,
+            Self::StaleLabel,
+            Self::IrreversibleDeleteAttempt,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MalignantGeneRecoveryDrill {
+    pub id: String,
+    pub kind: MalignantGeneDrillKind,
+    pub profile: TaskProfile,
+    pub stable_anchor_id: String,
+    pub target_segment_id: String,
+    pub payload_digest: String,
+    pub sanitized_payload_summary: String,
+    pub replay_validation_status: GeneValidationStatus,
+    pub expected_hold_reasons: Vec<String>,
+    pub protected_segment_ids: Vec<String>,
+    pub segments: Vec<GeneSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MalignantGeneRecoveryResult {
+    pub fixture_id: String,
+    pub kind: MalignantGeneDrillKind,
+    pub target_segment_id: String,
+    pub classification: String,
+    pub confidence: f32,
+    pub rollback_anchor_id: String,
+    pub validation_status: GeneValidationStatus,
+    pub redaction_status: String,
+    pub payload_digest: String,
+    pub quarantine_plan_present: bool,
+    pub cut_candidate_present: bool,
+    pub regeneration_candidate_present: bool,
+    pub trusted_regeneration_sources: Vec<String>,
+    pub copied_bad_payload_source: bool,
+    pub tombstone_id: Option<String>,
+    pub approval_decision: String,
+    pub hold_reasons: Vec<String>,
+    pub protected_segments_retained: bool,
+    pub evidence_packet_lines: Vec<String>,
+    pub preview_only: bool,
+    pub failures: Vec<String>,
+}
+
+impl MalignantGeneRecoveryResult {
+    pub fn passed(&self) -> bool {
+        self.failures.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MalignantGeneRecoveryDrillReport {
+    pub results: Vec<MalignantGeneRecoveryResult>,
+    pub covered_fixture_kinds: Vec<MalignantGeneDrillKind>,
+    pub missing_fixture_kinds: Vec<MalignantGeneDrillKind>,
+    pub quarantined_count: usize,
+    pub cut_candidate_count: usize,
+    pub regeneration_candidate_count: usize,
+    pub failed_replay_count: usize,
+    pub preview_only: bool,
+    pub passed: bool,
+    pub failures: Vec<String>,
+}
+
+impl MalignantGeneRecoveryDrillReport {
+    pub fn passed(&self) -> bool {
+        self.passed
+    }
+
+    pub fn result_for_kind(
+        &self,
+        kind: MalignantGeneDrillKind,
+    ) -> Option<&MalignantGeneRecoveryResult> {
+        self.results.iter().find(|result| result.kind == kind)
+    }
+
+    pub fn summary(&self) -> String {
+        let covered = self
+            .covered_fixture_kinds
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        let missing = self
+            .missing_fixture_kinds
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        format!(
+            "malignant_gene_recovery_drills passed={} fixtures={} quarantined={} cut_candidates={} regeneration_candidates={} failed_replay={} preview_only={} covered={} missing={}",
+            self.passed,
+            self.results.len(),
+            self.quarantined_count,
+            self.cut_candidate_count,
+            self.regeneration_candidate_count,
+            self.failed_replay_count,
+            self.preview_only,
+            covered,
+            missing
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MalignantGeneRecoveryDrillCorpus {
+    pub policy: DnaSplicerPolicy,
+    pub fixtures: Vec<MalignantGeneRecoveryDrill>,
+}
+
+impl MalignantGeneRecoveryDrillCorpus {
+    pub fn new(policy: DnaSplicerPolicy, fixtures: Vec<MalignantGeneRecoveryDrill>) -> Self {
+        Self { policy, fixtures }
+    }
+
+    pub fn default_corpus() -> Self {
+        Self::new(
+            DnaSplicerPolicy::default(),
+            default_malignant_gene_recovery_drills(),
+        )
+    }
+
+    pub fn evaluate(&self) -> MalignantGeneRecoveryDrillReport {
+        let results = self
+            .fixtures
+            .iter()
+            .map(|fixture| evaluate_malignant_drill(&self.policy, fixture))
+            .collect::<Vec<_>>();
+        let mut covered_fixture_kinds = Vec::new();
+        for result in &results {
+            push_drill_kind_once(&mut covered_fixture_kinds, result.kind);
+        }
+        let missing_fixture_kinds = MalignantGeneDrillKind::expected_kinds()
+            .iter()
+            .copied()
+            .filter(|kind| !covered_fixture_kinds.contains(kind))
+            .collect::<Vec<_>>();
+        let quarantined_count = results
+            .iter()
+            .filter(|result| result.classification == "malignant_quarantined")
+            .count();
+        let cut_candidate_count = results
+            .iter()
+            .filter(|result| result.cut_candidate_present)
+            .count();
+        let regeneration_candidate_count = results
+            .iter()
+            .filter(|result| result.regeneration_candidate_present)
+            .count();
+        let failed_replay_count = results
+            .iter()
+            .filter(|result| result.validation_status == GeneValidationStatus::Failed)
+            .count();
+        let preview_only = results.iter().all(|result| result.preview_only);
+        let mut failures = Vec::new();
+        for result in &results {
+            failures.extend(result.failures.iter().cloned());
+        }
+        for kind in &missing_fixture_kinds {
+            failures.push(format!(
+                "malignant_gene_drill_coverage_missing:{}",
+                kind.as_str()
+            ));
+        }
+        if !preview_only {
+            failures.push("malignant_gene_drill_preview_only_gate_failed".to_owned());
+        }
+        let passed = failures.is_empty();
+
+        MalignantGeneRecoveryDrillReport {
+            results,
+            covered_fixture_kinds,
+            missing_fixture_kinds,
+            quarantined_count,
+            cut_candidate_count,
+            regeneration_candidate_count,
+            failed_replay_count,
+            preview_only,
+            passed,
+            failures,
+        }
+    }
+}
+
+impl Default for MalignantGeneRecoveryDrillCorpus {
+    fn default() -> Self {
+        Self::default_corpus()
+    }
+}
+
+pub fn default_malignant_gene_recovery_drill_corpus() -> MalignantGeneRecoveryDrillCorpus {
+    MalignantGeneRecoveryDrillCorpus::default()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MutationRepairFixtureCorpus {
     pub policy: DnaSplicerPolicy,
@@ -247,6 +472,142 @@ impl Default for MutationRepairFixtureCorpus {
 
 pub fn default_mutation_repair_fixture_corpus() -> MutationRepairFixtureCorpus {
     MutationRepairFixtureCorpus::default()
+}
+
+fn evaluate_malignant_drill(
+    policy: &DnaSplicerPolicy,
+    fixture: &MalignantGeneRecoveryDrill,
+) -> MalignantGeneRecoveryResult {
+    let preview = DnaSplicer::new(policy.clone()).preview(
+        fixture.profile,
+        fixture.stable_anchor_id.clone(),
+        fixture.segments.clone(),
+    );
+    let target_id = fixture.target_segment_id.as_str();
+    let target_findings = target_findings(&preview, Some(target_id));
+    let target_disposition = preview
+        .segments
+        .iter()
+        .find(|segment| segment.segment.id == target_id)
+        .map(|segment| segment.disposition);
+    let lifecycle_record = preview
+        .lifecycle_records
+        .iter()
+        .find(|record| record.target_segment_id == target_id);
+    let target_plans = preview
+        .mutation_plans
+        .iter()
+        .filter(|plan| plan.target_gene_id == target_id)
+        .collect::<Vec<_>>();
+    let quarantine_plan_present = target_plans
+        .iter()
+        .any(|plan| plan.intent == GeneScissorsIntent::Quarantine);
+    let cut_candidate_present = target_plans
+        .iter()
+        .any(|plan| plan.intent == GeneScissorsIntent::Cut);
+    let regeneration_plan = target_plans
+        .iter()
+        .find(|plan| plan.intent == GeneScissorsIntent::Regenerate);
+    let regeneration_candidate_present = regeneration_plan.is_some();
+    let trusted_regeneration_sources = regeneration_plan
+        .map(|plan| plan.source_gene_ids.clone())
+        .unwrap_or_default();
+    let copied_bad_payload_source = trusted_regeneration_sources
+        .iter()
+        .any(|source| source == target_id);
+    let tombstone_id = cut_candidate_present.then(|| format!("tombstone:{target_id}"));
+    let confidence = lifecycle_record
+        .map(|record| record.confidence)
+        .unwrap_or_default();
+    let classification = if target_disposition == Some(GeneSegmentDisposition::Quarantined)
+        && target_findings
+            .iter()
+            .any(|finding| finding.severity.as_str() == "quarantine")
+    {
+        "malignant_quarantined"
+    } else {
+        "not_quarantined"
+    }
+    .to_owned();
+    let hold_reasons = hold_reasons_for_drill(fixture, &preview, &target_plans);
+    let approval_decision = approval_decision_for_validation(fixture.replay_validation_status);
+    let protected_segments_retained = fixture.protected_segment_ids.iter().all(|id| {
+        preview.segments.iter().any(|segment| {
+            segment.segment.id == *id && segment.disposition == GeneSegmentDisposition::Retained
+        })
+    });
+    let preview_only = preview.is_read_only_preview()
+        && target_plans
+            .iter()
+            .all(|plan| plan.is_read_only_preview() && !plan.admission_write_authorized);
+    let mut evidence_packet_lines = malignant_drill_evidence_lines(
+        fixture,
+        &classification,
+        confidence,
+        quarantine_plan_present,
+        cut_candidate_present,
+        regeneration_candidate_present,
+        &trusted_regeneration_sources,
+        tombstone_id.as_deref(),
+        &approval_decision,
+        &hold_reasons,
+        preview_only,
+    );
+    let redaction_status = if evidence_packet_lines
+        .iter()
+        .any(|line| contains_private_or_executable_marker(line))
+    {
+        "leaked"
+    } else {
+        "redacted"
+    }
+    .to_owned();
+    for line in &mut evidence_packet_lines {
+        line.push_str(&format!(" redaction_status={redaction_status}"));
+    }
+    let failures = malignant_drill_failures(
+        fixture,
+        &preview,
+        &target_findings,
+        target_disposition,
+        lifecycle_record,
+        quarantine_plan_present,
+        cut_candidate_present,
+        regeneration_plan.copied(),
+        &trusted_regeneration_sources,
+        copied_bad_payload_source,
+        tombstone_id.as_deref(),
+        &approval_decision,
+        &hold_reasons,
+        protected_segments_retained,
+        &evidence_packet_lines,
+        preview_only,
+        &redaction_status,
+    );
+
+    MalignantGeneRecoveryResult {
+        fixture_id: fixture.id.clone(),
+        kind: fixture.kind,
+        target_segment_id: fixture.target_segment_id.clone(),
+        classification,
+        confidence,
+        rollback_anchor_id: fixture.stable_anchor_id.clone(),
+        validation_status: fixture.replay_validation_status,
+        redaction_status,
+        payload_digest: fixture.payload_digest.clone(),
+        quarantine_plan_present,
+        cut_candidate_present,
+        regeneration_candidate_present,
+        trusted_regeneration_sources,
+        copied_bad_payload_source,
+        tombstone_id,
+        approval_decision,
+        hold_reasons,
+        protected_segments_retained,
+        evidence_packet_lines,
+        preview_only,
+        failures,
+    }
 }
 
 fn evaluate_fixture(
@@ -338,6 +699,105 @@ fn default_mutation_repair_fixtures() -> Vec<MutationRepairFixture> {
         contradictory_policy_fixture(),
         stale_label_fixture(),
         malicious_instruction_fixture(),
+    ]
+}
+
+fn default_malignant_gene_recovery_drills() -> Vec<MalignantGeneRecoveryDrill> {
+    vec![
+        malignant_drill_fixture(
+            "drill:malicious-instruction",
+            MalignantGeneDrillKind::MaliciousInstructionSegment,
+            "segment:drill-malicious",
+            GeneSegmentSource::ToolOutput,
+            "redacted adversarial instruction marker",
+            "quarantine digest-only tool instruction marker before expression",
+            "digest-only malicious instruction simulation",
+            GeneValidationStatus::Pending,
+            ["replay_validation_pending", "operator_approval_required"],
+            0.31,
+            0.94,
+            0.90,
+            2,
+        ),
+        malignant_drill_fixture(
+            "drill:false-memory",
+            MalignantGeneDrillKind::FalseMemory,
+            "segment:drill-false-memory",
+            GeneSegmentSource::SemanticMemory,
+            "false memory conflict",
+            "contradict stable memory validation evidence",
+            "digest-only false memory simulation",
+            GeneValidationStatus::Pending,
+            ["replay_validation_pending", "operator_approval_required"],
+            0.28,
+            0.88,
+            0.24,
+            3,
+        ),
+        malignant_drill_fixture(
+            "drill:bad-routing-threshold",
+            MalignantGeneDrillKind::BadRoutingThreshold,
+            "segment:drill-bad-routing",
+            GeneSegmentSource::GenomeLedger,
+            "bad routing threshold conflict",
+            "contradict stable route budget and force unsafe attention fanout",
+            "digest-only bad routing threshold simulation",
+            GeneValidationStatus::Pending,
+            ["replay_validation_pending", "operator_approval_required"],
+            0.34,
+            0.86,
+            0.22,
+            4,
+        ),
+        malignant_drill_fixture(
+            "drill:contradictory-rule",
+            MalignantGeneDrillKind::ContradictoryRule,
+            "segment:drill-contradictory-rule",
+            GeneSegmentSource::ToolOutput,
+            "conflicting safety rule",
+            "contradict rollback and validation requirements",
+            "digest-only contradictory rule simulation",
+            GeneValidationStatus::Pending,
+            ["replay_validation_pending", "operator_approval_required"],
+            0.37,
+            0.82,
+            0.23,
+            5,
+        ),
+        malignant_drill_fixture(
+            "drill:stale-label",
+            MalignantGeneDrillKind::StaleLabel,
+            "segment:drill-stale-label",
+            GeneSegmentSource::SemanticMemory,
+            "",
+            "",
+            "digest-only stale label simulation",
+            GeneValidationStatus::Pending,
+            ["replay_validation_pending", "operator_approval_required"],
+            0.42,
+            0.74,
+            0.21,
+            14,
+        ),
+        malignant_drill_fixture(
+            "drill:irreversible-delete-attempt",
+            MalignantGeneDrillKind::IrreversibleDeleteAttempt,
+            "segment:drill-irreversible-delete",
+            GeneSegmentSource::ToolOutput,
+            "irreversible delete attempt",
+            "conflict with rollback anchors by requesting destructive removal",
+            "digest-only irreversible delete simulation",
+            GeneValidationStatus::Failed,
+            [
+                "destructive_intent_blocked",
+                "replay_validation_failed",
+                "operator_approval_required",
+            ],
+            0.20,
+            0.96,
+            0.92,
+            1,
+        ),
     ]
 }
 
@@ -742,6 +1202,75 @@ fn malicious_instruction_fixture() -> MutationRepairFixture {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn malignant_drill_fixture(
+    id: &str,
+    kind: MalignantGeneDrillKind,
+    target_segment_id: &str,
+    source: GeneSegmentSource,
+    label: &str,
+    purpose: &str,
+    payload_summary: &str,
+    replay_validation_status: GeneValidationStatus,
+    expected_hold_reasons: impl IntoIterator<Item = &'static str>,
+    fitness: f32,
+    drift_score: f32,
+    privacy_risk: f32,
+    age: u32,
+) -> MalignantGeneRecoveryDrill {
+    let stable_anchor_id = "genome:malignant-drill:stable";
+    let protected_segment_ids = vec![
+        format!("{target_segment_id}:healthy-left"),
+        format!("{target_segment_id}:healthy-right"),
+    ];
+    let mut target = GeneSegment::new(target_segment_id, TaskProfile::Coding, source, 64, 96)
+        .with_source_hash(format!("sha256:{}", id.replace(':', "-")))
+        .with_metadata(label, purpose, format!("synthetic drill summary for {id}"))
+        .with_kv_residency(GeneKvResidency::Sink)
+        .with_age(age)
+        .with_health(fitness, drift_score, privacy_risk);
+    if label.is_empty() || purpose.is_empty() {
+        target = target.with_last_confirmed_purpose("");
+    }
+
+    MalignantGeneRecoveryDrill {
+        id: id.to_owned(),
+        kind,
+        profile: TaskProfile::Coding,
+        stable_anchor_id: stable_anchor_id.to_owned(),
+        target_segment_id: target_segment_id.to_owned(),
+        payload_digest: stable_redaction_digest([id, payload_summary]),
+        sanitized_payload_summary: payload_summary.to_owned(),
+        replay_validation_status,
+        expected_hold_reasons: expected_hold_reasons
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        protected_segment_ids: protected_segment_ids.clone(),
+        segments: vec![
+            healthy_segment(
+                &protected_segment_ids[0],
+                GeneSegmentSource::GenomeLedger,
+                &format!("sha256:{}-left", id.replace(':', "-")),
+                0,
+                64,
+                "healthy recovery anchor",
+                "preserve stable recovery behavior while target is isolated",
+            ),
+            target,
+            healthy_segment(
+                &protected_segment_ids[1],
+                GeneSegmentSource::SemanticMemory,
+                &format!("sha256:{}-right", id.replace(':', "-")),
+                96,
+                160,
+                "healthy recovery memory",
+                "preserve unrelated useful memory while target is isolated",
+            ),
+        ],
+    }
+}
+
 fn healthy_segment(
     id: &str,
     source: GeneSegmentSource,
@@ -1005,6 +1534,201 @@ fn review_packet_lines(
     lines
 }
 
+#[allow(clippy::too_many_arguments)]
+fn malignant_drill_evidence_lines(
+    fixture: &MalignantGeneRecoveryDrill,
+    classification: &str,
+    confidence: f32,
+    quarantine_plan_present: bool,
+    cut_candidate_present: bool,
+    regeneration_candidate_present: bool,
+    trusted_regeneration_sources: &[String],
+    tombstone_id: Option<&str>,
+    approval_decision: &str,
+    hold_reasons: &[String],
+    preview_only: bool,
+) -> Vec<String> {
+    vec![
+        format!(
+            "malignant_drill fixture={} kind={} target_present=true classification={} confidence={:.3} rollback={} validation={} payload_digest={} redacted=true preview_only={} quarantine={} cut_candidate={} regenerate={}",
+            fixture.id,
+            fixture.kind.as_str(),
+            classification,
+            confidence,
+            fixture.stable_anchor_id,
+            fixture.replay_validation_status.as_str(),
+            fixture.payload_digest,
+            preview_only,
+            quarantine_plan_present,
+            cut_candidate_present,
+            regeneration_candidate_present
+        ),
+        format!(
+            "malignant_drill_recovery fixture={} trusted_sources={} tombstone={} approval={} hold_reasons={} protected_neighbors={} summary={}",
+            fixture.id,
+            trusted_regeneration_sources.join("|"),
+            tombstone_id.unwrap_or("none"),
+            approval_decision,
+            hold_reasons.join("|"),
+            fixture.protected_segment_ids.len(),
+            fixture.sanitized_payload_summary
+        ),
+    ]
+}
+
+fn hold_reasons_for_drill(
+    fixture: &MalignantGeneRecoveryDrill,
+    preview: &DnaSplicePreview,
+    target_plans: &[&MutationPlan],
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    for expected in &fixture.expected_hold_reasons {
+        push_string_once(&mut reasons, expected);
+    }
+    if fixture.replay_validation_status == GeneValidationStatus::Pending {
+        push_string_once(&mut reasons, "replay_validation_pending");
+    }
+    if fixture.replay_validation_status == GeneValidationStatus::Failed {
+        push_string_once(&mut reasons, "replay_validation_failed");
+    }
+    if preview.read_only {
+        push_string_once(&mut reasons, "preview_only");
+    }
+    if target_plans
+        .iter()
+        .any(|plan| !plan.admission_write_authorized)
+    {
+        push_string_once(&mut reasons, "operator_approval_required");
+    }
+    reasons
+}
+
+fn approval_decision_for_validation(validation_status: GeneValidationStatus) -> String {
+    match validation_status {
+        GeneValidationStatus::NotRequired => "not_required".to_owned(),
+        GeneValidationStatus::Pending => "held_pending_replay_validation".to_owned(),
+        GeneValidationStatus::Passed => "approval_held_pending_operator".to_owned(),
+        GeneValidationStatus::Failed => "rejected_hold".to_owned(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn malignant_drill_failures(
+    fixture: &MalignantGeneRecoveryDrill,
+    preview: &DnaSplicePreview,
+    findings: &[&super::splicing::MutationFinding],
+    target_disposition: Option<GeneSegmentDisposition>,
+    lifecycle_record: Option<&super::splicing::GeneScissorsLifecycleRecord>,
+    quarantine_plan_present: bool,
+    cut_candidate_present: bool,
+    regeneration_plan: Option<&MutationPlan>,
+    trusted_regeneration_sources: &[String],
+    copied_bad_payload_source: bool,
+    tombstone_id: Option<&str>,
+    approval_decision: &str,
+    hold_reasons: &[String],
+    protected_segments_retained: bool,
+    evidence_packet_lines: &[String],
+    preview_only: bool,
+    redaction_status: &str,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if findings.is_empty() {
+        failures.push(format!("{}:malignant_finding_missing", fixture.id));
+    }
+    if !findings
+        .iter()
+        .any(|finding| finding.kind == GeneVariantKind::Drift)
+    {
+        failures.push(format!("{}:drift_finding_missing", fixture.id));
+    }
+    if target_disposition != Some(GeneSegmentDisposition::Quarantined) {
+        failures.push(format!(
+            "{}:target_not_quarantined:{target_disposition:?}",
+            fixture.id
+        ));
+    }
+    if lifecycle_record.map(|record| record.state) != Some(GeneScissorsLifecycleState::Quarantined)
+    {
+        failures.push(format!("{}:quarantine_lifecycle_missing", fixture.id));
+    }
+    if lifecycle_record.map(|record| record.rollback_anchor_id.as_str())
+        != Some(fixture.stable_anchor_id.as_str())
+    {
+        failures.push(format!("{}:lifecycle_rollback_anchor_missing", fixture.id));
+    }
+    if !quarantine_plan_present {
+        failures.push(format!("{}:quarantine_plan_missing", fixture.id));
+    }
+    if !cut_candidate_present {
+        failures.push(format!("{}:cut_candidate_missing", fixture.id));
+    }
+    if regeneration_plan.is_none() {
+        failures.push(format!("{}:regeneration_candidate_missing", fixture.id));
+    }
+    if let Some(plan) = regeneration_plan {
+        if plan.rollback_anchor_id != fixture.stable_anchor_id {
+            failures.push(format!("{}:regeneration_rollback_mismatch", fixture.id));
+        }
+        if plan.validation_status != GeneValidationStatus::Pending
+            || !plan.is_read_only_preview()
+            || plan.admission_write_authorized
+            || plan.applied
+        {
+            failures.push(format!("{}:regeneration_not_preview_only", fixture.id));
+        }
+        if !plan.has_regeneration_payload() {
+            failures.push(format!("{}:regeneration_payload_missing", fixture.id));
+        }
+    }
+    if !trusted_regeneration_sources.contains(&fixture.stable_anchor_id) {
+        failures.push(format!("{}:stable_anchor_not_used", fixture.id));
+    }
+    if copied_bad_payload_source {
+        failures.push(format!(
+            "{}:bad_payload_used_as_regeneration_source",
+            fixture.id
+        ));
+    }
+    if tombstone_id.is_none() {
+        failures.push(format!("{}:tombstone_candidate_missing", fixture.id));
+    }
+    if fixture.replay_validation_status == GeneValidationStatus::Failed
+        && approval_decision != "rejected_hold"
+    {
+        failures.push(format!("{}:failed_validation_not_rejected", fixture.id));
+    }
+    for reason in &fixture.expected_hold_reasons {
+        if !hold_reasons.contains(reason) {
+            failures.push(format!("{}:hold_reason_missing:{reason}", fixture.id));
+        }
+    }
+    if !protected_segments_retained {
+        failures.push(format!("{}:protected_neighbor_not_retained", fixture.id));
+    }
+    if redaction_status != "redacted" {
+        failures.push(format!("{}:evidence_redaction_failed", fixture.id));
+    }
+    if evidence_packet_lines
+        .iter()
+        .any(|line| contains_private_or_executable_marker(line))
+    {
+        failures.push(format!("{}:evidence_contains_private_marker", fixture.id));
+    }
+    if evidence_packet_lines
+        .iter()
+        .any(|line| line.contains("write_allowed=true") || line.contains("applied=true"))
+    {
+        failures.push(format!("{}:evidence_claims_write_or_apply", fixture.id));
+    }
+    if !preview_only || !preview.is_read_only_preview() {
+        failures.push(format!("{}:preview_only_gate_failed", fixture.id));
+    }
+
+    failures
+}
+
 fn segment_digest(segment: &GeneSegment) -> String {
     stable_digest([
         segment.id.as_str(),
@@ -1070,5 +1794,17 @@ fn stable_digest<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
 fn push_kind_once(kinds: &mut Vec<MutationFixtureKind>, kind: MutationFixtureKind) {
     if !kinds.contains(&kind) {
         kinds.push(kind);
+    }
+}
+
+fn push_drill_kind_once(kinds: &mut Vec<MalignantGeneDrillKind>, kind: MalignantGeneDrillKind) {
+    if !kinds.contains(&kind) {
+        kinds.push(kind);
+    }
+}
+
+fn push_string_once(values: &mut Vec<String>, value: &str) {
+    if !values.iter().any(|existing| existing == value) {
+        values.push(value.to_owned());
     }
 }
