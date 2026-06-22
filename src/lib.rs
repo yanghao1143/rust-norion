@@ -35,6 +35,7 @@ pub mod runtime_manifest;
 pub mod rust_validation;
 pub mod self_evolution;
 pub mod self_evolving_memory;
+pub mod self_goal_proposal;
 pub mod semantic_index;
 pub mod session_state;
 pub mod split;
@@ -287,6 +288,11 @@ pub use self_evolving_memory::{
     SelfEvolvingMemoryRetrievalReport, SelfEvolvingMemoryStore, SelfEvolvingMemoryWriteReport,
     ToolReliabilityContext, ToolReliabilityObservationInput, ToolReliabilityObservationRecord,
     ToolReliabilityRecord,
+};
+pub use self_goal_proposal::{
+    SELF_GOAL_PROPOSAL_SCHEMA_VERSION, SELF_GOAL_PROPOSAL_TRACE_SCHEMA, SelfGoalProposalCandidate,
+    SelfGoalProposalPolicy, SelfGoalProposalReport, SelfGoalProposalSource,
+    default_noiron_self_goal_proposal_report, default_self_goal_proposal_report,
 };
 pub use semantic_index::{
     DeterministicSemanticEmbeddingProvider, SemanticEmbeddingProvider, SemanticIndex,
