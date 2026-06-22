@@ -14,7 +14,11 @@ This answers the autonomy question in stages:
   operator approval.
 - Phase 3, available now as preview: emit a queue append preview packet for one
   preview-admissible goal without mutating the durable queue.
-- Phase 4, later: execute admitted goals automatically inside budget,
+- Phase 4, available now as preview: feed that append packet through the
+  unified writer gate as an `evolution_goal_queue` preflight candidate. The
+  default gate still returns `preview_only`; a write-enabled policy can only
+  return `ready_for_explicit_apply`, never apply by itself.
+- Phase 5, later: execute admitted goals automatically inside budget,
   rollback, branch-protection, and writer-gate limits.
 
 ## Rust Surface
@@ -30,6 +34,7 @@ The executable companion is `src/self_goal_proposal.rs`, which exposes:
 - `SelfGoalAdmissionReport`
 - `SelfGoalQueuePreviewGate`
 - `SelfGoalQueuePreviewReport`
+- `UnifiedWriterGateCandidate::self_goal_queue_preview(report)`
 - `default_self_goal_proposal_report(queue)`
 - `default_noiron_self_goal_proposal_report()`
 - `default_self_goal_admission_report(proposal_report, runs)`
@@ -142,4 +147,19 @@ The gate can classify a candidate as:
   missing candidate, or unredacted evidence blocked the packet.
 
 This is still not a durable queue write. It only turns a fully reviewed
-self-goal into the exact digest-only packet a future writer gate must approve.
+self-goal into the exact digest-only packet the unified writer gate can now
+preflight.
+
+## Queue Writer Preflight
+
+`UnifiedWriterGateCandidate::self_goal_queue_preview(report)` is the fourth
+safe step. It converts an append-preview report into a unified writer-gate
+candidate under the `evolution_goal_queue` domain and requested write scope. It
+maps the existing queue digest to the rollback anchor, append/resulting queue
+digests to content evidence, and append-preview rows to review packet refs.
+
+Default policy keeps the result `preview_only` because durable writes are
+disabled. If a future explicit policy enables durable writes and every evidence,
+rollback, privacy, license, approval, and source-flag gate passes, the decision
+can become `ready_for_explicit_apply`. The gate still does not mutate the
+durable queue, create branches, or start autonomous execution.

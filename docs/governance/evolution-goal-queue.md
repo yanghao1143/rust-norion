@@ -69,16 +69,21 @@ maintainer/operator approval before any goal can be admitted or executed.
 review: it can mark a candidate as `preview_admissible`, held for prior goal,
 held for missing evidence, held for approval, held for the one-goal admission
 limit, or rejected. The default report remains held while R97 is active, and
-even a preview-admissible record keeps `write_allowed=false` and `applied=false`
-until a future queue writer gate is added.
+even a preview-admissible record keeps `write_allowed=false` and `applied=false`.
 
 `SelfGoalQueuePreviewGate` now turns a preview-admissible candidate into a
-digest-only append packet for the future writer gate. It records the existing
+digest-only append packet for the unified writer gate. It records the existing
 queue digest, append-record digest, resulting queue preview digest, and redacted
 goal record line while still keeping `read_only=true`, `write_allowed=false`,
 and `applied=false`. The gate holds on admission-gate waits, duplicate goals,
 or append-limit pressure, and rejects unsafe policy or failed admission reports
 instead of mutating the durable queue.
+
+`UnifiedWriterGateCandidate::self_goal_queue_preview` now consumes that packet
+as an `evolution_goal_queue` preflight candidate. With default policy the
+writer gate returns `preview_only`; with an explicit write-enabled policy it can
+only reach `ready_for_explicit_apply`. A separate apply workflow is still
+required before any durable queue append or autonomous execution may happen.
 
 ## Queue Evaluation
 
