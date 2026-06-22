@@ -85,6 +85,208 @@ impl SelfEvolutionValidationEvidence {
             experiments,
         }
     }
+
+    pub fn add_artifact(&mut self, artifact: &SelfEvolutionValidationArtifact) {
+        let lane = artifact.validation_lane();
+        match artifact.kind.lane() {
+            SelfEvolutionValidationArtifactLane::Compiler => {
+                self.compiler = self.compiler.saturating_add(lane);
+            }
+            SelfEvolutionValidationArtifactLane::Tests => {
+                self.tests = self.tests.saturating_add(lane);
+            }
+            SelfEvolutionValidationArtifactLane::Benchmarks => {
+                self.benchmarks = self.benchmarks.saturating_add(lane);
+            }
+            SelfEvolutionValidationArtifactLane::Experiments => {
+                self.experiments = self.experiments.saturating_add(lane);
+            }
+        }
+    }
+}
+
+impl SelfEvolutionValidationLane {
+    fn saturating_add(self, other: Self) -> Self {
+        Self {
+            items: self.items.saturating_add(other.items),
+            passed: self.passed.saturating_add(other.passed),
+            failed: self.failed.saturating_add(other.failed),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionValidationArtifactLane {
+    Compiler,
+    Tests,
+    Benchmarks,
+    Experiments,
+}
+
+impl SelfEvolutionValidationArtifactLane {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Compiler => "compiler",
+            Self::Tests => "tests",
+            Self::Benchmarks => "benchmarks",
+            Self::Experiments => "experiments",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionValidationArtifactKind {
+    CargoCheck,
+    FocusedTests,
+    BenchmarkGate,
+    TraceSchemaGate,
+}
+
+impl SelfEvolutionValidationArtifactKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CargoCheck => "cargo-check",
+            Self::FocusedTests => "focused-tests",
+            Self::BenchmarkGate => "benchmark-gate",
+            Self::TraceSchemaGate => "trace-schema-gate",
+        }
+    }
+
+    pub fn lane(self) -> SelfEvolutionValidationArtifactLane {
+        match self {
+            Self::CargoCheck => SelfEvolutionValidationArtifactLane::Compiler,
+            Self::FocusedTests => SelfEvolutionValidationArtifactLane::Tests,
+            Self::BenchmarkGate => SelfEvolutionValidationArtifactLane::Benchmarks,
+            Self::TraceSchemaGate => SelfEvolutionValidationArtifactLane::Experiments,
+        }
+    }
+
+    pub fn source_report_schema(self) -> &'static str {
+        match self {
+            Self::CargoCheck => "rust-norion-cargo-check-v1",
+            Self::FocusedTests => "rust-norion-focused-test-v1",
+            Self::BenchmarkGate => "rust-norion-benchmark-gate-v1",
+            Self::TraceSchemaGate => "rust-norion-trace-schema-gate-v1",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionValidationArtifact {
+    pub kind: SelfEvolutionValidationArtifactKind,
+    pub label: String,
+    pub items: u64,
+    pub passed: u64,
+    pub failed: u64,
+}
+
+impl SelfEvolutionValidationArtifact {
+    pub fn new(
+        kind: SelfEvolutionValidationArtifactKind,
+        label: impl Into<String>,
+        items: u64,
+        passed: u64,
+        failed: u64,
+    ) -> Self {
+        Self {
+            kind,
+            label: label.into(),
+            items,
+            passed,
+            failed,
+        }
+    }
+
+    pub fn cargo_check(label: impl Into<String>, passed: bool) -> Self {
+        Self::single(
+            SelfEvolutionValidationArtifactKind::CargoCheck,
+            label,
+            passed,
+        )
+    }
+
+    pub fn focused_tests(label: impl Into<String>, items: u64, passed: u64, failed: u64) -> Self {
+        Self::new(
+            SelfEvolutionValidationArtifactKind::FocusedTests,
+            label,
+            items,
+            passed,
+            failed,
+        )
+    }
+
+    pub fn benchmark_gate(label: impl Into<String>, passed: bool, failure_count: usize) -> Self {
+        let failed = if passed {
+            0
+        } else {
+            failure_count.max(1) as u64
+        };
+        Self::new(
+            SelfEvolutionValidationArtifactKind::BenchmarkGate,
+            label,
+            1_u64.max(u64::from(passed).saturating_add(failed)),
+            u64::from(passed),
+            failed,
+        )
+    }
+
+    pub fn trace_schema_gate(
+        label: impl Into<String>,
+        passed: bool,
+        checked_lines: usize,
+        failure_count: usize,
+    ) -> Self {
+        let failed = if passed {
+            0
+        } else {
+            failure_count.max(1) as u64
+        };
+        Self::new(
+            SelfEvolutionValidationArtifactKind::TraceSchemaGate,
+            label,
+            (checked_lines as u64).max(u64::from(passed).saturating_add(failed)),
+            u64::from(passed),
+            failed,
+        )
+    }
+
+    fn single(
+        kind: SelfEvolutionValidationArtifactKind,
+        label: impl Into<String>,
+        passed: bool,
+    ) -> Self {
+        Self::new(kind, label, 1, u64::from(passed), u64::from(!passed))
+    }
+
+    fn validation_lane(&self) -> SelfEvolutionValidationLane {
+        SelfEvolutionValidationLane::new(self.items, self.passed, self.failed)
+    }
+
+    fn evidence_id(&self, candidate_id: &str) -> String {
+        let candidate = self_evolution_review_id_component(candidate_id);
+        let label = self_evolution_review_id_component(&self.label);
+        format!(
+            "validation-artifact:{}:{}:{}:items-{}:passed-{}:failed-{}",
+            self.kind.as_str(),
+            candidate,
+            label,
+            self.items,
+            self.passed,
+            self.failed
+        )
+    }
+
+    fn content_digest(&self, candidate_id: &str) -> String {
+        self_evolution_stable_digest(&format!(
+            "validation_artifact;candidate={candidate_id};kind={};lane={};label={};items={};passed={};failed={}",
+            self.kind.as_str(),
+            self.kind.lane().as_str(),
+            self.label,
+            self.items,
+            self.passed,
+            self.failed
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -300,6 +502,43 @@ impl SelfEvolutionAdmissionEvidence {
             )));
         self.review_packet
             .push_source_report_schema("rust-norion-self-evolution-validation-v1");
+        self
+    }
+
+    pub fn with_validation_artifact(mut self, artifact: SelfEvolutionValidationArtifact) -> Self {
+        if artifact.kind == SelfEvolutionValidationArtifactKind::CargoCheck {
+            self.evolution_ledger.replay_rust_check_items = self
+                .evolution_ledger
+                .replay_rust_check_items
+                .saturating_add(artifact.items);
+            self.evolution_ledger.replay_rust_check_passed = self
+                .evolution_ledger
+                .replay_rust_check_passed
+                .saturating_add(artifact.passed);
+            self.evolution_ledger.replay_rust_check_failed = self
+                .evolution_ledger
+                .replay_rust_check_failed
+                .saturating_add(artifact.failed);
+        }
+        self.validation.add_artifact(&artifact);
+        self.review_packet
+            .push_evidence_id(artifact.evidence_id(&self.candidate_id));
+        self.review_packet
+            .push_content_digest(artifact.content_digest(&self.candidate_id));
+        self.review_packet
+            .push_source_report_schema("rust-norion-self-evolution-validation-artifact-v1");
+        self.review_packet
+            .push_source_report_schema(artifact.kind.source_report_schema());
+        self
+    }
+
+    pub fn with_validation_artifacts(
+        mut self,
+        artifacts: impl IntoIterator<Item = SelfEvolutionValidationArtifact>,
+    ) -> Self {
+        for artifact in artifacts {
+            self = self.with_validation_artifact(artifact);
+        }
         self
     }
 
@@ -4264,6 +4503,146 @@ mod tests {
                 .iter()
                 .any(|failure| failure == "no benchmark cases were recorded")
         );
+    }
+
+    #[test]
+    fn self_evolution_admission_attaches_command_and_gate_validation_artifacts() {
+        let router_preview = safe_router_threshold_preview();
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            "artifact-candidate",
+            EvolutionLedger::default(),
+            &passing_benchmark_gate(),
+        )
+        .with_validation_artifacts([
+            SelfEvolutionValidationArtifact::cargo_check("cargo-check-rust-norion", true),
+            SelfEvolutionValidationArtifact::focused_tests(
+                "operator-approval-focused-tests",
+                2,
+                2,
+                0,
+            ),
+            SelfEvolutionValidationArtifact::benchmark_gate("benchmark-gate-full", true, 0),
+            SelfEvolutionValidationArtifact::trace_schema_gate("trace-schema-jsonl", true, 3, 0),
+        ])
+        .with_router_threshold_preview_report(&router_preview);
+
+        let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+        assert!(
+            report.admitted_for_human_review,
+            "{:?}",
+            report.blocked_reasons
+        );
+        assert!(report.rust_validation_passed);
+        assert!(report.validation_passed);
+        assert_eq!(report.rust_check_items, 1);
+        assert_eq!(report.rust_check_passed, 1);
+        assert_eq!(report.rust_check_failed, 0);
+        assert_eq!(
+            report.validation.compiler,
+            SelfEvolutionValidationLane::new(1, 1, 0)
+        );
+        assert_eq!(
+            report.validation.tests,
+            SelfEvolutionValidationLane::new(2, 2, 0)
+        );
+        assert_eq!(
+            report.validation.experiments,
+            SelfEvolutionValidationLane::new(3, 1, 0)
+        );
+        for prefix in [
+            "validation-artifact:cargo-check:artifact-candidate:cargo-check-rust-norion",
+            "validation-artifact:focused-tests:artifact-candidate:operator-approval-focused-tests",
+            "validation-artifact:benchmark-gate:artifact-candidate:benchmark-gate-full",
+            "validation-artifact:trace-schema-gate:artifact-candidate:trace-schema-jsonl",
+        ] {
+            assert!(
+                report
+                    .review_packet
+                    .evidence_ids
+                    .iter()
+                    .any(|evidence_id| evidence_id.starts_with(prefix)),
+                "missing validation artifact evidence prefix {prefix}: {:?}",
+                report.review_packet.evidence_ids
+            );
+        }
+        for schema in [
+            "rust-norion-self-evolution-validation-artifact-v1",
+            "rust-norion-cargo-check-v1",
+            "rust-norion-focused-test-v1",
+            "rust-norion-benchmark-gate-v1",
+            "rust-norion-trace-schema-gate-v1",
+        ] {
+            assert!(
+                report
+                    .review_packet
+                    .source_report_schemas
+                    .iter()
+                    .any(|source_schema| source_schema == schema),
+                "missing validation artifact schema {schema}: {:?}",
+                report.review_packet.source_report_schemas
+            );
+        }
+        assert!(!report.mutation_write_allowed);
+        assert!(!report.memory_store_write_allowed);
+        assert!(!report.ndkv_write_allowed);
+        assert!(!report.model_weight_write_allowed);
+        assert!(!report.git_write_allowed);
+    }
+
+    #[test]
+    fn self_evolution_admission_blocks_failed_validation_artifact_without_writes() {
+        let router_preview = safe_router_threshold_preview();
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            "failed-artifact",
+            EvolutionLedger::default(),
+            &passing_benchmark_gate(),
+        )
+        .with_validation_artifacts([
+            SelfEvolutionValidationArtifact::cargo_check("cargo-check-rust-norion", false),
+            SelfEvolutionValidationArtifact::focused_tests("focused-tests", 1, 1, 0),
+            SelfEvolutionValidationArtifact::benchmark_gate("benchmark-gate", true, 0),
+            SelfEvolutionValidationArtifact::trace_schema_gate("trace-schema", true, 1, 0),
+        ])
+        .with_router_threshold_preview_report(&router_preview);
+
+        let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+        assert!(!report.admitted_for_human_review);
+        assert!(!report.rust_validation_passed);
+        assert!(!report.validation_passed);
+        assert_eq!(report.rust_check_items, 1);
+        assert_eq!(report.rust_check_passed, 0);
+        assert_eq!(report.rust_check_failed, 1);
+        assert_eq!(
+            report.validation.compiler,
+            SelfEvolutionValidationLane::new(1, 0, 1)
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_rust_check_passed=0<1".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_rust_check_failed=1>0".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_compiler_validation_passed=0<1".to_owned())
+        );
+        assert!(
+            report
+                .blocked_reasons
+                .contains(&"self_evolution_admission_compiler_validation_failed=1>0".to_owned())
+        );
+        assert!(!report.mutation_write_allowed);
+        assert!(!report.memory_store_write_allowed);
+        assert!(!report.ndkv_write_allowed);
+        assert!(!report.model_weight_write_allowed);
+        assert!(!report.git_write_allowed);
     }
 
     #[test]

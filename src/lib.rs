@@ -205,7 +205,9 @@ pub use self_evolution::{
     SelfEvolutionRollbackReplayDecision, SelfEvolutionRollbackReplayGate,
     SelfEvolutionRollbackReplayGateReport, SelfEvolutionRollbackReplayItem,
     SelfEvolutionRollbackReplayPlan, SelfEvolutionRollbackReplayPolicy,
-    SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
+    SelfEvolutionValidationArtifact, SelfEvolutionValidationArtifactKind,
+    SelfEvolutionValidationArtifactLane, SelfEvolutionValidationEvidence,
+    SelfEvolutionValidationLane,
 };
 pub use self_evolving_memory::{
     SelfEvolvingEpisodeContext, SelfEvolvingEpisodeInput, SelfEvolvingEpisodeRecord,
