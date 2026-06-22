@@ -26,6 +26,9 @@ const SELF_GOAL_QUEUE_CONTINUATION_PLAN_SCHEMA_VERSION: &str =
     "self_goal_queue_continuation_plan_v1";
 const SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-continuation-plan-v1";
+const SELF_GOAL_QUEUE_EVIDENCE_PLAN_SCHEMA_VERSION: &str = "self_goal_queue_evidence_plan_v1";
+const SELF_GOAL_QUEUE_EVIDENCE_PLAN_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-evidence-plan-v1";
 
 #[derive(Debug, Clone)]
 pub(crate) struct SelfGoalQueueCliReport {
@@ -39,6 +42,7 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) completion_preview: SelfGoalQueueCliCompletionPreview,
     pub(crate) completion_writer_gate: UnifiedWriterGateReport,
     pub(crate) continuation_plan: SelfGoalQueueCliContinuationPlan,
+    pub(crate) evidence_plan: SelfGoalQueueCliEvidencePlan,
     pub(crate) proposal: SelfGoalProposalReport,
     pub(crate) admission: SelfGoalAdmissionReport,
     pub(crate) queue_preview: SelfGoalQueuePreviewReport,
@@ -66,7 +70,14 @@ impl SelfGoalQueueCliReport {
                 self.completion_writer_gate.summary_line()
             ),
             self.continuation_plan.summary_line(),
+            self.evidence_plan.summary_line(),
         ];
+        lines.extend(
+            self.evidence_plan
+                .steps
+                .iter()
+                .map(SelfGoalQueueCliEvidencePlanStep::summary_line),
+        );
         lines.extend(
             self.queue_run
                 .decisions
@@ -124,6 +135,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         .evaluate([completion_preview.writer_gate_candidate()]);
     let continuation_plan =
         SelfGoalQueueCliContinuationPlan::from_completion(&current_queue, &completion_preview);
+    let evidence_plan = SelfGoalQueueCliEvidencePlan::from_continuation(&continuation_plan);
     let admission = default_self_goal_admission_report(&proposal, &evidence_runs);
     let queue_preview =
         default_self_goal_queue_preview_report(&current_queue, &proposal, &admission);
@@ -171,6 +183,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         append_self_goal_queue_apply_trace_jsonl(trace_path, &apply)?;
         append_self_goal_queue_append_execution_trace_jsonl(trace_path, &append_execution)?;
         append_self_goal_queue_continuation_trace_jsonl(trace_path, &continuation_plan)?;
+        append_self_goal_queue_evidence_plan_trace_jsonl(trace_path, &evidence_plan)?;
         if let Some(store_write) = &store_write {
             append_evolution_goal_queue_store_write_trace_jsonl(trace_path, store_write)?;
         }
@@ -187,6 +200,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         completion_preview,
         completion_writer_gate,
         continuation_plan,
+        evidence_plan,
         proposal,
         admission,
         queue_preview,
@@ -378,6 +392,216 @@ impl SelfGoalQueueCliContinuationPlan {
             json_string_array(&self.reason_codes),
             json_escape(&self.summary_line())
         )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliEvidencePlan {
+    pub(crate) source: &'static str,
+    pub(crate) ready: bool,
+    pub(crate) active_goal_id: Option<String>,
+    pub(crate) required_evidence: Vec<String>,
+    pub(crate) evidence_template_digest: String,
+    pub(crate) evidence_plan_digest: String,
+    pub(crate) steps: Vec<SelfGoalQueueCliEvidencePlanStep>,
+}
+
+impl SelfGoalQueueCliEvidencePlan {
+    fn from_continuation(continuation: &SelfGoalQueueCliContinuationPlan) -> Self {
+        let active_goal_id = continuation.plan.active_goal_id.clone();
+        let steps = if continuation.ready {
+            active_goal_id
+                .as_deref()
+                .map(|goal_id| {
+                    continuation
+                        .plan
+                        .required_evidence
+                        .iter()
+                        .enumerate()
+                        .map(|(index, kind)| {
+                            SelfGoalQueueCliEvidencePlanStep::new(
+                                index + 1,
+                                goal_id,
+                                kind,
+                                continuation.source,
+                                &continuation.plan.evidence_template_digest,
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let step_digest_text = steps
+            .iter()
+            .map(|step| step.packet_template_digest.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        let required_text = continuation.plan.required_evidence.join("|");
+        let evidence_plan_digest = stable_redaction_digest([
+            "self-goal-queue-evidence-plan-v1",
+            continuation.source,
+            active_goal_id.as_deref().unwrap_or("none"),
+            continuation.plan.evidence_template_digest.as_str(),
+            required_text.as_str(),
+            step_digest_text.as_str(),
+        ]);
+
+        Self {
+            source: continuation.source,
+            ready: continuation.ready && !steps.is_empty(),
+            active_goal_id,
+            required_evidence: continuation.plan.required_evidence.clone(),
+            evidence_template_digest: continuation.plan.evidence_template_digest.clone(),
+            evidence_plan_digest,
+            steps,
+        }
+    }
+
+    pub(crate) fn auto_collectible_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.auto_collectible)
+            .count()
+    }
+
+    pub(crate) fn manual_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.manual_required)
+            .count()
+    }
+
+    pub(crate) fn summary_line(&self) -> String {
+        let required = if self.required_evidence.is_empty() {
+            "none".to_owned()
+        } else {
+            self.required_evidence.join("|")
+        };
+        format!(
+            "self_goal_queue_evidence_plan source={} ready={} goal={} required={} steps={} auto_collectible={} manual={} template={} digest={}",
+            self.source,
+            self.ready,
+            self.active_goal_id.as_deref().unwrap_or("none"),
+            required,
+            self.steps.len(),
+            self.auto_collectible_steps(),
+            self.manual_steps(),
+            self.evidence_template_digest,
+            self.evidence_plan_digest
+        )
+    }
+
+    fn json_line(&self) -> String {
+        let packet_digests = self
+            .steps
+            .iter()
+            .map(|step| step.packet_template_digest.clone())
+            .collect::<Vec<_>>();
+        let command_digests = self
+            .steps
+            .iter()
+            .map(|step| step.command_digest.clone())
+            .collect::<Vec<_>>();
+        let step_kinds = self
+            .steps
+            .iter()
+            .map(|step| step.evidence_kind.clone())
+            .collect::<Vec<_>>();
+        format!(
+            "{{\"schema\":\"{}\",\"plan_schema\":\"{}\",\"source\":\"{}\",\"ready\":{},\"active_goal_id\":\"{}\",\"required_evidence_count\":{},\"required_evidence\":{},\"planned_step_count\":{},\"step_kinds\":{},\"auto_collectible_steps\":{},\"manual_steps\":{},\"evidence_template_digest\":\"{}\",\"evidence_plan_digest\":\"{}\",\"packet_template_digests\":{},\"command_digests\":{},\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"{}\"}}",
+            json_escape(SELF_GOAL_QUEUE_EVIDENCE_PLAN_TRACE_SCHEMA),
+            json_escape(SELF_GOAL_QUEUE_EVIDENCE_PLAN_SCHEMA_VERSION),
+            json_escape(self.source),
+            self.ready,
+            json_escape(self.active_goal_id.as_deref().unwrap_or("none")),
+            self.required_evidence.len(),
+            json_string_array(&self.required_evidence),
+            self.steps.len(),
+            json_string_array(&step_kinds),
+            self.auto_collectible_steps(),
+            self.manual_steps(),
+            json_escape(&self.evidence_template_digest),
+            json_escape(&self.evidence_plan_digest),
+            json_string_array(&packet_digests),
+            json_string_array(&command_digests),
+            json_escape(&self.summary_line())
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliEvidencePlanStep {
+    pub(crate) sequence: usize,
+    pub(crate) evidence_kind: String,
+    pub(crate) runner: &'static str,
+    pub(crate) auto_collectible: bool,
+    pub(crate) manual_required: bool,
+    pub(crate) packet_template_digest: String,
+    pub(crate) command_digest: String,
+}
+
+impl SelfGoalQueueCliEvidencePlanStep {
+    fn new(
+        sequence: usize,
+        goal_id: &str,
+        evidence_kind: &str,
+        source: &str,
+        evidence_template_digest: &str,
+    ) -> Self {
+        let runner = evidence_runner(evidence_kind);
+        let manual_required = evidence_kind == "operator_approval";
+        let packet_template_digest = stable_redaction_digest([
+            "self-goal-queue-evidence-packet-template-v1",
+            goal_id,
+            evidence_kind,
+            source,
+            evidence_template_digest,
+            &sequence.to_string(),
+        ]);
+        let command_digest = stable_redaction_digest([
+            "self-goal-queue-evidence-command-template-v1",
+            runner,
+            evidence_kind,
+            source,
+            &sequence.to_string(),
+        ]);
+
+        Self {
+            sequence,
+            evidence_kind: evidence_kind.to_owned(),
+            runner,
+            auto_collectible: !manual_required,
+            manual_required,
+            packet_template_digest,
+            command_digest,
+        }
+    }
+
+    fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_evidence_step index={} kind={} runner={} auto_collectible={} manual={} packet={} command={}",
+            self.sequence,
+            self.evidence_kind,
+            self.runner,
+            self.auto_collectible,
+            self.manual_required,
+            self.packet_template_digest,
+            self.command_digest
+        )
+    }
+}
+
+fn evidence_runner(evidence_kind: &str) -> &'static str {
+    match evidence_kind {
+        "cargo_check" => "cargo_check",
+        "focused_tests" => "focused_tests",
+        "benchmark_gate" => "benchmark_gate",
+        "trace_schema_gate" => "trace_schema_gate",
+        "experiment_ledger" => "experiment_ledger_gate",
+        "operator_approval" => "operator_approval",
+        _ => "unsupported",
     }
 }
 
@@ -892,6 +1116,17 @@ fn self_goal_trace_path(args: &Args) -> Option<&Path> {
 fn append_self_goal_queue_continuation_trace_jsonl(
     path: impl AsRef<Path>,
     plan: &SelfGoalQueueCliContinuationPlan,
+) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(file, "{}", plan.json_line())
+}
+
+fn append_self_goal_queue_evidence_plan_trace_jsonl(
+    path: impl AsRef<Path>,
+    plan: &SelfGoalQueueCliEvidencePlan,
 ) -> io::Result<()> {
     let mut file = fs::OpenOptions::new()
         .create(true)
