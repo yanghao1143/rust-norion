@@ -517,10 +517,11 @@ writer-gate consolidation baselines.
   layer and trace-schema counters. R95 now provides the reference fact/license
   verification gate and deterministic chunk-repair fixture catalog. R96 now
   provides the clean-room source-provenance scanner and contamination fixtures.
-  R97 now has the first coding service/eval readiness bridge that turns #75
-  fixtures into deterministic `ChatRequest` plans with streaming, cancellation,
-  max-token, diagnostics, health, model-capability, offline/mock, evidence, and
-  Rust-validation coverage. Continue with R97 endpoint/runner wiring next.
+  R97 now has the first coding service/eval readiness bridge and offline mock
+  runner that turn #75 fixtures into deterministic `ChatRequest` plans, execute
+  those plans through `ChatSession` streaming/cancellation paths, and score the
+  resulting observations with digest-only evidence. Continue with R97 endpoint,
+  CLI runner, and benchmark gate feed wiring next.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -1063,10 +1064,12 @@ writer-gate consolidation baselines.
   #75 provides the completed local scoring dataset/profile baseline. The
   `CodingServiceEvalReadinessReport` now maps that corpus to deterministic
   service `ChatRequest` plans and digest-only request/eval evidence for
-  English, Chinese, Rust, and mixed-language coding lanes. #19/#29 continue the
-  local service endpoint, mock backend, streaming/cancellation, diagnostics,
-  runner, compiler/test, and benchmark validation work for self-improving
-  coding behavior.
+  English, Chinese, Rust, and mixed-language coding lanes. The
+  `CodingServiceEvalRunnerReport` now executes those plans through an offline
+  `ChatSession` mock runner with stream, cancellation, diagnostics, health,
+  model-capability, max-token, and Rust-validation coverage. #19/#29 continue
+  the local service endpoint, CLI runner, compiler/test, benchmark gate feed,
+  and artifact serialization work for self-improving coding behavior.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
