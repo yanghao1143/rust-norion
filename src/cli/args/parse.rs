@@ -506,6 +506,50 @@ impl Args {
                     state.trace_schema_gate_path_set = true;
                     index += 2;
                 }
+                "--self-goal-queue" => {
+                    state.self_goal_queue = true;
+                    index += 1;
+                }
+                "--self-goal-queue-store" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_store_path = Some(PathBuf::from(&raw[index + 1]));
+                    index += 2;
+                }
+                "--self-goal-queue-store-apply" => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_store_apply = true;
+                    index += 1;
+                }
+                "--self-goal-queue-tenant" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_tenant = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--self-goal-queue-workspace" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_workspace = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--self-goal-queue-session" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_session = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--self-goal-queue-key" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_key = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--self-goal-queue-operator" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_operator = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--self-goal-queue-ticket" if index + 1 < raw.len() => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_ticket = raw[index + 1].to_owned();
+                    index += 2;
+                }
                 "--experience-hygiene" => {
                     state.experience_hygiene = true;
                     index += 1;

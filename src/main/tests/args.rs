@@ -1,4 +1,39 @@
 use super::*;
+use std::path::Path;
+
+#[test]
+fn parses_self_goal_queue_flags() {
+    let args = Args::parse(vec![
+        "--self-goal-queue-store".to_owned(),
+        "target/self-goal-queue.ndkv".to_owned(),
+        "--self-goal-queue-store-apply".to_owned(),
+        "--self-goal-queue-tenant".to_owned(),
+        "tenant-a".to_owned(),
+        "--self-goal-queue-workspace".to_owned(),
+        "workspace-b".to_owned(),
+        "--self-goal-queue-session".to_owned(),
+        "session-c".to_owned(),
+        "--self-goal-queue-key".to_owned(),
+        "queue-key".to_owned(),
+        "--self-goal-queue-operator".to_owned(),
+        "operator-1".to_owned(),
+        "--self-goal-queue-ticket".to_owned(),
+        "ticket-2".to_owned(),
+    ]);
+
+    assert!(args.self_goal_queue);
+    assert_eq!(
+        args.self_goal_queue_store_path.as_deref(),
+        Some(Path::new("target/self-goal-queue.ndkv"))
+    );
+    assert!(args.self_goal_queue_store_apply);
+    assert_eq!(args.self_goal_queue_tenant, "tenant-a");
+    assert_eq!(args.self_goal_queue_workspace, "workspace-b");
+    assert_eq!(args.self_goal_queue_session, "session-c");
+    assert_eq!(args.self_goal_queue_key, "queue-key");
+    assert_eq!(args.self_goal_queue_operator, "operator-1");
+    assert_eq!(args.self_goal_queue_ticket, "ticket-2");
+}
 
 #[test]
 fn parses_reasoning_genome_benchmark_gate_flags() {
