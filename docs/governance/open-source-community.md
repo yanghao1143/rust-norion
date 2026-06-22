@@ -37,31 +37,18 @@ external adapter/plugin.
 
 ## License Direction
 
-Current policy remains the repository license: public non-commercial research,
-education, evaluation, benchmarking, and experimental deployment only.
-Commercial use requires written permission from the copyright holder.
+Current policy is GPL-3.0. Everyone, including contributors, may use, deploy,
+modify, and redistribute rust-norion commercially under the same GPL-3.0 terms.
+Derivative works and redistributed modifications must remain open source under
+GPL-3.0-compatible terms.
 
-For community growth, the preferred target is not a contributor-only commercial
-carve-out. Contributor-only commercial rights are hard to reason about because
-contributors would still touch code written by other contributors. The cleaner
-model is a permissive core license where everyone, including contributors, can
-use the core commercially under the same terms.
+This avoids a contributor-only commercial carve-out, which would be hard to
+reason about once contributors touch code written by other contributors. The
+project stays open for commercial deployment and research while preserving the
+copyleft requirement that improvements remain available to the community.
 
-Future license changes should be handled by an explicit ADR/license-transition
-pull request before any repository-wide change. The recommended target is:
-
-- permissive core: basic gene-chain definitions, splicing, mutation detection,
-  baseline routing, baseline KV, self-goal planning gates, and backend traits
-  under MIT/Apache-2.0 style terms so contributors can safely build commercial
-  products around the open core;
-- commercial add-ons: enterprise multi-tenancy, advanced audit suites,
-  specialized evolution operators, private deployment support, and bespoke
-  integrations under commercial terms.
-
-Until that ADR/license-transition PR lands, contributors should treat pull
-requests as non-commercial research contributions only because `LICENSE`,
-`NOTICE.md`, `README.md`, `CONTRIBUTING.md`, and CI still enforce the current
-non-commercial policy.
+Future license changes should still be handled by an explicit ADR or
+license-transition pull request before any repository-wide change.
 
 ## Documentation Layers
 
@@ -152,8 +139,9 @@ Growth should be explicit and reversible:
 3. Maintainer: trusted to approve scoped areas after sustained high-quality
    contributions.
 
-Protected branches still require owner/maintainer approval. Public
-collaboration does not imply commercial-use permission.
+Protected branches still require owner/maintainer approval. Commercial use is
+allowed under GPL-3.0 terms, but public collaboration does not bypass review,
+attribution, validation, or third-party license compatibility requirements.
 
 ## Single-Maintainer Guardrails
 

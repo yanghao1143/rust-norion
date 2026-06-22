@@ -1,12 +1,13 @@
 # Local Research Deployment Profiles
 
-Issue #78 adds deterministic, non-commercial local research deployment
-profiles for running rust-norion experiments without turning preview evidence
-into durable memory, genome, or experiment-ledger writes.
+Issue #78 adds deterministic local research deployment profiles for running
+rust-norion experiments without turning preview evidence into durable memory,
+genome, or experiment-ledger writes.
 
 This is a guardrail layer for local deployment research. It is not a production
-hosting permission and it does not relax branch protection, maintainer approval,
-privacy review, license review, or preview-to-write graduation.
+hosting quality guarantee and it does not relax branch protection, maintainer
+approval, privacy review, GPL-3.0 or third-party license review, or
+preview-to-write graduation.
 
 ## Profile Templates
 
@@ -47,7 +48,7 @@ Each profile carries explicit limits for:
 - `allow` when the request is inside the profile budget
 - `backpressure` when streaming/cancellation/timeout pressure exceeds the
   profile's soft guard
-- `reject` when context, KV, concurrency, disabled feature, non-commercial, or
+- `reject` when context, KV, concurrency, disabled feature, license, or
   durable-write boundaries would be crossed
 
 Guard reports are read-only and include a stable evidence digest so issue and
@@ -73,7 +74,7 @@ plan, privacy/license checks, and maintainer/operator approval.
 ## Operator Health
 
 `ResearchDeploymentProfile::operator_health()` emits the active profile, device
-class, adapter hint, write mode, resource limits, non-commercial flag, and
+class, adapter hint, write mode, resource limits, license posture, and
 write-disabled state. Health output remains read-only:
 
 - `read_only=true`
@@ -91,4 +92,4 @@ human approval.
 guard reports, disabled-write defaults, operator-health evidence, focused
 tests, and this policy document land. Follow-up work may wire these profiles
 into CLI/config/runtime selection, but that wiring must keep the same
-non-commercial and preview-only defaults.
+GPL-3.0-compatible and preview-only defaults.

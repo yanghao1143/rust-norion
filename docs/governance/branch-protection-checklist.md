@@ -64,7 +64,7 @@ The pull request template must require:
 - preview-only default for durable memory/genome/self-evolution writes
 - preview-to-write graduation checklist for any requested write or active
   behavior change
-- non-commercial research/deployment compatibility
+- GPL-3.0 license compatibility
 - clean-room external-source confirmation
 
 ## Issue Templates
@@ -91,7 +91,7 @@ maintainer. A PR is not merge-ready until:
 - CODEOWNER review passes
 - conversations are resolved
 - license/provenance notes are acceptable
-- non-commercial constraints are preserved
+- GPL-3.0 and third-party license constraints are preserved
 
 ## Audit Procedure
 
@@ -109,4 +109,3 @@ git ls-files .github/ISSUE_TEMPLATE
 The audit result should be posted to the relevant governance issue when settings
 change. If branch protection cannot be verified, self-evolution and
 preview-to-write graduation work must remain blocked from merge.
-

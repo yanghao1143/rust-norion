@@ -2,10 +2,10 @@
 
 rust-norion accepts public collaboration through issues and pull requests.
 
-The repository is public for non-commercial research, education, evaluation,
-benchmarking, and experimental deployment. Commercial use, commercial
-deployment approval, and license exceptions require explicit written permission
-from the copyright holder.
+The repository is released under the GNU General Public License v3.0.
+Commercial use, deployment research, modification, and redistribution are
+allowed under GPL-3.0 terms. Derivative works and redistributed modifications
+must remain open source under GPL-3.0-compatible terms.
 
 ## Ground Rules
 
@@ -14,16 +14,17 @@ from the copyright holder.
 - Protected branches require a pull request, CODEOWNER approval from
   `@yanghao1143`, and approval of the latest reviewable push.
 - Do not push directly to protected branches.
-- Keep contributions compatible with the repository license: non-commercial
-  research, education, evaluation, and experimental deployment only.
-- Pull requests do not request or imply commercial-use permission.
-- Do not copy GPL, AGPL, commercial, or otherwise incompatible code, tests,
-  prompts, generated files, or assets into this repository.
+- Keep contributions compatible with the repository license: GPL-3.0.
+- Pull requests do not bypass maintainer review, branch protection, validation
+  gates, attribution requirements, or third-party license obligations.
+- Do not copy AGPL, proprietary, commercial-restricted, private, generated, or
+  otherwise incompatible code, tests, prompts, generated files, or assets into
+  this repository.
 - `fortunto2/rust-code` may be used as an MIT-licensed reference. Any code port
   requires explicit attribution and review.
-- `Kuberwastaken/claurst` may be used only for clean-room architecture inspiration
-  unless the project explicitly accepts GPL-3.0 obligations in a written
-  decision.
+- `Kuberwastaken/claurst` is a GPL-3.0 reference. Any code import or port
+  requires a dedicated issue or pull request, explicit attribution,
+  compatibility review, and maintainer approval.
 - Do not commit local state, memory databases, `.ndkv` files, model weights,
   credentials, logs, generated `target` directories, or private datasets.
 
@@ -47,8 +48,8 @@ Every pull request should include:
 - Trace or benchmark evidence when changing routing, memory, genome, runtime,
   self-evolution, task hierarchy, or durable-state behavior.
 - A clean-room note for changes inspired by external projects or papers.
-- A note confirming that no commercial-use permission is being requested by the
-  pull request itself.
+- A note confirming that external references, if used, are documented with
+  license and attribution details.
 
 ## Safety Gates
 
@@ -69,6 +70,4 @@ See [NOTICE.md](NOTICE.md) and
 for license, clean-room, and branch-protection details.
 See
 [docs/governance/open-source-community.md](docs/governance/open-source-community.md)
-for the proposed long-term permissive-core/community strategy. Until a separate
-license-transition PR changes the controlling files, the current
-non-commercial license remains in force.
+for the focused community strategy and contributor path.

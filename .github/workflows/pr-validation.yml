@@ -110,19 +110,17 @@ jobs:
       - name: Guard collaboration and license policy surfaces
         shell: bash
         run: |
-          grep -Fq "Rust-Norion Research Deployment Non-Commercial License" LICENSE
-          grep -Fq "Commercial use is not permitted without prior written permission" LICENSE
-          grep -Fq "Commercial licenses, exceptions, or deployment permissions may be granted only" LICENSE
-          grep -Fq "rust-norion is published for non-commercial research" NOTICE.md
-          grep -Fq "Pull requests do not grant commercial-use permission" NOTICE.md
-          grep -Fq "public for non-commercial research" README.md
+          grep -Fq "GNU GENERAL PUBLIC LICENSE" LICENSE
+          grep -Fq "Version 3, 29 June 2007" LICENSE
+          grep -Fq "released under the GNU General Public License v3.0" NOTICE.md
+          grep -Fq "Commercial use is allowed under" README.md
           grep -Fq "owner or maintainer review and approval" README.md
           grep -Fq "Public Collaboration Governance" README.md
           grep -Fq "CODEOWNER approval" CONTRIBUTING.md
-          grep -Fq "no commercial-use permission is being requested" CONTRIBUTING.md
-          grep -Fq "clean-room architecture inspiration" CONTRIBUTING.md
+          grep -Fq "GPL-3.0" CONTRIBUTING.md
+          grep -Fq "maintainer approval" CONTRIBUTING.md
           grep -Fq "default branch is protected" docs/governance/public-collaboration.md
           grep -Fq "Kuberwastaken/claurst" docs/governance/public-collaboration.md
-          grep -Fq "No commercial-use permission, license exception, or commercial deployment approval is requested by this PR" .github/pull_request_template.md
-          grep -Fq "External code was not copied from GPL/AGPL/commercial sources" .github/pull_request_template.md
+          grep -Fq "Change remains compatible with the GPL-3.0 license" .github/pull_request_template.md
+          grep -Fq "External code was not copied from AGPL/proprietary/commercial-restricted/private sources" .github/pull_request_template.md
           grep -Fxq "* @yanghao1143" .github/CODEOWNERS

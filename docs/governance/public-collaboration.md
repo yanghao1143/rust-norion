@@ -1,23 +1,25 @@
 # Public Collaboration Governance
 
 This repository is public so researchers and contributors can inspect,
-evaluate, deploy experimentally, and improve rust-norion together. It is not a
-commercial-use grant.
+evaluate, deploy, and improve rust-norion together under the GNU General Public
+License v3.0.
 
 ## Allowed Use
 
 Allowed without separate written permission:
 
-- non-commercial research and education
+- research and education
 - local evaluation and benchmarking
 - reproducibility work
 - safety analysis and validation
-- experimental non-commercial deployment
+- experimental and production deployment under GPL-3.0 terms
+- commercial use under GPL-3.0 terms
 - issue discussion and pull request development
 
-Commercial use, paid hosted services, embedding in a commercial product,
-selling or sublicensing the software, or using it primarily for commercial
-advantage requires explicit written permission from the copyright holder.
+Derivative works and redistributed modifications must remain open source under
+GPL-3.0-compatible terms. Operators remain responsible for applicable law,
+privacy duties, safety requirements, third-party model or dataset licenses, and
+local deployment policy.
 
 ## Merge Control
 
@@ -49,7 +51,8 @@ Each PR must include:
 - validation commands and outcomes
 - rollback plan for self-evolution, memory, genome, routing, or durable-state
   changes
-- confirmation that no commercial-use permission is requested
+- confirmation that external references, if used, include license and
+  attribution notes
 - confirmation that no local `.ndkv`, model weights, private data, generated
   output, logs, or credentials are included
 
@@ -59,9 +62,9 @@ External projects can inform design, but implementation must respect licenses.
 
 - `fortunto2/rust-code`: MIT-compatible reference. Code imports or ports need
   attribution, review, and compatibility with the repository license.
-- `Kuberwastaken/claurst`: GPL-3.0 reference. Treat it as architecture
-  inspiration only. Do not copy source, tests, generated code, prompts, or
-  assets unless the project explicitly accepts GPL-3.0 obligations in writing.
+- `Kuberwastaken/claurst`: GPL-3.0 reference. Code imports or ports require a
+  dedicated issue or pull request, attribution, compatibility review, and
+  maintainer approval.
 - Papers and public documentation: use as design input; cite in docs where a
   module relies on a published idea.
 
@@ -79,7 +82,7 @@ The roadmap issues define the main safety surfaces:
 - #10 benchmark and trace gates
 - #11 public collaboration governance
 - #20 experiment ledger and approval gates
-- #27 non-commercial research license and contributor controls
+- #27 GPL-3.0 license and contributor controls
 - #77 preview-to-write graduation checklist
 
 Durable memory or genome mutation must remain preview-only until the related
