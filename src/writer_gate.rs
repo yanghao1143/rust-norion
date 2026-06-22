@@ -8,6 +8,10 @@ use crate::reasoning_genome::{
     GeneScissorsTransactionJournal, GeneValidationStatus,
 };
 use crate::self_evolution::SelfEvolutionPromotionPreflightReport;
+use crate::self_goal_proposal::{
+    SELF_GOAL_QUEUE_PREVIEW_SCHEMA_VERSION, SELF_GOAL_QUEUE_PREVIEW_TRACE_SCHEMA,
+    SelfGoalQueuePreviewDecision, SelfGoalQueuePreviewReport,
+};
 
 pub const UNIFIED_WRITER_GATE_SCHEMA_VERSION: &str = "unified_writer_gate_v1";
 pub const UNIFIED_WRITER_GATE_TRACE_SCHEMA: &str = "rust-norion-unified-writer-gate-v1";
@@ -17,6 +21,7 @@ pub enum UnifiedWriterGateDomain {
     Memory,
     Genome,
     ExperimentLedger,
+    EvolutionGoalQueue,
 }
 
 impl UnifiedWriterGateDomain {
@@ -25,6 +30,7 @@ impl UnifiedWriterGateDomain {
             Self::Memory => "memory",
             Self::Genome => "genome",
             Self::ExperimentLedger => "experiment_ledger",
+            Self::EvolutionGoalQueue => "evolution_goal_queue",
         }
     }
 }
@@ -34,6 +40,7 @@ pub enum UnifiedWriterGateWriteScope {
     DurableMemory,
     Genome,
     ExperimentLedger,
+    EvolutionGoalQueue,
 }
 
 impl UnifiedWriterGateWriteScope {
@@ -42,6 +49,7 @@ impl UnifiedWriterGateWriteScope {
             Self::DurableMemory => "durable_memory",
             Self::Genome => "genome",
             Self::ExperimentLedger => "experiment_ledger",
+            Self::EvolutionGoalQueue => "evolution_goal_queue",
         }
     }
 }
@@ -380,6 +388,109 @@ impl UnifiedWriterGateCandidate {
         ))
     }
 
+    pub fn self_goal_queue_preview(report: &SelfGoalQueuePreviewReport) -> Self {
+        let append_records = report
+            .records
+            .iter()
+            .filter(|record| record.decision == SelfGoalQueuePreviewDecision::AppendPreview)
+            .collect::<Vec<_>>();
+        let record_count = report.record_count.to_string();
+        let append_preview_count = report.append_preview_count.to_string();
+        let candidate_id = stable_redaction_digest([
+            "self-goal-queue-preview",
+            report.existing_queue_digest.as_str(),
+            record_count.as_str(),
+            append_preview_count.as_str(),
+        ]);
+        let review_packet_ids = append_records
+            .iter()
+            .map(|record| {
+                safe_ref(format!(
+                    "self-goal-queue-preview:{}:{}",
+                    record.candidate_id, record.proposed_goal_id
+                ))
+            })
+            .collect::<Vec<_>>();
+        let evidence_ids = append_records
+            .iter()
+            .flat_map(|record| {
+                [
+                    record.existing_queue_digest.clone(),
+                    record
+                        .append_record_digest
+                        .clone()
+                        .unwrap_or_else(|| "missing-append-record-digest".to_owned()),
+                    record
+                        .resulting_queue_preview_digest
+                        .clone()
+                        .unwrap_or_else(|| "missing-resulting-queue-digest".to_owned()),
+                ]
+            })
+            .collect::<Vec<_>>();
+        let rollback_anchor_ids = if append_records.is_empty() {
+            Vec::new()
+        } else {
+            vec![report.existing_queue_digest.clone()]
+        };
+        let content_digests = append_records
+            .iter()
+            .flat_map(|record| {
+                [
+                    record.append_record_digest.clone(),
+                    record.resulting_queue_preview_digest.clone(),
+                ]
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+        let source_report_schemas = vec![
+            SELF_GOAL_QUEUE_PREVIEW_SCHEMA_VERSION.to_owned(),
+            SELF_GOAL_QUEUE_PREVIEW_TRACE_SCHEMA.to_owned(),
+            report.admission_schema_version.to_owned(),
+        ];
+        let append_packet_ready = !append_records.is_empty()
+            && append_records.iter().all(|record| {
+                record.append_record_digest.is_some()
+                    && record.resulting_queue_preview_digest.is_some()
+                    && record.append_record_line.is_some()
+                    && record.evidence_is_redacted()
+            });
+        let redacted = report.evidence_is_redacted()
+            && !contains_private_or_executable_marker(&report.summary_line())
+            && report
+                .record_lines
+                .iter()
+                .all(|line| !contains_private_or_executable_marker(line));
+
+        Self::new(
+            UnifiedWriterGateDomain::EvolutionGoalQueue,
+            candidate_id,
+            [UnifiedWriterGateWriteScope::EvolutionGoalQueue],
+        )
+        .with_refs(
+            review_packet_ids,
+            evidence_ids,
+            rollback_anchor_ids,
+            content_digests,
+            source_report_schemas,
+        )
+        .with_evidence(
+            report.passed() && append_packet_ready,
+            report.passed() && append_packet_ready,
+            append_packet_ready,
+            redacted,
+            true,
+        )
+        .with_operator_approval(report.passed() && append_packet_ready, append_packet_ready)
+        .with_source_flags(
+            report.read_only,
+            report.is_preview_only(),
+            report.write_allowed,
+            report.applied,
+            false,
+        )
+        .with_raw_payload_redacted(redacted)
+    }
+
     pub fn with_refs(
         mut self,
         review_packet_ids: Vec<String>,
@@ -525,6 +636,7 @@ pub struct UnifiedWriterGateReport {
     pub memory_records: usize,
     pub genome_records: usize,
     pub experiment_ledger_records: usize,
+    pub evolution_goal_queue_records: usize,
     pub ready_records: usize,
     pub held_records: usize,
     pub rejected_records: usize,
@@ -547,13 +659,14 @@ impl UnifiedWriterGateReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "unified_writer_gate schema={} decision={} records={} memory={} genome={} experiment_ledger={} ready={} held={} rejected={} preview_only={} durable_write_allowed={} explicit_apply_required={} read_only={} write_allowed={} applied={} evidence={}",
+            "unified_writer_gate schema={} decision={} records={} memory={} genome={} experiment_ledger={} evolution_goal_queue={} ready={} held={} rejected={} preview_only={} durable_write_allowed={} explicit_apply_required={} read_only={} write_allowed={} applied={} evidence={}",
             self.schema_version,
             self.decision.as_str(),
             self.records.len(),
             self.memory_records,
             self.genome_records,
             self.experiment_ledger_records,
+            self.evolution_goal_queue_records,
             self.ready_records,
             self.held_records,
             self.rejected_records,
@@ -574,7 +687,7 @@ impl UnifiedWriterGateReport {
             .map(|record| record.reason_codes.len())
             .sum::<usize>();
         format!(
-            "{{\"schema\":\"{}\",\"gate_schema\":\"{}\",\"decision\":\"{}\",\"records\":{},\"memory_records\":{},\"genome_records\":{},\"experiment_ledger_records\":{},\"ready_records\":{},\"held_records\":{},\"rejected_records\":{},\"preview_only_records\":{},\"reason_code_count\":{},\"durable_write_allowed\":{},\"explicit_apply_required\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"evidence_digest\":\"{}\",\"summary\":\"{}\"}}",
+            "{{\"schema\":\"{}\",\"gate_schema\":\"{}\",\"decision\":\"{}\",\"records\":{},\"memory_records\":{},\"genome_records\":{},\"experiment_ledger_records\":{},\"evolution_goal_queue_records\":{},\"ready_records\":{},\"held_records\":{},\"rejected_records\":{},\"preview_only_records\":{},\"reason_code_count\":{},\"durable_write_allowed\":{},\"explicit_apply_required\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"evidence_digest\":\"{}\",\"summary\":\"{}\"}}",
             json_escape(UNIFIED_WRITER_GATE_TRACE_SCHEMA),
             json_escape(self.schema_version),
             json_escape(self.decision.as_str()),
@@ -582,6 +695,7 @@ impl UnifiedWriterGateReport {
             self.memory_records,
             self.genome_records,
             self.experiment_ledger_records,
+            self.evolution_goal_queue_records,
             self.ready_records,
             self.held_records,
             self.rejected_records,
@@ -673,6 +787,10 @@ impl UnifiedWriterGate {
             .iter()
             .filter(|record| record.domain == UnifiedWriterGateDomain::ExperimentLedger)
             .count();
+        let evolution_goal_queue_records = records
+            .iter()
+            .filter(|record| record.domain == UnifiedWriterGateDomain::EvolutionGoalQueue)
+            .count();
         let evidence_digest = report_digest(&records, decision, durable_write_allowed);
 
         UnifiedWriterGateReport {
@@ -687,6 +805,7 @@ impl UnifiedWriterGate {
             memory_records,
             genome_records,
             experiment_ledger_records,
+            evolution_goal_queue_records,
             ready_records,
             held_records,
             rejected_records,
@@ -894,6 +1013,10 @@ fn json_escape(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::evolution_goal::{
+        EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
+        EvolutionGoalRunEvidence,
+    };
     use crate::hierarchy::TaskProfile;
     use crate::memory_admission::{
         MemoryAdmissionCandidate, MemoryAdmissionKind, MemoryAdmissionReviewPacket,
@@ -903,6 +1026,11 @@ mod tests {
         GeneScissorsTransaction, GeneScissorsTransactionState, GeneValidationStatus,
     };
     use crate::self_evolution::SelfEvolutionPromotionPreflightDecision;
+    use crate::self_goal_proposal::{
+        SelfGoalProposalCandidate, SelfGoalQueuePreviewReport,
+        default_noiron_self_goal_queue_preview_report, default_self_goal_admission_report,
+        default_self_goal_proposal_report, default_self_goal_queue_preview_report,
+    };
 
     #[test]
     fn default_gate_keeps_all_domains_preview_only_even_when_evidence_is_ready() {
@@ -913,12 +1041,16 @@ mod tests {
                 UnifiedWriterGateDomain::ExperimentLedger,
                 "experiment:candidate",
             ),
+            ready_candidate(
+                UnifiedWriterGateDomain::EvolutionGoalQueue,
+                "goal-queue:candidate",
+            ),
         ];
 
         let report = UnifiedWriterGate::new().evaluate(candidates);
 
         assert_eq!(report.decision, UnifiedWriterGateDecision::PreviewOnly);
-        assert_eq!(report.preview_only_records, 3);
+        assert_eq!(report.preview_only_records, 4);
         assert_eq!(report.ready_records, 0);
         assert!(report.is_preview_only());
         assert!(
@@ -1088,6 +1220,103 @@ mod tests {
         assert!(!report.applied);
     }
 
+    #[test]
+    fn self_goal_queue_preview_constructor_maps_append_packet_to_goal_queue_domain() {
+        let preview = self_goal_queue_preview_fixture(true);
+        let candidate = UnifiedWriterGateCandidate::self_goal_queue_preview(&preview);
+
+        assert_eq!(
+            candidate.domain,
+            UnifiedWriterGateDomain::EvolutionGoalQueue
+        );
+        assert_eq!(
+            candidate.requested_writes,
+            vec![UnifiedWriterGateWriteScope::EvolutionGoalQueue]
+        );
+        assert!(candidate.validation_passed);
+        assert!(candidate.trace_or_benchmark_passed);
+        assert!(candidate.rollback_ready);
+        assert!(candidate.privacy_checked);
+        assert!(candidate.operator_approved);
+        assert!(candidate.approval_refs_match);
+        assert!(candidate.source_preview_only);
+        assert!(candidate.raw_payload_redacted);
+
+        let report = UnifiedWriterGate::new().evaluate([candidate]);
+        assert_eq!(report.decision, UnifiedWriterGateDecision::PreviewOnly);
+        assert_eq!(report.evolution_goal_queue_records, 1);
+        assert!(report.is_preview_only());
+        assert_eq!(report.records[0].reason_codes, ["durable_writes_disabled"]);
+    }
+
+    #[test]
+    fn self_goal_queue_preview_can_reach_ready_for_explicit_apply_without_applying() {
+        let preview = self_goal_queue_preview_fixture(true);
+        let candidate = UnifiedWriterGateCandidate::self_goal_queue_preview(&preview);
+        let policy = UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        };
+
+        let report = UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([candidate]);
+
+        assert_eq!(
+            report.decision,
+            UnifiedWriterGateDecision::ReadyForExplicitApply
+        );
+        assert_eq!(report.evolution_goal_queue_records, 1);
+        assert!(report.durable_write_allowed);
+        assert!(report.write_allowed);
+        assert!(report.explicit_apply_required);
+        assert!(!report.applied);
+    }
+
+    #[test]
+    fn self_goal_queue_preview_holds_without_append_packet() {
+        let preview = default_noiron_self_goal_queue_preview_report();
+        let candidate = UnifiedWriterGateCandidate::self_goal_queue_preview(&preview);
+
+        let report = UnifiedWriterGate::new().evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert_eq!(report.evolution_goal_queue_records, 1);
+        assert!(!report.write_allowed);
+        for reason in [
+            "review_packet_refs_missing",
+            "validation_evidence_missing_or_failed",
+            "trace_or_benchmark_evidence_missing_or_failed",
+            "rollback_anchor_missing_or_not_ready",
+            "operator_approval_missing",
+            "approval_refs_missing_or_mismatched",
+            "durable_writes_disabled",
+        ] {
+            assert!(
+                report.records[0].reason_codes.contains(&reason.to_owned()),
+                "{:?}",
+                report.records[0].reason_codes
+            );
+        }
+    }
+
+    #[test]
+    fn self_goal_queue_preview_rejects_source_write_flags() {
+        let mut preview = self_goal_queue_preview_fixture(true);
+        preview.write_allowed = true;
+        let candidate = UnifiedWriterGateCandidate::self_goal_queue_preview(&preview);
+
+        let report = UnifiedWriterGate::new().evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Reject);
+        assert_eq!(report.evolution_goal_queue_records, 1);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"source_write_allowed_before_unified_gate".to_owned())
+        );
+    }
+
     fn ready_candidate(
         domain: UnifiedWriterGateDomain,
         candidate_id: &str,
@@ -1097,6 +1326,9 @@ mod tests {
             UnifiedWriterGateDomain::Genome => UnifiedWriterGateWriteScope::Genome,
             UnifiedWriterGateDomain::ExperimentLedger => {
                 UnifiedWriterGateWriteScope::ExperimentLedger
+            }
+            UnifiedWriterGateDomain::EvolutionGoalQueue => {
+                UnifiedWriterGateWriteScope::EvolutionGoalQueue
             }
         };
         UnifiedWriterGateCandidate::new(domain, candidate_id, [scope])
@@ -1109,6 +1341,50 @@ mod tests {
             )
             .with_evidence(true, true, true, true, true)
             .with_operator_approval(true, true)
+    }
+
+    fn self_goal_queue_preview_fixture(ready: bool) -> SelfGoalQueuePreviewReport {
+        if !ready {
+            return default_noiron_self_goal_queue_preview_report();
+        }
+
+        let queue = EvolutionGoalQueue::new(Vec::new());
+        let proposal = default_self_goal_proposal_report(&queue);
+        let runs = [passing_run_for_self_goal_candidate(&proposal.candidates[0]).with_approval()];
+        let admission = default_self_goal_admission_report(&proposal, &runs);
+        default_self_goal_queue_preview_report(&queue, &proposal, &admission)
+    }
+
+    fn passing_run_for_self_goal_candidate(
+        candidate: &SelfGoalProposalCandidate,
+    ) -> EvolutionGoalRunEvidence {
+        let evidence = candidate
+            .proposed_goal
+            .success_gate
+            .required_evidence
+            .iter()
+            .map(|kind| match kind {
+                EvolutionGoalEvidenceKind::CargoCheck => EvolutionGoalEvidence::cargo_check(true),
+                EvolutionGoalEvidenceKind::FocusedTests => {
+                    EvolutionGoalEvidence::focused_tests(true, 3, 0)
+                }
+                EvolutionGoalEvidenceKind::BenchmarkGate => {
+                    EvolutionGoalEvidence::benchmark_gate(true)
+                }
+                EvolutionGoalEvidenceKind::TraceSchemaGate => {
+                    EvolutionGoalEvidence::trace_schema_gate(true)
+                }
+                EvolutionGoalEvidenceKind::ExperimentLedger => {
+                    EvolutionGoalEvidence::experiment_ledger(true)
+                }
+                EvolutionGoalEvidenceKind::OperatorApproval => {
+                    EvolutionGoalEvidence::operator_approval(true)
+                }
+            })
+            .collect::<Vec<_>>();
+
+        EvolutionGoalRunEvidence::new(candidate.proposed_goal.stable_id.clone())
+            .with_evidence(evidence)
     }
 
     fn memory_preview_fixture(read_only_plan: bool) -> MemoryAdmissionPreview {

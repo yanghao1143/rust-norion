@@ -63,9 +63,9 @@ The north star is now explicitly scoped around five core requirements:
 - Semantic retrieval, sparse filtering, and gist generation reuse the
   self-developed model's own tokenizer and embedding surface instead of
   introducing a hidden third-party encoder dependency.
-- Memory, genome, and experiment-ledger writes default to preview/read-only.
-  Durable admission requires a writer gate, validation evidence, rollback plan,
-  and maintainer/operator approval.
+- Memory, genome, experiment-ledger, and evolution-goal-queue writes default to
+  preview/read-only. Durable admission requires a writer gate, validation
+  evidence, rollback plan, and maintainer/operator approval.
 - External projects and papers are research references until fact, license, and
   attribution review is complete; incompatible licenses stay concept-only.
 
@@ -75,7 +75,7 @@ The north star is now explicitly scoped around five core requirements:
 - 可借鉴公开论文和开放算法思想，但实现细节由本仓库自主掌控。
 - 运行时记忆、经验库和自适应状态全部本地化、可检查、可替换。
 - 语义检索、稀疏筛选和 gist 生成复用自研模型自身的 tokenizer 与 embedding 接口，不引入隐藏的第三方编码器依赖。
-- memory、genome 和 experiment ledger 写入默认 preview/read-only；持久化准入必须经过 writer gate、验证证据、rollback plan 和维护者/操作者批准。
+- memory、genome、experiment ledger 和 evolution goal queue 写入默认 preview/read-only；持久化准入必须经过 writer gate、验证证据、rollback plan 和维护者/操作者批准。
 - 外部项目和论文在事实、许可证和 attribution 复核完成前只作为研究参考；许可证不兼容的材料只做概念参考。
 
 ## Architecture Target / 架构目标
@@ -335,7 +335,8 @@ modules, not external product dependencies:
   labels from evidence instead of blindly keeping old memory or deleting useful
   strategy.
 - Self-evolution writer gates:
-  Memory, genome, and experiment-ledger writes must remain deny-by-default.
+  Memory, genome, experiment-ledger, and evolution-goal-queue writes must
+  remain deny-by-default.
   A candidate cannot mutate `.ndkv`, adaptive state, genome state, or experiment
   history unless the writer gate confirms candidate-only preview evidence,
   validation status, rollback plan, privacy/license checks, and explicit
@@ -528,8 +529,11 @@ writer-gate consolidation baselines.
   evaluates whether a proposed goal would be admissible through the normal
   success, budget, rollback, and approval logic. `SelfGoalQueuePreviewGate`
   can now emit the exact digest-only append packet for one preview-admissible
-  candidate, while execution and durable queue writes remain blocked behind
-  future writer gates.
+  candidate. `UnifiedWriterGateCandidate::self_goal_queue_preview` now feeds
+  that append packet into the shared `evolution_goal_queue` writer preflight:
+  default policy remains `preview_only`, and write-enabled policy can only
+  reach `ready_for_explicit_apply`. Execution and durable queue writes remain
+  blocked behind a later explicit apply workflow.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -601,8 +605,9 @@ writer-gate consolidation baselines.
   [`docs/governance/local-research-deployment-profiles.md`](docs/governance/local-research-deployment-profiles.md).
 - R94 `self-evolution writer gate consolidation` is now the completed baseline
   for a shared read-only `UnifiedWriterGate` over memory admission, Gene
-  Scissors transaction journals, and self-evolution promotion preflight
-  reports. It emits count/digest-only `rust-norion-unified-writer-gate-v1`
+  Scissors transaction journals, self-evolution promotion preflight reports,
+  and self-goal evolution-queue append preflights. It emits count/digest-only
+  `rust-norion-unified-writer-gate-v1`
   JSONL evidence, rejects unsafe write/applied/active sources, and keeps
   `ready_for_explicit_apply` out of normal trace-schema passage until a later
   scoped apply issue exists. Policy is documented in
@@ -890,7 +895,8 @@ writer-gate consolidation baselines.
   baseline with deterministic CPU/GPU/low-memory/benchmark profiles, resource
   guards, disabled write defaults, and operator-health evidence. R94 is the
   completed unified writer-gate baseline with shared memory/genome/
-  experiment-ledger evidence, deny-by-default policy, and trace-gated JSONL.
+  experiment-ledger/evolution-goal-queue evidence, deny-by-default policy, and
+  trace-gated JSONL.
   R95 is the completed reference backlog verification baseline with source,
   license, clean-room, and chunk-repair fixture evidence. R96 is the completed
   clean-room implementation audit baseline with provenance-manifest,
@@ -995,8 +1001,9 @@ writer-gate consolidation baselines.
   [`docs/governance/evolution-goal-queue.md`](docs/governance/evolution-goal-queue.md).
 - R94 `self-evolution writer gate consolidation`: completed baseline for
   shared `UnifiedWriterGate` evaluation across memory admission, Gene Scissors
-  journals, and self-evolution promotion preflight reports, with deny-by-default
-  policy and count/digest-only trace evidence. Policy is documented in
+  journals, self-evolution promotion preflight reports, and self-goal queue
+  append preflight packets, with deny-by-default policy and count/digest-only
+  trace evidence. Policy is documented in
   [`docs/governance/unified-writer-gate.md`](docs/governance/unified-writer-gate.md).
 
 ## R8x/R9x Milestone Backlog / R8x/R9x 里程碑候选
@@ -1088,9 +1095,11 @@ writer-gate consolidation baselines.
   policy cases; or mark one fully evidenced candidate as preview-admissible.
   `SelfGoalQueuePreviewGate` then converts that one preview-admissible goal
   into a digest-only append packet with existing/resulting queue digests and a
-  redacted goal record line. No branch creation, durable memory/genome
-  mutation, experiment-ledger write, or queue write happens without future
-  writer-gate promotion.
+  redacted goal record line. `UnifiedWriterGateCandidate::self_goal_queue_preview`
+  now preflights that packet as an `evolution_goal_queue` writer candidate.
+  No branch creation, durable memory/genome mutation, experiment-ledger write,
+  queue write, or autonomous execution happens without a later explicit apply
+  workflow.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
