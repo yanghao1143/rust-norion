@@ -18,6 +18,8 @@ See [NOTICE.md](NOTICE.md) and
 [Public Collaboration Governance](docs/governance/public-collaboration.md) for
 research deployment boundaries, clean-room reference rules, and protected-branch
 review requirements.
+See [Open Source and Community Plan](docs/governance/open-source-community.md)
+for the focused community strategy, contributor path, and scope guardrails.
 
 本仓库公开用于非商用研究、教育、评估、基准测试和实验性部署。商业使用需要版权持有人明确书面许可。欢迎提交 issue 和 pull request，但合并必须经过仓库所有者或维护者审核批准。
 
@@ -26,6 +28,11 @@ review requirements.
 The goal is to build a practical, sovereignty-first local inference control
 engine that can make a self-developed model backend behave more adaptively over
 time without retraining model weights on every interaction.
+
+For scope discipline and single-maintainer priorities, see
+[Focused Development Strategy](docs/architecture/focused-development-strategy.md).
+For a research-facing draft suitable for arXiv-style refinement, see
+[Bio-Inspired Inference Control Report](docs/research/bio-inspired-inference-control-report.tex).
 
 本项目目标是构建一个实用、自主可控优先的本地推理控制引擎，让自研模型后端在不频繁重训权重的前提下，能够随着使用逐步调整推理策略、记忆选择和计算分配。
 
