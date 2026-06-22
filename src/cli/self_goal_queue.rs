@@ -34,6 +34,8 @@ const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_SCHEMA_VERSION: &str =
     "self_goal_queue_evidence_collection_v1";
 const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-evidence-collection-v1";
+const SELF_GOAL_LOCAL_EVIDENCE_SCHEMA_VERSION: &str = "self_goal_local_evidence_v1";
+const SELF_GOAL_LOCAL_EVIDENCE_TRACE_SCHEMA: &str = "rust-norion-self-goal-local-evidence-v1";
 
 #[derive(Debug, Clone)]
 pub(crate) struct SelfGoalQueueCliReport {
@@ -217,6 +219,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         append_self_goal_queue_append_execution_trace_jsonl(trace_path, &append_execution)?;
         append_self_goal_queue_continuation_trace_jsonl(trace_path, &continuation_plan)?;
         append_self_goal_queue_evidence_plan_trace_jsonl(trace_path, &evidence_plan)?;
+        append_self_goal_local_evidence_trace_jsonl(trace_path, &local_evidence)?;
         append_self_goal_queue_evidence_collection_trace_jsonl(trace_path, &evidence_collection)?;
         if let Some(store_write) = &store_write {
             append_evolution_goal_queue_store_write_trace_jsonl(trace_path, store_write)?;
@@ -1083,8 +1086,11 @@ impl SelfGoalQueueCliLocalEvidenceReport {
         let enabled = args.self_goal_queue_local_evidence;
         let dry_run = args.self_goal_queue_local_evidence_dry_run;
         let active_goal_id = run_plan.active_goal_id.clone().filter(|_| run_plan.active);
-        if !enabled || active_goal_id.is_none() {
-            return Self::empty(enabled, dry_run, active_goal_id);
+        if !enabled {
+            return Self::empty(enabled, dry_run, None);
+        }
+        if active_goal_id.is_none() {
+            return Self::empty(enabled, dry_run, None);
         }
 
         let goal_id = active_goal_id.as_deref().unwrap_or("none");
@@ -1178,6 +1184,90 @@ impl SelfGoalQueueCliLocalEvidenceReport {
             self.dry_run,
             self.ready,
             self.active_goal_id.as_deref().unwrap_or("none"),
+            self.planned_step_count,
+            self.attempted_step_count,
+            self.generated_packet_count,
+            self.passed_step_count,
+            self.failed_step_count,
+            self.skipped_step_count,
+            self.manual_step_count,
+            self.packet_digest,
+            self.runner_digest
+        )
+    }
+
+    fn json_line(&self) -> String {
+        let step_kinds = self
+            .steps
+            .iter()
+            .map(|step| step.evidence_kind.clone())
+            .collect::<Vec<_>>();
+        let step_statuses = self
+            .steps
+            .iter()
+            .map(|step| step.status.to_owned())
+            .collect::<Vec<_>>();
+        let runner_kinds = self
+            .steps
+            .iter()
+            .map(|step| step.runner.to_owned())
+            .collect::<Vec<_>>();
+        let packet_digests = self
+            .steps
+            .iter()
+            .map(|step| {
+                step.generated_packet_digest
+                    .clone()
+                    .unwrap_or_else(|| "none".to_owned())
+            })
+            .collect::<Vec<_>>();
+        let exit_digests = self
+            .steps
+            .iter()
+            .map(|step| {
+                step.exit_digest
+                    .clone()
+                    .unwrap_or_else(|| "none".to_owned())
+            })
+            .collect::<Vec<_>>();
+        let planned_status_count = self
+            .steps
+            .iter()
+            .filter(|step| step.status == "planned")
+            .count();
+        format!(
+            "{{\"schema\":\"{}\",\"local_evidence_schema\":\"{}\",\"enabled\":{},\"dry_run\":{},\"ready\":{},\"active_goal_id\":\"{}\",\"planned_step_count\":{},\"attempted_step_count\":{},\"generated_packet_count\":{},\"passed_step_count\":{},\"failed_step_count\":{},\"skipped_step_count\":{},\"manual_step_count\":{},\"planned_status_count\":{},\"step_kinds\":{},\"step_statuses\":{},\"runner_kinds\":{},\"packet_digests\":{},\"exit_digests\":{},\"packet_digest\":\"{}\",\"runner_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"{}\"}}",
+            json_escape(SELF_GOAL_LOCAL_EVIDENCE_TRACE_SCHEMA),
+            json_escape(SELF_GOAL_LOCAL_EVIDENCE_SCHEMA_VERSION),
+            self.enabled,
+            self.dry_run,
+            self.ready,
+            json_escape(self.active_goal_id.as_deref().unwrap_or("none")),
+            self.planned_step_count,
+            self.attempted_step_count,
+            self.generated_packet_count,
+            self.passed_step_count,
+            self.failed_step_count,
+            self.skipped_step_count,
+            self.manual_step_count,
+            planned_status_count,
+            json_string_array(&step_kinds),
+            json_string_array(&step_statuses),
+            json_string_array(&runner_kinds),
+            json_string_array(&packet_digests),
+            json_string_array(&exit_digests),
+            json_escape(&self.packet_digest),
+            json_escape(&self.runner_digest),
+            json_escape(&self.trace_summary_line())
+        )
+    }
+
+    fn trace_summary_line(&self) -> String {
+        format!(
+            "self_goal_local_evidence_trace enabled={} dry_run={} ready={} planned={} attempted={} generated={} passed={} failed={} skipped={} manual={} packet_digest={} runner_digest={}",
+            self.enabled,
+            self.dry_run,
+            self.ready,
             self.planned_step_count,
             self.attempted_step_count,
             self.generated_packet_count,
@@ -1784,6 +1874,17 @@ fn append_self_goal_queue_evidence_plan_trace_jsonl(
         .append(true)
         .open(path)?;
     writeln!(file, "{}", plan.json_line())
+}
+
+fn append_self_goal_local_evidence_trace_jsonl(
+    path: impl AsRef<Path>,
+    local_evidence: &SelfGoalQueueCliLocalEvidenceReport,
+) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(file, "{}", local_evidence.json_line())
 }
 
 fn append_self_goal_queue_evidence_collection_trace_jsonl(
