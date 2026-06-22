@@ -29,6 +29,10 @@ const SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA: &str =
 const SELF_GOAL_QUEUE_EVIDENCE_PLAN_SCHEMA_VERSION: &str = "self_goal_queue_evidence_plan_v1";
 const SELF_GOAL_QUEUE_EVIDENCE_PLAN_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-evidence-plan-v1";
+const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_SCHEMA_VERSION: &str =
+    "self_goal_queue_evidence_collection_v1";
+const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-evidence-collection-v1";
 
 #[derive(Debug, Clone)]
 pub(crate) struct SelfGoalQueueCliReport {
@@ -43,6 +47,7 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) completion_writer_gate: UnifiedWriterGateReport,
     pub(crate) continuation_plan: SelfGoalQueueCliContinuationPlan,
     pub(crate) evidence_plan: SelfGoalQueueCliEvidencePlan,
+    pub(crate) evidence_collection: SelfGoalQueueCliEvidenceCollection,
     pub(crate) proposal: SelfGoalProposalReport,
     pub(crate) admission: SelfGoalAdmissionReport,
     pub(crate) queue_preview: SelfGoalQueuePreviewReport,
@@ -71,12 +76,19 @@ impl SelfGoalQueueCliReport {
             ),
             self.continuation_plan.summary_line(),
             self.evidence_plan.summary_line(),
+            self.evidence_collection.summary_line(),
         ];
         lines.extend(
             self.evidence_plan
                 .steps
                 .iter()
                 .map(SelfGoalQueueCliEvidencePlanStep::summary_line),
+        );
+        lines.extend(
+            self.evidence_collection
+                .steps
+                .iter()
+                .map(SelfGoalQueueCliEvidenceCollectionStep::summary_line),
         );
         lines.extend(
             self.queue_run
@@ -136,6 +148,8 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
     let continuation_plan =
         SelfGoalQueueCliContinuationPlan::from_completion(&current_queue, &completion_preview);
     let evidence_plan = SelfGoalQueueCliEvidencePlan::from_continuation(&continuation_plan);
+    let evidence_collection =
+        SelfGoalQueueCliEvidenceCollection::from_plan(&evidence_plan, &evidence_runs);
     let admission = default_self_goal_admission_report(&proposal, &evidence_runs);
     let queue_preview =
         default_self_goal_queue_preview_report(&current_queue, &proposal, &admission);
@@ -184,6 +198,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         append_self_goal_queue_append_execution_trace_jsonl(trace_path, &append_execution)?;
         append_self_goal_queue_continuation_trace_jsonl(trace_path, &continuation_plan)?;
         append_self_goal_queue_evidence_plan_trace_jsonl(trace_path, &evidence_plan)?;
+        append_self_goal_queue_evidence_collection_trace_jsonl(trace_path, &evidence_collection)?;
         if let Some(store_write) = &store_write {
             append_evolution_goal_queue_store_write_trace_jsonl(trace_path, store_write)?;
         }
@@ -201,6 +216,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         completion_writer_gate,
         continuation_plan,
         evidence_plan,
+        evidence_collection,
         proposal,
         admission,
         queue_preview,
@@ -603,6 +619,267 @@ fn evidence_runner(evidence_kind: &str) -> &'static str {
         "operator_approval" => "operator_approval",
         _ => "unsupported",
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliEvidenceCollection {
+    pub(crate) source: &'static str,
+    pub(crate) ready: bool,
+    pub(crate) collection_complete: bool,
+    pub(crate) active_goal_id: Option<String>,
+    pub(crate) evidence_collection_digest: String,
+    pub(crate) steps: Vec<SelfGoalQueueCliEvidenceCollectionStep>,
+}
+
+impl SelfGoalQueueCliEvidenceCollection {
+    fn from_plan(plan: &SelfGoalQueueCliEvidencePlan, runs: &[EvolutionGoalRunEvidence]) -> Self {
+        let active_goal_id = plan.active_goal_id.clone().filter(|_| plan.ready);
+        let run = active_goal_id
+            .as_deref()
+            .and_then(|goal_id| runs.iter().find(|run| run.goal_id == goal_id));
+        let steps = if plan.ready {
+            plan.steps
+                .iter()
+                .map(|step| SelfGoalQueueCliEvidenceCollectionStep::from_plan_step(step, run))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let packet_digest_text = steps
+            .iter()
+            .map(|step| step.collection_packet_digest.as_str())
+            .collect::<Vec<_>>()
+            .join("|");
+        let status_text = steps
+            .iter()
+            .map(|step| step.status)
+            .collect::<Vec<_>>()
+            .join("|");
+        let evidence_collection_digest = stable_redaction_digest([
+            "self-goal-queue-evidence-collection-v1",
+            plan.source,
+            active_goal_id.as_deref().unwrap_or("none"),
+            plan.evidence_plan_digest.as_str(),
+            status_text.as_str(),
+            packet_digest_text.as_str(),
+        ]);
+        let collection_complete = plan.ready
+            && !steps.is_empty()
+            && steps
+                .iter()
+                .all(|step| step.status == "passed" && step.evidence_digest.is_some());
+
+        Self {
+            source: plan.source,
+            ready: plan.ready,
+            collection_complete,
+            active_goal_id,
+            evidence_collection_digest,
+            steps,
+        }
+    }
+
+    pub(crate) fn passed_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.status == "passed")
+            .count()
+    }
+
+    pub(crate) fn failed_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.status == "failed")
+            .count()
+    }
+
+    pub(crate) fn missing_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.status == "missing")
+            .count()
+    }
+
+    pub(crate) fn manual_missing_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.status == "manual_missing")
+            .count()
+    }
+
+    pub(crate) fn auto_collectible_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.auto_collectible)
+            .count()
+    }
+
+    pub(crate) fn manual_required_steps(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.manual_required)
+            .count()
+    }
+
+    pub(crate) fn collected_evidence_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.evidence_digest.is_some())
+            .count()
+    }
+
+    pub(crate) fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_evidence_collection source={} ready={} complete={} goal={} planned={} collected={} passed={} failed={} missing={} manual_missing={} auto_collectible={} manual={} digest={}",
+            self.source,
+            self.ready,
+            self.collection_complete,
+            self.active_goal_id.as_deref().unwrap_or("none"),
+            self.steps.len(),
+            self.collected_evidence_count(),
+            self.passed_steps(),
+            self.failed_steps(),
+            self.missing_steps(),
+            self.manual_missing_steps(),
+            self.auto_collectible_steps(),
+            self.manual_required_steps(),
+            self.evidence_collection_digest
+        )
+    }
+
+    fn json_line(&self) -> String {
+        let step_kinds = self
+            .steps
+            .iter()
+            .map(|step| step.evidence_kind.clone())
+            .collect::<Vec<_>>();
+        let step_statuses = self
+            .steps
+            .iter()
+            .map(|step| step.status.to_owned())
+            .collect::<Vec<_>>();
+        let collection_packet_digests = self
+            .steps
+            .iter()
+            .map(|step| step.collection_packet_digest.clone())
+            .collect::<Vec<_>>();
+        let collected_evidence_digests = self
+            .steps
+            .iter()
+            .filter_map(|step| step.evidence_digest.clone())
+            .collect::<Vec<_>>();
+        format!(
+            "{{\"schema\":\"{}\",\"collection_schema\":\"{}\",\"source\":\"{}\",\"ready\":{},\"collection_complete\":{},\"active_goal_id\":\"{}\",\"planned_step_count\":{},\"step_kinds\":{},\"step_statuses\":{},\"passed_steps\":{},\"failed_steps\":{},\"missing_steps\":{},\"manual_missing_steps\":{},\"auto_collectible_steps\":{},\"manual_required_steps\":{},\"collected_evidence_count\":{},\"collected_evidence_digests\":{},\"collection_packet_digests\":{},\"evidence_collection_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false,\"summary\":\"{}\"}}",
+            json_escape(SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_TRACE_SCHEMA),
+            json_escape(SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_SCHEMA_VERSION),
+            json_escape(self.source),
+            self.ready,
+            self.collection_complete,
+            json_escape(self.active_goal_id.as_deref().unwrap_or("none")),
+            self.steps.len(),
+            json_string_array(&step_kinds),
+            json_string_array(&step_statuses),
+            self.passed_steps(),
+            self.failed_steps(),
+            self.missing_steps(),
+            self.manual_missing_steps(),
+            self.auto_collectible_steps(),
+            self.manual_required_steps(),
+            self.collected_evidence_count(),
+            json_string_array(&collected_evidence_digests),
+            json_string_array(&collection_packet_digests),
+            json_escape(&self.evidence_collection_digest),
+            json_escape(&self.summary_line())
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfGoalQueueCliEvidenceCollectionStep {
+    pub(crate) sequence: usize,
+    pub(crate) evidence_kind: String,
+    pub(crate) runner: &'static str,
+    pub(crate) status: &'static str,
+    pub(crate) auto_collectible: bool,
+    pub(crate) manual_required: bool,
+    pub(crate) evidence_digest: Option<String>,
+    pub(crate) collection_packet_digest: String,
+}
+
+impl SelfGoalQueueCliEvidenceCollectionStep {
+    fn from_plan_step(
+        step: &SelfGoalQueueCliEvidencePlanStep,
+        run: Option<&EvolutionGoalRunEvidence>,
+    ) -> Self {
+        let evidence = matching_evidence(run, &step.evidence_kind);
+        let approval_granted = run.is_some_and(|run| run.approval_granted);
+        let status = if step.evidence_kind == "operator_approval" {
+            match evidence {
+                Some(evidence) if evidence.passed && approval_granted => "passed",
+                Some(evidence) if !evidence.passed => "failed",
+                _ => "manual_missing",
+            }
+        } else {
+            match evidence {
+                Some(evidence) if evidence.passed => "passed",
+                Some(_) => "failed",
+                None => "missing",
+            }
+        };
+        let evidence_digest = match status {
+            "passed" | "failed" => evidence.map(|evidence| evidence.evidence_digest.clone()),
+            _ => None,
+        };
+        let collection_packet_digest = stable_redaction_digest([
+            "self-goal-queue-evidence-collection-packet-v1",
+            &step.sequence.to_string(),
+            &step.evidence_kind,
+            status,
+            evidence_digest.as_deref().unwrap_or("none"),
+            &step.packet_template_digest,
+        ]);
+
+        Self {
+            sequence: step.sequence,
+            evidence_kind: step.evidence_kind.clone(),
+            runner: step.runner,
+            status,
+            auto_collectible: step.auto_collectible,
+            manual_required: step.manual_required,
+            evidence_digest,
+            collection_packet_digest,
+        }
+    }
+
+    fn summary_line(&self) -> String {
+        format!(
+            "self_goal_queue_evidence_collection_step index={} kind={} runner={} status={} auto_collectible={} manual={} evidence={} packet={}",
+            self.sequence,
+            self.evidence_kind,
+            self.runner,
+            self.status,
+            self.auto_collectible,
+            self.manual_required,
+            self.evidence_digest.as_deref().unwrap_or("none"),
+            self.collection_packet_digest
+        )
+    }
+}
+
+fn matching_evidence<'a>(
+    run: Option<&'a EvolutionGoalRunEvidence>,
+    evidence_kind: &str,
+) -> Option<&'a EvolutionGoalEvidence> {
+    let run = run?;
+    run.evidence
+        .iter()
+        .filter(|evidence| evidence.kind.as_str() == evidence_kind)
+        .find(|evidence| evidence.passed)
+        .or_else(|| {
+            run.evidence
+                .iter()
+                .find(|evidence| evidence.kind.as_str() == evidence_kind)
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1133,6 +1410,17 @@ fn append_self_goal_queue_evidence_plan_trace_jsonl(
         .append(true)
         .open(path)?;
     writeln!(file, "{}", plan.json_line())
+}
+
+fn append_self_goal_queue_evidence_collection_trace_jsonl(
+    path: impl AsRef<Path>,
+    collection: &SelfGoalQueueCliEvidenceCollection,
+) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(file, "{}", collection.json_line())
 }
 
 fn json_string_array(values: &[String]) -> String {
