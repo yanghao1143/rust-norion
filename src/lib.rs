@@ -82,10 +82,12 @@ pub use clean_room_audit::{
     CleanRoomMaterialKind, default_clean_room_audit_records, default_clean_room_audit_report,
 };
 pub use coding_service_eval::{
-    CODING_SERVICE_EVAL_SCHEMA_VERSION, CODING_SERVICE_EVAL_TRACE_SCHEMA,
-    CodingServiceEvalCapability, CodingServiceEvalLanguage, CodingServiceEvalReadinessReport,
-    CodingServiceEvalRequestPlan, default_coding_service_eval_readiness_report,
-    default_coding_service_eval_request_plans,
+    CODING_SERVICE_EVAL_RUNNER_SCHEMA_VERSION, CODING_SERVICE_EVAL_SCHEMA_VERSION,
+    CODING_SERVICE_EVAL_TRACE_SCHEMA, CodingServiceEvalCapability, CodingServiceEvalLanguage,
+    CodingServiceEvalReadinessReport, CodingServiceEvalRequestPlan, CodingServiceEvalRunRecord,
+    CodingServiceEvalRunnerConfig, CodingServiceEvalRunnerReport,
+    default_coding_service_eval_readiness_report, default_coding_service_eval_request_plans,
+    default_coding_service_eval_runner_report,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};

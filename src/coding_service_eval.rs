@@ -1,17 +1,20 @@
 use std::collections::BTreeMap;
 
 use norion_eval::{
-    CODING_EVAL_SCHEMA_VERSION, CodingEvalCorpus, CodingEvalProfileKind, CodingEvalSuiteReport,
-    default_coding_eval_corpus, sample_passing_observations,
+    CODING_EVAL_SCHEMA_VERSION, CodingEvalCorpus, CodingEvalFixture, CodingEvalObservation,
+    CodingEvalProfileKind, CodingEvalSuiteReport, default_coding_eval_corpus,
+    sample_passing_observations,
 };
 use norion_service::{
-    ChatMessage, ChatRequest, ModelEndpoint, ModelRole, RoutingPreference, request_json,
+    ChatChunkKind, ChatMessage, ChatRequest, ChatSession, ChatSessionConfig, ModelEndpoint,
+    ModelRole, RoutingPreference, StreamState, request_json,
 };
 
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 pub const CODING_SERVICE_EVAL_SCHEMA_VERSION: &str = "coding_service_eval_v1";
 pub const CODING_SERVICE_EVAL_TRACE_SCHEMA: &str = "rust-norion-coding-service-eval-readiness-v1";
+pub const CODING_SERVICE_EVAL_RUNNER_SCHEMA_VERSION: &str = "coding_service_eval_runner_v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CodingServiceEvalCapability {
@@ -207,6 +210,237 @@ pub struct CodingServiceEvalReadinessReport {
     pub applied: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodingServiceEvalRunnerConfig {
+    pub history_limit: usize,
+    pub offline_model_label: String,
+    pub memory_hit_rate: f32,
+    pub base_latency_ms: u64,
+    pub per_message_latency_ms: u64,
+}
+
+impl Default for CodingServiceEvalRunnerConfig {
+    fn default() -> Self {
+        Self {
+            history_limit: 16,
+            offline_model_label: "norion-offline-mock-coding-service".to_owned(),
+            memory_hit_rate: 0.72,
+            base_latency_ms: 700,
+            per_message_latency_ms: 75,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodingServiceEvalRunRecord {
+    pub fixture_id: String,
+    pub profile: CodingEvalProfileKind,
+    pub language: CodingServiceEvalLanguage,
+    pub model_label: String,
+    pub final_state: StreamState,
+    pub final_state_label: String,
+    pub stream_chunk_count: usize,
+    pub delta_chunk_count: usize,
+    pub status_chunk_count: usize,
+    pub metadata_chunk_count: usize,
+    pub final_chunk_count: usize,
+    pub done_chunk_count: usize,
+    pub cancellation_probed: bool,
+    pub cancellation_passed: bool,
+    pub cancellation_state: Option<StreamState>,
+    pub cancellation_state_label: Option<String>,
+    pub cancellation_partial_chars: usize,
+    pub diagnostics_seen: bool,
+    pub health_seen: bool,
+    pub model_capabilities_seen: bool,
+    pub max_tokens_respected: bool,
+    pub rust_validation_checked: bool,
+    pub compile_checked: bool,
+    pub unit_test_checked: bool,
+    pub observation: CodingEvalObservation,
+    pub evidence_packet_line: String,
+}
+
+impl CodingServiceEvalRunRecord {
+    pub fn passed_runner_contract(&self) -> bool {
+        self.final_state == StreamState::Completed
+            && self.delta_chunk_count > 0
+            && self.final_chunk_count > 0
+            && self.done_chunk_count > 0
+            && (!self.cancellation_probed || self.cancellation_passed)
+            && self.diagnostics_seen
+            && self.health_seen
+            && self.model_capabilities_seen
+            && self.max_tokens_respected
+            && self.evidence_is_redacted()
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.evidence_packet_line.contains("redaction-digest:")
+            && !contains_private_or_executable_marker(&self.evidence_packet_line)
+            && !self.evidence_packet_line.contains(&self.observation.output)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodingServiceEvalRunnerReport {
+    pub schema_version: &'static str,
+    pub trace_schema: &'static str,
+    pub plan_count: usize,
+    pub completed_count: usize,
+    pub failed_runner_contract_count: usize,
+    pub cancellation_probe_count: usize,
+    pub cancellation_passed_count: usize,
+    pub diagnostics_seen_count: usize,
+    pub health_seen_count: usize,
+    pub model_capabilities_seen_count: usize,
+    pub max_tokens_respected_count: usize,
+    pub rust_validation_checked_count: usize,
+    pub suite_report: CodingEvalSuiteReport,
+    pub run_records: Vec<CodingServiceEvalRunRecord>,
+    pub evidence_packets: Vec<String>,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl CodingServiceEvalRunnerReport {
+    pub fn from_corpus(corpus: &CodingEvalCorpus, config: &CodingServiceEvalRunnerConfig) -> Self {
+        let plans = request_plans_from_corpus(corpus);
+        let mut run_records = Vec::with_capacity(plans.len());
+
+        for plan in &plans {
+            if let Some(fixture) = corpus
+                .fixtures
+                .iter()
+                .find(|fixture| fixture.id == plan.fixture_id)
+            {
+                run_records.push(run_plan(fixture, plan, config));
+            }
+        }
+
+        let observations = run_records
+            .iter()
+            .map(|record| record.observation.clone())
+            .collect::<Vec<_>>();
+        let suite_report = corpus.score_observations(&observations);
+        let completed_count = run_records
+            .iter()
+            .filter(|record| record.final_state == StreamState::Completed)
+            .count();
+        let failed_runner_contract_count = run_records
+            .iter()
+            .filter(|record| !record.passed_runner_contract())
+            .count();
+        let cancellation_probe_count = run_records
+            .iter()
+            .filter(|record| record.cancellation_probed)
+            .count();
+        let cancellation_passed_count = run_records
+            .iter()
+            .filter(|record| record.cancellation_passed)
+            .count();
+        let diagnostics_seen_count = run_records
+            .iter()
+            .filter(|record| record.diagnostics_seen)
+            .count();
+        let health_seen_count = run_records
+            .iter()
+            .filter(|record| record.health_seen)
+            .count();
+        let model_capabilities_seen_count = run_records
+            .iter()
+            .filter(|record| record.model_capabilities_seen)
+            .count();
+        let max_tokens_respected_count = run_records
+            .iter()
+            .filter(|record| record.max_tokens_respected)
+            .count();
+        let rust_validation_checked_count = run_records
+            .iter()
+            .filter(|record| record.rust_validation_checked)
+            .count();
+        let evidence_packets = run_records
+            .iter()
+            .map(|record| record.evidence_packet_line.clone())
+            .collect();
+
+        Self {
+            schema_version: CODING_SERVICE_EVAL_RUNNER_SCHEMA_VERSION,
+            trace_schema: CODING_SERVICE_EVAL_TRACE_SCHEMA,
+            plan_count: plans.len(),
+            completed_count,
+            failed_runner_contract_count,
+            cancellation_probe_count,
+            cancellation_passed_count,
+            diagnostics_seen_count,
+            health_seen_count,
+            model_capabilities_seen_count,
+            max_tokens_respected_count,
+            rust_validation_checked_count,
+            suite_report,
+            run_records,
+            evidence_packets,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn passed(&self) -> bool {
+        self.plan_count == self.run_records.len()
+            && self.completed_count == self.plan_count
+            && self.failed_runner_contract_count == 0
+            && self.cancellation_probe_count == self.cancellation_passed_count
+            && self.diagnostics_seen_count == self.plan_count
+            && self.health_seen_count == self.plan_count
+            && self.model_capabilities_seen_count == self.plan_count
+            && self.max_tokens_respected_count == self.plan_count
+            && self.suite_report.failed_count == 0
+            && self.suite_report.profile_coverage()
+                == CodingEvalProfileKind::expected_profiles().len()
+            && self.evidence_is_redacted()
+            && self.read_only
+            && !self.write_allowed
+            && !self.applied
+    }
+
+    pub fn evidence_is_redacted(&self) -> bool {
+        self.suite_report.evidence_is_redacted()
+            && self
+                .run_records
+                .iter()
+                .all(CodingServiceEvalRunRecord::evidence_is_redacted)
+            && self.evidence_packets.iter().all(|line| {
+                line.contains("redaction-digest:") && !contains_private_or_executable_marker(line)
+            })
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "coding_service_eval_runner schema={} trace_schema={} passed={} plans={} completed={} failed_runner_contract={} cancellation={}/{} diagnostics={} health={} model_capabilities={} max_tokens_respected={} rust_validation_checked={} suite_pass_rate={:.3} evidence_redacted={} read_only={} write_allowed={} applied={}",
+            self.schema_version,
+            self.trace_schema,
+            self.passed(),
+            self.plan_count,
+            self.completed_count,
+            self.failed_runner_contract_count,
+            self.cancellation_passed_count,
+            self.cancellation_probe_count,
+            self.diagnostics_seen_count,
+            self.health_seen_count,
+            self.model_capabilities_seen_count,
+            self.max_tokens_respected_count,
+            self.rust_validation_checked_count,
+            self.suite_report.pass_rate(),
+            self.evidence_is_redacted(),
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
 impl CodingServiceEvalReadinessReport {
     pub fn from_corpus(corpus: &CodingEvalCorpus) -> Self {
         let validation = corpus.validate();
@@ -304,8 +538,324 @@ pub fn default_coding_service_eval_readiness_report() -> CodingServiceEvalReadin
     CodingServiceEvalReadinessReport::from_corpus(&default_coding_eval_corpus())
 }
 
+pub fn default_coding_service_eval_runner_report() -> CodingServiceEvalRunnerReport {
+    CodingServiceEvalRunnerReport::from_corpus(
+        &default_coding_eval_corpus(),
+        &CodingServiceEvalRunnerConfig::default(),
+    )
+}
+
 fn request_plans_from_corpus(corpus: &CodingEvalCorpus) -> Vec<CodingServiceEvalRequestPlan> {
     corpus.fixtures.iter().map(plan_from_fixture).collect()
+}
+
+fn run_plan(
+    fixture: &CodingEvalFixture,
+    plan: &CodingServiceEvalRequestPlan,
+    config: &CodingServiceEvalRunnerConfig,
+) -> CodingServiceEvalRunRecord {
+    let output = deterministic_service_output(fixture);
+    let mut session = ChatSession::new(
+        plan.request.session_id.clone(),
+        ChatSessionConfig::new(config.history_limit)
+            .with_default_max_tokens(plan.request.max_tokens),
+    );
+    session.begin_stream();
+    session.push_status(format!(
+        "health online model={} route={}",
+        config.offline_model_label,
+        plan.request.routing_intent().summary()
+    ));
+    session.push_metadata(format!(
+        "capabilities streaming cancellation max_tokens diagnostics health model_capabilities offline_mock rust_validation={}",
+        plan.requires_rust_validation
+    ));
+    session.push_metadata(format!(
+        "diagnostics role={} routing={} endpoint={} profile={} output={}",
+        plan.request.model_role_label(),
+        plan.request.routing_preference_label(),
+        plan.request.endpoint_label(),
+        plan.request.profile,
+        plan.request.output
+    ));
+    for delta in streaming_deltas(&output) {
+        session.push_delta(delta);
+    }
+    session.push_final_payload_with_answer(
+        format!(
+            "answer_digest={} fixture={} profile={}",
+            stable_redaction_digest(["coding-service-eval-answer", fixture.id.as_str(), &output]),
+            fixture.id,
+            fixture.profile.as_str()
+        ),
+        output.clone(),
+    );
+    session.finish();
+
+    let final_state = session.state();
+    let stream_chunk_count = session.chunks().len();
+    let delta_chunk_count = session
+        .chunks()
+        .iter()
+        .filter(|chunk| chunk.kind == ChatChunkKind::Delta)
+        .count();
+    let status_chunk_count = session
+        .chunks()
+        .iter()
+        .filter(|chunk| chunk.kind == ChatChunkKind::Status)
+        .count();
+    let metadata_chunk_count = session
+        .chunks()
+        .iter()
+        .filter(|chunk| chunk.kind == ChatChunkKind::Metadata)
+        .count();
+    let final_chunk_count = session
+        .chunks()
+        .iter()
+        .filter(|chunk| chunk.kind == ChatChunkKind::Final)
+        .count();
+    let done_chunk_count = session
+        .chunks()
+        .iter()
+        .filter(|chunk| chunk.kind == ChatChunkKind::Done)
+        .count();
+    let health_seen = session
+        .chunks()
+        .iter()
+        .any(|chunk| chunk.content.contains("health online"));
+    let model_capabilities_seen = session
+        .chunks()
+        .iter()
+        .any(|chunk| chunk.content.contains("capabilities streaming"));
+    let diagnostics_seen = session
+        .chunks()
+        .iter()
+        .any(|chunk| chunk.content.contains("diagnostics role="));
+
+    let cancellation = if plan.requires_cancellation_probe {
+        Some(run_cancellation_probe(plan, config))
+    } else {
+        None
+    };
+    let tokens = estimate_tokens(&output);
+    let latency_ms =
+        config.base_latency_ms + config.per_message_latency_ms * plan.request.messages.len() as u64;
+    let max_tokens_respected = plan
+        .request
+        .max_tokens
+        .is_some_and(|max_tokens| tokens <= max_tokens as u64);
+    let rust_validation_checked = plan.requires_rust_validation
+        && fixture.requires_cargo_check()
+        && fixture.requires_cargo_test();
+    let observation = CodingEvalObservation::new(fixture.id.clone(), output.clone())
+        .with_compile(
+            fixture.requires_cargo_check(),
+            fixture.requires_cargo_check(),
+        )
+        .with_unit_tests(fixture.requires_cargo_test(), fixture.requires_cargo_test())
+        .with_runtime_metrics(config.memory_hit_rate, tokens, latency_ms)
+        .with_benchmark_regression(0.0)
+        .with_redaction(!contains_private_or_executable_marker(&output));
+
+    let (
+        cancellation_probed,
+        cancellation_passed,
+        cancellation_state,
+        cancellation_state_label,
+        cancellation_partial_chars,
+    ) = cancellation
+        .map(|(state, state_label, partial_chars, passed)| {
+            (true, passed, Some(state), Some(state_label), partial_chars)
+        })
+        .unwrap_or((false, false, None, None, 0));
+    let evidence_packet_line = run_evidence_packet_line(
+        fixture,
+        plan,
+        config,
+        &observation,
+        final_state,
+        stream_chunk_count,
+        delta_chunk_count,
+        status_chunk_count,
+        metadata_chunk_count,
+        final_chunk_count,
+        done_chunk_count,
+        cancellation_probed,
+        cancellation_passed,
+        cancellation_state,
+        cancellation_partial_chars,
+        diagnostics_seen,
+        health_seen,
+        model_capabilities_seen,
+        max_tokens_respected,
+        rust_validation_checked,
+    );
+
+    CodingServiceEvalRunRecord {
+        fixture_id: fixture.id.clone(),
+        profile: fixture.profile,
+        language: plan.language,
+        model_label: config.offline_model_label.clone(),
+        final_state,
+        final_state_label: final_state.as_str().to_owned(),
+        stream_chunk_count,
+        delta_chunk_count,
+        status_chunk_count,
+        metadata_chunk_count,
+        final_chunk_count,
+        done_chunk_count,
+        cancellation_probed,
+        cancellation_passed,
+        cancellation_state,
+        cancellation_state_label,
+        cancellation_partial_chars,
+        diagnostics_seen,
+        health_seen,
+        model_capabilities_seen,
+        max_tokens_respected,
+        rust_validation_checked,
+        compile_checked: fixture.requires_cargo_check(),
+        unit_test_checked: fixture.requires_cargo_test(),
+        observation,
+        evidence_packet_line,
+    }
+}
+
+fn run_cancellation_probe(
+    plan: &CodingServiceEvalRequestPlan,
+    config: &CodingServiceEvalRunnerConfig,
+) -> (StreamState, String, usize, bool) {
+    let mut session = ChatSession::new(
+        format!("{}-cancel-probe", plan.request.session_id),
+        ChatSessionConfig::new(config.history_limit)
+            .with_default_max_tokens(plan.request.max_tokens),
+    );
+    session.begin_stream();
+    session.push_status("cancellation probe active");
+    session.push_delta("partial cancellation probe");
+    session.cancel_stream();
+    let snapshot = session.outcome().snapshot();
+    let passed = snapshot.state == StreamState::Interrupted
+        && snapshot.has_partial
+        && !snapshot.state_blocks_prompt_submit;
+
+    (
+        snapshot.state,
+        snapshot.state_label,
+        snapshot.partial_chars,
+        passed,
+    )
+}
+
+fn deterministic_service_output(fixture: &CodingEvalFixture) -> String {
+    match fixture.profile {
+        CodingEvalProfileKind::EnglishInstruction => {
+            "Use Result with error context, return recoverable errors with no panic, and include a validation step for the caller.".to_owned()
+        }
+        CodingEvalProfileKind::ChineseInstruction => {
+            "借用 和 所有权 让 Rust 在编译期避免 数据竞争；修改建议 是缩小可变借用作用域并保持清晰生命周期。".to_owned()
+        }
+        CodingEvalProfileKind::RustCodeGeneration => {
+            "fn parse_port(input: &str) -> Result<u16, String> { let value: u16 = input.trim().parse().map_err(|_| \"parse error\".to_owned())?; if value == 0 { return Err(\"zero port\".to_owned()); } Ok(value) } Validation: run cargo check and cargo test.".to_owned()
+        }
+        CodingEvalProfileKind::RustRepair => {
+            "Use std::borrow::Cow and return Cow::Borrowed for the prefix while falling back to Cow::Owned only when allocation is needed. The lifetime is valid because the borrowed slice is tied to the input, and cargo test covers the repair.".to_owned()
+        }
+        CodingEvalProfileKind::MultilingualCodingExplanation => {
+            "Return Result instead of unwrap so request handling can report recoverable errors. 中文: Result 让 错误处理 可恢复，避免 unwrap 导致 请求处理 崩溃。".to_owned()
+        }
+    }
+}
+
+fn streaming_deltas(output: &str) -> Vec<String> {
+    let words = output.split_whitespace().collect::<Vec<_>>();
+    if words.len() <= 8 {
+        return vec![output.to_owned()];
+    }
+    let split_at = words.len() / 2;
+    vec![
+        format!("{} ", words[..split_at].join(" ")),
+        words[split_at..].join(" "),
+    ]
+}
+
+fn estimate_tokens(output: &str) -> u64 {
+    output
+        .split_whitespace()
+        .count()
+        .max(output.chars().count().div_ceil(8))
+        .max(1) as u64
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_evidence_packet_line(
+    fixture: &CodingEvalFixture,
+    plan: &CodingServiceEvalRequestPlan,
+    config: &CodingServiceEvalRunnerConfig,
+    observation: &CodingEvalObservation,
+    final_state: StreamState,
+    stream_chunk_count: usize,
+    delta_chunk_count: usize,
+    status_chunk_count: usize,
+    metadata_chunk_count: usize,
+    final_chunk_count: usize,
+    done_chunk_count: usize,
+    cancellation_probed: bool,
+    cancellation_passed: bool,
+    cancellation_state: Option<StreamState>,
+    cancellation_partial_chars: usize,
+    diagnostics_seen: bool,
+    health_seen: bool,
+    model_capabilities_seen: bool,
+    max_tokens_respected: bool,
+    rust_validation_checked: bool,
+) -> String {
+    [
+        CODING_SERVICE_EVAL_RUNNER_SCHEMA_VERSION.to_owned(),
+        fixture.id.clone(),
+        fixture.profile.as_str().to_owned(),
+        plan.language.as_str().to_owned(),
+        final_state.as_str().to_owned(),
+        stream_chunk_count.to_string(),
+        delta_chunk_count.to_string(),
+        status_chunk_count.to_string(),
+        metadata_chunk_count.to_string(),
+        final_chunk_count.to_string(),
+        done_chunk_count.to_string(),
+        cancellation_probed.to_string(),
+        cancellation_passed.to_string(),
+        cancellation_state
+            .map(|state| state.as_str().to_owned())
+            .unwrap_or_else(|| "none".to_owned()),
+        cancellation_partial_chars.to_string(),
+        diagnostics_seen.to_string(),
+        health_seen.to_string(),
+        model_capabilities_seen.to_string(),
+        max_tokens_respected.to_string(),
+        rust_validation_checked.to_string(),
+        observation.compile_checked.to_string(),
+        observation.compile_passed.to_string(),
+        observation.unit_test_checked.to_string(),
+        observation.unit_test_passed.to_string(),
+        observation.tokens.to_string(),
+        observation.latency_ms.to_string(),
+        format!("{:.3}", observation.memory_hit_rate),
+        stable_redaction_digest([
+            "coding-service-eval-run-output",
+            fixture.id.as_str(),
+            observation.output.as_str(),
+        ]),
+        stable_redaction_digest([
+            "coding-service-eval-run-request",
+            fixture.id.as_str(),
+            plan.request.session_id.as_str(),
+            config.offline_model_label.as_str(),
+        ]),
+    ]
+    .into_iter()
+    .map(|field| escape_field(&field))
+    .collect::<Vec<_>>()
+    .join("\t")
 }
 
 fn plan_from_fixture(fixture: &norion_eval::CodingEvalFixture) -> CodingServiceEvalRequestPlan {
@@ -561,5 +1111,95 @@ mod tests {
                 .missing_capabilities
                 .contains(&"cancellation".to_owned())
         );
+    }
+
+    #[test]
+    fn default_mock_runner_executes_plans_and_scores_suite() {
+        let report = default_coding_service_eval_runner_report();
+
+        assert_eq!(
+            report.schema_version,
+            CODING_SERVICE_EVAL_RUNNER_SCHEMA_VERSION
+        );
+        assert!(report.passed(), "{}", report.summary_line());
+        assert_eq!(report.plan_count, 5);
+        assert_eq!(report.completed_count, report.plan_count);
+        assert_eq!(report.failed_runner_contract_count, 0);
+        assert_eq!(report.cancellation_probe_count, 2);
+        assert_eq!(report.cancellation_passed_count, 2);
+        assert_eq!(report.diagnostics_seen_count, report.plan_count);
+        assert_eq!(report.health_seen_count, report.plan_count);
+        assert_eq!(report.model_capabilities_seen_count, report.plan_count);
+        assert_eq!(report.max_tokens_respected_count, report.plan_count);
+        assert_eq!(report.rust_validation_checked_count, 2);
+        assert_eq!(report.suite_report.failed_count, 0);
+        assert_eq!(
+            report.suite_report.profile_coverage(),
+            CodingEvalProfileKind::expected_profiles().len()
+        );
+        assert!(report.summary_line().contains("passed=true"));
+        assert!(report.read_only && !report.write_allowed && !report.applied);
+    }
+
+    #[test]
+    fn mock_runner_uses_stream_session_and_cancellation_contract() {
+        let report = default_coding_service_eval_runner_report();
+        let repair = report
+            .run_records
+            .iter()
+            .find(|record| record.profile == CodingEvalProfileKind::RustRepair)
+            .expect("rust repair run");
+        let english = report
+            .run_records
+            .iter()
+            .find(|record| record.profile == CodingEvalProfileKind::EnglishInstruction)
+            .expect("english run");
+
+        assert!(repair.passed_runner_contract());
+        assert_eq!(repair.final_state, StreamState::Completed);
+        assert!(repair.delta_chunk_count >= 2);
+        assert!(repair.status_chunk_count >= 1);
+        assert!(repair.metadata_chunk_count >= 2);
+        assert_eq!(repair.final_chunk_count, 1);
+        assert_eq!(repair.done_chunk_count, 1);
+        assert!(repair.cancellation_probed);
+        assert!(repair.cancellation_passed);
+        assert_eq!(repair.cancellation_state, Some(StreamState::Interrupted));
+        assert!(repair.cancellation_partial_chars > 0);
+        assert!(repair.rust_validation_checked);
+        assert!(repair.compile_checked);
+        assert!(repair.unit_test_checked);
+
+        assert!(english.passed_runner_contract());
+        assert!(!english.cancellation_probed);
+        assert_eq!(english.cancellation_state, None);
+        assert!(!english.rust_validation_checked);
+        assert!(!english.compile_checked);
+        assert!(!english.unit_test_checked);
+    }
+
+    #[test]
+    fn mock_runner_evidence_is_digest_only() {
+        let plans = default_coding_service_eval_request_plans();
+        let report = default_coding_service_eval_runner_report();
+
+        assert!(report.evidence_is_redacted());
+        for record in &report.run_records {
+            assert!(record.evidence_is_redacted());
+            assert!(record.evidence_packet_line.contains("redaction-digest:"));
+            assert!(
+                !record
+                    .evidence_packet_line
+                    .contains(&record.observation.output)
+            );
+            for plan in plans
+                .iter()
+                .filter(|plan| plan.fixture_id == record.fixture_id)
+            {
+                for message in &plan.request.messages {
+                    assert!(!record.evidence_packet_line.contains(&message.content));
+                }
+            }
+        }
     }
 }
