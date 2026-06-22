@@ -465,7 +465,8 @@ These are algorithmic references, not product dependencies:
 
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
 lineage-audit implementation, #77 graduation-checklist closure, #47
-privacy-redaction corpus hardening, and #50 malignant-gene recovery drills.
+privacy-redaction corpus hardening, #50 malignant-gene recovery drills, and
+the #51 genome aging/rejuvenation benchmark lane selection.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -481,7 +482,15 @@ privacy-redaction corpus hardening, and #50 malignant-gene recovery drills.
   approval-gated admission, compute-budget scheduling, and wasted-compute
   telemetry. R87/#46 adds the redacted lineage audit export baseline,
   R88/#47 adds the shared privacy-redaction corpus and detector baseline, and
-  R92/#50 adds deterministic malignant-gene poisoning defense drills.
+  R92/#50 adds deterministic malignant-gene poisoning defense and recovery
+  drills. The next active genome lane is #51, using the #47 redaction corpus
+  and #50 recovery fixtures as the safety floor for aging/rejuvenation
+  simulation.
+- Active acceleration lane: R91/#15/#51/#72 is now the next genome milestone.
+  The immediate implementation should add deterministic aging/rejuvenation
+  simulation evidence first, then tighten purpose relabel validation, then move
+  reversible Gene Scissors transactions behind the same redaction, rollback,
+  and approval gates.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -499,23 +508,32 @@ privacy-redaction corpus hardening, and #50 malignant-gene recovery drills.
   packets do not leak raw prompts, answers, secrets, hidden reasoning,
   executable payloads, tenant identifiers, or unreviewed third-party source
   text.
+- #50 `[Genome] Add malignant-gene poisoning defense and recovery drills` is
+  closed after adding deterministic synthetic drills for malicious instruction
+  segments, false memory, bad routing thresholds, contradictory rules, stale
+  labels, and irreversible-delete attempts. The drill evidence now proves
+  quarantine, reversible cut candidates, stable-anchor regeneration, replay
+  validation hold/reject reasons, rollback/tombstone metadata, redaction
+  status, and preview-only admission.
 - #77 `[Governance] Add preview-to-write graduation checklist` is now closed.
   Its checklist is the policy bridge for later memory/genome/evolution writes:
   preview evidence can graduate only after writer gates, validation evidence,
   rollback anchors, privacy/license checks, and maintainer/operator approval.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
-- PR #1 is currently open and mergeable from
-  `codex/r83-memory-admission-review-packets`. Both latest `focused Rust
-  crates` check runs are green, but GitHub still reports review approval
-  required before merge.
+- PR #1 is currently open from
+  `codex/r83-memory-admission-review-packets` into
+  `codex-runtime-device-abi`. GitHub currently reports merge state
+  `MERGEABLE`, both focused validation checks are green, and merge still
+  requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
   Its body now marks #43, #44, #45, #46, #47, #50, and #77 complete; issues
   #51 and #72-#78 extend that tracker with the next
   audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
-  workstream. The next suggested order moves to #51/#72/#73 so aging/
-  rejuvenation simulation, purpose relabeling, and reversible Gene Scissors
-  transactions build on the redaction and malignant-defense gates.
+  workstream. The next suggested order is #51 first, then #72 and #73:
+  measure aging/rejuvenation behavior, make purpose relabeling explicit, and
+  only then journal reversible Gene Scissors transactions on top of the
+  redaction and malignant-defense gates.
 
 ## Version Plan / 版本计划
 
