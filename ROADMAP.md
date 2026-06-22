@@ -497,10 +497,11 @@ writer-gate consolidation baselines.
   preview-only memory consolidation/forgetting worker baseline. #78 adds the
   deterministic local research deployment profile and resource-guard baseline.
   R94 adds the unified writer-gate consolidation baseline across memory,
-  genome, and experiment-ledger write domains. The default queue now advances
-  to R95 reference backlog verification as the next bounded preview goal with
-  explicit success, stop, budget, rollback, approval, and conflict-isolation
-  gates.
+  genome, and experiment-ledger write domains. R95 adds the reference backlog
+  verification and license-review gate for #63/#64/#65. The default queue now
+  advances to R96 clean-room implementation audit as the next bounded preview
+  goal with explicit success, stop, budget, rollback, approval, and
+  conflict-isolation gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
   read-only queue reports for bounded self-evolution, and #74 now provides the
   thinking-phase phase scheduler above hierarchy, genome-chain, routing, and
@@ -511,8 +512,9 @@ writer-gate consolidation baselines.
   #78 now provides deterministic non-commercial local deployment profiles,
   resource/backpressure guards, disabled durable-write defaults, and operator
   health evidence. R94 now provides the shared read-only writer-gate evidence
-  layer and trace-schema counters. Continue with R95 reference fact/license
-  verification next.
+  layer and trace-schema counters. R95 now provides the reference fact/license
+  verification gate and deterministic chunk-repair fixture catalog. Continue
+  with R96 clean-room implementation audit next.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -859,8 +861,8 @@ writer-gate consolidation baselines.
   the deterministic genome rejuvenation simulation baseline, #72 is the purpose
   ontology / relabel validator baseline, and #73 is the reversible Gene
   Scissors transaction journal baseline. #79 is the completed pursuit-goal
-  scheduler baseline with default #74/#75/#76/#78/R94/R95 queue records, success,
-  stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
+  scheduler baseline with default #74/#75/#76/#78/R94/R95/R96 queue records,
+  success, stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
   completed thinking-phase scheduler baseline with deterministic phase
   contracts, digest-only segment and route traces, budget exhaustion reporting,
   disabled-mode adapter passthrough, and no durable writes. #75 is the
@@ -874,7 +876,9 @@ writer-gate consolidation baselines.
   guards, disabled write defaults, and operator-health evidence. R94 is the
   completed unified writer-gate baseline with shared memory/genome/
   experiment-ledger evidence, deny-by-default policy, and trace-gated JSONL.
-  The live default pursuit queue now starts at R95.)
+  R95 is the completed reference backlog verification baseline with source,
+  license, clean-room, and chunk-repair fixture evidence. The live default
+  pursuit queue now starts at R96.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -1034,9 +1038,12 @@ writer-gate consolidation baselines.
   evidence through `UnifiedWriterGate` so durable writes remain preview/read-only
   until validation, rollback, privacy/license, trace/benchmark, exact refs, and
   maintainer/operator approval requirements pass.
-- R95 / #63/#64/#65: reference backlog verification. Fact-check and
-  license-review DNA-inspired, chunk/KV, and Rust inference references before
-  any behavior spec is promoted to an implementation issue.
+- R95 / #63/#64/#65 completed baseline: reference backlog verification.
+  Fact-checks and license-reviews DNA-inspired, chunk/KV, and Rust inference
+  references before any behavior spec is promoted to an implementation issue.
+  `ReferenceBacklogReport` keeps GPL, unknown-license, and unverified sources
+  out of source-level reuse while preserving paper/concept references as
+  preview-only design inputs.
 - R96 / #18/#40/#60: clean-room implementation audit. Reconfirm
   `fortunto2/rust-code` stays behind MIT attribution review and
   `Kuberwastaken/claurst` remains GPL-3.0 concept-only unless GPL obligations

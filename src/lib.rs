@@ -24,6 +24,7 @@ pub mod process_reward;
 pub mod production_runtime;
 pub mod reasoning_genome;
 pub mod recursive_scheduler;
+pub mod reference_backlog;
 pub mod reflection;
 pub mod research_deployment;
 pub mod router;
@@ -191,6 +192,13 @@ pub use reasoning_genome::{
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,
     RecursiveScheduler,
+};
+pub use reference_backlog::{
+    REFERENCE_BACKLOG_SCHEMA_VERSION, REFERENCE_BACKLOG_TRACE_SCHEMA, ReferenceBacklogArea,
+    ReferenceBacklogRecord, ReferenceBacklogReport, ReferenceChunkRepairFixture,
+    ReferenceChunkRepairFixtureKind, ReferenceReuseDecision, ReferenceSourceKind,
+    default_reference_backlog, default_reference_backlog_report,
+    default_reference_chunk_repair_fixtures,
 };
 pub use reflection::{
     DraftToken, InferenceDraft, ReasoningStep, ReflectionIssue, ReflectionReport,

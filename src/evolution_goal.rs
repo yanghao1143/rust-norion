@@ -599,7 +599,7 @@ impl EvolutionGoalQueue {
 pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
     vec![EvolutionGoal::new(
         10,
-        "R95 reference backlog verification and license review",
+        "R96 clean-room implementation audit",
         EvolutionGoalSuccessGate::new([
             EvolutionGoalEvidenceKind::CargoCheck,
             EvolutionGoalEvidenceKind::FocusedTests,
@@ -607,9 +607,9 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
             EvolutionGoalEvidenceKind::OperatorApproval,
         ]),
         [
-            "roadmap:R95",
-            "issues:#63,#64,#65",
-            "pursuit:reference-backlog-verification",
+            "roadmap:R96",
+            "issues:#18,#40,#60",
+            "pursuit:clean-room-implementation-audit",
         ],
     )]
 }
@@ -1012,11 +1012,11 @@ mod tests {
     }
 
     #[test]
-    fn default_noiron_pursuit_goal_queue_advances_to_reference_backlog_verification() {
+    fn default_noiron_pursuit_goal_queue_advances_to_clean_room_audit() {
         let queue = default_noiron_pursuit_goal_queue();
 
         assert_eq!(queue.goals.len(), 1);
-        assert!(queue.goals[0].objective.contains("R95"));
+        assert!(queue.goals[0].objective.contains("R96"));
 
         let report = queue.evaluate(&[]);
 
