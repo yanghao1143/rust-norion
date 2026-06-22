@@ -1,6 +1,7 @@
 pub mod adaptive_state;
 pub mod agent_team;
 pub mod benchmark;
+pub mod clean_room_audit;
 pub mod disk_kv;
 pub mod drift;
 pub mod engine;
@@ -73,6 +74,11 @@ pub use benchmark::{
     default_genome_rejuvenation_cases, default_self_evolving_memory_ab_cases,
     run_default_genome_rejuvenation_simulation, run_default_self_evolving_memory_ab_suite,
     run_genome_rejuvenation_simulation, seeded_self_evolving_memory_ab_store,
+};
+pub use clean_room_audit::{
+    CLEAN_ROOM_AUDIT_SCHEMA_VERSION, CLEAN_ROOM_AUDIT_TRACE_SCHEMA, CleanRoomAuditDecision,
+    CleanRoomAuditFinding, CleanRoomAuditRecord, CleanRoomAuditReport, CleanRoomLicenseClass,
+    CleanRoomMaterialKind, default_clean_room_audit_records, default_clean_room_audit_report,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};

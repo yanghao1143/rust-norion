@@ -599,7 +599,7 @@ impl EvolutionGoalQueue {
 pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
     vec![EvolutionGoal::new(
         10,
-        "R96 clean-room implementation audit",
+        "R97 English/Chinese/Rust coding service and eval harness",
         EvolutionGoalSuccessGate::new([
             EvolutionGoalEvidenceKind::CargoCheck,
             EvolutionGoalEvidenceKind::FocusedTests,
@@ -607,9 +607,9 @@ pub fn default_noiron_pursuit_goals() -> Vec<EvolutionGoal> {
             EvolutionGoalEvidenceKind::OperatorApproval,
         ]),
         [
-            "roadmap:R96",
-            "issues:#18,#40,#60",
-            "pursuit:clean-room-implementation-audit",
+            "roadmap:R97",
+            "issues:#75,#19,#29",
+            "pursuit:multilingual-coding-service-eval",
         ],
     )]
 }
@@ -1012,11 +1012,11 @@ mod tests {
     }
 
     #[test]
-    fn default_noiron_pursuit_goal_queue_advances_to_clean_room_audit() {
+    fn default_noiron_pursuit_goal_queue_advances_to_coding_service_eval() {
         let queue = default_noiron_pursuit_goal_queue();
 
         assert_eq!(queue.goals.len(), 1);
-        assert!(queue.goals[0].objective.contains("R96"));
+        assert!(queue.goals[0].objective.contains("R97"));
 
         let report = queue.evaluate(&[]);
 

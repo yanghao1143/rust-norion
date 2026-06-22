@@ -498,10 +498,12 @@ writer-gate consolidation baselines.
   deterministic local research deployment profile and resource-guard baseline.
   R94 adds the unified writer-gate consolidation baseline across memory,
   genome, and experiment-ledger write domains. R95 adds the reference backlog
-  verification and license-review gate for #63/#64/#65. The default queue now
-  advances to R96 clean-room implementation audit as the next bounded preview
-  goal with explicit success, stop, budget, rollback, approval, and
-  conflict-isolation gates.
+  verification and license-review gate for #63/#64/#65. R96 adds the
+  clean-room implementation audit and source-provenance scanner for
+  #18/#40/#60. The default queue now advances to R97 English/Chinese/Rust
+  coding service and eval harness as the next bounded preview goal with
+  explicit success, stop, budget, rollback, approval, and conflict-isolation
+  gates.
 - Active acceleration lane: #79 now provides deterministic queue records and
   read-only queue reports for bounded self-evolution, and #74 now provides the
   thinking-phase phase scheduler above hierarchy, genome-chain, routing, and
@@ -513,8 +515,9 @@ writer-gate consolidation baselines.
   resource/backpressure guards, disabled durable-write defaults, and operator
   health evidence. R94 now provides the shared read-only writer-gate evidence
   layer and trace-schema counters. R95 now provides the reference fact/license
-  verification gate and deterministic chunk-repair fixture catalog. Continue
-  with R96 clean-room implementation audit next.
+  verification gate and deterministic chunk-repair fixture catalog. R96 now
+  provides the clean-room source-provenance scanner and contamination fixtures.
+  Continue with R97 English/Chinese/Rust coding service and eval harness next.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -861,7 +864,7 @@ writer-gate consolidation baselines.
   the deterministic genome rejuvenation simulation baseline, #72 is the purpose
   ontology / relabel validator baseline, and #73 is the reversible Gene
   Scissors transaction journal baseline. #79 is the completed pursuit-goal
-  scheduler baseline with default #74/#75/#76/#78/R94/R95/R96 queue records,
+  scheduler baseline with default #74/#75/#76/#78/R94/R95/R96/R97 queue records,
   success, stop, budget, rollback, approval, and conflict-isolation gates. #74 is the
   completed thinking-phase scheduler baseline with deterministic phase
   contracts, digest-only segment and route traces, budget exhaustion reporting,
@@ -877,8 +880,10 @@ writer-gate consolidation baselines.
   completed unified writer-gate baseline with shared memory/genome/
   experiment-ledger evidence, deny-by-default policy, and trace-gated JSONL.
   R95 is the completed reference backlog verification baseline with source,
-  license, clean-room, and chunk-repair fixture evidence. The live default
-  pursuit queue now starts at R96.)
+  license, clean-room, and chunk-repair fixture evidence. R96 is the completed
+  clean-room implementation audit baseline with provenance-manifest,
+  contamination-scanner, and compact evidence-packet coverage. The live default
+  pursuit queue now starts at R97.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -1044,20 +1049,22 @@ writer-gate consolidation baselines.
   `ReferenceBacklogReport` keeps GPL, unknown-license, and unverified sources
   out of source-level reuse while preserving paper/concept references as
   preview-only design inputs.
-- R96 / #18/#40/#60: clean-room implementation audit. Reconfirm
-  `fortunto2/rust-code` stays behind MIT attribution review and
+- R96 / #18/#40/#60 completed baseline: clean-room implementation audit.
+  Reconfirms `fortunto2/rust-code` stays behind MIT attribution review and
   `Kuberwastaken/claurst` remains GPL-3.0 concept-only unless GPL obligations
-  are explicitly accepted. Do not copy, translate, or mechanically port GPL or
-  unreviewed external source into this repository.
-- R96 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
+  are explicitly accepted. `CleanRoomAuditReport` validates source provenance,
+  compact evidence packets, and contamination fixtures so GPL, unknown-license,
+  private-payload, or unreviewed source material cannot be promoted into
+  implementation work.
+- R97 / #75/#19/#29: English/Chinese/Rust coding service and eval harness.
   #75 provides the completed local scoring dataset/profile baseline. #19/#29
   continue the local service paths and compiler/test/benchmark validation for
   self-improving coding behavior.
-- R97 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
+- R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
   evaluation gates.
-- R98 / #78/#62: local research deployment guardrails. Keep non-commercial
+- R99 / #78/#62: local research deployment guardrails. Keep non-commercial
   deployment research bounded by explicit resource profiles, safety runbooks,
   and reviewable operator controls.
 

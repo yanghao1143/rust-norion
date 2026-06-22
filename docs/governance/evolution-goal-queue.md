@@ -32,10 +32,10 @@ replaced with `redaction-digest:*` before they enter the serialized record.
 queue as preview-only planning state. After the #74 thinking-phase scheduler,
 #75 English/Chinese/Rust coding evaluation profile, #76 memory consolidation
 worker, #78 local research deployment guardrail baseline, R94 unified
-writer-gate consolidation, and R95 reference backlog verification landed, the
-live default queue now starts at:
+writer-gate consolidation, R95 reference backlog verification, and R96
+clean-room implementation audit landed, the live default queue now starts at:
 
-- R96 clean-room implementation audit
+- R97 English/Chinese/Rust coding service and eval harness
 
 This gives rust-norion a bounded next objective. R95 keeps DNA-inspired,
 chunk/KV, Rust inference, `fortunto2/rust-code`, and `Kuberwastaken/claurst`
@@ -44,7 +44,9 @@ behavior spec can become an implementation issue. R96 now uses that evidence to
 audit implementation plans: MIT/Apache/BSD sources still require attribution and
 a scoped Norion-owned port plan, unknown-license sources remain blocked, and
 GPL-3.0 sources remain concept-only unless GPL obligations are explicitly
-accepted. The queue can advance only when the active goal has
+accepted. R97 can now focus on local service/API behavior and multilingual
+coding evaluation without importing external source or mutating memory/genome
+state by default. The queue can advance only when the active goal has
 compiler/test/benchmark/trace or ledger evidence for its success gate and
 maintainer/operator approval for promotion. If a goal reaches its target,
 exhausts budget, fails a rollback gate, or waits for approval, later goals
