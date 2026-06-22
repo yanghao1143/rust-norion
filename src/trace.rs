@@ -18,6 +18,7 @@ mod routing;
 mod runtime_device;
 mod runtime_kv;
 mod schema_jsonl_gate;
+mod self_goal;
 mod specialized;
 mod writer_gate;
 
@@ -39,6 +40,7 @@ use improvement_corpus::evaluate_improvement_corpus_schema_line;
 use required_fields::trace_required_fields;
 use runtime_device::evaluate_trace_runtime_device_execution;
 use runtime_kv::evaluate_trace_runtime_kv;
+use self_goal::evaluate_self_goal_queue_apply_schema_line;
 use writer_gate::evaluate_unified_writer_gate_schema_line;
 
 #[cfg(test)]
@@ -63,8 +65,8 @@ pub use jsonl::{
     append_self_evolution_promotion_preflight_trace_jsonl,
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
-    append_self_evolution_rollback_replay_trace_jsonl, append_trace_jsonl,
-    append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
+    append_self_evolution_rollback_replay_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
+    append_trace_jsonl, append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
     business_contract_trace_json_line, improvement_corpus_trace_json_line,
     memory_residency_trace_json_line, rust_check_trace_json_line,
     self_evolution_admission_trace_json_line, self_evolution_experiment_trace_json_line,
@@ -72,8 +74,8 @@ pub use jsonl::{
     self_evolution_promotion_preflight_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
-    self_evolution_rollback_replay_trace_json_line, trace_json_line, trace_json_line_with_case,
-    unified_writer_gate_trace_json_line,
+    self_evolution_rollback_replay_trace_json_line, self_goal_queue_apply_trace_json_line,
+    trace_json_line, trace_json_line_with_case, unified_writer_gate_trace_json_line,
 };
 pub use schema_jsonl_gate::{
     OPERATOR_HEALTH_SCHEMA, OperatorHealthMetric, OperatorHealthSection, OperatorHealthSnapshot,
@@ -145,6 +147,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-unified-writer-gate-v1\"") {
         failures.extend(evaluate_unified_writer_gate_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-goal-queue-apply-plan-v1\"") {
+        failures.extend(evaluate_self_goal_queue_apply_schema_line(line));
         return failures;
     }
 
