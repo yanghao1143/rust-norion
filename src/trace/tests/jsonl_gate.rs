@@ -1013,21 +1013,28 @@ fn trace_schema_jsonl_gate_aggregates_unified_writer_gate_reports() {
     )
     .with_evidence(false, false, false, true, true)
     .with_operator_approval(false, false)]);
+    let goal_queue_report =
+        UnifiedWriterGate::new().evaluate([unified_writer_gate_ready_candidate(
+            UnifiedWriterGateDomain::EvolutionGoalQueue,
+            "goal-queue:ready-for-preview",
+        )]);
 
     append_unified_writer_gate_trace_jsonl(&path, &preview_report).unwrap();
     append_unified_writer_gate_trace_jsonl(&path, &held_report).unwrap();
+    append_unified_writer_gate_trace_jsonl(&path, &goal_queue_report).unwrap();
 
     let report = evaluate_trace_schema_jsonl(&path).unwrap();
 
     assert!(report.passed, "{:?}", report.failures);
-    assert_eq!(report.checked_lines, 2);
-    assert_eq!(report.unified_writer_gate_events, 2);
-    assert_eq!(report.unified_writer_gate_records, 2);
+    assert_eq!(report.checked_lines, 3);
+    assert_eq!(report.unified_writer_gate_events, 3);
+    assert_eq!(report.unified_writer_gate_records, 3);
     assert_eq!(report.unified_writer_gate_memory_records, 1);
     assert_eq!(report.unified_writer_gate_genome_records, 1);
     assert_eq!(report.unified_writer_gate_experiment_ledger_records, 0);
+    assert_eq!(report.unified_writer_gate_evolution_goal_queue_records, 1);
     assert_eq!(report.unified_writer_gate_ready_records, 0);
-    assert_eq!(report.unified_writer_gate_preview_only_records, 1);
+    assert_eq!(report.unified_writer_gate_preview_only_records, 2);
     assert_eq!(report.unified_writer_gate_held_records, 1);
     assert_eq!(report.unified_writer_gate_rejected_records, 0);
     assert_eq!(report.unified_writer_gate_write_allowed, 0);
@@ -1036,7 +1043,7 @@ fn trace_schema_jsonl_gate_aggregates_unified_writer_gate_reports() {
     assert!(
         report
             .summary_line()
-            .contains("unified_writer_gate_events=2")
+            .contains("unified_writer_gate_events=3")
     );
     cleanup(path);
 }
@@ -1431,6 +1438,9 @@ fn unified_writer_gate_ready_candidate(
         UnifiedWriterGateDomain::Memory => UnifiedWriterGateWriteScope::DurableMemory,
         UnifiedWriterGateDomain::Genome => UnifiedWriterGateWriteScope::Genome,
         UnifiedWriterGateDomain::ExperimentLedger => UnifiedWriterGateWriteScope::ExperimentLedger,
+        UnifiedWriterGateDomain::EvolutionGoalQueue => {
+            UnifiedWriterGateWriteScope::EvolutionGoalQueue
+        }
     };
 
     UnifiedWriterGateCandidate::new(domain, candidate_id, [scope])
