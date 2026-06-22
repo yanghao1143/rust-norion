@@ -34,6 +34,7 @@ use crate::cli::roundtrip::{
     run_persistent_roundtrip, run_persistent_roundtrip_all_devices,
 };
 use crate::cli::runtime_manifest::print_runtime_manifest_gate_report;
+use crate::cli::self_goal_queue::{print_self_goal_queue_report, run_self_goal_queue_report};
 use crate::cli::state::{
     print_state_inspection_gate_report, print_state_inspection_matrix_gate_report,
     print_state_inspection_report, run_state_inspection, run_state_inspection_all_devices,
@@ -154,6 +155,18 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         print_production_kernel_conformance_report(&report);
         if !report.passed {
             std::process::exit(2);
+        }
+        return Ok(());
+    }
+    if args.self_goal_queue {
+        let report = run_self_goal_queue_report(&args)?;
+        print_self_goal_queue_report(&report);
+        if let Some(trace_schema_gate_path) = &args.trace_schema_gate_path {
+            let report = evaluate_trace_schema_jsonl(trace_schema_gate_path)?;
+            print_trace_schema_gate_report(trace_schema_gate_path, &report);
+            if !report.passed {
+                std::process::exit(2);
+            }
         }
         return Ok(());
     }
