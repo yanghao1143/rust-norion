@@ -1,3 +1,6 @@
+use crate::evolution_goal_queue_store::{
+    EVOLUTION_GOAL_QUEUE_STORE_SCHEMA_VERSION, EVOLUTION_GOAL_QUEUE_STORE_WRITE_TRACE_SCHEMA,
+};
 use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::self_goal_proposal::{
     SELF_GOAL_PROPOSAL_SCHEMA_VERSION, SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
@@ -395,6 +398,168 @@ pub(super) fn evaluate_self_goal_queue_append_execution_schema_line(line: &str) 
     let summary = extract_json_string_field(line, "summary").unwrap_or_default();
     if contains_private_or_executable_marker(&summary) {
         failures.push("self_goal_queue_append_execution summary leaked private marker".to_owned());
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_evolution_goal_queue_store_write_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-evolution-goal-queue-store-write-v1\"",
+        ),
+        ("store_schema", "\"store_schema\":"),
+        ("decision", "\"decision\":"),
+        ("reason_code_count", "\"reason_code_count\":"),
+        ("key_digest", "\"key_digest\":"),
+        ("queue_digest", "\"queue_digest\":"),
+        ("rollback_anchor_digest", "\"rollback_anchor_digest\":"),
+        (
+            "approval_attestation_digest",
+            "\"approval_attestation_digest\":",
+        ),
+        ("tenant_isolation_allowed", "\"tenant_isolation_allowed\":"),
+        ("isolation_decision", "\"isolation_decision\":"),
+        ("durable_write_allowed", "\"durable_write_allowed\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("summary", "\"summary\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing evolution_goal_queue_store_write field {name}"
+            ));
+        }
+    }
+
+    if line.contains("\"queue\":")
+        || line.contains("\"goals\":[")
+        || line.contains("\"record_lines\":[")
+        || line.contains("\"reason_codes\":[")
+    {
+        failures.push(
+            "evolution_goal_queue_store_write must expose digest/count evidence only".to_owned(),
+        );
+    }
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == EVOLUTION_GOAL_QUEUE_STORE_WRITE_TRACE_SCHEMA => {}
+        Some(value) => failures.push(format!(
+            "evolution_goal_queue_store_write schema {value} is not supported"
+        )),
+        None => failures.push("evolution_goal_queue_store_write schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "store_schema") {
+        Some(value) if value == EVOLUTION_GOAL_QUEUE_STORE_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "evolution_goal_queue_store_write store_schema {value} is not supported"
+        )),
+        None => failures.push("evolution_goal_queue_store_write store_schema missing".to_owned()),
+    }
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    let reason_code_count = extract_json_usize_field(line, "reason_code_count").unwrap_or(0);
+    let tenant_isolation_allowed =
+        extract_json_bool_field(line, "tenant_isolation_allowed").unwrap_or(false);
+    let read_only = extract_json_bool_field(line, "read_only").unwrap_or(false);
+    let write_allowed = extract_json_bool_field(line, "write_allowed").unwrap_or(false);
+    let durable_write_allowed =
+        extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false);
+    let applied = extract_json_bool_field(line, "applied").unwrap_or(false);
+
+    match decision.as_str() {
+        "applied" => {
+            if reason_code_count != 0 {
+                failures.push(
+                    "evolution_goal_queue_store_write applied trace must not carry reason codes"
+                        .to_owned(),
+                );
+            }
+            if !tenant_isolation_allowed
+                || read_only
+                || !write_allowed
+                || !durable_write_allowed
+                || !applied
+            {
+                failures.push(
+                    "evolution_goal_queue_store_write applied trace requires isolated durable write flags"
+                        .to_owned(),
+                );
+            }
+        }
+        "hold" => {
+            if reason_code_count == 0 {
+                failures.push(
+                    "evolution_goal_queue_store_write hold trace requires reason codes".to_owned(),
+                );
+            }
+            if !read_only || write_allowed || durable_write_allowed || applied {
+                failures.push(
+                    "evolution_goal_queue_store_write hold trace must remain read-only".to_owned(),
+                );
+            }
+        }
+        "rejected" => {
+            if reason_code_count == 0 {
+                failures.push(
+                    "evolution_goal_queue_store_write rejected trace requires reason codes"
+                        .to_owned(),
+                );
+            }
+            if !read_only || write_allowed || durable_write_allowed || applied {
+                failures.push(
+                    "evolution_goal_queue_store_write rejected trace must remain read-only"
+                        .to_owned(),
+                );
+            }
+        }
+        _ => failures.push(format!(
+            "evolution_goal_queue_store_write decision {decision} is not supported"
+        )),
+    }
+
+    let key_digest = extract_json_string_field(line, "key_digest").unwrap_or_default();
+    if !key_digest.starts_with("fnv64:") {
+        failures.push("evolution_goal_queue_store_write key_digest must be fnv64".to_owned());
+    }
+    if contains_private_or_executable_marker(&key_digest) {
+        failures
+            .push("evolution_goal_queue_store_write key_digest leaked private marker".to_owned());
+    }
+
+    for field in [
+        "queue_digest",
+        "rollback_anchor_digest",
+        "approval_attestation_digest",
+    ] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if value != "none" && !value.starts_with("redaction-digest:") {
+            failures.push(format!(
+                "evolution_goal_queue_store_write {field} must be redaction digest or none"
+            ));
+        }
+        if contains_private_or_executable_marker(&value) {
+            failures.push(format!(
+                "evolution_goal_queue_store_write {field} leaked private marker"
+            ));
+        }
+    }
+
+    let isolation_decision =
+        extract_json_string_field(line, "isolation_decision").unwrap_or_default();
+    if !matches!(isolation_decision.as_str(), "allowed" | "rejected") {
+        failures.push(
+            "evolution_goal_queue_store_write isolation_decision is not supported".to_owned(),
+        );
+    }
+
+    let summary = extract_json_string_field(line, "summary").unwrap_or_default();
+    if contains_private_or_executable_marker(&summary) {
+        failures.push("evolution_goal_queue_store_write summary leaked private marker".to_owned());
     }
 
     failures
