@@ -3,8 +3,8 @@
 R96 turns the R95 reference backlog into a source-provenance and license
 contamination audit for issues #18, #40, and #60. It is still preview-only
 governance: no external source is vendored, no model/data asset is imported, no
-durable memory or genome write is enabled, and no commercial-use permission is
-granted.
+durable memory or genome write is enabled, and no license exception is granted
+outside GPL-3.0.
 
 The executable companion is `src/clean_room_audit.rs`, which exposes
 `clean_room_audit_v1` and the compact evidence schema
@@ -17,7 +17,7 @@ The executable companion is `src/clean_room_audit.rs`, which exposes
 | Project-owned records can move to implementation spikes. | `ready_for_norion_owned_spike` |
 | MIT/Apache/BSD references can guide behavior specs when attribution is recorded. | `spec_only` |
 | MIT/Apache/BSD source-level work requires attribution, a scoped Norion-owned port plan, maintainer review, and no copied/vendored/generated external payload. | `ready_for_norion_owned_spike` or `attribution_port_plan_required` |
-| GPL sources can only remain architecture concepts unless GPL obligations are explicitly accepted. | `concept_only` or `blocked_gpl_source` |
+| GPL-3.0-compatible sources require attribution, a scoped Norion-owned port plan, and maintainer review before source-level work. | `ready_for_norion_owned_spike` or `attribution_port_plan_required` |
 | Unknown-license or unverified sources cannot supply code, tests, prompts, schemas, docs text, assets, model artifacts, datasets, or generated fixtures. | `blocked_until_license_review` |
 | Raw private prompts, raw answers, secrets, executable payload markers, or polluted context are rejected from provenance evidence. | `rejected_private_payload` |
 | Copied/vendored external material without the required source policy is rejected or blocked. | `rejected_external_copy`, `blocked_gpl_source`, or `blocked_until_license_review` |
@@ -31,8 +31,8 @@ No record permits blind copy, line-by-line translation, or mechanical porting.
 | --- | --- | --- | --- |
 | `clean-room:rust-code:tool-contract-matrix` | `fortunto2/rust-code` MIT | `crates/norion-agent` / #18 | `spec_only` |
 | `clean-room:rust-code:doctor-readiness` | `fortunto2/rust-code` MIT | `crates/norion-cli` / #18 | `spec_only` |
-| `clean-room:claurst:permission-tool-assembly` | `Kuberwastaken/claurst` GPL-3.0 | `crates/norion-service` / #18 | `concept_only` |
-| `clean-room:claurst:bridge-boundary` | `Kuberwastaken/claurst` GPL-3.0 | future bridge boundary / #40 | `concept_only` |
+| `clean-room:claurst:permission-tool-assembly` | `Kuberwastaken/claurst` GPL-3.0 | `crates/norion-service` / #18 | `spec_only` until a port plan and attribution review land |
+| `clean-room:claurst:bridge-boundary` | `Kuberwastaken/claurst` GPL-3.0 | future bridge boundary / #40 | `spec_only` until a port plan and attribution review land |
 | `clean-room:candle:runtime-forward-kernel` | `huggingface/candle` Apache-2.0 | `ModelRuntimeForwardKernel` / #40 | `ready_for_norion_owned_spike` |
 | `clean-room:mistral-rs:streaming-cancel-backpressure` | `mistral.rs` MIT | `MistralRsHttpRuntime` / #40 | `ready_for_norion_owned_spike` |
 | `clean-room:cepe:chunked-context-scheduler` | CEPE MIT | `RecursiveScheduler` / #40 | `ready_for_norion_owned_spike` |
@@ -45,11 +45,11 @@ No record permits blind copy, line-by-line translation, or mechanical porting.
 R96 manifest keeps its rows spec-only until a concrete port plan and maintainer
 review are attached to a future implementation issue.
 
-`Kuberwastaken/claurst` remains GPL-3.0 concept-only. The allowed transfer is
-limited to generic Norion-owned requirements such as "permission-aware tool
-assembly" or "bridge sessions cannot mutate memory directly." Source, tests,
-prompts, schemas, docs text, UI layouts, assets, and command/tool
-implementations are not copied.
+`Kuberwastaken/claurst` is now license-compatible at the repository policy
+level, but source-level work still requires a dedicated issue or pull request,
+explicit attribution, maintainer review, and clean separation from private,
+generated, or unreviewed material. Blind copy, line-by-line translation, and
+mechanical porting remain rejected.
 
 ## Contamination Fixtures
 

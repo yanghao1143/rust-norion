@@ -512,7 +512,7 @@ writer-gate consolidation baselines.
   fixtures, scoring thresholds, redacted evidence packets, and overfit guards.
   #76 now provides replayable digest-only memory consolidation, decay,
   tombstone, cross-tenant merge rejection, and before/after metric evidence.
-  #78 now provides deterministic non-commercial local deployment profiles,
+  #78 now provides deterministic GPL-3.0-compatible local deployment profiles,
   resource/backpressure guards, disabled durable-write defaults, and operator
   health evidence. R94 now provides the shared read-only writer-gate evidence
   layer and trace-schema counters. R95 now provides the reference fact/license
@@ -601,7 +601,7 @@ writer-gate consolidation baselines.
   JSONL output. Policy is documented in
   [`docs/governance/memory-consolidation-worker.md`](docs/governance/memory-consolidation-worker.md).
 - #78 `[Runtime] Add local research deployment profiles and resource guards` is
-  now the completed baseline for non-commercial local deployment guardrails. It
+  now the completed baseline for GPL-3.0-compatible local deployment guardrails. It
   adds CPU-only, single-GPU, low-memory, and benchmark/replay profile templates,
   resource and backpressure guard reports, disabled durable memory/genome/
   experiment-ledger writes by default, operator health evidence, and policy
@@ -1110,9 +1110,9 @@ writer-gate consolidation baselines.
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
   evaluation gates.
-- R99 / #78/#62: local research deployment guardrails. Keep non-commercial
-  deployment research bounded by explicit resource profiles, safety runbooks,
-  and reviewable operator controls.
+- R99 / #78/#62: local research deployment guardrails. Keep deployment
+  research bounded by explicit resource profiles, GPL-3.0 compatibility checks,
+  safety runbooks, and reviewable operator controls.
 
 ## Definition of Done / 验收标准
 

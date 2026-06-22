@@ -11,9 +11,9 @@ Linked issue:
 - [ ] No raw prompt/answer payload is exposed in trace, benchmark, review, or ledger summaries
 - [ ] Durable memory/genome/self-evolution writes remain preview-only unless an approved writer gate and rollback path are included
 - [ ] Preview-to-write graduation checklist is satisfied for any requested write or active behavior change
-- [ ] Change remains compatible with the non-commercial research/deployment license
-- [ ] No commercial-use permission, license exception, or commercial deployment approval is requested by this PR
-- [ ] External code was not copied from GPL/AGPL/commercial sources
+- [ ] Change remains compatible with the GPL-3.0 license
+- [ ] PR does not bypass maintainer review, branch protection, validation gates, attribution requirements, or third-party license obligations
+- [ ] External code was not copied from AGPL/proprietary/commercial-restricted/private sources
 - [ ] External references, if used, are documented with clean-room/attribution notes
 
 ## Reviewer Notes
