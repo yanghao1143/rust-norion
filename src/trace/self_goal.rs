@@ -10,7 +10,15 @@ use crate::self_goal_proposal::{
 };
 use crate::writer_gate::UNIFIED_WRITER_GATE_SCHEMA_VERSION;
 
-use super::fields::{extract_json_bool_field, extract_json_string_field, extract_json_usize_field};
+use super::fields::{
+    extract_json_bool_field, extract_json_string_array_field, extract_json_string_field,
+    extract_json_usize_field,
+};
+
+const SELF_GOAL_QUEUE_CONTINUATION_PLAN_SCHEMA_VERSION: &str =
+    "self_goal_queue_continuation_plan_v1";
+const SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA: &str =
+    "rust-norion-self-goal-queue-continuation-plan-v1";
 
 pub(super) fn evaluate_self_goal_queue_apply_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -392,6 +400,203 @@ pub(super) fn evaluate_self_goal_queue_append_execution_schema_line(line: &str) 
     let summary = extract_json_string_field(line, "summary").unwrap_or_default();
     if contains_private_or_executable_marker(&summary) {
         failures.push("self_goal_queue_append_execution summary leaked private marker".to_owned());
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_self_goal_queue_continuation_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-goal-queue-continuation-plan-v1\"",
+        ),
+        ("plan_schema", "\"plan_schema\":"),
+        ("source", "\"source\":"),
+        ("ready", "\"ready\":"),
+        ("queue_digest", "\"queue_digest\":"),
+        ("goals", "\"goals\":"),
+        ("active", "\"active\":"),
+        ("active_goal_id", "\"active_goal_id\":"),
+        ("required_evidence_count", "\"required_evidence_count\":"),
+        ("required_evidence", "\"required_evidence\":"),
+        ("evidence_template_digest", "\"evidence_template_digest\":"),
+        ("continuation_digest", "\"continuation_digest\":"),
+        ("budget_attempts", "\"budget_attempts\":"),
+        ("budget_steps", "\"budget_steps\":"),
+        ("budget_tokens", "\"budget_tokens\":"),
+        ("budget_runtime_ms", "\"budget_runtime_ms\":"),
+        ("reason_code_count", "\"reason_code_count\":"),
+        ("reason_codes", "\"reason_codes\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("summary", "\"summary\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing self_goal_queue_continuation field {name}"));
+        }
+    }
+
+    if line.contains("\"records\":[")
+        || line.contains("\"record_lines\":[")
+        || line.contains("\"goals\":[")
+        || line.contains("\"objective\":")
+        || line.contains("\"resulting_queue\":")
+    {
+        failures
+            .push("self_goal_queue_continuation must expose plan counts/digests only".to_owned());
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_goal_queue_continuation",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_goal_queue_continuation",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_goal_queue_continuation",
+    );
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_CONTINUATION_PLAN_TRACE_SCHEMA => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_continuation schema {value} is not supported"
+        )),
+        None => failures.push("self_goal_queue_continuation schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "plan_schema") {
+        Some(value) if value == SELF_GOAL_QUEUE_CONTINUATION_PLAN_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_queue_continuation plan_schema {value} is not supported"
+        )),
+        None => failures.push("self_goal_queue_continuation plan_schema missing".to_owned()),
+    }
+
+    let source = extract_json_string_field(line, "source").unwrap_or_default();
+    if !matches!(
+        source.as_str(),
+        "current_queue" | "completion_resulting_queue"
+    ) {
+        failures.push("self_goal_queue_continuation source is not supported".to_owned());
+    }
+
+    let ready = extract_json_bool_field(line, "ready").unwrap_or(false);
+    let active = extract_json_bool_field(line, "active").unwrap_or(false);
+    if ready != active {
+        failures.push("self_goal_queue_continuation ready must match active".to_owned());
+    }
+
+    let goals = extract_json_usize_field(line, "goals").unwrap_or(0);
+    let required_evidence_count =
+        extract_json_usize_field(line, "required_evidence_count").unwrap_or(0);
+    let required_evidence =
+        extract_json_string_array_field(line, "required_evidence").unwrap_or_default();
+    let reason_code_count = extract_json_usize_field(line, "reason_code_count").unwrap_or(0);
+    let reason_codes = extract_json_string_array_field(line, "reason_codes").unwrap_or_default();
+
+    if ready && goals == 0 {
+        failures.push("self_goal_queue_continuation ready plan requires retained goals".to_owned());
+    }
+    if active && required_evidence.is_empty() {
+        failures
+            .push("self_goal_queue_continuation active plan requires evidence kinds".to_owned());
+    }
+    if required_evidence_count != required_evidence.len() {
+        failures.push("self_goal_queue_continuation required evidence count mismatch".to_owned());
+    }
+    if reason_code_count != reason_codes.len() {
+        failures.push("self_goal_queue_continuation reason code count mismatch".to_owned());
+    }
+    if reason_codes.is_empty() {
+        failures.push("self_goal_queue_continuation requires reason codes".to_owned());
+    }
+    for evidence in &required_evidence {
+        if !matches!(
+            evidence.as_str(),
+            "cargo_check"
+                | "focused_tests"
+                | "benchmark_gate"
+                | "trace_schema_gate"
+                | "experiment_ledger"
+                | "operator_approval"
+        ) {
+            failures.push(format!(
+                "self_goal_queue_continuation evidence kind {evidence} is not supported"
+            ));
+        }
+        if contains_private_or_executable_marker(evidence) {
+            failures.push("self_goal_queue_continuation evidence kind leaked marker".to_owned());
+        }
+    }
+    for reason in &reason_codes {
+        if contains_private_or_executable_marker(reason) {
+            failures.push("self_goal_queue_continuation reason leaked marker".to_owned());
+        }
+    }
+
+    let active_goal_id = extract_json_string_field(line, "active_goal_id").unwrap_or_default();
+    if active_goal_id != "none" && !active_goal_id.starts_with("redaction-digest:") {
+        failures.push(
+            "self_goal_queue_continuation active_goal_id must be redaction digest or none"
+                .to_owned(),
+        );
+    }
+    if !active && active_goal_id != "none" {
+        failures.push("self_goal_queue_continuation inactive plan must not name a goal".to_owned());
+    }
+    if active && active_goal_id == "none" {
+        failures.push("self_goal_queue_continuation active plan must name a goal".to_owned());
+    }
+
+    for field in [
+        "queue_digest",
+        "evidence_template_digest",
+        "continuation_digest",
+    ] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if !value.starts_with("redaction-digest:") {
+            failures.push(format!(
+                "self_goal_queue_continuation {field} must be redaction digest"
+            ));
+        }
+        if contains_private_or_executable_marker(&value) {
+            failures.push(format!(
+                "self_goal_queue_continuation {field} leaked private marker"
+            ));
+        }
+    }
+
+    for field in [
+        "budget_attempts",
+        "budget_steps",
+        "budget_tokens",
+        "budget_runtime_ms",
+    ] {
+        if active && extract_json_usize_field(line, field).unwrap_or(0) == 0 {
+            failures.push(format!(
+                "self_goal_queue_continuation active {field} must be nonzero"
+            ));
+        }
+    }
+
+    let summary = extract_json_string_field(line, "summary").unwrap_or_default();
+    if contains_private_or_executable_marker(&summary) {
+        failures.push("self_goal_queue_continuation summary leaked private marker".to_owned());
     }
 
     failures
