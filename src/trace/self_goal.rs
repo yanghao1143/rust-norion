@@ -26,6 +26,8 @@ const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_SCHEMA_VERSION: &str =
     "self_goal_queue_evidence_collection_v1";
 const SELF_GOAL_QUEUE_EVIDENCE_COLLECTION_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-evidence-collection-v1";
+const SELF_GOAL_LOCAL_EVIDENCE_SCHEMA_VERSION: &str = "self_goal_local_evidence_v1";
+const SELF_GOAL_LOCAL_EVIDENCE_TRACE_SCHEMA: &str = "rust-norion-self-goal-local-evidence-v1";
 
 pub(super) fn evaluate_self_goal_queue_apply_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -1060,6 +1062,248 @@ pub(super) fn evaluate_self_goal_queue_evidence_collection_schema_line(line: &st
     if contains_private_or_executable_marker(&summary) {
         failures
             .push("self_goal_queue_evidence_collection summary leaked private marker".to_owned());
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_self_goal_local_evidence_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-goal-local-evidence-v1\"",
+        ),
+        ("local_evidence_schema", "\"local_evidence_schema\":"),
+        ("enabled", "\"enabled\":"),
+        ("dry_run", "\"dry_run\":"),
+        ("ready", "\"ready\":"),
+        ("active_goal_id", "\"active_goal_id\":"),
+        ("planned_step_count", "\"planned_step_count\":"),
+        ("attempted_step_count", "\"attempted_step_count\":"),
+        ("generated_packet_count", "\"generated_packet_count\":"),
+        ("passed_step_count", "\"passed_step_count\":"),
+        ("failed_step_count", "\"failed_step_count\":"),
+        ("skipped_step_count", "\"skipped_step_count\":"),
+        ("manual_step_count", "\"manual_step_count\":"),
+        ("planned_status_count", "\"planned_status_count\":"),
+        ("step_kinds", "\"step_kinds\":"),
+        ("step_statuses", "\"step_statuses\":"),
+        ("runner_kinds", "\"runner_kinds\":"),
+        ("packet_digests", "\"packet_digests\":"),
+        ("exit_digests", "\"exit_digests\":"),
+        ("packet_digest", "\"packet_digest\":"),
+        ("runner_digest", "\"runner_digest\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("summary", "\"summary\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing self_goal_local_evidence field {name}"));
+        }
+    }
+
+    if line.contains("\"generated_packets\"")
+        || line.contains("\"evidence_packets\"")
+        || line.contains("\"command\"")
+        || line.contains("\"commands\"")
+        || line.contains("\"stdout\"")
+        || line.contains("\"stderr\"")
+        || line.contains("cargo check")
+        || line.contains("cargo test")
+        || line.contains("goal=")
+        || line.contains("label=self-goal-local-evidence")
+    {
+        failures.push("self_goal_local_evidence must expose runner counts/digests only".to_owned());
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "self_goal_local_evidence",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "self_goal_local_evidence",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "self_goal_local_evidence",
+    );
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == SELF_GOAL_LOCAL_EVIDENCE_TRACE_SCHEMA => {}
+        Some(value) => failures.push(format!(
+            "self_goal_local_evidence schema {value} is not supported"
+        )),
+        None => failures.push("self_goal_local_evidence schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "local_evidence_schema") {
+        Some(value) if value == SELF_GOAL_LOCAL_EVIDENCE_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "self_goal_local_evidence local_evidence_schema {value} is not supported"
+        )),
+        None => failures.push("self_goal_local_evidence local_evidence_schema missing".to_owned()),
+    }
+
+    let enabled = extract_json_bool_field(line, "enabled").unwrap_or(false);
+    let dry_run = extract_json_bool_field(line, "dry_run").unwrap_or(false);
+    let ready = extract_json_bool_field(line, "ready").unwrap_or(false);
+    let planned_step_count = extract_json_usize_field(line, "planned_step_count").unwrap_or(0);
+    let attempted_step_count = extract_json_usize_field(line, "attempted_step_count").unwrap_or(0);
+    let generated_packet_count =
+        extract_json_usize_field(line, "generated_packet_count").unwrap_or(0);
+    let passed_step_count = extract_json_usize_field(line, "passed_step_count").unwrap_or(0);
+    let failed_step_count = extract_json_usize_field(line, "failed_step_count").unwrap_or(0);
+    let skipped_step_count = extract_json_usize_field(line, "skipped_step_count").unwrap_or(0);
+    let manual_step_count = extract_json_usize_field(line, "manual_step_count").unwrap_or(0);
+    let planned_status_count = extract_json_usize_field(line, "planned_status_count").unwrap_or(0);
+    let step_kinds = extract_json_string_array_field(line, "step_kinds").unwrap_or_default();
+    let step_statuses = extract_json_string_array_field(line, "step_statuses").unwrap_or_default();
+    let runner_kinds = extract_json_string_array_field(line, "runner_kinds").unwrap_or_default();
+    let packet_digests =
+        extract_json_string_array_field(line, "packet_digests").unwrap_or_default();
+    let exit_digests = extract_json_string_array_field(line, "exit_digests").unwrap_or_default();
+
+    if planned_step_count != step_kinds.len()
+        || planned_step_count != step_statuses.len()
+        || planned_step_count != runner_kinds.len()
+        || planned_step_count != packet_digests.len()
+        || planned_step_count != exit_digests.len()
+    {
+        failures.push("self_goal_local_evidence step count mismatch".to_owned());
+    }
+    if passed_step_count
+        .saturating_add(failed_step_count)
+        .saturating_add(skipped_step_count)
+        .saturating_add(manual_step_count)
+        .saturating_add(planned_status_count)
+        != planned_step_count
+    {
+        failures.push("self_goal_local_evidence status count mismatch".to_owned());
+    }
+    if attempted_step_count != passed_step_count.saturating_add(failed_step_count) {
+        failures.push("self_goal_local_evidence attempted count mismatch".to_owned());
+    }
+    let generated_packet_digests = packet_digests
+        .iter()
+        .filter(|digest| digest.starts_with("redaction-digest:"))
+        .count();
+    if generated_packet_count != generated_packet_digests {
+        failures.push("self_goal_local_evidence generated packet count mismatch".to_owned());
+    }
+    if generated_packet_count > attempted_step_count {
+        failures
+            .push("self_goal_local_evidence generated packets exceed attempted gates".to_owned());
+    }
+    if dry_run && (attempted_step_count > 0 || generated_packet_count > 0) {
+        failures.push("self_goal_local_evidence dry-run must not attempt gates".to_owned());
+    }
+    if enabled && ready && planned_step_count == 0 {
+        failures.push("self_goal_local_evidence ready runner requires steps".to_owned());
+    }
+    if !enabled && (ready || planned_step_count > 0 || attempted_step_count > 0) {
+        failures.push("self_goal_local_evidence disabled runner must stay empty".to_owned());
+    }
+
+    for evidence in &step_kinds {
+        if !matches!(
+            evidence.as_str(),
+            "cargo_check"
+                | "focused_tests"
+                | "benchmark_gate"
+                | "trace_schema_gate"
+                | "experiment_ledger"
+                | "operator_approval"
+        ) {
+            failures.push(format!(
+                "self_goal_local_evidence evidence kind {evidence} is not supported"
+            ));
+        }
+        if contains_private_or_executable_marker(evidence) {
+            failures.push("self_goal_local_evidence evidence kind leaked marker".to_owned());
+        }
+    }
+    for status in &step_statuses {
+        if !matches!(
+            status.as_str(),
+            "planned" | "manual" | "skipped" | "passed" | "failed"
+        ) {
+            failures.push(format!(
+                "self_goal_local_evidence status {status} is not supported"
+            ));
+        }
+    }
+    for runner in &runner_kinds {
+        if !matches!(
+            runner.as_str(),
+            "cargo_check"
+                | "focused_tests"
+                | "benchmark_gate"
+                | "trace_schema_gate"
+                | "experiment_ledger_gate"
+                | "operator_approval"
+                | "unsupported"
+        ) {
+            failures.push(format!(
+                "self_goal_local_evidence runner {runner} is not supported"
+            ));
+        }
+        if contains_private_or_executable_marker(runner) {
+            failures.push("self_goal_local_evidence runner leaked marker".to_owned());
+        }
+    }
+
+    let active_goal_id = extract_json_string_field(line, "active_goal_id").unwrap_or_default();
+    if active_goal_id != "none" && !active_goal_id.starts_with("redaction-digest:") {
+        failures.push(
+            "self_goal_local_evidence active_goal_id must be redaction digest or none".to_owned(),
+        );
+    }
+    if ready && active_goal_id == "none" {
+        failures.push("self_goal_local_evidence ready runner must name a goal".to_owned());
+    }
+    if !ready && active_goal_id != "none" {
+        failures.push("self_goal_local_evidence held runner must not name a goal".to_owned());
+    }
+
+    for field in ["packet_digest", "runner_digest"] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if !value.starts_with("redaction-digest:") {
+            failures.push(format!(
+                "self_goal_local_evidence {field} must be redaction digest"
+            ));
+        }
+        if contains_private_or_executable_marker(&value) {
+            failures.push(format!(
+                "self_goal_local_evidence {field} leaked private marker"
+            ));
+        }
+    }
+    for value in packet_digests.iter().chain(exit_digests.iter()) {
+        if value != "none" && !value.starts_with("redaction-digest:") {
+            failures.push(
+                "self_goal_local_evidence step digest must be redaction digest or none".to_owned(),
+            );
+        }
+        if contains_private_or_executable_marker(value) {
+            failures.push("self_goal_local_evidence step digest leaked marker".to_owned());
+        }
+    }
+
+    let summary = extract_json_string_field(line, "summary").unwrap_or_default();
+    if contains_private_or_executable_marker(&summary) {
+        failures.push("self_goal_local_evidence summary leaked private marker".to_owned());
     }
 
     failures
