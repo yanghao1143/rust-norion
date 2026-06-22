@@ -413,8 +413,32 @@ These are algorithmic references, not product dependencies:
 - RLVR and test-time scaling:
   optimize routing, memory retention, and compute allocation without frequent
   weight retraining.
+- rust-code / claurst-style Rust AI codebases:
+  may be used only as license-reviewed, clean-room external references for
+  behavior, terminology, or risk review. GPL or otherwise incompatible source
+  must not be copied, translated, or used as implementation substrate in this
+  repository.
 
 以上方向只作为公开算法启发，不作为外部权重、闭源组件或厂商运行时依赖。
+
+## Current Snapshot / 当前快照
+
+Status date: 2026-06-22.
+
+- Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
+  describe capability milestones, not the published crate/package version.
+- Capability progress is now in the v0.7 band: Rust-native Transformer
+  templates, KV import/export ABI, benchmark harnesses for self-developed
+  runtimes, self-owned runtime ABI, model-side embeddings, production manifest
+  gates, reference/local production kernels, all-device benchmark coverage, and
+  device/quantization budget planning have substantially landed.
+- v1.0 remains the target state: a production-grade local Agent Harness plus a
+  test-time scaling inference engine for self-owned Transformer models.
+- PR #1 is currently open, mergeable, and green on checks, but still needs
+  review approval before merge.
+- GitHub issue #31 is the master tracker for the future implementation roadmap.
+  Issues #72-#78 extend that tracker with the next gene/runtime/eval/memory/
+  governance/deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -658,6 +682,32 @@ These are algorithmic references, not product dependencies:
   entropy/logprob feedback remains present across every device)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
+
+## GitHub Tracker Sync / GitHub 路线同步
+
+- #31 `[Roadmap] Master tracker for future rust-norion implementation`: master
+  roadmap tracker for capability sequencing and cross-issue status.
+- #72 `[Genome] Add gene purpose ontology and relabel validator`: make gene
+  purpose explicit, validate relabel operations, and reduce stale-label drift
+  before Gene Scissors edits become durable.
+- #73 `[Genome] Add reversible Gene Scissors transaction journal`: add a
+  reversible journal for cut/quarantine/regenerate/splice operations so genome
+  edits can be audited and rolled back.
+- #74 `[Runtime] Add thinking-phase gene-chain execution scheduler`: schedule
+  genome-chain expression during thinking/runtime phases without bypassing the
+  existing trace, reward, and drift gates.
+- #75 `[Benchmark] Add English Chinese Rust coding eval datasets and scoring
+  profiles`: add English, Chinese, and Rust coding evaluation datasets with
+  scoring profiles for benchmark and test-time scaling evidence.
+- #76 `[Memory] Add memory consolidation and forgetting worker`: consolidate
+  useful durable memory, decay or forget stale/unsafe records, and keep local
+  memory growth bounded.
+- #77 `[Governance] Add preview-to-write graduation checklist`: define the
+  checklist for moving read-only preview evidence into durable write/admission
+  paths.
+- #78 `[Runtime] Add local research deployment profiles and resource guards`:
+  add local research deployment profiles and resource guards so experimental
+  runtime work stays bounded on local hardware.
 
 ## Definition of Done / 验收标准
 
