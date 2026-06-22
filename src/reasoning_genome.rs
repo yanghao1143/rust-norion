@@ -1,6 +1,7 @@
 mod audit;
 mod fixtures;
 mod model;
+mod purpose;
 mod schema;
 mod splicing;
 
@@ -20,6 +21,11 @@ pub use model::{
     GeneLifecycleAction, GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,
     GeneScissorsIntent, GeneValidationStatus, GenomeExpression, GenomeExpressionInput,
     MutationPlan, ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
+};
+pub use purpose::{
+    GENE_PURPOSE_ONTOLOGY_VERSION, GenePurposeEvidenceClass, GenePurposeFreshness,
+    GenePurposeRecord, GenePurposeRelabelDecision, GenePurposeRelabelEvidence,
+    GenePurposeRelabelPolicy, GenePurposeRelabelProposal, GenePurposeRelabelValidator,
 };
 pub use schema::{
     DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,

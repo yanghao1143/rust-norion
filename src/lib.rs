@@ -160,9 +160,12 @@ pub use production_runtime::{
 };
 pub use reasoning_genome::{
     DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
-    DnaGeneSchemaError, DnaGeneSourceEvidence, GeneLifecycleAction, GeneLifecycleRecord,
-    GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
-    GenomeExpression, GenomeExpressionInput, MalignantGeneDrillKind, MalignantGeneRecoveryDrill,
+    DnaGeneSchemaError, DnaGeneSourceEvidence, GENE_PURPOSE_ONTOLOGY_VERSION, GeneLifecycleAction,
+    GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,
+    GenePurposeEvidenceClass, GenePurposeFreshness, GenePurposeRecord, GenePurposeRelabelDecision,
+    GenePurposeRelabelEvidence, GenePurposeRelabelPolicy, GenePurposeRelabelProposal,
+    GenePurposeRelabelValidator, GeneScissorsIntent, GeneValidationStatus, GenomeExpression,
+    GenomeExpressionInput, MalignantGeneDrillKind, MalignantGeneRecoveryDrill,
     MalignantGeneRecoveryDrillCorpus, MalignantGeneRecoveryDrillReport,
     MalignantGeneRecoveryResult, MutationFixtureKind, MutationPlan, MutationRepairCandidateFixture,
     MutationRepairFixture, MutationRepairFixtureCorpus, MutationRepairFixtureGateReport,

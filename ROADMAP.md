@@ -465,8 +465,9 @@ These are algorithmic references, not product dependencies:
 
 Status date: 2026-06-22. GitHub issue and PR status refreshed after the #46
 lineage-audit implementation, #77 graduation-checklist closure, #47
-privacy-redaction corpus hardening, #50 malignant-gene recovery drills, and
-the #51 genome aging/rejuvenation benchmark simulation baseline.
+privacy-redaction corpus hardening, #50 malignant-gene recovery drills, the #51
+genome aging/rejuvenation benchmark simulation baseline, and the #72 gene
+purpose relabel validator baseline.
 
 - Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
   describe capability milestones, not the published crate/package version.
@@ -481,16 +482,18 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
   splicing, model adapter execution, validation, reflection,
   approval-gated admission, compute-budget scheduling, and wasted-compute
   telemetry. R87/#46 adds the redacted lineage audit export baseline,
-  R88/#47 adds the shared privacy-redaction corpus and detector baseline, and
+  R88/#47 adds the shared privacy-redaction corpus and detector baseline,
   R92/#50 adds deterministic malignant-gene poisoning defense and recovery
-  drills, and R91/#51 adds deterministic genome aging/rejuvenation simulation
-  evidence. The next active genome lane is #72/#73: tighten purpose relabel
-  validation, then move reversible Gene Scissors transactions behind the same
-  redaction, rollback, and approval gates.
-- Active acceleration lane: #51 now provides the benchmark baseline for keep,
-  relabel, refresh, regenerate, quarantine, and tombstone decisions. Continue
-  with #72 purpose ontology / relabel validation before #73 reversible Gene
-  Scissors transaction journaling.
+  drills, R91/#51 adds deterministic genome aging/rejuvenation simulation
+  evidence, and R89/#72 now adds purpose ontology / relabel validation. The
+  next active genome lane is #73: move reversible Gene Scissors transactions
+  behind the same redaction, rollback, and approval gates.
+- Active acceleration lane: #72 now provides deterministic purpose records and
+  preview-only relabel validation for keep/relabel/refresh/regenerate/
+  quarantine decisions. Continue with #73 reversible Gene Scissors transaction
+  journaling, then #79 pursuit-goal queue scheduling so multiple bounded
+  self-evolution goals can run in order with explicit success, stop, budget,
+  rollback, and approval gates.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -533,13 +536,10 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
   `MERGEABLE`, both focused validation checks are green, and merge still
   requires the repository's configured review approval to clear.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Its body now marks #43, #44, #45, #46, #47, #50, and #77 complete; issues
-  #51 and #72-#78 extend that tracker with the next
-  audit/privacy/gene-aging/malignant-cut/eval/memory/governance/deployment
-  workstream. With #51 now implemented in this branch, the next suggested order
-  is #72 first and #73 second: make purpose relabeling explicit, and only then
-  journal reversible Gene Scissors transactions on top of the redaction,
-  rejuvenation, and malignant-defense gates.
+  Its body marks #43, #44, #45, #46, #47, #50, #51, #72, and #77 as completed
+  or landing baselines in this branch; issues #73-#79 extend the next
+  reversible-transaction, scheduler, evaluation, memory, governance,
+  deployment, and pursuit-goal queue workstream.
 
 ## Version Plan / 版本计划
 
@@ -795,8 +795,11 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
   preview-to-write graduation checklist. #46 is the completed redacted
   lineage/audit export baseline, #47 is the completed privacy-redaction corpus
   baseline, #50 is the completed malignant-gene recovery drill baseline, #51 is
-  the deterministic genome rejuvenation simulation baseline, and #72/#73 are
-  queued for purpose relabeling plus reversible Gene Scissors transactions.)
+  the deterministic genome rejuvenation simulation baseline, #72 is the purpose
+  ontology / relabel validator baseline, and #73 is queued for reversible Gene
+  Scissors transactions. #79 is queued above the evolution ledger as the
+  pursuit-goal scheduler with success, stop, budget, rollback, and approval
+  gates.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -855,9 +858,12 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
   previews, rollback readiness, replay digests, and digest-only evidence before
   any durable genome edit is accepted. Policy is documented in
   [`docs/governance/genome-rejuvenation-simulation.md`](docs/governance/genome-rejuvenation-simulation.md).
-- #72 `[Genome] Add gene purpose ontology and relabel validator`: make gene
-  purpose explicit, validate relabel operations, and reduce stale-label drift
-  before Gene Scissors edits become durable.
+- #72 `[Genome] Add gene purpose ontology and relabel validator`: completed
+  baseline for deterministic purpose records, digest-only provenance,
+  preview-only relabel proposals, stale/conflicting/missing-anchor quarantine,
+  and privacy-safe serialization before Gene Scissors edits become durable.
+  Policy is documented in
+  [`docs/governance/gene-purpose-relabel-validator.md`](docs/governance/gene-purpose-relabel-validator.md).
 - #73 `[Genome] Add reversible Gene Scissors transaction journal`: add a
   reversible journal for cut/quarantine/regenerate/splice operations so genome
   edits can be audited and rolled back.
@@ -876,6 +882,10 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
 - #78 `[Runtime] Add local research deployment profiles and resource guards`:
   add local research deployment profiles and resource guards so experimental
   runtime work stays bounded on local hardware.
+- #79 `[Evolution] Add pursuit goal queue and stop gates`: add a deterministic
+  multi-goal self-evolution queue with per-goal success gates, stop conditions,
+  rollback conditions, budget caps, approval holds, and isolation between
+  failed and later goals.
 
 ## R8x/R9x Milestone Backlog / R8x/R9x 里程碑候选
 
@@ -901,7 +911,8 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
   detector wiring for memory reports, genome mutation fixtures, trace events,
   benchmark artifacts, audit exports, and review packets before broader audit
   exports or outside collaboration depend on trace packets.
-- R89 / #12/#72: Reasoning DNA dual-chain stabilization. Normalize
+- R89 / #12/#72 completed baseline: Reasoning DNA dual-chain stabilization.
+  Normalize
   `express_chain` and `memory_chain` records with segment ids, source ids,
   purpose tags, version, confidence, last validation result, rollback anchors,
   and purpose ontology validation.
@@ -915,22 +926,25 @@ the #51 genome aging/rejuvenation benchmark simulation baseline.
   deterministic simulation baseline for expired, drifting, or semantically aged
   memory/gene segments with keep/relabel/refresh/regenerate/quarantine/
   tombstone decisions, replay digests, rollback readiness, and no durable
-  writes. #72 should make purpose tags, confidence, version, and validation
-  state explicit before any durable relabel edit.
+  writes. #72 now makes purpose tags, confidence, version, and validation state
+  explicit before any durable relabel edit.
 - R92 / #50 completed baseline: malignant mutation quarantine and regeneration.
   Quarantines harmful, polluted, low-confidence, false-memory, routing-drift,
   stale-label, contradictory, secret-risk, or destructive-delete segments with
   digest-only reasons and rollback records; emits reversible cut/tombstone
   candidates and stable-anchor regeneration candidates while keeping
   re-admission held until validation and operator approval.
-- R93 / #77/#6/#20: self-evolution writer gate consolidation. Unify memory,
+- R93 / #79: pursuit-goal queue and stop gates. Queue bounded self-evolution
+  objectives, run one active goal at a time, stop on success/budget/rollback
+  conditions, and require maintainer/operator approval before durable mutation.
+- R94 / #77/#6/#20: self-evolution writer gate consolidation. Unify memory,
   genome, and experiment-ledger writer gates so all durable writes remain
   preview/read-only until validation, rollback, privacy/license, and
   maintainer/operator approval requirements pass.
-- R94 / #63/#64/#65: reference backlog verification. Fact-check and
+- R95 / #63/#64/#65: reference backlog verification. Fact-check and
   license-review DNA-inspired, chunk/KV, and Rust inference references before
   any behavior spec is promoted to an implementation issue.
-- R95 / #18/#40/#60: clean-room implementation audit. Reconfirm
+- R96 / #18/#40/#60: clean-room implementation audit. Reconfirm
   `fortunto2/rust-code` stays behind MIT attribution review and
   `Kuberwastaken/claurst` remains GPL-3.0 concept-only unless GPL obligations
   are explicitly accepted. Do not copy, translate, or mechanically port GPL or

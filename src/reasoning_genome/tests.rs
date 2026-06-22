@@ -1,7 +1,7 @@
 use super::*;
 use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::RuntimeKvBlock;
-use crate::privacy_redaction::contains_private_or_executable_marker;
+use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 #[test]
 fn default_genome_expresses_read_only_profile_genes() {
@@ -1453,6 +1453,215 @@ fn malignant_gene_recovery_evidence_packets_are_redacted() {
             );
         }
     }
+}
+
+#[test]
+fn gene_purpose_relabel_accepts_fresh_preview_without_mutating_current_record() {
+    let current = sample_gene_purpose_record();
+    let evidence = sample_gene_purpose_evidence();
+    let current_label = current.label.clone();
+
+    let proposal = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+
+    assert!(proposal.accepted(), "{:?}", proposal.reason_codes);
+    assert_eq!(
+        proposal.decision,
+        GenePurposeRelabelDecision::AcceptedPreview
+    );
+    assert_eq!(proposal.validation_status, GeneValidationStatus::Pending);
+    assert!(proposal.preview_only);
+    assert!(proposal.approval_required);
+    assert!(!proposal.write_allowed);
+    assert!(!proposal.applied);
+    assert!(proposal.proposed_record.is_preview_only());
+    assert_eq!(current.label, current_label);
+    assert_eq!(current.freshness, GenePurposeFreshness::Fresh);
+    assert!(current.stable_id.starts_with("redaction-digest:"));
+    assert!(current.provenance_digest.starts_with("redaction-digest:"));
+    assert!(current.purpose_digest.starts_with("redaction-digest:"));
+
+    let first_line = proposal.proposed_record.to_kv_line();
+    let second_line = proposal.proposed_record.to_kv_line();
+    assert_eq!(first_line, second_line);
+    assert!(first_line.contains(GENE_PURPOSE_ONTOLOGY_VERSION));
+    assert!(first_line.contains("redaction-digest:"));
+    assert!(!contains_private_or_executable_marker(
+        &proposal.summary_line()
+    ));
+}
+
+#[test]
+fn gene_purpose_relabel_accepts_aged_low_fitness_preview() {
+    let aged_gene = ReasoningGene::new(
+        "gene:test:aging-routing",
+        ReasoningGeneKind::Routing,
+        "routing threshold tuner",
+        "keeps adaptive attention thresholds bounded by task and hardware evidence",
+    )
+    .with_tags(["routing", "threshold"])
+    .with_health(9, 0.50, 0.18);
+    let current = GenePurposeRecord::from_reasoning_gene(
+        TaskProfile::Coding,
+        "tenant:local",
+        GenePurposeEvidenceClass::HealthMetadata,
+        "genome:test:stable",
+        &aged_gene,
+    );
+    let evidence =
+        sample_gene_purpose_evidence().with_health(GenePurposeFreshness::Aging, 0.48, 0.62);
+
+    let proposal = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+
+    assert!(proposal.accepted(), "{:?}", proposal.reason_codes);
+    assert_eq!(current.freshness, GenePurposeFreshness::Aging);
+    assert_eq!(
+        proposal.proposed_record.freshness,
+        GenePurposeFreshness::Aging
+    );
+    assert!(proposal.proposed_record.is_preview_only());
+    for tag in ["purpose_ontology", "relabel", "preview_only"] {
+        assert!(
+            proposal.proposed_tags.contains(&tag.to_owned()),
+            "{:?}",
+            proposal.proposed_tags
+        );
+    }
+}
+
+#[test]
+fn gene_purpose_relabel_quarantines_conflicting_labels() {
+    let current = sample_gene_purpose_record();
+    let evidence = GenePurposeRelabelEvidence::new(
+        GenePurposeEvidenceClass::Reflection,
+        stable_redaction_digest(["evidence", "conflict"]),
+        "digest-only reflection found a contradiction",
+        "conflicting memory router",
+        "contradict the current purpose with a mutually exclusive runtime policy",
+        "genome:test:stable",
+    );
+
+    let proposal = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+
+    assert!(proposal.quarantined());
+    assert_eq!(proposal.validation_status, GeneValidationStatus::Failed);
+    assert!(
+        proposal
+            .reason_codes
+            .contains(&"conflicting_relabel".to_owned()),
+        "{:?}",
+        proposal.reason_codes
+    );
+    assert!(
+        proposal
+            .reason_codes
+            .contains(&"contradictory_label".to_owned()),
+        "{:?}",
+        proposal.reason_codes
+    );
+}
+
+#[test]
+fn gene_purpose_relabel_quarantines_missing_rollback_anchor() {
+    let mut current = sample_gene_purpose_record();
+    current.rollback_anchor_id.clear();
+    let evidence = sample_gene_purpose_evidence();
+
+    let proposal = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+
+    assert!(proposal.quarantined());
+    assert_eq!(proposal.validation_status, GeneValidationStatus::Failed);
+    assert!(
+        proposal
+            .reason_codes
+            .contains(&"missing_rollback_anchor".to_owned()),
+        "{:?}",
+        proposal.reason_codes
+    );
+}
+
+#[test]
+fn gene_purpose_relabel_quarantines_stale_evidence() {
+    let current = sample_gene_purpose_record();
+    let evidence =
+        sample_gene_purpose_evidence().with_health(GenePurposeFreshness::Stale, 0.64, 0.70);
+
+    let proposal = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+
+    assert!(proposal.quarantined());
+    assert_eq!(proposal.validation_status, GeneValidationStatus::Failed);
+    assert!(
+        proposal.reason_codes.contains(&"stale_evidence".to_owned()),
+        "{:?}",
+        proposal.reason_codes
+    );
+}
+
+#[test]
+fn gene_purpose_relabel_redacts_private_payloads_from_preview_record() {
+    let current = sample_gene_purpose_record();
+    let evidence = GenePurposeRelabelEvidence::new(
+        GenePurposeEvidenceClass::Reflection,
+        stable_redaction_digest(["evidence", "private"]),
+        "prompt: keep secret=raw in digest only",
+        "prompt: private routing note",
+        "secret=raw should never enter a preview purpose record",
+        "genome:test:stable",
+    )
+    .with_tags(["secret=raw"])
+    .without_privacy_check();
+
+    let proposal = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+
+    assert!(proposal.quarantined());
+    assert_eq!(proposal.validation_status, GeneValidationStatus::Failed);
+    for reason in ["privacy_gate_missing", "private_payload_marker"] {
+        assert!(
+            proposal.reason_codes.contains(&reason.to_owned()),
+            "{:?}",
+            proposal.reason_codes
+        );
+    }
+    let summary = proposal.summary_line();
+    let kv_line = proposal.proposed_record.to_kv_line();
+    assert!(summary.contains("redaction-digest:"));
+    assert!(kv_line.contains("redaction-digest:"));
+    assert!(!summary.contains("prompt:"));
+    assert!(!summary.contains("secret="));
+    assert!(!kv_line.contains("prompt:"));
+    assert!(!kv_line.contains("secret="));
+    assert!(!contains_private_or_executable_marker(&summary));
+    assert!(!contains_private_or_executable_marker(&kv_line));
+}
+
+fn sample_gene_purpose_record() -> GenePurposeRecord {
+    let gene = ReasoningGene::new(
+        "gene:test:retrieval-purpose",
+        ReasoningGeneKind::Retrieval,
+        "memory retrieval controller",
+        "select useful semantic, gist, and runtime KV memory with bounded evidence",
+    )
+    .with_tags(["retrieval", "memory_chain"])
+    .with_health(2, 0.82, 0.06);
+
+    GenePurposeRecord::from_reasoning_gene(
+        TaskProfile::Coding,
+        "local_scope",
+        GenePurposeEvidenceClass::Reflection,
+        "genome:test:stable",
+        &gene,
+    )
+}
+
+fn sample_gene_purpose_evidence() -> GenePurposeRelabelEvidence {
+    GenePurposeRelabelEvidence::new(
+        GenePurposeEvidenceClass::Reflection,
+        stable_redaction_digest(["evidence", "purpose", "retrieval"]),
+        "digest-only reflection confirms retrieval purpose",
+        "bounded memory retrieval selector",
+        "selects validated memory and runtime KV evidence for coding tasks",
+        "genome:test:stable",
+    )
+    .with_tags(["memory", "coding", "bounded_kv"])
 }
 
 fn contains_executable_payload_marker(line: &str) -> bool {
