@@ -61,6 +61,7 @@ pub enum TenantResourceLane {
     TraceEvidence,
     SelfEvolvingMemory,
     ApprovalPacket,
+    EvolutionGoalQueue,
 }
 
 impl TenantResourceLane {
@@ -73,6 +74,7 @@ impl TenantResourceLane {
             Self::TraceEvidence => "trace_evidence",
             Self::SelfEvolvingMemory => "self_evolving_memory",
             Self::ApprovalPacket => "approval_packet",
+            Self::EvolutionGoalQueue => "evolution_goal_queue",
         }
     }
 }
@@ -646,6 +648,7 @@ fn str_to_lane(value: &str) -> Option<TenantResourceLane> {
         "trace_evidence" => Some(TenantResourceLane::TraceEvidence),
         "self_evolving_memory" => Some(TenantResourceLane::SelfEvolvingMemory),
         "approval_packet" => Some(TenantResourceLane::ApprovalPacket),
+        "evolution_goal_queue" => Some(TenantResourceLane::EvolutionGoalQueue),
         _ => None,
     }
 }
