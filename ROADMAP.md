@@ -479,20 +479,25 @@ Status date: 2026-06-22.
   reflection, and approval-gated memory/genome admission.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
-  #20 self-evolution experiment ledger / rollback / approval gates, and #25
-  reinforced KV-Fusion scoring and admission arbitration.
-- Next priority is #43 `[Runtime] Build unified Noiron engine orchestration
-  loop`. It should close the deterministic path from request intake through
-  route selection, memory/KV loading, gene-splice preview, runtime adapter
-  execution, validation/reflection, and approval-gated memory/genome write
-  candidates.
+  #20 self-evolution experiment ledger / rollback / approval gates, #25
+  reinforced KV-Fusion scoring and admission arbitration, #43 unified Noiron
+  engine orchestration loop, and #44 KV residency / compaction /
+  replay-safe retention policy.
+- Current active lane and next priority is #45 `[Routing] Add compute-budget
+  scheduler and wasted-compute telemetry`. The implementation evidence should
+  be checked against the issue acceptance criteria: deterministic budget-driven
+  route fanout changes, benchmark comparison with and without budget-aware
+  routing, saved-context / skipped-chunk / validation-cost telemetry, and
+  correctness-anchor preservation when work is pruned.
 - v1.0 remains the target state: a production-grade local Agent Harness plus a
   test-time scaling inference engine for self-owned Transformer models.
-- PR #1 is currently open, mergeable, and green on checks, but still needs
-  review approval before merge.
+- PR #1 is currently open and mergeable, but still needs review approval before
+  merge. The `focused Rust crates` checks are still `IN_PROGRESS`, so the PR
+  must not be treated as green yet.
 - GitHub issue #31 is the master tracker for the future implementation roadmap.
-  Issues #43 and #72-#78 extend that tracker with the next runtime/gene/eval/
-  memory/governance/deployment workstream.
+  Its body now marks #43 and #44 complete while #45 remains open; issues #45
+  and #72-#78 extend that tracker with the next routing/gene/eval/memory/
+  governance/deployment workstream.
 
 ## Version Plan / 版本计划
 
@@ -735,14 +740,16 @@ Status date: 2026-06-22.
   uncertainty-bearing token totals, so production sweeps can prove token-level
   entropy/logprob feedback remains present across every device)
 - v0.8: unified Noiron orchestration loop and gated self-evolution admission
-  (target: issue #43 should provide a deterministic request path that composes
+  (baseline: issue #43 has provided the deterministic request path that composes
   FHT-DKE routing, adaptive attention thresholds, disk-backed KV memory,
   reinforced KV-Fusion, task-aware hierarchy adjustment, Reasoning Genome
   express/memory-chain splicing, runtime adapter/model execution, validation,
   closed-loop reflection, experiment ledger evidence, rollback plans, and
   approval-gated memory/genome admission. Durable writes stay preview-only
   until writer gates, validation evidence, rollback anchors, privacy/license
-  checks, and maintainer/operator approval are all present.)
+  checks, and maintainer/operator approval are all present. Issue #44 is the
+  completed KV residency/compaction baseline, and #45 is the active follow-on
+  routing-budget and wasted-compute telemetry lane.)
 - v1.0: production-grade local Agent Harness and test-time scaling inference
   engine for self-owned Transformer models
 
@@ -762,10 +769,19 @@ Status date: 2026-06-22.
 - #25 `[Memory] Reinforced KV-Fusion scoring and admission arbitration`:
   advanced memory reinforcement/admission scoring; treat as a completed/closed
   v0.7 memory-quality lane feeding v0.8 orchestration.
-- #43 `[Runtime] Build unified Noiron engine orchestration loop`: next priority.
-  Connect routing, disk-backed KV memory, Reasoning Genome splicing, model
-  adapter execution, validation, reflection, and approval-gated
-  memory/genome admission into one deterministic engine path.
+- #43 `[Runtime] Build unified Noiron engine orchestration loop`: completed /
+  closed v0.8 baseline. Connects routing, disk-backed KV memory, Reasoning
+  Genome splicing, model adapter execution, validation, reflection, and
+  approval-gated memory/genome admission into one deterministic engine path.
+- #44 `[Memory] Add KV residency, compaction, and replay-safe retention
+  policy`: completed / closed v0.8 memory baseline for hot/warm/cold
+  residency, deterministic compaction, stale retirement, replay-safe retention,
+  and rollback-anchor preservation.
+- #45 `[Routing] Add compute-budget scheduler and wasted-compute telemetry`:
+  current active lane. Verify the already reported implementation evidence
+  against the acceptance criteria before closing: deterministic fanout changes,
+  before/after compute benchmarks, saved-context / skipped-low-value-chunk /
+  validation-cost telemetry, and correctness anchors preserved under pruning.
 - #72 `[Genome] Add gene purpose ontology and relabel validator`: make gene
   purpose explicit, validate relabel operations, and reduce stale-label drift
   before Gene Scissors edits become durable.
@@ -790,32 +806,40 @@ Status date: 2026-06-22.
 
 ## R8x/R9x Milestone Backlog / R8x/R9x 里程碑候选
 
-- R84 / #43: unified Noiron orchestration preview path. Produce a read-only
-  orchestration packet for request intake, route plan, memory/KV candidates,
-  gene splice preview, runtime adapter selection, validation/reflection result,
-  and admission candidates.
-- R85: Reasoning DNA dual-chain stabilization. Normalize `express_chain` and
+- R84 / #43 completed baseline: unified Noiron orchestration preview path.
+  Produces a read-only orchestration packet for request intake, route plan,
+  memory/KV candidates, gene splice preview, runtime adapter selection,
+  validation/reflection result, and admission candidates.
+- R85 / #44 completed baseline: KV residency and replay-safe retention.
+  Normalizes hot/warm/cold memory residency, deterministic compaction, stale
+  retirement, benchmark reporting, and rollback-anchor preservation for the
+  orchestration baseline.
+- Next active / #45: compute-budget scheduler and wasted-compute telemetry.
+  Verify budget-aware route fanout, before/after compute benchmarks,
+  saved-context and skipped-work telemetry, validation-cost reporting, and
+  correctness-anchor preservation before closing the issue.
+- R86: Reasoning DNA dual-chain stabilization. Normalize `express_chain` and
   `memory_chain` records with segment ids, source ids, purpose tags, version,
   confidence, last validation result, and rollback anchors.
-- R86: Gene splicing and mutation taxonomy. Gate variable splicing, intron
+- R87: Gene splicing and mutation taxonomy. Gate variable splicing, intron
   filtering, segment isolation, insertion/deletion, mislabel, truncation, format
   drift, stale-label, schema, privacy, and KV-shape findings as read-only
   `MutationPlan` evidence.
-- R87: DNA aging and relabel/rejuvenation. Add relabel plans for expired,
+- R88: DNA aging and relabel/rejuvenation. Add relabel plans for expired,
   drifting, or semantically aged memory/gene segments based on evidence
   summaries, purpose tags, confidence, version, and validation state.
-- R88: malignant mutation quarantine and regeneration. Quarantine harmful,
+- R89: malignant mutation quarantine and regeneration. Quarantine harmful,
   polluted, low-confidence, or secret-risk segments with digest-only reasons and
   rollback records; allow repair/regeneration/re-admission only after validation
   and operator approval.
-- R89: self-evolution writer gate consolidation. Unify memory, genome, and
+- R90: self-evolution writer gate consolidation. Unify memory, genome, and
   experiment-ledger writer gates so all durable writes remain preview/read-only
   until validation, rollback, privacy/license, and maintainer/operator approval
   requirements pass.
-- R90: reference backlog verification. Fact-check and license-review
+- R91: reference backlog verification. Fact-check and license-review
   DNA-inspired, chunk/KV, and Rust inference references before any behavior spec
   is promoted to an implementation issue.
-- R91: clean-room implementation audit. Reconfirm `fortunto2/rust-code` stays
+- R92: clean-room implementation audit. Reconfirm `fortunto2/rust-code` stays
   behind MIT attribution review and `Kuberwastaken/claurst` remains GPL-3.0
   concept-only unless GPL obligations are explicitly accepted.
 
