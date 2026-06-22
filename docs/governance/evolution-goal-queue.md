@@ -85,6 +85,13 @@ writer gate returns `preview_only`; with an explicit write-enabled policy it can
 only reach `ready_for_explicit_apply`. A separate apply workflow is still
 required before any durable queue append or autonomous execution may happen.
 
+`SelfGoalQueueApplyPlanner` now adds the explicit apply-plan layer for that
+future workflow. It cross-checks the live queue digest, append packet, rollback
+anchor, expected resulting queue digest, and matching writer-gate candidate. A
+default writer gate still holds the plan; a write-enabled writer gate can make
+the plan `ready_for_explicit_apply`, but the plan remains `read_only=true`,
+`write_allowed=false`, and `applied=false`.
+
 ## Queue Evaluation
 
 `EvolutionGoalQueue::evaluate()` returns a read-only

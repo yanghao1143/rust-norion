@@ -18,7 +18,11 @@ This answers the autonomy question in stages:
   unified writer gate as an `evolution_goal_queue` preflight candidate. The
   default gate still returns `preview_only`; a write-enabled policy can only
   return `ready_for_explicit_apply`, never apply by itself.
-- Phase 5, later: execute admitted goals automatically inside budget,
+- Phase 5, available now as preview: build a self-goal queue apply plan from
+  the current queue, append packet, and writer-gate report. The plan records the
+  rollback anchor and expected resulting queue digest, but still keeps
+  `write_allowed=false` and `applied=false`.
+- Phase 6, later: execute admitted goals automatically inside budget,
   rollback, branch-protection, and writer-gate limits.
 
 ## Rust Surface
@@ -34,6 +38,8 @@ The executable companion is `src/self_goal_proposal.rs`, which exposes:
 - `SelfGoalAdmissionReport`
 - `SelfGoalQueuePreviewGate`
 - `SelfGoalQueuePreviewReport`
+- `SelfGoalQueueApplyPlanner`
+- `SelfGoalQueueApplyReport`
 - `UnifiedWriterGateCandidate::self_goal_queue_preview(report)`
 - `default_self_goal_proposal_report(queue)`
 - `default_noiron_self_goal_proposal_report()`
@@ -41,6 +47,8 @@ The executable companion is `src/self_goal_proposal.rs`, which exposes:
 - `default_noiron_self_goal_admission_report()`
 - `default_self_goal_queue_preview_report(queue, proposal_report, admission_report)`
 - `default_noiron_self_goal_queue_preview_report()`
+- `default_self_goal_queue_apply_report(queue, queue_preview_report, writer_gate_report)`
+- `default_noiron_self_goal_queue_apply_report()`
 
 ## Candidate Contract
 
@@ -163,3 +171,26 @@ disabled. If a future explicit policy enables durable writes and every evidence,
 rollback, privacy, license, approval, and source-flag gate passes, the decision
 can become `ready_for_explicit_apply`. The gate still does not mutate the
 durable queue, create branches, or start autonomous execution.
+
+## Queue Apply Plan
+
+`SelfGoalQueueApplyPlanner` is the fifth safe step. It consumes the current
+`EvolutionGoalQueue`, the queue append-preview packet, and the unified
+writer-gate report. It rejects stale previews when the current queue digest no
+longer matches, rejects unsafe source write/apply flags, requires the writer
+record to target the `evolution_goal_queue` domain, and holds while the default
+writer gate remains `preview_only`.
+
+When a write-enabled writer gate reaches `ready_for_explicit_apply`, the apply
+planner emits a digest-only apply record with:
+
+- current queue digest;
+- rollback anchor digest;
+- append-record digest;
+- expected resulting queue digest;
+- matching writer-gate candidate and refs digest.
+
+This is the first point where rust-norion can safely say a self-proposed goal is
+ready to be applied to the pursuit queue. It is still not the durable append
+executor: the report remains `read_only=true`, `write_allowed=false`, and
+`applied=false`.

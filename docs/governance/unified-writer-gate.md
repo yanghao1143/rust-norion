@@ -62,6 +62,11 @@ The JSONL trace schema currently accepts only preview/hold/reject evidence with
 until a future issue adds a scoped apply workflow and maintainer approval
 binding.
 
+For self-goal queue appends, `SelfGoalQueueApplyPlanner` is now the next
+preview-only layer after the unified writer gate. It can turn a queue writer
+preflight into a digest-only apply plan, but it still does not mutate the
+durable pursuit queue.
+
 ## Trace Evidence
 
 `UnifiedWriterGateReport::json_line()` emits

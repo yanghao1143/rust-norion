@@ -67,3 +67,8 @@ scope before approving a merge.
 See [NOTICE.md](NOTICE.md) and
 [docs/governance/public-collaboration.md](docs/governance/public-collaboration.md)
 for license, clean-room, and branch-protection details.
+See
+[docs/governance/open-source-community.md](docs/governance/open-source-community.md)
+for the proposed long-term permissive-core/community strategy. Until a separate
+license-transition PR changes the controlling files, the current
+non-commercial license remains in force.

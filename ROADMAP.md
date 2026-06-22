@@ -532,8 +532,12 @@ writer-gate consolidation baselines.
   candidate. `UnifiedWriterGateCandidate::self_goal_queue_preview` now feeds
   that append packet into the shared `evolution_goal_queue` writer preflight:
   default policy remains `preview_only`, and write-enabled policy can only
-  reach `ready_for_explicit_apply`. Execution and durable queue writes remain
-  blocked behind a later explicit apply workflow.
+  reach `ready_for_explicit_apply`. `SelfGoalQueueApplyPlanner` now adds the
+  explicit apply-plan layer: it cross-checks the live queue digest, rollback
+  anchor, append digest, expected resulting queue digest, and matching
+  writer-gate candidate while still keeping `write_allowed=false` and
+  `applied=false`. Execution and durable queue writes remain blocked behind a
+  later explicit append executor.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -1096,10 +1100,12 @@ writer-gate consolidation baselines.
   `SelfGoalQueuePreviewGate` then converts that one preview-admissible goal
   into a digest-only append packet with existing/resulting queue digests and a
   redacted goal record line. `UnifiedWriterGateCandidate::self_goal_queue_preview`
-  now preflights that packet as an `evolution_goal_queue` writer candidate.
-  No branch creation, durable memory/genome mutation, experiment-ledger write,
-  queue write, or autonomous execution happens without a later explicit apply
-  workflow.
+  now preflights that packet as an `evolution_goal_queue` writer candidate, and
+  `SelfGoalQueueApplyPlanner` turns a ready writer preflight into a digest-only
+  apply plan with rollback and expected-resulting-queue digests. No branch
+  creation, durable memory/genome mutation, experiment-ledger write, queue
+  write, or autonomous execution happens without a later explicit append
+  executor.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
