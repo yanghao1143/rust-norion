@@ -524,9 +524,10 @@ writer-gate consolidation baselines.
   CLI runner, and benchmark gate feed wiring next. The first safe answer to
   "when can it set its own goals?" is now in place as
   `SelfGoalProposalReport`: rust-norion can propose the next R97/R98 goals as
-  preview-only, digest-only candidate records, while execution and queue
-  admission remain blocked behind validation, budget, rollback,
-  trace/schema, privacy/license, and maintainer/operator approval gates.
+  preview-only, digest-only candidate records. `SelfGoalAdmissionGate` now
+  evaluates whether a proposed goal would be admissible through the normal
+  success, budget, rollback, and approval logic, while execution and durable
+  queue writes remain blocked behind future writer gates.
 - Recently advanced or closed implementation lanes include #16 append-only
   disk-backed KV ledger writer gates, #17 FHT-DKE adaptive router scoring loop,
   #20 self-evolution experiment ledger / rollback / approval gates, #25
@@ -1078,10 +1079,13 @@ writer-gate consolidation baselines.
 - R97/R98 self-goal proposal preview: `SelfGoalProposalReport` generates the
   next bounded candidate goals from the active pursuit queue, including R97
   endpoint/CLI wiring, R97 benchmark feed wiring, the R98 memory-consolidation
-  successor, and a governance gate for future autonomous execution. This is the
-  proposal phase only: no branch creation, durable memory/genome mutation,
-  experiment-ledger write, or queue admission happens without the existing
-  approval and rollback gates.
+  successor, and a governance gate for future autonomous execution.
+  `SelfGoalAdmissionGate` adds the preview-only admission review for those
+  candidates: it can hold on active prior goals, missing evidence, missing
+  approval, or the one-goal admission limit; reject rollback/budget/unsafe
+  policy cases; or mark one fully evidenced candidate as preview-admissible.
+  No branch creation, durable memory/genome mutation, experiment-ledger write,
+  or queue write happens without future writer-gate promotion.
 - R98 / #76/#36/#42: self-evolving memory consolidation. #76 provides the
   completed preview-only consolidation/forgetting worker baseline. #36/#42
   continue deeper episodic, heuristic, tool-reliability store evolution and A/B
