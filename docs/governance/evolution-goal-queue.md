@@ -47,9 +47,11 @@ GPL-3.0 sources remain concept-only unless GPL obligations are explicitly
 accepted. R97 can now focus on local service/API behavior and multilingual
 coding evaluation without importing external source or mutating memory/genome
 state by default. The first R97 readiness bridge maps the #75 corpus to
-deterministic service request plans and digest-only evidence while the queue
-remains on R97 for endpoint, runner, streaming/cancellation, and diagnostics
-wiring. The queue can advance only when the active goal has
+deterministic service request plans and digest-only evidence, and the offline
+mock runner now executes those plans through stream, cancellation, diagnostics,
+health, model-capability, max-token, and Rust-validation contracts. The queue
+remains on R97 for endpoint or CLI runner wiring, benchmark gate feed, and
+artifact serialization. The queue can advance only when the active goal has
 compiler/test/benchmark/trace or ledger evidence for its success gate and
 maintainer/operator approval for promotion. If a goal reaches its target,
 exhausts budget, fails a rollback gate, or waits for approval, later goals
