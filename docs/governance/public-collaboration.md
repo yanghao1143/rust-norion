@@ -32,6 +32,9 @@ directly. The default branch is protected and requires:
 - conversation resolution before merge
 - no force pushes or branch deletion
 
+The branch protection checklist lives at
+`docs/governance/branch-protection-checklist.md`.
+
 The repository owner can reject, request changes, narrow scope, or revert a
 contribution when it fails safety, license, roadmap, or validation gates.
 

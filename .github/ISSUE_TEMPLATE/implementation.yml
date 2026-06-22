@@ -1,0 +1,49 @@
+name: Implementation slice
+description: Track a scoped rust-norion implementation change.
+title: "[Area] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What user-visible or system-visible behavior should change?
+      placeholder: "Add a preview-only gate for ..."
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List the files/modules and side effects in scope.
+      placeholder: |
+        - modules:
+        - side effects:
+        - out of scope:
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation evidence
+      description: Commands, tests, benchmarks, trace gates, and expected evidence.
+      placeholder: |
+        - cargo fmt --all -- --check
+        - cargo check -q --package rust-norion
+        - cargo test -q ...
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checklist
+      options:
+        - label: No raw prompts, answers, secrets, or private payloads will be exposed.
+          required: true
+        - label: Durable writes remain preview-only unless a linked writer/apply gate is included.
+          required: true
+        - label: Rollback or revert expectations are described for behavior-changing work.
+          required: true
+        - label: External code references are clean-room or license-reviewed.
+          required: true

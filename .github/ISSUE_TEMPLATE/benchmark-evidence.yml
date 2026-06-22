@@ -1,0 +1,48 @@
+name: Benchmark evidence
+description: Attach benchmark, trace-schema, or validation evidence for a roadmap slice.
+title: "[Benchmark] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: claim
+    attributes:
+      label: Claim being validated
+      description: What performance, safety, or behavior claim does this evidence support?
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands run
+      placeholder: |
+        - cargo test -q ...
+        - cargo run -- ...
+        - benchmark command:
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Results summary
+      description: Include counts, digests, pass/fail status, and regression budget.
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Redacted artifacts
+      description: Link trace rows, benchmark summaries, issue comments, or stable digests.
+    validations:
+      required: false
+  - type: checkboxes
+    id: evidence_safety
+    attributes:
+      label: Evidence safety
+      options:
+        - label: No raw prompts, answers, secrets, local private paths, or payloads are included.
+          required: true
+        - label: Evidence includes enough scope to support the stated claim.
+          required: true
+        - label: Any failed or skipped validation is disclosed.
+          required: true

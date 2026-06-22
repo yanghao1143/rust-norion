@@ -1,1 +1,12 @@
+# Default owner for all repository changes.
 * @yanghao1143
+
+# Protected rust-norion safety surfaces.
+/src/self_evolution.rs @yanghao1143
+/src/trace/ @yanghao1143
+/src/model_service/ @yanghao1143
+/src/kv_cache.rs @yanghao1143
+/src/memory_admission.rs @yanghao1143
+/src/reasoning_genome.rs @yanghao1143
+/docs/governance/ @yanghao1143
+/.github/ @yanghao1143
