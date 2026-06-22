@@ -1,0 +1,389 @@
+\documentclass[10pt]{article}
+
+\usepackage[margin=0.8in]{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\title{Bio-Inspired Inference Control for Local Large Language Models:\\
+A DNA Gene-Chain Architecture in Rust}
+
+\author{
+  rust-norion Project\\
+  Code: \url{https://github.com/yanghao1143/rust-norion}\\
+  Draft technical report, June 2026
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Long-context large language model (LLM) applications increasingly require more
+than a fast forward kernel. Private deployments, multi-turn coding assistants,
+tool-using agents, and local research systems must decide which context to keep,
+which memory to persist, when to revise a control policy, and how to reject
+unsafe self-modification. This report presents the architecture of
+\texttt{rust-norion}, a Rust prototype for a bio-inspired inference
+control-layer engine. The system treats reusable reasoning context as a
+``reasoning genome'' composed of explicit expression segments, latent memory
+segments, mutation evidence, rollback anchors, and writer-gated evolution
+records. Unlike runtime-first engines that primarily optimize model execution,
+\texttt{rust-norion} focuses on the control plane around inference:
+disk-backed KV memory, hierarchical routing, adaptive attention thresholds,
+reinforced KV-Fusion, task-aware hierarchy adjustment, reflection loops,
+gene-chain splicing, mutation isolation, and auditable self-goal planning. The
+current implementation is a prototype: durable genome, memory, experiment, and
+self-goal writes remain preview-only unless explicit gates, validation evidence,
+rollback plans, and operator approval are present. We describe the motivation,
+system model, core abstractions, governance gates, current implementation
+status, and evaluation plan needed to turn bio-inspired control from metaphor
+into measurable engineering behavior.
+\end{abstract}
+
+\noindent\textbf{Keywords:} large language models, inference control, local AI,
+long context, KV cache, self-evolution, bio-inspired architecture, Rust.
+
+\section{Introduction}
+
+The dominant open-source LLM infrastructure stack separates into two broad
+families. Runtime-first systems focus on model loading, kernels, quantization,
+streaming, batching, and hardware utilization. Gateway-first systems focus on
+request routing, rate limits, observability, and policy. Both layers are
+necessary, but neither fully addresses a third problem: how a local model
+should govern its own context, memory, routing thresholds, reflection outputs,
+and bounded self-improvement over long periods without frequent weight
+retraining.
+
+\texttt{rust-norion} explores this third layer. It is not designed as a direct
+competitor to high-throughput inference runtimes. Instead, it is a Rust
+control-plane prototype that can sit around a deterministic local runtime today
+and around stronger pluggable model backends later. The design assumes that
+many practical improvements in local AI behavior come from better inference
+control rather than from immediately changing model weights: selecting useful
+context, pruning redundant segments, reusing KV memory, adjusting hierarchy
+weights by task profile, learning from reflection, and blocking unsafe durable
+state changes.
+
+The architecture is intentionally bio-inspired. A biological genome is not only
+a flat sequence of expressed material; it contains regulatory structure,
+non-coding regions, mutation handling, inheritance, repair, and irreversible
+failure boundaries. \texttt{rust-norion} maps these ideas into software
+primitives: an express chain for active reasoning context, a memory chain for
+latent reusable state, a splicer for filtering low-value context, mutation
+detectors for malformed or harmful segments, gene scissors for reversible edit
+plans, and writer gates for previewing durable changes before application.
+
+This report makes three contributions:
+
+\begin{enumerate}[leftmargin=*]
+  \item It defines a DNA-inspired inference control architecture that separates
+  model runtime execution from memory, routing, context governance, and
+  self-evolution policy.
+  \item It describes a Rust implementation strategy for deterministic previews,
+  digest-only evidence, rollback anchors, and explicit apply gates across
+  memory, genome, experiment-ledger, and self-goal queues.
+  \item It identifies a focused evaluation plan for measuring whether the
+  architecture improves long-context efficiency, KV reuse, mutation isolation,
+  and safe self-improvement without claiming production runtime performance.
+\end{enumerate}
+
+\section{Background and Motivation}
+
+Long-context inference exposes a resource-management problem. StreamingLLM
+showed that retaining a small set of attention-sink tokens can stabilize
+streaming language modeling beyond the nominal context window
+\cite{streamingllm}. CEPE shows that parallel context encoding can extend
+decoder-only models by chunking long inputs and exposing additional context via
+cross-attention \cite{cepe}. Biosequence models such as Evo demonstrate that
+Transformer-style sequence modeling can represent biological structure across
+molecular and genome scales \cite{evo}. These works motivate, but do not by
+themselves provide, a local software control plane for deciding how an LLM
+should persist, splice, repair, inherit, and audit its own inference context.
+
+The \texttt{rust-norion} hypothesis is that long-running local agents need an
+explicit inference genome: a structured control state that records what should
+be expressed now, what should remain latent, what can be reused, what should be
+cut, and which changes are too risky to apply automatically. This is especially
+important for local coding assistants and enterprise-style deployments where
+raw prompts, private datasets, credentials, model weights, and unreviewed
+third-party code must not leak into persistent memory.
+
+The project therefore optimizes for a different target than a runtime benchmark
+leaderboard. The desired property is a safe adaptive loop:
+
+\[
+  \text{observe} \rightarrow \text{route} \rightarrow \text{infer}
+  \rightarrow \text{reflect} \rightarrow \text{propose}
+  \rightarrow \text{validate} \rightarrow \text{apply or rollback}.
+\]
+
+At the current prototype stage, the last step is intentionally blocked for many
+state classes. Preview reports can compute candidate writes and apply plans,
+but durable side effects require explicit gates.
+
+\section{System Overview}
+
+\subsection{Control Plane and Runtime Boundary}
+
+The system separates a model runtime from an inference control plane. The model
+runtime owns tokenizer behavior, embeddings, architecture shape, weights,
+forward kernels, and optional KV import/export. The control plane owns context
+selection, memory tiering, routing thresholds, reflection, process reward,
+recursive scheduling, genome edits, and durable-state governance.
+
+This separation is implemented through stable Rust traits such as
+\texttt{InferenceBackend} and \texttt{ModelRuntime}. A deterministic local
+runtime can be used for tests and ABI validation. A production backend can later
+attach behind the same boundary if it satisfies manifest, device-contract, KV
+shape, token uncertainty, and trace requirements. The point is not to make the
+prototype kernel outperform mature runtimes; the point is to keep the
+control-layer logic portable across runtimes.
+
+\subsection{Reasoning Genome}
+
+The reasoning genome is a structured representation of inference control state.
+The main conceptual components are:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Express chain}: active segments that may affect the current
+  response or route decision.
+  \item \textbf{Memory chain}: latent reusable segments that may be retrieved,
+  fused, decayed, or forgotten.
+  \item \textbf{Gene segment}: a typed unit of context, evidence, routing
+  policy, memory admission, or repair metadata.
+  \item \textbf{Splicer}: a filter that separates useful expressed segments
+  from intron-like redundant material.
+  \item \textbf{Mutation detector}: a classifier for malformed, stale,
+  conflicting, private, executable, or low-fitness segments.
+  \item \textbf{Gene scissors}: a reversible edit planner that records before
+  and after digests, forensic copies, stable anchors, lineage, and rollback
+  conditions.
+\end{itemize}
+
+The biological analogy is constrained by engineering value. ``Intron'' means
+low-value context that consumes budget. ``Mutation'' means a segment that is
+format-invalid, harmful, stale, private, or behaviorally regressive. ``Repair''
+means a validated replacement or isolation plan, not uncontrolled model
+rewriting.
+
+\subsection{Disk-Backed KV and Memory Tiers}
+
+\texttt{rust-norion} uses disk-backed memory plans and ledger-style write gates
+so useful context can persist across sessions without turning raw prompts into
+uncontrolled durable data. Hot/Warm/Cold tiering, KV-Fusion, and memory
+consolidation are treated as control-plane decisions. Memory candidates carry
+quality signals, process reward, privacy classification, rollback anchors,
+review packets, and read-only/write/applied flags.
+
+The design goal is to make local long-context behavior practical on constrained
+hardware. Rather than caching every token forever, the control layer can prefer
+high-fitness memory, demote cold state, and keep write admission explicit.
+
+\section{Adaptive Routing and Hierarchy}
+
+The routing layer estimates when a token or segment should use local attention,
+global attention, projection, convolution-style fusion, memory lookup, or
+fallback paths. Inputs include entropy, task profile, context length, hardware
+pressure, KV budget, cache hit rate, latency pressure, and device profile.
+
+Task-aware hierarchy adjustment stores profile-specific control weights. Coding
+tasks may prioritize compiler/test evidence and precise local context. Long
+document tasks may prioritize recursive summaries and stable anchors. General
+reasoning may prioritize uncertainty and reflection feedback. In each case, the
+control plane is allowed to adjust thresholds and hierarchy weights, but not
+silently mutate model weights.
+
+Reflection provides another feedback channel. Draft quality, structured issues,
+revision actions, and process reward can update future routing and memory
+admission. The target is test-time adaptation: improve how the model is used
+without assuming that every interaction triggers training.
+
+\section{Self-Evolution Governance}
+
+\subsection{Preview-Only State Changes}
+
+The project treats durable state mutation as a safety boundary. Memory writes,
+genome edits, experiment-ledger promotions, and self-goal queue appends default
+to preview-only. Preview reports can include counts, digests, rollback anchors,
+and reason codes, but raw prompts, hidden reasoning, credentials, private
+payloads, and unreviewed source content must not enter durable traces.
+
+\subsection{Unified Writer Gate}
+
+The unified writer gate normalizes candidate writes from multiple domains. It
+evaluates review packet references, evidence references, rollback readiness,
+privacy checks, license checks, operator approval, approval-reference matching,
+source read-only flags, source write flags, and source applied flags. Its
+decisions are:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{preview\_only}: safe evidence exists, but durable writes are
+  disabled.
+  \item \texttt{hold}: required evidence is incomplete.
+  \item \texttt{reject}: privacy, license, source-write, source-active, or
+  source-applied safety failed.
+  \item \texttt{ready\_for\_explicit\_apply}: all gates passed under an explicit
+  write-enabled policy, but application still requires a scoped apply workflow.
+\end{itemize}
+
+\subsection{Self-Goal Queue}
+
+The self-goal mechanism answers when the system can set its own goals. The
+answer is staged. First, \texttt{SelfGoalProposalReport} proposes bounded
+candidate goals. Second, \texttt{SelfGoalAdmissionGate} evaluates whether a
+candidate would be admissible under success evidence, budget, rollback, and
+approval constraints. Third, \texttt{SelfGoalQueuePreviewGate} emits a
+digest-only append packet for one admissible candidate. Fourth, the unified
+writer gate preflights that packet as an \texttt{evolution\_goal\_queue}
+candidate. Fifth, \texttt{SelfGoalQueueApplyPlanner} builds a digest-only apply
+plan with live queue digest, rollback anchor, append digest, expected resulting
+queue digest, and matching writer-gate refs. Even here,
+\texttt{write\_allowed=false} and \texttt{applied=false}; a future append
+executor must apply the plan explicitly.
+
+This design lets the system reason about its next work without giving it a
+blank check to mutate durable project state.
+
+\section{Implementation Status}
+
+The public code is available at
+\url{https://github.com/yanghao1143/rust-norion}. As of this draft, the
+repository contains a Rust prototype with deterministic control-plane modules,
+trace schema gates, local runtime boundaries, memory admission previews,
+reasoning genome governance, gene-scissors transaction journals, self-evolution
+preflights, writer gates, and self-goal queue apply planning. The implementation
+also includes tests for preview-only behavior, digest-only records, rollback
+anchors, unsafe source-flag rejection, duplicate-goal holds, and writer-gate
+readiness.
+
+The project should be interpreted as a control-layer prototype, not as a
+production LLM runtime. It does not claim to outperform mature Rust inference
+runtimes on kernel throughput. The current deterministic runtime is valuable
+because it makes governance behavior testable and reproducible. Production
+kernel integration remains a runtime-boundary problem.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Layer & Purpose & Current stance \\
+\midrule
+Runtime boundary & Backend traits, manifest, device contract & Prototype with deterministic paths \\
+KV memory & Disk-backed admission and tier plans & Preview/gated durable writes \\
+Reasoning genome & Gene segments, scissors, lineage, repair & Preview/gated edits \\
+Routing/hierarchy & Adaptive thresholds and task profiles & Control-plane tests and traces \\
+Self-evolution & Experiments, promotion, rollback & Preview/gated promotion \\
+Self-goals & Proposal, admission, preview, apply plan & No autonomous append executor yet \\
+\bottomrule
+\end{tabular}
+\caption{Summary of the rust-norion prototype layers.}
+\end{table}
+
+\section{Evaluation Plan}
+
+The architecture should be evaluated with measurements aligned to its real
+claim: better inference control, not raw kernel speed. The proposed benchmark
+suite should include:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Context compression}: token or segment reduction from splicing
+  while preserving task-relevant anchors.
+  \item \textbf{Mutation isolation}: rate at which malformed/private/executable
+  segments are isolated before expression or durable write.
+  \item \textbf{Repair success}: proportion of structured segment errors that
+  can be corrected and validated without contaminating the full chain.
+  \item \textbf{KV reuse}: hit rate and latency improvement from reinforced
+  KV-Fusion and tiered residency.
+  \item \textbf{Routing efficiency}: reduction in wasted global attention or
+  long-context compute under equivalent task quality.
+  \item \textbf{Self-evolution safety}: count of proposed changes, admitted
+  previews, held plans, rejected unsafe writes, applied changes, and rollbacks.
+  \item \textbf{Local deployment reproducibility}: deterministic behavior across
+  CPU-only, integrated GPU, mobile, edge, browser-WASM, and accelerator profile
+  simulations where possible.
+\end{enumerate}
+
+The most important reporting rule is to keep baseline and after-change evidence
+together. A self-evolution claim should not be accepted if it only shows that a
+loop ran; it should show measurable control-plane movement, validation success,
+and rollback safety.
+
+\section{Open Source Strategy}
+
+The project is best positioned as a small, distinctive research/engineering
+codebase rather than a broad model-serving platform. Community work should
+therefore focus on gene-chain control, memory governance, runtime boundaries,
+tests, examples, and reproducible benchmark evidence.
+
+For broader adoption, the long-term license direction should favor a permissive
+open core where contributors and users can build commercial products around the
+basic control-layer primitives, while enterprise-specific multi-tenancy,
+advanced audit suites, private deployment support, and specialized evolution
+operators can remain commercial add-ons. Until a formal license transition is
+approved, the repository's existing license remains controlling.
+
+\section{Limitations}
+
+The architecture is early and should not be oversold. Several risks remain.
+First, the biological metaphor can become harmful if it adds terminology
+without measurable benefit. Every gene-chain primitive must correspond to a
+clear engineering behavior. Second, a single-maintainer project cannot
+reasonably compete with runtime teams on every model architecture, accelerator,
+and optimized kernel. The backend boundary must stay pluggable. Third,
+self-evolution is only useful if it is validated and reversible; otherwise it
+becomes technical debt with a more exciting name. Fourth, privacy and licensing
+governance must remain strict because long-lived memory can amplify mistakes.
+
+\section{Conclusion}
+
+\texttt{rust-norion} proposes a bio-inspired inference control architecture for
+local LLM systems. The core idea is to treat context, memory, routing, repair,
+and self-evolution as a governed reasoning genome around a pluggable model
+runtime. This shifts the research question from ``How fast is the kernel?'' to
+``How safely and efficiently can a local model use, persist, repair, and evolve
+its control state?'' The current Rust prototype implements many of the
+governance surfaces needed to explore that question: digest-only previews,
+rollback anchors, gene-scissors journals, memory admission plans, writer gates,
+and self-goal apply planning. The next step is to connect these surfaces to
+focused demos and benchmarks that make the benefits measurable.
+
+\begin{thebibliography}{9}
+
+\bibitem{attention}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention Is All You Need.
+\textit{Advances in Neural Information Processing Systems}, 2017.
+
+\bibitem{streamingllm}
+Guangxuan Xiao, Yuandong Tian, Beidi Chen, Song Han, and Mike Lewis. Efficient
+Streaming Language Models with Attention Sinks. arXiv:2309.17453, 2023.
+
+\bibitem{cepe}
+Howard Yen, Tianyu Gao, and Danqi Chen. Long-Context Language Modeling with
+Parallel Context Encoding. arXiv:2402.16617, 2024.
+
+\bibitem{evo}
+Eric Nguyen, Michael Poli, Matthew G. Durrant, Brian Kang, Dhruva Katrekar, and
+collaborators. Sequence modeling and design from molecular to genome scale with
+Evo. \textit{Science}, 2024.
+
+\bibitem{rustnorion}
+yanghao1143 and contributors. rust-norion: DNA-inspired inference control layer
+in Rust. \url{https://github.com/yanghao1143/rust-norion}, 2026.
+
+\end{thebibliography}
+
+\end{document}

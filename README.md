@@ -31,6 +31,8 @@ time without retraining model weights on every interaction.
 
 For scope discipline and single-maintainer priorities, see
 [Focused Development Strategy](docs/architecture/focused-development-strategy.md).
+For a research-facing draft suitable for arXiv-style refinement, see
+[Bio-Inspired Inference Control Report](docs/research/bio-inspired-inference-control-report.tex).
 
 本项目目标是构建一个实用、自主可控优先的本地推理控制引擎，让自研模型后端在不频繁重训权重的前提下，能够随着使用逐步调整推理策略、记忆选择和计算分配。
 
