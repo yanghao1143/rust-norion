@@ -464,6 +464,17 @@ pub struct TraceSchemaGateReport {
     pub self_goal_queue_evidence_plan_command_templates: usize,
     pub self_goal_queue_evidence_plan_write_allowed: usize,
     pub self_goal_queue_evidence_plan_applied: usize,
+    pub self_goal_queue_evidence_collection_events: usize,
+    pub self_goal_queue_evidence_collection_ready: usize,
+    pub self_goal_queue_evidence_collection_complete: usize,
+    pub self_goal_queue_evidence_collection_steps: usize,
+    pub self_goal_queue_evidence_collection_collected: usize,
+    pub self_goal_queue_evidence_collection_passed: usize,
+    pub self_goal_queue_evidence_collection_failed: usize,
+    pub self_goal_queue_evidence_collection_missing: usize,
+    pub self_goal_queue_evidence_collection_manual_missing: usize,
+    pub self_goal_queue_evidence_collection_write_allowed: usize,
+    pub self_goal_queue_evidence_collection_applied: usize,
     pub evolution_goal_queue_store_write_events: usize,
     pub evolution_goal_queue_store_write_applied: usize,
     pub evolution_goal_queue_store_write_held: usize,
@@ -731,7 +742,7 @@ impl TraceSchemaGateReport {
             self.kv_fusion_saved_tokens
         );
         format!(
-            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
+            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} self_goal_queue_evidence_collection_events={} self_goal_queue_evidence_collection_ready={} self_goal_queue_evidence_collection_complete={} self_goal_queue_evidence_collection_steps={} self_goal_queue_evidence_collection_collected={} self_goal_queue_evidence_collection_passed={} self_goal_queue_evidence_collection_failed={} self_goal_queue_evidence_collection_missing={} self_goal_queue_evidence_collection_manual_missing={} self_goal_queue_evidence_collection_write_allowed={} self_goal_queue_evidence_collection_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
             self.self_evolution_rollback_replay_apply_held,
@@ -820,6 +831,17 @@ impl TraceSchemaGateReport {
             self.self_goal_queue_evidence_plan_command_templates,
             self.self_goal_queue_evidence_plan_write_allowed,
             self.self_goal_queue_evidence_plan_applied,
+            self.self_goal_queue_evidence_collection_events,
+            self.self_goal_queue_evidence_collection_ready,
+            self.self_goal_queue_evidence_collection_complete,
+            self.self_goal_queue_evidence_collection_steps,
+            self.self_goal_queue_evidence_collection_collected,
+            self.self_goal_queue_evidence_collection_passed,
+            self.self_goal_queue_evidence_collection_failed,
+            self.self_goal_queue_evidence_collection_missing,
+            self.self_goal_queue_evidence_collection_manual_missing,
+            self.self_goal_queue_evidence_collection_write_allowed,
+            self.self_goal_queue_evidence_collection_applied,
             self.evolution_goal_queue_store_write_events,
             self.evolution_goal_queue_store_write_applied,
             self.evolution_goal_queue_store_write_held,
@@ -1014,6 +1036,7 @@ impl TraceSchemaGateReport {
             .self_goal_queue_apply_events
             .saturating_add(self.self_goal_queue_continuation_events)
             .saturating_add(self.self_goal_queue_evidence_plan_events)
+            .saturating_add(self.self_goal_queue_evidence_collection_events)
             .saturating_add(self.evolution_goal_queue_store_write_events);
         let self_goal_queue_review = self
             .self_goal_queue_apply_ready_records
@@ -1022,6 +1045,9 @@ impl TraceSchemaGateReport {
             .saturating_add(self.self_goal_queue_evidence_plan_ready)
             .saturating_add(self.self_goal_queue_evidence_plan_held)
             .saturating_add(self.self_goal_queue_evidence_plan_manual)
+            .saturating_add(self.self_goal_queue_evidence_collection_ready)
+            .saturating_add(self.self_goal_queue_evidence_collection_missing)
+            .saturating_add(self.self_goal_queue_evidence_collection_manual_missing)
             .saturating_add(self.evolution_goal_queue_store_write_held);
         let self_goal_queue_blocked = self
             .self_goal_queue_apply_rejected_records
@@ -1031,6 +1057,8 @@ impl TraceSchemaGateReport {
             .saturating_add(self.self_goal_queue_continuation_applied)
             .saturating_add(self.self_goal_queue_evidence_plan_write_allowed)
             .saturating_add(self.self_goal_queue_evidence_plan_applied)
+            .saturating_add(self.self_goal_queue_evidence_collection_write_allowed)
+            .saturating_add(self.self_goal_queue_evidence_collection_applied)
             .saturating_add(self.evolution_goal_queue_store_write_rejected);
         sections.push(OperatorHealthSection::new(
             "self_goal_queue",
@@ -1087,6 +1115,26 @@ impl TraceSchemaGateReport {
                 OperatorHealthMetric::new(
                     "evidence_plan_manual",
                     self.self_goal_queue_evidence_plan_manual,
+                ),
+                OperatorHealthMetric::new(
+                    "evidence_collection_events",
+                    self.self_goal_queue_evidence_collection_events,
+                ),
+                OperatorHealthMetric::new(
+                    "evidence_collection_complete",
+                    self.self_goal_queue_evidence_collection_complete,
+                ),
+                OperatorHealthMetric::new(
+                    "evidence_collection_passed",
+                    self.self_goal_queue_evidence_collection_passed,
+                ),
+                OperatorHealthMetric::new(
+                    "evidence_collection_missing",
+                    self.self_goal_queue_evidence_collection_missing,
+                ),
+                OperatorHealthMetric::new(
+                    "evidence_collection_manual_missing",
+                    self.self_goal_queue_evidence_collection_manual_missing,
                 ),
                 OperatorHealthMetric::new(
                     "store_write_events",
@@ -1577,6 +1625,17 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_goal_queue_evidence_plan_command_templates = 0;
     let mut self_goal_queue_evidence_plan_write_allowed = 0;
     let mut self_goal_queue_evidence_plan_applied = 0;
+    let mut self_goal_queue_evidence_collection_events = 0;
+    let mut self_goal_queue_evidence_collection_ready = 0;
+    let mut self_goal_queue_evidence_collection_complete = 0;
+    let mut self_goal_queue_evidence_collection_steps = 0;
+    let mut self_goal_queue_evidence_collection_collected = 0;
+    let mut self_goal_queue_evidence_collection_passed = 0;
+    let mut self_goal_queue_evidence_collection_failed = 0;
+    let mut self_goal_queue_evidence_collection_missing = 0;
+    let mut self_goal_queue_evidence_collection_manual_missing = 0;
+    let mut self_goal_queue_evidence_collection_write_allowed = 0;
+    let mut self_goal_queue_evidence_collection_applied = 0;
     let mut evolution_goal_queue_store_write_events = 0;
     let mut evolution_goal_queue_store_write_applied = 0;
     let mut evolution_goal_queue_store_write_held = 0;
@@ -1902,6 +1961,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_goal_queue_evidence_plan_write_allowed += summary.write_allowed;
             self_goal_queue_evidence_plan_applied += summary.applied;
         }
+        if let Some(summary) = self_goal_queue_evidence_collection_trace_gate_summary(line) {
+            self_goal_queue_evidence_collection_events += summary.events;
+            self_goal_queue_evidence_collection_ready += summary.ready;
+            self_goal_queue_evidence_collection_complete += summary.complete;
+            self_goal_queue_evidence_collection_steps += summary.steps;
+            self_goal_queue_evidence_collection_collected += summary.collected;
+            self_goal_queue_evidence_collection_passed += summary.passed;
+            self_goal_queue_evidence_collection_failed += summary.failed;
+            self_goal_queue_evidence_collection_missing += summary.missing;
+            self_goal_queue_evidence_collection_manual_missing += summary.manual_missing;
+            self_goal_queue_evidence_collection_write_allowed += summary.write_allowed;
+            self_goal_queue_evidence_collection_applied += summary.applied;
+        }
         if let Some(summary) = evolution_goal_queue_store_write_trace_gate_summary(line) {
             evolution_goal_queue_store_write_events += summary.events;
             evolution_goal_queue_store_write_applied += summary.applied;
@@ -2208,6 +2280,17 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_goal_queue_evidence_plan_command_templates,
         self_goal_queue_evidence_plan_write_allowed,
         self_goal_queue_evidence_plan_applied,
+        self_goal_queue_evidence_collection_events,
+        self_goal_queue_evidence_collection_ready,
+        self_goal_queue_evidence_collection_complete,
+        self_goal_queue_evidence_collection_steps,
+        self_goal_queue_evidence_collection_collected,
+        self_goal_queue_evidence_collection_passed,
+        self_goal_queue_evidence_collection_failed,
+        self_goal_queue_evidence_collection_missing,
+        self_goal_queue_evidence_collection_manual_missing,
+        self_goal_queue_evidence_collection_write_allowed,
+        self_goal_queue_evidence_collection_applied,
         evolution_goal_queue_store_write_events,
         evolution_goal_queue_store_write_applied,
         evolution_goal_queue_store_write_held,
@@ -2515,6 +2598,45 @@ fn self_goal_queue_evidence_plan_trace_gate_summary(
         required_evidence: extract_json_usize_field(line, "required_evidence_count").unwrap_or(0),
         packet_templates: packet_templates.len(),
         command_templates: command_templates.len(),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfGoalQueueEvidenceCollectionTraceGateSummary {
+    events: usize,
+    ready: usize,
+    complete: usize,
+    steps: usize,
+    collected: usize,
+    passed: usize,
+    failed: usize,
+    missing: usize,
+    manual_missing: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn self_goal_queue_evidence_collection_trace_gate_summary(
+    line: &str,
+) -> Option<SelfGoalQueueEvidenceCollectionTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-goal-queue-evidence-collection-v1\"") {
+        return None;
+    }
+
+    Some(SelfGoalQueueEvidenceCollectionTraceGateSummary {
+        events: 1,
+        ready: usize::from(extract_json_bool_field(line, "ready").unwrap_or(false)),
+        complete: usize::from(
+            extract_json_bool_field(line, "collection_complete").unwrap_or(false),
+        ),
+        steps: extract_json_usize_field(line, "planned_step_count").unwrap_or(0),
+        collected: extract_json_usize_field(line, "collected_evidence_count").unwrap_or(0),
+        passed: extract_json_usize_field(line, "passed_steps").unwrap_or(0),
+        failed: extract_json_usize_field(line, "failed_steps").unwrap_or(0),
+        missing: extract_json_usize_field(line, "missing_steps").unwrap_or(0),
+        manual_missing: extract_json_usize_field(line, "manual_missing_steps").unwrap_or(0),
         write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
         applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
     })
