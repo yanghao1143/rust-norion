@@ -3684,6 +3684,206 @@ function Get-StatusFileFreshness {
     }
 }
 
+function Convert-ToStatusUtcString {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return $null
+    }
+    try {
+        return ([DateTime]$Value).ToUniversalTime().ToString("o")
+    } catch {
+        return $null
+    }
+}
+
+function Resolve-DaemonFreshnessPathList {
+    param(
+        [string]$EnvName,
+        [string[]]$DefaultRelativePaths
+    )
+
+    $override = [Environment]::GetEnvironmentVariable($EnvName, "Process")
+    $paths = @()
+    if ($null -ne $override) {
+        foreach ($rawPath in $override.Split(";")) {
+            $trimmed = $rawPath.Trim()
+            if ($trimmed.Length -eq 0) {
+                continue
+            }
+            $paths += (Resolve-RepoPath $trimmed)
+        }
+        return @($paths)
+    }
+
+    foreach ($relativePath in $DefaultRelativePaths) {
+        $paths += (Resolve-RepoPath $relativePath)
+    }
+    return @($paths)
+}
+
+function Get-DaemonSourceFreshnessPaths {
+    $paths = @(Resolve-DaemonFreshnessPathList `
+        -EnvName "NORION_DAEMON_SOURCE_FRESHNESS_PATHS" `
+        -DefaultRelativePaths @(
+            "tools\evolution-loop\daemon-evolution-loop.ps1",
+            "tools\evolution-loop\status-evolution-loop.ps1",
+            "tools\evolution-loop\Cargo.toml",
+            "tools\evolution-loop\src\main.rs",
+            "tools\evolution-loop\src\report.rs",
+            "tools\evolution-loop\src\self_improve_proposal_artifact.rs"
+        ))
+
+    if ($null -eq [Environment]::GetEnvironmentVariable("NORION_DAEMON_SOURCE_FRESHNESS_PATHS", "Process")) {
+        $gitHead = Resolve-RepoPath ".git\HEAD"
+        $paths += $gitHead
+        if (Test-Path -LiteralPath $gitHead -PathType Leaf) {
+            try {
+                $headText = (Get-Content -Raw -LiteralPath $gitHead).Trim()
+                if ($headText.StartsWith("ref: ")) {
+                    $refPath = $headText.Substring(5).Trim().Replace("/", "\")
+                    if ($refPath.Length -gt 0) {
+                        $paths += (Resolve-RepoPath (Join-Path ".git" $refPath))
+                    }
+                }
+            } catch {
+                # Best-effort source freshness only; missing git ref details should not break status.
+            }
+        }
+    }
+
+    return @($paths)
+}
+
+function Get-DaemonBinaryFreshnessPaths {
+    return @(Resolve-DaemonFreshnessPathList `
+        -EnvName "NORION_DAEMON_BINARY_FRESHNESS_PATHS" `
+        -DefaultRelativePaths @(
+            "target\debug\evolution-loop.exe",
+            "tools\evolution-loop\target\debug\evolution-loop.exe"
+        ))
+}
+
+function Get-LatestFreshnessPathWriteTime {
+    param([string[]]$Paths)
+
+    $latestPath = $null
+    $latestWriteTimeUtc = $null
+    $checkedPaths = @()
+    $missingPaths = @()
+    foreach ($path in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace($path)) {
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            $missingPaths += $path
+            continue
+        }
+        try {
+            $item = Get-Item -LiteralPath $path
+            $checkedPaths += [pscustomobject][ordered]@{
+                path = $path
+                last_write_time_utc = (Convert-ToStatusUtcString $item.LastWriteTimeUtc)
+            }
+            if ($null -eq $latestWriteTimeUtc -or $item.LastWriteTimeUtc -gt $latestWriteTimeUtc) {
+                $latestPath = $path
+                $latestWriteTimeUtc = $item.LastWriteTimeUtc
+            }
+        } catch {
+            $missingPaths += $path
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        latest_path = $latestPath
+        latest_write_time_utc_value = $latestWriteTimeUtc
+        latest_write_time_utc = (Convert-ToStatusUtcString $latestWriteTimeUtc)
+        checked_path_count = @($checkedPaths).Count
+        missing_path_count = @($missingPaths).Count
+        checked_paths = @($checkedPaths)
+        missing_paths = @($missingPaths)
+    }
+}
+
+function Get-DaemonSourceFreshness {
+    param(
+        [object]$PidValue,
+        [bool]$Running
+    )
+
+    $processStartTimeUtc = $null
+    $processStartError = ""
+    if ($Running -and $null -ne $PidValue) {
+        try {
+            $process = Get-Process -Id $PidValue -ErrorAction Stop
+            $processStartTimeUtc = $process.StartTime.ToUniversalTime()
+        } catch {
+            $processStartError = $_.Exception.Message
+        }
+    }
+
+    $sourcePathsFromEnv = $null -ne [Environment]::GetEnvironmentVariable("NORION_DAEMON_SOURCE_FRESHNESS_PATHS", "Process")
+    $binaryPathsFromEnv = $null -ne [Environment]::GetEnvironmentVariable("NORION_DAEMON_BINARY_FRESHNESS_PATHS", "Process")
+    $sourceFreshness = Get-LatestFreshnessPathWriteTime -Paths @(Get-DaemonSourceFreshnessPaths)
+    $binaryFreshness = Get-LatestFreshnessPathWriteTime -Paths @(Get-DaemonBinaryFreshnessPaths)
+
+    $daemonStartedBeforeSourceUpdate = $null
+    if ($null -ne $processStartTimeUtc -and $null -ne $sourceFreshness.latest_write_time_utc_value) {
+        $daemonStartedBeforeSourceUpdate = [bool]($processStartTimeUtc -lt $sourceFreshness.latest_write_time_utc_value)
+    }
+
+    $daemonStartedBeforeBinaryUpdate = $null
+    if ($null -ne $processStartTimeUtc -and $null -ne $binaryFreshness.latest_write_time_utc_value) {
+        $daemonStartedBeforeBinaryUpdate = [bool]($processStartTimeUtc -lt $binaryFreshness.latest_write_time_utc_value)
+    }
+
+    $restartRecommended = $false
+    $restartReason = "daemon_source_current"
+    if (-not $Running) {
+        $restartReason = "daemon_not_running"
+    } elseif ($null -eq $processStartTimeUtc) {
+        $restartReason = "daemon_process_start_time_unavailable"
+    } elseif ($daemonStartedBeforeSourceUpdate -eq $true -and $daemonStartedBeforeBinaryUpdate -eq $true) {
+        $restartRecommended = $true
+        $restartReason = "daemon_started_before_source_and_binary_update"
+    } elseif ($daemonStartedBeforeSourceUpdate -eq $true) {
+        $restartRecommended = $true
+        $restartReason = "daemon_started_before_source_update"
+    } elseif ($daemonStartedBeforeBinaryUpdate -eq $true) {
+        $restartRecommended = $true
+        $restartReason = "daemon_started_before_binary_update"
+    }
+
+    return [pscustomobject][ordered]@{
+        schema = "daemon_source_freshness_v1"
+        checked = $true
+        report_only = $true
+        read_only = $true
+        side_effects = $false
+        starts_process = $false
+        sends_prompt = $false
+        source_paths_from_env = [bool]$sourcePathsFromEnv
+        binary_paths_from_env = [bool]$binaryPathsFromEnv
+        daemon_pid = if ($Running) { $PidValue } else { $null }
+        daemon_process_start_time_utc = (Convert-ToStatusUtcString $processStartTimeUtc)
+        daemon_process_start_time_error = $processStartError
+        source_latest_write_time_utc = $sourceFreshness.latest_write_time_utc
+        source_latest_path = $sourceFreshness.latest_path
+        source_checked_path_count = $sourceFreshness.checked_path_count
+        source_missing_path_count = $sourceFreshness.missing_path_count
+        source_checked_paths = @($sourceFreshness.checked_paths)
+        source_missing_paths = @($sourceFreshness.missing_paths)
+        binary_latest_write_time_utc = $binaryFreshness.latest_write_time_utc
+        binary_latest_path = $binaryFreshness.latest_path
+        binary_checked_path_count = $binaryFreshness.checked_path_count
+        binary_missing_path_count = $binaryFreshness.missing_path_count
+        daemon_started_before_source_update = $daemonStartedBeforeSourceUpdate
+        daemon_started_before_binary_update = $daemonStartedBeforeBinaryUpdate
+        daemon_restart_recommended = [bool]$restartRecommended
+        restart_reason = $restartReason
+    }
+}
+
 function Read-DaemonLogSummary {
     param([string]$LogPath)
 
@@ -4230,6 +4430,17 @@ function Read-DaemonSnapshot {
             validation_execution_ok = -not $validationExecutionRequired
             validation_execution_failure = if ($validationExecutionRequired) { "daemon status was skipped" } else { "" }
             launch_validation = Get-LaunchValidationSummary -StderrTail @()
+            source_freshness = [pscustomobject][ordered]@{
+                schema = "daemon_source_freshness_v1"
+                checked = $false
+                report_only = $true
+                read_only = $true
+                side_effects = $false
+                starts_process = $false
+                sends_prompt = $false
+                daemon_restart_recommended = $false
+                restart_reason = "daemon_status_skipped"
+            }
             operator_summary = ""
             error = ""
         }
@@ -4260,6 +4471,7 @@ function Read-DaemonSnapshot {
     }
     $stdoutFreshness = Get-StatusFileFreshness -Path $stdoutLog
     $ledgerFreshness = Get-StatusFileFreshness -Path $ledgerPath
+    $sourceFreshness = Get-DaemonSourceFreshness -PidValue $pidValue -Running $running
     $inProgressStdoutMaxAge = [Math]::Max(1, [int]$MaxDaemonInProgressStdoutAgeSecondsEffective)
     $roundTimeoutMaxAge = [Math]::Max($inProgressStdoutMaxAge, [int]$MaxDaemonRoundTimeoutSecondsEffective)
     $idleLedgerMaxAge = [Math]::Max(0, [int]$MaxDaemonIdleLedgerAgeSecondsEffective)
@@ -4365,6 +4577,10 @@ function Read-DaemonSnapshot {
         activity_reason = $reason
         activity_next_step = $nextStep
         daemon_round_transition_status = $transitionStatus
+        source_freshness = $sourceFreshness
+        source_freshness_checked = $sourceFreshness.checked
+        daemon_restart_recommended = $sourceFreshness.daemon_restart_recommended
+        daemon_restart_reason = $sourceFreshness.restart_reason
         latest_stage = $logSummary.latest_stage
         latest_round_state = $logSummary.latest_round_state
         latest_done_round = $logSummary.latest_done_round
@@ -4544,6 +4760,12 @@ if ($RequireLatestSafeTestGateValidationCommandEffective) {
 
 $nextStep = if ($failures.Count -gt 0) {
     "fix status failures before unattended evolution"
+} elseif ($daemonStatus.checked -and (Has-Property $daemonStatus "daemon_restart_recommended") -and $daemonStatus.daemon_restart_recommended) {
+    if ((Has-Property $daemonStatus "round_in_progress") -and $daemonStatus.round_in_progress -eq $true) {
+        "daemon source stale: wait for current round, then restart daemon before next round ($($daemonStatus.daemon_restart_reason))"
+    } else {
+        "daemon source stale: restart daemon before next round ($($daemonStatus.daemon_restart_reason))"
+    }
 } elseif ($daemonStatus.checked -and $daemonStatus.running) {
     "daemon $($daemonStatus.activity_state): $($daemonStatus.activity_next_step)"
 } elseif ($backendHealthDegraded) {
@@ -4605,6 +4827,7 @@ if ($processStatus.checked) {
 if ($daemonStatus.checked) {
     Write-Host "daemon: running=$($daemonStatus.running) state=$($daemonStatus.activity_state) ok=$($daemonStatus.activity_ok) active_round=$($daemonStatus.active_round) ledger_round=$($daemonStatus.ledger_latest_round) lag=$($daemonStatus.ledger_lag_rounds) summary=$($daemonStatus.operator_summary)"
     Write-Host "daemon_transition: schema=$($daemonStatus.daemon_round_transition_status.schema) kind=$($daemonStatus.daemon_round_transition_status.transition_kind) state=$($daemonStatus.daemon_round_transition_status.activity_state) ok=$($daemonStatus.daemon_round_transition_status.activity_ok) reason=$($daemonStatus.daemon_round_transition_status.activity_reason) active_round=$($daemonStatus.daemon_round_transition_status.active_round) ledger_round=$($daemonStatus.daemon_round_transition_status.ledger_latest_round) lag=$($daemonStatus.daemon_round_transition_status.ledger_lag_rounds) latest_round_state=$($daemonStatus.daemon_round_transition_status.latest_round_state) round_in_progress=$($daemonStatus.daemon_round_transition_status.round_in_progress)"
+    Write-Host "daemon_source_freshness: checked=$($daemonStatus.source_freshness.checked) restart_recommended=$($daemonStatus.source_freshness.daemon_restart_recommended) reason=$($daemonStatus.source_freshness.restart_reason) process_start=$($daemonStatus.source_freshness.daemon_process_start_time_utc) source_latest=$($daemonStatus.source_freshness.source_latest_write_time_utc) source_latest_path=$($daemonStatus.source_freshness.source_latest_path) binary_latest=$($daemonStatus.source_freshness.binary_latest_write_time_utc) binary_latest_path=$($daemonStatus.source_freshness.binary_latest_path) read_only=$($daemonStatus.source_freshness.read_only) starts_process=$($daemonStatus.source_freshness.starts_process) sends_prompt=$($daemonStatus.source_freshness.sends_prompt)"
     Write-Host "launch_validation: mode=$($daemonStatus.launch_validation.mode) enforced=$($daemonStatus.launch_validation.validation_execution_enforced) configured_run=$($daemonStatus.launch_validation.require_configured_validation_run) test_gate_run=$($daemonStatus.launch_validation.require_test_gate_validation_run) validation_command=$($daemonStatus.launch_validation.validation_command_present) use_test_gate_command=$($daemonStatus.launch_validation.use_test_gate_validation_command) next_step=$($daemonStatus.launch_validation.next_step)"
     if ($daemonStatus.validation_execution_required) {
         Write-Host "daemon_validation_execution_gate: required=$($daemonStatus.validation_execution_required) ok=$($daemonStatus.validation_execution_ok) failure=$($daemonStatus.validation_execution_failure)"

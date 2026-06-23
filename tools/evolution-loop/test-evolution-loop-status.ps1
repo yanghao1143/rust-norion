@@ -1661,6 +1661,15 @@ if ($daemonStatus.daemon.ledger_lag_rounds -ne 0) {
 if ([string]$daemonStatus.daemon.operator_summary -notmatch "state=active") {
     throw "daemon status did not expose operator summary"
 }
+if ($daemonStatus.daemon.source_freshness.schema -ne "daemon_source_freshness_v1") {
+    throw "daemon status did not expose source freshness schema"
+}
+if ($daemonStatus.daemon.source_freshness.read_only -ne $true -or $daemonStatus.daemon.source_freshness.starts_process -ne $false -or $daemonStatus.daemon.source_freshness.sends_prompt -ne $false) {
+    throw "daemon source freshness broke read-only contract"
+}
+if ($daemonStatus.daemon.source_freshness_checked -ne $true) {
+    throw "daemon status did not mirror source freshness checked state"
+}
 if ([string]$daemonStatus.next_step -notmatch "daemon active: wait for current round") {
     throw "status next_step did not prioritize active daemon"
 }
@@ -1674,6 +1683,79 @@ if ($daemonStatus.live_status_bundle.daemon.daemon_round_transition_status.trans
 }
 Assert-NextRoundDecisionReportV1 -Report $daemonStatus.live_status_bundle.next_round_decision_report_v1 -Decision $daemonStatus.next_round_decision -Name "active-daemon-live-bundle"
 Assert-NextRoundDownstreamStatusConsumersV1 -Projection $daemonStatus.live_status_bundle.next_round_downstream_status_consumers_v1 -Report $daemonStatus.live_status_bundle.next_round_decision_report_v1 -Name "active-daemon-live-bundle" -DaemonRoundTransitionStatus $daemonStatus.live_status_bundle.daemon.daemon_round_transition_status
+
+$oldSourceFreshnessPaths = [Environment]::GetEnvironmentVariable("NORION_DAEMON_SOURCE_FRESHNESS_PATHS", "Process")
+$oldBinaryFreshnessPaths = [Environment]::GetEnvironmentVariable("NORION_DAEMON_BINARY_FRESHNESS_PATHS", "Process")
+$sourceFreshnessMarker = Join-Path $testDir "daemon-source-freshness-marker.rs"
+$binaryFreshnessMarker = Join-Path $testDir "daemon-binary-freshness-marker.exe"
+Set-Content -Encoding ASCII -LiteralPath $sourceFreshnessMarker -Value "// source freshness marker"
+Set-Content -Encoding ASCII -LiteralPath $binaryFreshnessMarker -Value "binary freshness marker"
+$fixtureProcessStart = (Get-Process -Id $PID).StartTime
+try {
+    [Environment]::SetEnvironmentVariable("NORION_DAEMON_SOURCE_FRESHNESS_PATHS", $sourceFreshnessMarker, "Process")
+    [Environment]::SetEnvironmentVariable("NORION_DAEMON_BINARY_FRESHNESS_PATHS", $binaryFreshnessMarker, "Process")
+
+    (Get-Item -LiteralPath $sourceFreshnessMarker).LastWriteTime = $fixtureProcessStart.AddMinutes(-10)
+    (Get-Item -LiteralPath $binaryFreshnessMarker).LastWriteTime = $fixtureProcessStart.AddMinutes(-10)
+    $daemonFreshSourceText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $daemonDir -JsonStatus
+    if ($LASTEXITCODE -ne 0) {
+        throw "fresh daemon source freshness status command failed with exit code $LASTEXITCODE"
+    }
+    $daemonFreshSource = ($daemonFreshSourceText | Out-String | ConvertFrom-Json)
+    if ($daemonFreshSource.daemon.source_freshness.source_paths_from_env -ne $true -or $daemonFreshSource.daemon.source_freshness.binary_paths_from_env -ne $true) {
+        throw "daemon source freshness test fixture did not use injected paths"
+    }
+    if ($daemonFreshSource.daemon.source_freshness.daemon_restart_recommended -ne $false -or $daemonFreshSource.daemon.daemon_restart_recommended -ne $false) {
+        throw "fresh daemon source freshness should not recommend restart"
+    }
+    if ($daemonFreshSource.daemon.source_freshness.restart_reason -ne "daemon_source_current") {
+        throw "fresh daemon source freshness did not expose current restart reason"
+    }
+    if ($daemonFreshSource.daemon.source_freshness.daemon_started_before_source_update -ne $false -or $daemonFreshSource.daemon.source_freshness.daemon_started_before_binary_update -ne $false) {
+        throw "fresh daemon source freshness reported unexpected stale source or binary"
+    }
+
+    (Get-Item -LiteralPath $sourceFreshnessMarker).LastWriteTime = $fixtureProcessStart.AddMinutes(10)
+    (Get-Item -LiteralPath $binaryFreshnessMarker).LastWriteTime = $fixtureProcessStart.AddMinutes(-10)
+    $daemonStaleSourceText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $daemonDir -JsonStatus
+    if ($LASTEXITCODE -ne 0) {
+        throw "stale daemon source freshness status command failed with exit code $LASTEXITCODE"
+    }
+    $daemonStaleSource = ($daemonStaleSourceText | Out-String | ConvertFrom-Json)
+    if ($daemonStaleSource.daemon.source_freshness.daemon_started_before_source_update -ne $true) {
+        throw "stale daemon source freshness did not detect source update after daemon start"
+    }
+    if ($daemonStaleSource.daemon.source_freshness.daemon_started_before_binary_update -ne $false) {
+        throw "stale daemon source freshness should not blame binary marker"
+    }
+    if ($daemonStaleSource.daemon.source_freshness.daemon_restart_recommended -ne $true -or $daemonStaleSource.daemon.daemon_restart_recommended -ne $true) {
+        throw "stale daemon source freshness did not recommend restart"
+    }
+    if ($daemonStaleSource.daemon.source_freshness.restart_reason -ne "daemon_started_before_source_update" -or $daemonStaleSource.daemon.daemon_restart_reason -ne "daemon_started_before_source_update") {
+        throw "stale daemon source freshness did not expose source-update restart reason"
+    }
+    if ([string]$daemonStaleSource.next_step -notmatch "daemon source stale: wait for current round, then restart daemon before next round") {
+        throw "stale daemon source freshness did not prioritize restart next_step"
+    }
+    if ($daemonStaleSource.daemon.source_freshness.source_latest_path -ne $sourceFreshnessMarker) {
+        throw "stale daemon source freshness did not expose marker as latest source path"
+    }
+
+    $daemonStaleSourceHumanText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $daemonDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "stale daemon source freshness human status command failed with exit code $LASTEXITCODE"
+    }
+    $daemonStaleSourceHuman = ($daemonStaleSourceHumanText | Out-String)
+    if ($daemonStaleSourceHuman -notmatch "daemon_source_freshness: checked=True restart_recommended=True reason=daemon_started_before_source_update") {
+        throw "human status did not print stale daemon source freshness restart recommendation"
+    }
+    if ($daemonStaleSourceHuman -notmatch "read_only=True starts_process=False sends_prompt=False") {
+        throw "human daemon source freshness output broke read-only contract"
+    }
+} finally {
+    [Environment]::SetEnvironmentVariable("NORION_DAEMON_SOURCE_FRESHNESS_PATHS", $oldSourceFreshnessPaths, "Process")
+    [Environment]::SetEnvironmentVariable("NORION_DAEMON_BINARY_FRESHNESS_PATHS", $oldBinaryFreshnessPaths, "Process")
+}
 
 Set-Content -Encoding ASCII -LiteralPath (Join-Path $daemonDir "report.json") -Value (@{
     rounds = 2
