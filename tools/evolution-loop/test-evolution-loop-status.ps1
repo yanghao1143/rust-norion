@@ -684,6 +684,22 @@ Set-Content -Encoding ASCII -LiteralPath $report -Value (@{
         memory_store_write_allowed = $false
         ndkv_write_allowed = $false
     }
+    self_improve_proposal_repair_factor_regeneration_admission_report_v1 = @{
+        action_required = $true
+        repair_factor_count = 2
+        regeneration_candidate_count = 2
+        ready_regeneration_candidate_count = 2
+        pending_action_closure_count = 0
+        pending_operator_approval_count = 2
+        blocked_count = 0
+        regeneration_admission_ready = $true
+        first_repair_factor_id = "repair-factor-r392-self-improve-r392-helper-contract"
+        first_candidate_ready = $true
+        first_admission_status = "ready_for_operator_gated_regeneration_admission"
+        admission_write_authorized = $false
+        memory_store_write_allowed = $false
+        ndkv_write_allowed = $false
+    }
     self_improve_proposal_memory_reflection_usefulness_report_v1 = @{
         target_count = 2
         projected_report_count = 2
@@ -1163,6 +1179,9 @@ if ($reportProposalFirstMissing.Count -ne 2 -or $reportProposalFirstMissing[0] -
 if ($reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_source -ne "self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1" -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_item_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_pending_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_admission_commit_approval_review_packet_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal commit approval review packet was not exposed"
 }
+if ($reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_source -ne "self_improve_proposal_repair_factor_regeneration_admission_report_v1" -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_factor_count -ne 2 -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_candidate_count -ne 2 -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_ready_count -ne 2 -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_pending_action_closure_count -ne 0 -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_blocked_count -ne 0 -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_ready -ne $true -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_first_factor -ne "repair-factor-r392-self-improve-r392-helper-contract" -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_first_ready -ne $true -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_first_status -ne "ready_for_operator_gated_regeneration_admission" -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_write_authorized -ne $false -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_repair_factor_regeneration_admission_ndkv_write_allowed -ne $false) {
+    throw "report self-improve proposal repair factor regeneration admission was not exposed"
+}
 if ($reportStatus.report.self_improve_proposal_memory_reflection_usefulness_source -ne "self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_useful_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_pending_operator_approval_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_wasted_compute_guard_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_adapter_safe_count -ne 2 -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ready -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_explicit_operator_approval_required -ne $true -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_commit_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_memory_store_write_allowed -ne $false -or $reportStatus.report.self_improve_proposal_memory_reflection_usefulness_ndkv_write_allowed -ne $false) {
     throw "report self-improve proposal memory reflection usefulness was not exposed"
 }
@@ -1237,6 +1256,9 @@ if ($reportHuman -notmatch "report_self_improve_proposal_acceptance_summary_v1: 
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1: source=self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1" -or $reportHuman -notmatch "review_packet_items=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending=2" -or $reportHuman -notmatch "approval_review_packet_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve approval review packet"
+}
+if ($reportHuman -notmatch "report_self_improve_proposal_repair_factor_regeneration_admission_report_v1: source=self_improve_proposal_repair_factor_regeneration_admission_report_v1" -or $reportHuman -notmatch "candidates=2" -or $reportHuman -notmatch "ready=2" -or $reportHuman -notmatch "pending_action_closure=0" -or $reportHuman -notmatch "pending_operator_approval=2" -or $reportHuman -notmatch "admission_ready=True" -or $reportHuman -notmatch "first_factor=repair-factor-r392-self-improve-r392-helper-contract" -or $reportHuman -notmatch "first_status=ready_for_operator_gated_regeneration_admission" -or $reportHuman -notmatch "admission_write_authorized=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
+    throw "human status did not summarize self-improve repair factor regeneration admission"
 }
 if ($reportHuman -notmatch "report_self_improve_proposal_memory_reflection_usefulness_report_v1: source=self_improve_proposal_memory_reflection_usefulness_report_v1" -or $reportHuman -notmatch "useful=2" -or $reportHuman -notmatch "pending_operator_approval=2" -or $reportHuman -notmatch "wasted_compute_guard=2" -or $reportHuman -notmatch "adapter_safe=2" -or $reportHuman -notmatch "reflection_usefulness_ready=True" -or $reportHuman -notmatch "explicit_operator_approval_required=True" -or $reportHuman -notmatch "commit_allowed=False" -or $reportHuman -notmatch "memory_store_write_allowed=False" -or $reportHuman -notmatch "ndkv_write_allowed=False") {
     throw "human status did not summarize self-improve memory reflection usefulness"
