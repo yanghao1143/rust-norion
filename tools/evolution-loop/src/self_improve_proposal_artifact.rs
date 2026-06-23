@@ -217,6 +217,50 @@ pub(crate) struct SelfImproveProposalRepairFactorRetagPlanItem {
     pub(crate) blocked_reasons: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorRegenerationAdmissionReport {
+    pub(crate) action_required: bool,
+    pub(crate) repair_factor_count: usize,
+    pub(crate) regeneration_candidate_count: usize,
+    pub(crate) ready_regeneration_candidate_count: usize,
+    pub(crate) pending_action_closure_count: usize,
+    pub(crate) pending_operator_approval_count: usize,
+    pub(crate) blocked_count: usize,
+    pub(crate) regeneration_admission_ready: bool,
+    pub(crate) first_repair_factor_id: Option<String>,
+    pub(crate) first_candidate_ready: bool,
+    pub(crate) first_admission_status: Option<String>,
+    pub(crate) admission_write_authorized: bool,
+    pub(crate) failure_reasons: Vec<String>,
+    pub(crate) items: Vec<SelfImproveProposalRepairFactorRegenerationAdmissionItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorRegenerationAdmissionItem {
+    pub(crate) repair_factor_id: String,
+    pub(crate) proposal_id: String,
+    pub(crate) source_round: Option<u64>,
+    pub(crate) previous_label: String,
+    pub(crate) repair_label: String,
+    pub(crate) target_action: String,
+    pub(crate) regeneration_action: String,
+    pub(crate) regeneration_status: String,
+    pub(crate) admission_action: String,
+    pub(crate) ready_for_regeneration_candidate: bool,
+    pub(crate) ready_for_regeneration_admission: bool,
+    pub(crate) admission_status: String,
+    pub(crate) closed_action_confirmed: bool,
+    pub(crate) approval_review_packet_ready: bool,
+    pub(crate) pending_action_closure: bool,
+    pub(crate) pending_operator_approval: bool,
+    pub(crate) validation_required: bool,
+    pub(crate) rollback_required: bool,
+    pub(crate) approval_required: bool,
+    pub(crate) memory_admission_required: bool,
+    pub(crate) regeneration_write_authorized: bool,
+    pub(crate) blocked_reasons: Vec<String>,
+}
+
 pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
     let mut proposals = Vec::new();
     let mut seen = BTreeSet::new();
@@ -345,6 +389,31 @@ pub(crate) fn option_repair_factor_retag_plan_report_json(
             ),
             false,
         ),
+    }
+}
+
+pub(crate) fn option_repair_factor_regeneration_admission_report_json(
+    artifact: Option<&SelfImproveProposalArtifact>,
+) -> String {
+    match artifact {
+        Some(artifact) => repair_factor_regeneration_admission_report_json(
+            &artifact.repair_factor_regeneration_admission(),
+            true,
+        ),
+        None => {
+            let repair_readiness = SelfImproveProposalRepairFactorReadinessReport::from_queue(
+                &empty_repair_factor_queue(),
+            );
+            let retag = SelfImproveProposalRepairFactorRetagPlanReport::from_readiness_report(
+                &repair_readiness,
+            );
+            repair_factor_regeneration_admission_report_json(
+                &SelfImproveProposalRepairFactorRegenerationAdmissionReport::from_retag_plan(
+                    &retag,
+                ),
+                false,
+            )
+        }
     }
 }
 
@@ -1664,6 +1733,16 @@ impl SelfImproveProposalArtifact {
         )
     }
 
+    pub(crate) fn repair_factor_regeneration_admission(
+        &self,
+    ) -> SelfImproveProposalRepairFactorRegenerationAdmissionReport {
+        SelfImproveProposalRepairFactorRegenerationAdmissionReport::from_retag_closure_and_review(
+            &self.repair_factor_retag_plan(),
+            &self.action_closure_report(),
+            &self.memory_admission_commit_approval_review_packet(),
+        )
+    }
+
     pub(crate) fn action_closure_report(&self) -> SelfImproveProposalActionClosureReport {
         let assignment = self.acceptance_action_assignment();
         let closure_evidence = self.action_closure_evidence(&assignment);
@@ -2265,6 +2344,236 @@ impl SelfImproveProposalRepairFactorRetagPlanItem {
             validation_required: true,
             approval_required: true,
             memory_admission_required: true,
+            blocked_reasons,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorRegenerationAdmissionReport {
+    fn from_retag_closure_and_review(
+        retag: &SelfImproveProposalRepairFactorRetagPlanReport,
+        closure: &SelfImproveProposalActionClosureReport,
+        review: &SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport,
+    ) -> Self {
+        let items = retag
+            .items
+            .iter()
+            .map(|item| {
+                let closure_item = closure
+                    .closure_items
+                    .iter()
+                    .find(|closure_item| closure_item.proposal_id == item.proposal_id);
+                let review_item = review
+                    .review_packet_items
+                    .iter()
+                    .find(|review_item| review_item.proposal_id == item.proposal_id);
+                SelfImproveProposalRepairFactorRegenerationAdmissionItem::from_retag_item(
+                    item,
+                    closure_item,
+                    review_item,
+                )
+            })
+            .collect::<Vec<_>>();
+        let regeneration_candidate_count = items
+            .iter()
+            .filter(|item| item.ready_for_regeneration_candidate)
+            .count();
+        let ready_regeneration_candidate_count = items
+            .iter()
+            .filter(|item| item.ready_for_regeneration_admission)
+            .count();
+        let pending_action_closure_count = items
+            .iter()
+            .filter(|item| item.pending_action_closure)
+            .count();
+        let pending_operator_approval_count = items
+            .iter()
+            .filter(|item| item.pending_operator_approval)
+            .count();
+        let blocked_count = items
+            .len()
+            .saturating_sub(ready_regeneration_candidate_count);
+        let regeneration_admission_ready = retag.action_required
+            && regeneration_candidate_count > 0
+            && ready_regeneration_candidate_count == regeneration_candidate_count
+            && pending_operator_approval_count > 0
+            && blocked_count == 0;
+        let mut failure_reasons = review.failure_reasons.clone();
+        if retag.action_required && regeneration_candidate_count == 0 {
+            failure_reasons
+                .push("regeneration admission has no regeneration candidates".to_owned());
+        }
+        if pending_action_closure_count > 0 {
+            failure_reasons.push("regeneration admission requires action closure".to_owned());
+        }
+        if regeneration_candidate_count > 0 && ready_regeneration_candidate_count == 0 {
+            failure_reasons.push("regeneration admission has no ready candidates".to_owned());
+        }
+        if regeneration_candidate_count > 0 && pending_operator_approval_count == 0 {
+            failure_reasons
+                .push("regeneration admission requires pending operator approval".to_owned());
+        }
+        if retag.regeneration_write_authorized
+            || review.commit_allowed
+            || review.admission_write_authorized
+            || review.memory_store_write_allowed
+            || review.ndkv_write_allowed
+        {
+            failure_reasons
+                .push("regeneration admission input already authorized writes".to_owned());
+        }
+        failure_reasons.sort();
+        failure_reasons.dedup();
+        let first = items.first();
+        Self {
+            action_required: retag.action_required,
+            repair_factor_count: retag.repair_factor_count,
+            regeneration_candidate_count,
+            ready_regeneration_candidate_count,
+            pending_action_closure_count,
+            pending_operator_approval_count,
+            blocked_count,
+            regeneration_admission_ready,
+            first_repair_factor_id: first.map(|item| item.repair_factor_id.clone()),
+            first_candidate_ready: first
+                .map(|item| item.ready_for_regeneration_admission)
+                .unwrap_or(false),
+            first_admission_status: first.map(|item| item.admission_status.clone()),
+            admission_write_authorized: false,
+            failure_reasons,
+            items,
+        }
+    }
+
+    fn from_retag_plan(report: &SelfImproveProposalRepairFactorRetagPlanReport) -> Self {
+        let closure = empty_action_closure_report();
+        let request = SelfImproveProposalMemoryAdmissionRequestReport::from_readiness_report(
+            &SelfImproveProposalMemoryAdmissionReadinessReport::from_action_closure_report(
+                &closure,
+            ),
+        );
+        let decision =
+            SelfImproveProposalMemoryAdmissionDecisionReport::strict_from_request_report(&request);
+        let writer_plan =
+            SelfImproveProposalMemoryAdmissionWriterPlanReport::from_request_and_decision(
+                &request, &decision,
+            );
+        let dry_run =
+            SelfImproveProposalMemoryAdmissionWriterDryRunReport::from_writer_plan(&writer_plan);
+        let receipt =
+            SelfImproveProposalMemoryAdmissionWriterDryRunReceiptReport::from_dry_run(&dry_run);
+        let commit_record =
+            SelfImproveProposalMemoryAdmissionCommitRecordStageReport::from_dry_run_receipt(
+                &receipt,
+            );
+        let approval_request =
+            SelfImproveProposalMemoryAdmissionCommitApprovalRequestReport::from_commit_record_stage(
+                &commit_record,
+            );
+        let approval_decision =
+            SelfImproveProposalMemoryAdmissionCommitApprovalDecisionReport::from_commit_approval_request(
+                &approval_request,
+            );
+        let review =
+            SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketReport::from_commit_approval_decision(
+                &approval_decision,
+            );
+        Self::from_retag_closure_and_review(report, &closure, &review)
+    }
+}
+
+impl SelfImproveProposalRepairFactorRegenerationAdmissionItem {
+    fn from_retag_item(
+        item: &SelfImproveProposalRepairFactorRetagPlanItem,
+        closure_item: Option<&SelfImproveProposalActionClosureItem>,
+        review_item: Option<&SelfImproveProposalMemoryAdmissionCommitApprovalReviewPacketItem>,
+    ) -> Self {
+        let closed_action_confirmed = closure_item.is_some_and(|item| item.closed);
+        let approval_review_packet_ready =
+            review_item.is_some_and(|item| item.approval_review_packet_ready);
+        let pending_operator_approval = review_item.is_some_and(|item| {
+            item.explicit_operator_approval_required
+                && !item.commit_allowed
+                && !item.write_authorized
+                && !item.admission_write_authorized
+                && !item.memory_store_write_allowed
+                && !item.ndkv_write_allowed
+        });
+        let pending_action_closure = item.ready_for_regeneration && !closed_action_confirmed;
+        let ready_for_regeneration_admission = item.ready_for_regeneration
+            && closed_action_confirmed
+            && approval_review_packet_ready
+            && pending_operator_approval
+            && !item.regeneration_write_authorized;
+        let admission_status = if ready_for_regeneration_admission {
+            "ready_for_operator_gated_regeneration_admission"
+        } else if !item.ready_for_regeneration {
+            "blocked_until_regeneration_candidate_ready"
+        } else if !closed_action_confirmed {
+            "staged_waiting_action_closure"
+        } else if !approval_review_packet_ready {
+            "staged_waiting_approval_review_packet"
+        } else if !pending_operator_approval {
+            "staged_waiting_operator_approval"
+        } else {
+            "staged_waiting_memory_admission_gate"
+        };
+        let admission_action = if ready_for_regeneration_admission {
+            "request_operator_gated_regeneration_admission"
+        } else if !item.ready_for_regeneration {
+            "hold_regeneration_admission_until_candidate_ready"
+        } else if !closed_action_confirmed {
+            "hold_regeneration_admission_until_action_closure"
+        } else if !approval_review_packet_ready {
+            "hold_regeneration_admission_until_review_packet_ready"
+        } else if !pending_operator_approval {
+            "hold_regeneration_admission_until_operator_approval_pending"
+        } else {
+            "hold_regeneration_admission_until_memory_gate_ready"
+        };
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if !item.ready_for_regeneration {
+            blocked_reasons.push("regeneration_candidate_not_ready".to_owned());
+        }
+        if !closed_action_confirmed {
+            blocked_reasons.push("action_target_not_closed".to_owned());
+        }
+        if !approval_review_packet_ready {
+            blocked_reasons.push("approval_review_packet_not_ready".to_owned());
+        }
+        if !pending_operator_approval {
+            blocked_reasons.push("operator_approval_not_pending".to_owned());
+        }
+        if item.regeneration_write_authorized {
+            blocked_reasons.push("regeneration_write_already_authorized".to_owned());
+        }
+        if let Some(review_item) = review_item {
+            blocked_reasons.extend(review_item.blocked_reasons.clone());
+        }
+        blocked_reasons.sort();
+        blocked_reasons.dedup();
+        Self {
+            repair_factor_id: item.repair_factor_id.clone(),
+            proposal_id: item.proposal_id.clone(),
+            source_round: item.source_round,
+            previous_label: item.previous_label.clone(),
+            repair_label: item.repair_label.clone(),
+            target_action: item.target_action.clone(),
+            regeneration_action: item.regeneration_action.clone(),
+            regeneration_status: item.regeneration_status.clone(),
+            admission_action: admission_action.to_owned(),
+            ready_for_regeneration_candidate: item.ready_for_regeneration,
+            ready_for_regeneration_admission,
+            admission_status: admission_status.to_owned(),
+            closed_action_confirmed,
+            approval_review_packet_ready,
+            pending_action_closure,
+            pending_operator_approval,
+            validation_required: true,
+            rollback_required: true,
+            approval_required: true,
+            memory_admission_required: true,
+            regeneration_write_authorized: false,
             blocked_reasons,
         }
     }
@@ -5072,6 +5381,68 @@ fn repair_factor_retag_plan_item_json(
     )
 }
 
+fn repair_factor_regeneration_admission_report_json(
+    report: &SelfImproveProposalRepairFactorRegenerationAdmissionReport,
+    artifact_loaded: bool,
+) -> String {
+    let items = report
+        .items
+        .iter()
+        .map(repair_factor_regeneration_admission_item_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema\":\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_regeneration_admission\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"repair_factor_count\":{},\"regeneration_candidate_count\":{},\"ready_regeneration_candidate_count\":{},\"pending_action_closure_count\":{},\"pending_operator_approval_count\":{},\"blocked_count\":{},\"regeneration_admission_ready\":{},\"first_repair_factor_id\":{},\"first_candidate_ready\":{},\"first_admission_status\":{},\"admission_write_authorized\":{},\"failure_reasons\":{},\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"items\":[{}],\"side_effects\":{}}}",
+        artifact_loaded,
+        report.action_required,
+        report.repair_factor_count,
+        report.regeneration_candidate_count,
+        report.ready_regeneration_candidate_count,
+        report.pending_action_closure_count,
+        report.pending_operator_approval_count,
+        report.blocked_count,
+        report.regeneration_admission_ready,
+        option_string_json(report.first_repair_factor_id.as_deref()),
+        report.first_candidate_ready,
+        option_string_json(report.first_admission_status.as_deref()),
+        report.admission_write_authorized,
+        json_string_array(&report.failure_reasons),
+        items,
+        side_effects_json()
+    )
+}
+
+fn repair_factor_regeneration_admission_item_json(
+    item: &SelfImproveProposalRepairFactorRegenerationAdmissionItem,
+) -> String {
+    format!(
+        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"previous_label\":{},\"repair_label\":{},\"target_action\":{},\"regeneration_action\":{},\"regeneration_status\":{},\"admission_action\":{},\"ready_for_regeneration_candidate\":{},\"ready_for_regeneration_admission\":{},\"admission_status\":{},\"closed_action_confirmed\":{},\"approval_review_packet_ready\":{},\"pending_action_closure\":{},\"pending_operator_approval\":{},\"validation_required\":{},\"rollback_required\":{},\"approval_required\":{},\"memory_admission_required\":{},\"regeneration_write_authorized\":{},\"blocked_reasons\":{},\"report_only\":true,\"candidate_only\":true,\"auto_apply\":false,\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"side_effects\":{}}}",
+        json_string(&item.repair_factor_id),
+        json_string(&item.proposal_id),
+        option_u64_json(item.source_round),
+        json_string(&item.previous_label),
+        json_string(&item.repair_label),
+        json_string(&item.target_action),
+        json_string(&item.regeneration_action),
+        json_string(&item.regeneration_status),
+        json_string(&item.admission_action),
+        item.ready_for_regeneration_candidate,
+        item.ready_for_regeneration_admission,
+        json_string(&item.admission_status),
+        item.closed_action_confirmed,
+        item.approval_review_packet_ready,
+        item.pending_action_closure,
+        item.pending_operator_approval,
+        item.validation_required,
+        item.rollback_required,
+        item.approval_required,
+        item.memory_admission_required,
+        item.regeneration_write_authorized,
+        json_string_array(&item.blocked_reasons),
+        side_effects_json()
+    )
+}
+
 fn action_assignment_targets_json(assignment: &SelfImproveProposalActionAssignment) -> String {
     let targets = assignment
         .targets
@@ -5205,6 +5576,9 @@ mod tests {
         let repair_factor_retag_plan = artifact.repair_factor_retag_plan();
         let repair_factor_retag_plan_json =
             option_repair_factor_retag_plan_report_json(Some(&artifact));
+        let repair_factor_regeneration_admission = artifact.repair_factor_regeneration_admission();
+        let repair_factor_regeneration_admission_json =
+            option_repair_factor_regeneration_admission_report_json(Some(&artifact));
 
         assert_eq!(summary.projected_report_count, 3);
         assert_eq!(summary.memory_admission_accepted_count, 2);
@@ -5362,6 +5736,100 @@ mod tests {
                 .contains("\"regeneration_action\":\"hold_regeneration_until_retag_ready\"")
         );
         assert!(repair_factor_retag_plan_json.contains("\"validation_not_checked\""));
+        assert_eq!(repair_factor_regeneration_admission.repair_factor_count, 2);
+        assert_eq!(
+            repair_factor_regeneration_admission.regeneration_candidate_count,
+            1
+        );
+        assert_eq!(
+            repair_factor_regeneration_admission.ready_regeneration_candidate_count,
+            0
+        );
+        assert_eq!(
+            repair_factor_regeneration_admission.pending_action_closure_count,
+            1
+        );
+        assert_eq!(
+            repair_factor_regeneration_admission.pending_operator_approval_count,
+            0
+        );
+        assert_eq!(repair_factor_regeneration_admission.blocked_count, 2);
+        assert!(!repair_factor_regeneration_admission.regeneration_admission_ready);
+        assert!(!repair_factor_regeneration_admission.admission_write_authorized);
+        assert!(
+            repair_factor_regeneration_admission
+                .failure_reasons
+                .contains(&"regeneration admission requires action closure".to_owned())
+        );
+        assert!(
+            repair_factor_regeneration_admission
+                .failure_reasons
+                .contains(&"regeneration admission has no ready candidates".to_owned())
+        );
+        assert!(
+            repair_factor_regeneration_admission
+                .failure_reasons
+                .contains(&"regeneration admission requires pending operator approval".to_owned())
+        );
+        let first_regeneration_admission =
+            repair_factor_regeneration_admission.items.first().unwrap();
+        assert_eq!(
+            first_regeneration_admission.admission_status,
+            "staged_waiting_action_closure"
+        );
+        assert!(first_regeneration_admission.pending_action_closure);
+        assert!(!first_regeneration_admission.pending_operator_approval);
+        assert!(!first_regeneration_admission.ready_for_regeneration_admission);
+        assert!(
+            first_regeneration_admission
+                .blocked_reasons
+                .contains(&"action_target_not_closed".to_owned())
+        );
+        assert!(
+            first_regeneration_admission
+                .blocked_reasons
+                .contains(&"operator_approval_not_pending".to_owned())
+        );
+        assert!(repair_factor_regeneration_admission_json.contains(
+            "\"schema\":\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\""
+        ));
+        assert!(repair_factor_regeneration_admission_json.contains(
+            "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_regeneration_admission\""
+        ));
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"regeneration_candidate_count\":1")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"ready_regeneration_candidate_count\":0")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"pending_action_closure_count\":1")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"pending_operator_approval_count\":0")
+        );
+        assert!(repair_factor_regeneration_admission_json.contains("\"blocked_count\":2"));
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"regeneration_admission_ready\":false")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"admission_status\":\"staged_waiting_action_closure\"")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"admission_write_authorized\":false")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"memory_store_write_allowed\":false")
+        );
+        assert!(repair_factor_regeneration_admission_json.contains("\"ndkv_write_allowed\":false"));
     }
 
     #[test]
@@ -5372,6 +5840,8 @@ mod tests {
         let repair_factor_readiness_json = option_repair_factor_readiness_report_json(None);
         let repair_factor_release_json = option_repair_factor_release_report_json(None);
         let repair_factor_retag_plan_json = option_repair_factor_retag_plan_report_json(None);
+        let repair_factor_regeneration_admission_json =
+            option_repair_factor_regeneration_admission_report_json(None);
 
         assert!(json.contains("\"artifact_loaded\":false"));
         assert!(json.contains("\"total_candidate_count\":0"));
@@ -5437,6 +5907,36 @@ mod tests {
         assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_ready\":false"));
         assert!(repair_factor_retag_plan_json.contains("\"regeneration_write_authorized\":false"));
         assert!(repair_factor_retag_plan_json.contains("\"items\":[]"));
+        assert!(repair_factor_regeneration_admission_json.contains(
+            "\"schema\":\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\""
+        ));
+        assert!(repair_factor_regeneration_admission_json.contains("\"artifact_loaded\":false"));
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"regeneration_candidate_count\":0")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"ready_regeneration_candidate_count\":0")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"pending_action_closure_count\":0")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"pending_operator_approval_count\":0")
+        );
+        assert!(repair_factor_regeneration_admission_json.contains("\"blocked_count\":0"));
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"regeneration_admission_ready\":false")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"admission_write_authorized\":false")
+        );
+        assert!(repair_factor_regeneration_admission_json.contains("\"items\":[]"));
     }
 
     #[test]
@@ -5455,6 +5955,9 @@ mod tests {
         let repair_factor_retag_plan = artifact.repair_factor_retag_plan();
         let repair_factor_retag_plan_json =
             option_repair_factor_retag_plan_report_json(Some(&artifact));
+        let repair_factor_regeneration_admission = artifact.repair_factor_regeneration_admission();
+        let repair_factor_regeneration_admission_json =
+            option_repair_factor_regeneration_admission_report_json(Some(&artifact));
         let memory_admission_readiness = artifact.memory_admission_readiness_report();
         let memory_admission_request = artifact.memory_admission_request_report();
         let memory_admission_request_json =
@@ -5602,6 +6105,87 @@ mod tests {
         assert!(repair_factor_retag_plan_json.contains("\"regeneration_write_authorized\":false"));
         assert!(repair_factor_retag_plan_json.contains("\"memory_admission_required\":true"));
         assert!(repair_factor_retag_plan_json.contains("\"memory_store_write_allowed\":false"));
+        assert_eq!(repair_factor_regeneration_admission.repair_factor_count, 1);
+        assert_eq!(
+            repair_factor_regeneration_admission.regeneration_candidate_count,
+            1
+        );
+        assert_eq!(
+            repair_factor_regeneration_admission.ready_regeneration_candidate_count,
+            0
+        );
+        assert_eq!(
+            repair_factor_regeneration_admission.pending_action_closure_count,
+            1
+        );
+        assert_eq!(
+            repair_factor_regeneration_admission.pending_operator_approval_count,
+            1
+        );
+        assert_eq!(repair_factor_regeneration_admission.blocked_count, 1);
+        assert!(!repair_factor_regeneration_admission.regeneration_admission_ready);
+        assert!(!repair_factor_regeneration_admission.admission_write_authorized);
+        assert!(
+            repair_factor_regeneration_admission
+                .failure_reasons
+                .contains(&"regeneration admission requires action closure".to_owned())
+        );
+        let regeneration_admission_item =
+            repair_factor_regeneration_admission.items.first().unwrap();
+        assert_eq!(
+            regeneration_admission_item.admission_status,
+            "staged_waiting_action_closure"
+        );
+        assert_eq!(
+            regeneration_admission_item.admission_action,
+            "hold_regeneration_admission_until_action_closure"
+        );
+        assert!(regeneration_admission_item.pending_action_closure);
+        assert!(regeneration_admission_item.pending_operator_approval);
+        assert!(!regeneration_admission_item.ready_for_regeneration_admission);
+        assert!(!regeneration_admission_item.regeneration_write_authorized);
+        assert!(repair_factor_regeneration_admission_json.contains(
+            "\"schema\":\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\""
+        ));
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"regeneration_candidate_count\":1")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"ready_regeneration_candidate_count\":0")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"pending_action_closure_count\":1")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"pending_operator_approval_count\":1")
+        );
+        assert!(repair_factor_regeneration_admission_json.contains("\"blocked_count\":1"));
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"regeneration_admission_ready\":false")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json.contains(
+                "\"admission_action\":\"hold_regeneration_admission_until_action_closure\""
+            )
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"admission_status\":\"staged_waiting_action_closure\"")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"admission_write_authorized\":false")
+        );
+        assert!(
+            repair_factor_regeneration_admission_json
+                .contains("\"memory_store_write_allowed\":false")
+        );
+        assert!(repair_factor_regeneration_admission_json.contains("\"ndkv_write_allowed\":false"));
         assert_eq!(memory_admission_readiness.target_count, 1);
         assert_eq!(memory_admission_readiness.ready_count, 0);
         assert_eq!(memory_admission_readiness.blocked_count, 1);
@@ -5640,6 +6224,9 @@ mod tests {
         let artifact = from_ledger_text(text);
         let report = artifact.action_closure_report();
         let json = option_action_closure_report_json(Some(&artifact));
+        let regeneration_admission = artifact.repair_factor_regeneration_admission();
+        let regeneration_admission_json =
+            option_repair_factor_regeneration_admission_report_json(Some(&artifact));
 
         assert_eq!(report.target_count, 1);
         assert_eq!(report.closed_target_count, 1);
@@ -5657,6 +6244,45 @@ mod tests {
         assert!(json.contains("\"still_requires_memory_admission\":true"));
         assert!(json.contains("DEFAULT_TEST_GATE_VALIDATION_COMMAND"));
         assert!(json.contains("\"writes_ndkv\":false"));
+        assert_eq!(regeneration_admission.repair_factor_count, 1);
+        assert_eq!(regeneration_admission.regeneration_candidate_count, 1);
+        assert_eq!(regeneration_admission.ready_regeneration_candidate_count, 1);
+        assert_eq!(regeneration_admission.pending_action_closure_count, 0);
+        assert_eq!(regeneration_admission.pending_operator_approval_count, 1);
+        assert_eq!(regeneration_admission.blocked_count, 0);
+        assert!(regeneration_admission.regeneration_admission_ready);
+        assert!(!regeneration_admission.admission_write_authorized);
+        assert!(regeneration_admission.failure_reasons.is_empty());
+        let regeneration_admission_item = regeneration_admission.items.first().unwrap();
+        assert_eq!(
+            regeneration_admission_item.admission_status,
+            "ready_for_operator_gated_regeneration_admission"
+        );
+        assert_eq!(
+            regeneration_admission_item.admission_action,
+            "request_operator_gated_regeneration_admission"
+        );
+        assert!(regeneration_admission_item.closed_action_confirmed);
+        assert!(regeneration_admission_item.approval_review_packet_ready);
+        assert!(regeneration_admission_item.pending_operator_approval);
+        assert!(regeneration_admission_item.ready_for_regeneration_admission);
+        assert!(!regeneration_admission_item.regeneration_write_authorized);
+        assert!(regeneration_admission_json.contains(
+            "\"schema\":\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\""
+        ));
+        assert!(regeneration_admission_json.contains("\"regeneration_admission_ready\":true"));
+        assert!(
+            regeneration_admission_json.contains(
+                "\"admission_status\":\"ready_for_operator_gated_regeneration_admission\""
+            )
+        );
+        assert!(
+            regeneration_admission_json
+                .contains("\"admission_action\":\"request_operator_gated_regeneration_admission\"")
+        );
+        assert!(regeneration_admission_json.contains("\"admission_write_authorized\":false"));
+        assert!(regeneration_admission_json.contains("\"memory_store_write_allowed\":false"));
+        assert!(regeneration_admission_json.contains("\"ndkv_write_allowed\":false"));
     }
 
     #[test]
