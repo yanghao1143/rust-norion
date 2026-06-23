@@ -18,6 +18,17 @@ fn default_genome_rejuvenation_simulation_covers_all_decisions() {
     }
     assert_eq!(report.write_allowed_count(), 0);
     assert_eq!(report.applied_count(), 0);
+    assert_eq!(report.repair_factor_count(), 5);
+    assert_eq!(
+        report.ready_repair_factor_count(),
+        report.repair_factor_count()
+    );
+    assert_eq!(
+        report.ready_retag_plan_count(),
+        report.repair_factor_count()
+    );
+    assert_eq!(report.repair_factor_write_allowed_count(), 0);
+    assert_eq!(report.repair_factor_applied_count(), 0);
     assert_eq!(report.rollback_ready_count(), report.case_count());
     assert_eq!(report.replay_digest_count(), report.case_count());
     assert!(report.total_wasted_compute_reduction() > 0);
@@ -36,6 +47,8 @@ fn genome_rejuvenation_ledger_is_replayable_and_redacted() {
             .iter()
             .all(|line| line.contains("ledger_input=redaction-digest:")
                 && line.contains("replay_digest=redaction-digest:")
+                && line.contains("repair_factors=")
+                && line.contains("retag_plans=")
                 && line.contains("write_allowed=false")
                 && line.contains("applied=false")
                 && !line.contains("polluted safety guard")),
@@ -107,4 +120,62 @@ fn malignant_genome_rejuvenation_stays_preview_only() {
                 .rollback_anchor_id
                 .starts_with("genome:rejuvenation:")
     }));
+    assert_eq!(malignant.repair_factor_count(), 3);
+    assert_eq!(
+        malignant.ready_retag_plan_count(),
+        malignant.repair_factor_count()
+    );
+    assert!(malignant.repair_factors.iter().all(|factor| {
+        factor.is_safe_preview()
+            && factor.previous_label == "status:malignant"
+            && factor.repair_label.starts_with("repair_factor:")
+            && factor.approval_required
+            && factor.memory_admission_required
+            && !factor.write_allowed
+            && !factor.applied
+    }));
+    assert!(malignant.repair_factors.iter().any(|factor| {
+        factor.repair_label == "repair_factor:quarantine_malignant_gene"
+            && factor.release_action == "release_quarantine_factor_before_cut"
+            && factor.retag_action == "retag_malignant_gene_as_quarantined"
+    }));
+    assert!(malignant.repair_factors.iter().any(|factor| {
+        factor.repair_label == "repair_factor:regenerate_young_replacement_gene"
+            && factor.release_action == "release_regeneration_factor_from_stable_anchor"
+            && factor.retag_action == "retag_regenerated_gene_as_young_replacement"
+    }));
+    assert!(malignant.repair_factors.iter().any(|factor| {
+        factor.repair_label == "repair_factor:tombstone_cut_malignant_gene"
+            && factor.release_action == "release_tombstone_factor_after_quarantine"
+            && factor.retag_action == "retag_cut_gene_as_tombstoned"
+    }));
+}
+
+#[test]
+fn aging_genome_rejuvenation_releases_retag_repair_factor() {
+    let report = run_default_genome_rejuvenation_simulation();
+    let aging = report
+        .results
+        .iter()
+        .find(|result| {
+            result
+                .decision_kinds()
+                .contains(&GenomeRejuvenationDecisionKind::Relabel)
+        })
+        .expect("aging relabel result");
+
+    assert_eq!(aging.repair_factor_count(), 1);
+    let factor = aging.repair_factors.first().expect("repair factor");
+    assert!(factor.is_safe_preview());
+    assert_eq!(factor.previous_label, "status:aging:missing_purpose_label");
+    assert_eq!(
+        factor.repair_label,
+        "repair_factor:relabel_aging_gene_purpose"
+    );
+    assert_eq!(
+        factor.release_action,
+        "release_rejuvenation_factor_for_retag"
+    );
+    assert_eq!(factor.retag_action, "retag_aging_gene_with_current_purpose");
+    assert!(factor.replay_digest.starts_with("redaction-digest:"));
 }
