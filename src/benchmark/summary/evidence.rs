@@ -84,6 +84,42 @@ impl BenchmarkSummary {
         self.genome_evidence.total_regeneration_payloads
     }
 
+    pub fn mutation_repair_fixtures(&self) -> usize {
+        self.genome_evidence.mutation_repair_fixtures
+    }
+
+    pub fn mutation_repair_fixture_kinds(&self) -> usize {
+        self.genome_evidence.mutation_repair_fixture_kinds
+    }
+
+    pub fn mutation_repair_candidates(&self) -> usize {
+        self.genome_evidence.mutation_repair_candidates
+    }
+
+    pub fn mutation_repair_review_packets(&self) -> usize {
+        self.genome_evidence.mutation_repair_review_packets
+    }
+
+    pub fn malignant_gene_recovery_drills(&self) -> usize {
+        self.genome_evidence.malignant_gene_recovery_drills
+    }
+
+    pub fn malignant_gene_quarantines(&self) -> usize {
+        self.genome_evidence.malignant_gene_quarantines
+    }
+
+    pub fn malignant_gene_cut_candidates(&self) -> usize {
+        self.genome_evidence.malignant_gene_cut_candidates
+    }
+
+    pub fn malignant_gene_regeneration_candidates(&self) -> usize {
+        self.genome_evidence.malignant_gene_regeneration_candidates
+    }
+
+    pub fn malignant_gene_failed_replay(&self) -> usize {
+        self.genome_evidence.malignant_gene_failed_replay
+    }
+
     pub fn total_reasoning_genome_lifecycle_records(&self) -> usize {
         self.genome_evidence.total_lifecycle_records
     }
