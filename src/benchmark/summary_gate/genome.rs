@@ -107,4 +107,86 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_mutation_repair_fixtures) = gate.min_mutation_repair_fixtures {
+        let observed = summary.mutation_repair_fixtures();
+        if observed < min_mutation_repair_fixtures {
+            failures.push(format!(
+                "mutation_repair_fixtures {} below minimum {}",
+                observed, min_mutation_repair_fixtures
+            ));
+        }
+    }
+
+    if let Some(min_mutation_repair_fixture_kinds) = gate.min_mutation_repair_fixture_kinds {
+        let observed = summary.mutation_repair_fixture_kinds();
+        if observed < min_mutation_repair_fixture_kinds {
+            failures.push(format!(
+                "mutation_repair_fixture_kinds {} below minimum {}",
+                observed, min_mutation_repair_fixture_kinds
+            ));
+        }
+    }
+
+    if let Some(min_mutation_repair_candidates) = gate.min_mutation_repair_candidates {
+        let observed = summary.mutation_repair_candidates();
+        if observed < min_mutation_repair_candidates {
+            failures.push(format!(
+                "mutation_repair_candidates {} below minimum {}",
+                observed, min_mutation_repair_candidates
+            ));
+        }
+    }
+
+    if let Some(min_mutation_repair_review_packets) = gate.min_mutation_repair_review_packets {
+        let observed = summary.mutation_repair_review_packets();
+        if observed < min_mutation_repair_review_packets {
+            failures.push(format!(
+                "mutation_repair_review_packets {} below minimum {}",
+                observed, min_mutation_repair_review_packets
+            ));
+        }
+    }
+
+    if let Some(min_malignant_gene_recovery_drills) = gate.min_malignant_gene_recovery_drills {
+        let observed = summary.malignant_gene_recovery_drills();
+        if observed < min_malignant_gene_recovery_drills {
+            failures.push(format!(
+                "malignant_gene_recovery_drills {} below minimum {}",
+                observed, min_malignant_gene_recovery_drills
+            ));
+        }
+    }
+
+    if let Some(min_malignant_gene_quarantines) = gate.min_malignant_gene_quarantines {
+        let observed = summary.malignant_gene_quarantines();
+        if observed < min_malignant_gene_quarantines {
+            failures.push(format!(
+                "malignant_gene_quarantines {} below minimum {}",
+                observed, min_malignant_gene_quarantines
+            ));
+        }
+    }
+
+    if let Some(min_malignant_gene_cut_candidates) = gate.min_malignant_gene_cut_candidates {
+        let observed = summary.malignant_gene_cut_candidates();
+        if observed < min_malignant_gene_cut_candidates {
+            failures.push(format!(
+                "malignant_gene_cut_candidates {} below minimum {}",
+                observed, min_malignant_gene_cut_candidates
+            ));
+        }
+    }
+
+    if let Some(min_malignant_gene_regeneration_candidates) =
+        gate.min_malignant_gene_regeneration_candidates
+    {
+        let observed = summary.malignant_gene_regeneration_candidates();
+        if observed < min_malignant_gene_regeneration_candidates {
+            failures.push(format!(
+                "malignant_gene_regeneration_candidates {} below minimum {}",
+                observed, min_malignant_gene_regeneration_candidates
+            ));
+        }
+    }
 }
