@@ -2637,10 +2637,17 @@ impl SelfImproveProposal {
     }
 
     fn action_closure_evidence(&self) -> Option<SelfImproveProposalActionClosureEvidence> {
-        if !proposal_requests_no_fail_fast_validation_command(&self.suggested_action) {
-            return None;
+        if proposal_requests_no_fail_fast_validation_command(&self.suggested_action) {
+            return Some(self.no_fail_fast_action_closure_evidence());
+        }
+        if proposal_requests_index_deterministic_seed_field(&self.suggested_action) {
+            return Some(self.index_deterministic_seed_action_closure_evidence());
         }
 
+        None
+    }
+
+    fn no_fail_fast_action_closure_evidence(&self) -> SelfImproveProposalActionClosureEvidence {
         let pool_default = crate::pool_stage_call::DEFAULT_TEST_GATE_VALIDATION_COMMAND;
         let repair_default = crate::helper_stage_repair::VALIDATION_COMMAND;
         let pool_default_safe = validation::test_gate_validation_command_safety(Some(pool_default));
@@ -2671,7 +2678,7 @@ impl SelfImproveProposal {
             Vec::new()
         };
 
-        Some(SelfImproveProposalActionClosureEvidence {
+        SelfImproveProposalActionClosureEvidence {
             proposal_id: self.proposal_id.clone(),
             source_round: self.source_round,
             closure_kind: "test_gate_no_fail_fast".to_owned(),
@@ -2686,7 +2693,50 @@ impl SelfImproveProposal {
                 "test-gate and helper repair validation commands include --no-fail-fast".to_owned(),
                 "closure is report-only and does not auto-admit memory".to_owned(),
             ],
-        })
+        }
+    }
+
+    fn index_deterministic_seed_action_closure_evidence(
+        &self,
+    ) -> SelfImproveProposalActionClosureEvidence {
+        let code_evidence_present = index_deterministic_seed_contract_code_evidence_present();
+        let code_evidence_ids = if code_evidence_present {
+            vec![
+                "tools/evolution-loop/src/helper_feedback.rs::contract_markers(index)".to_owned(),
+                "tools/evolution-loop/src/pool_stage_call.rs::index_stage_prompt".to_owned(),
+                "tools/evolution-loop/src/pool_stage_call.rs::index_field_defaults".to_owned(),
+            ]
+        } else {
+            Vec::new()
+        };
+        let validation_evidence_present = self.validation_checked;
+        let validation_evidence_ids = if validation_evidence_present {
+            vec![
+                self.evidence_id.clone(),
+                "ledger.self_improve_proposal.validation_checked".to_owned(),
+            ]
+        } else {
+            Vec::new()
+        };
+
+        SelfImproveProposalActionClosureEvidence {
+            proposal_id: self.proposal_id.clone(),
+            source_round: self.source_round,
+            closure_kind: "index_deterministic_seed_contract".to_owned(),
+            code_evidence_present,
+            code_evidence_ids,
+            validation_evidence_present,
+            validation_evidence_ids,
+            validation_passed: self.validation_checked && self.validation_passed,
+            memory_store_write_attempted: false,
+            ndkv_write_attempted: false,
+            notes: vec![
+                "index helper contract now requires deterministic_seed in prompt, tags, and contract markers"
+                    .to_owned(),
+                "closure is report-only and still requires operator-gated memory admission"
+                    .to_owned(),
+            ],
+        }
     }
 }
 
@@ -2874,6 +2924,9 @@ fn suggested_action_is_actionable(value: &str) -> bool {
         && !suggested_action_is_generic_placeholder(normalized)
         && !suggested_action_is_warning_suppression_noise(normalized)
         && !suggested_action_is_dynamic_buffer_config_noise(normalized)
+        && !suggested_action_is_no_small_next_change_noise(normalized)
+        && !suggested_action_is_unproven_test_seed_noise(normalized)
+        && !suggested_action_is_past_primary_answer_noise(normalized)
 }
 
 fn normalize_candidate_action_for_matching(value: &str) -> String {
@@ -2996,6 +3049,45 @@ fn suggested_action_is_dynamic_buffer_config_noise(value: &str) -> bool {
         && only_restates_enabled_policy
 }
 
+fn suggested_action_is_no_small_next_change_noise(value: &str) -> bool {
+    value.starts_with("no small next change is explicitly requested")
+        || value.starts_with("no small next change explicitly requested")
+        || value.starts_with("no small next change grounded in the same evidence")
+        || value.starts_with("no small next change is grounded in the same evidence")
+}
+
+fn suggested_action_is_unproven_test_seed_noise(value: &str) -> bool {
+    let mentions_seed = value.contains("deterministic seed")
+        || value.contains("fixed seed")
+        || value.contains("known random seed")
+        || value.contains("random seed");
+    if !mentions_seed {
+        return false;
+    }
+    let mentions_index_contract = value.contains("index role")
+        || value.contains("index feedback")
+        || value.contains("index contract")
+        || value.contains("index roles feedback")
+        || value.contains("index role s feedback");
+    if mentions_index_contract {
+        return false;
+    }
+    value.contains("test harness")
+        || value.contains("test execution")
+        || value.contains("cargo test")
+        || value.contains("flaky")
+        || value.contains("flakiness")
+}
+
+fn suggested_action_is_past_primary_answer_noise(value: &str) -> bool {
+    (value.starts_with("update the primary answer")
+        || value.starts_with("update primary answer")
+        || value.starts_with("modify the primary answer"))
+        && (value.contains("cannot be verified")
+            || value.contains("provided inputs")
+            || value.contains("for round"))
+}
+
 fn derived_proposal_id(round: Option<u64>, action: &str, source: &str) -> String {
     let key = action
         .chars()
@@ -3036,6 +3128,47 @@ fn proposal_requests_no_fail_fast_validation_command(suggested_action: &str) -> 
     let lower = suggested_action.to_ascii_lowercase();
     lower.contains("--no-fail-fast")
         && (lower.contains("validation_command") || lower.contains("validation command"))
+}
+
+fn proposal_requests_index_deterministic_seed_field(suggested_action: &str) -> bool {
+    let normalized = normalize_candidate_action_for_matching(suggested_action);
+    let mentions_seed = normalized.contains("deterministic seed");
+    let mentions_index = normalized.contains("index role")
+        || normalized.contains("index feedback")
+        || normalized.contains("index contract")
+        || normalized.contains("index roles feedback")
+        || normalized.contains("index role s feedback");
+    let requests_field = normalized.contains("field")
+        || normalized.contains("include")
+        || normalized.contains("required")
+        || normalized.contains("requires")
+        || normalized.contains("feedback mechanism");
+    mentions_seed && mentions_index && requests_field
+}
+
+fn index_deterministic_seed_contract_code_evidence_present() -> bool {
+    if !helper_feedback::contract_markers("index").contains(&"deterministic_seed") {
+        return false;
+    }
+    let completed_roles = vec!["review".to_owned()];
+    let input = crate::pool_stage_call::PoolStageCallInput {
+        task_kind: "index",
+        case_name: "action-closure-evidence",
+        round: 1,
+        validation_timestamp_unix: Some(1_781_770_123),
+        validation_evidence: None,
+        original_prompt: "check index deterministic seed closure",
+        primary_answer: Some("index helper must carry deterministic seed provenance"),
+        final_json: Some("{\"ok\":true}"),
+        dispatch_plan: None,
+        completed_roles: &completed_roles,
+        max_tokens: 512,
+    };
+    let prompt = crate::pool_stage_call::stage_prompt(&input);
+    prompt.contains("deterministic_seed")
+        && prompt.contains("tags must include role=index")
+        && prompt.contains("and deterministic_seed labels")
+        && prompt.contains("Keep exactly seven lines")
 }
 
 fn repair_factor_id(target: &SelfImproveProposalActionAssignmentTarget) -> String {
@@ -6283,6 +6416,72 @@ mod tests {
         assert!(regeneration_admission_json.contains("\"admission_write_authorized\":false"));
         assert!(regeneration_admission_json.contains("\"memory_store_write_allowed\":false"));
         assert!(regeneration_admission_json.contains("\"ndkv_write_allowed\":false"));
+    }
+
+    #[test]
+    fn action_closure_report_marks_index_deterministic_seed_targets_closed_from_code_evidence() {
+        let text = r#"{"round":742,"case":"index-deterministic-seed","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","validation_command_preview":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-deterministic-seed","helper_stage_contract_by_role":{"review":{"fields":{"risk":"index feedback lacks deterministic provenance","change_request":"Update the `index` role's feedback mechanism to include a `deterministic_seed` field for all rounds, starting with round 730 (primary_answer).","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-deterministic-seed"}},"test-gate":{"fields":{"validation_command":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-deterministic-seed"}}}}"#;
+
+        let artifact = from_ledger_text(&format!("{text}\n"));
+        let report = artifact.action_closure_report();
+        let json = option_action_closure_report_json(Some(&artifact));
+        let regeneration_admission = artifact.repair_factor_regeneration_admission();
+
+        assert_eq!(report.target_count, 1);
+        assert_eq!(report.closed_target_count, 1);
+        assert_eq!(report.open_target_count, 0);
+        assert!(report.first_target_closed);
+        assert_eq!(
+            report.first_target_closure_kind.as_deref(),
+            Some("index_deterministic_seed_contract")
+        );
+        assert!(report.first_target_still_requires_memory_admission);
+        let item = report.closure_items.first().unwrap();
+        assert!(item.code_evidence_present);
+        assert!(item.validation_evidence_present);
+        assert!(item.validation_passed);
+        assert!(
+            item.code_evidence_ids
+                .iter()
+                .any(|id| id.contains("helper_feedback.rs::contract_markers(index)"))
+        );
+        assert!(json.contains("\"closure_kind\":\"index_deterministic_seed_contract\""));
+        assert!(json.contains("\"closed_target_count\":1"));
+        assert!(json.contains("\"still_requires_memory_admission\":true"));
+        assert_eq!(regeneration_admission.pending_action_closure_count, 0);
+        assert_eq!(regeneration_admission.ready_regeneration_candidate_count, 1);
+        assert!(regeneration_admission.regeneration_admission_ready);
+        assert!(!regeneration_admission.admission_write_authorized);
+    }
+
+    #[test]
+    fn action_assignment_filters_stale_noop_and_unproven_seed_noise() {
+        let text = concat!(
+            r#"{"round":736,"case":"invalid-test-seed","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"flaky tests","change_request":"Add a deterministic seed to the `evolution-loop` test harness to fix flakiness, as suggested in the `primary_answer`.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":737,"case":"noop-explicit","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"none","change_request":"No small next change is explicitly requested or derived from the evidence, as the primary_answer addresses a past issue.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":739,"case":"past-primary-answer","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"unverifiable past answer","change_request":"Update the `primary_answer` to remove the assertion that the `index` role's feedback for round 738 confirms the `deterministic_seed` field is present, as this cannot be verified from the provided inputs.","verification":"inspect prior answer"}}}}"#,
+            "\n",
+            r#"{"round":742,"case":"valid-index-seed","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"index feedback lacks deterministic provenance","change_request":"Update the `index` role's feedback mechanism to include a `deterministic_seed` field for all rounds, starting with round 730 (primary_answer).","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":743,"case":"noop-grounded","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"none","change_request":"No small next change grounded in the same evidence","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n"
+        );
+
+        let artifact = from_ledger_text(text);
+        let assignment = artifact.acceptance_action_assignment();
+        let closure = artifact.action_closure_report();
+
+        assert_eq!(artifact.total_candidate_count, 1);
+        assert_eq!(artifact.proposals[0].source_round, Some(742));
+        assert_eq!(assignment.target_count, 1);
+        assert_eq!(closure.closed_target_count, 1);
+        assert_eq!(closure.open_target_count, 0);
+        assert_eq!(
+            closure.first_target_closure_kind.as_deref(),
+            Some("index_deterministic_seed_contract")
+        );
     }
 
     #[test]
