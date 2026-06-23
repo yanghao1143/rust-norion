@@ -1,3 +1,6 @@
+use crate::benchmark::{
+    GENOME_REJUVENATION_REPAIR_FACTOR_SCHEMA_VERSION, GenomeRepairFactorRelease,
+};
 use crate::memory_admission::{
     MemoryAdmissionApprovalState, MemoryAdmissionDecision, MemoryAdmissionPreview,
     MemoryKvLedgerWritePlan, MemoryPrivacyClassification,
@@ -434,6 +437,65 @@ impl UnifiedWriterGateCandidate {
             report.is_read_only_preview(),
             report.write_allowed,
             report.applied,
+            false,
+        )
+        .with_raw_payload_redacted(redacted)
+    }
+
+    pub fn genome_repair_factor_release(factor: &GenomeRepairFactorRelease) -> Self {
+        let redacted = genome_repair_factor_redacted(factor);
+        let validation_passed = factor.validation_status == GeneValidationStatus::Passed;
+        let trace_or_benchmark_passed = factor.ready_for_release
+            && factor.ready_for_retag
+            && factor.blocked_reasons.is_empty()
+            && factor.replay_digest.starts_with("redaction-digest:");
+        let rollback_ready = !factor.rollback_anchor_id.trim().is_empty()
+            && factor.replay_digest.starts_with("redaction-digest:");
+        let evidence_ids = unique_owned(vec![
+            factor.gene_digest.clone(),
+            factor.replay_digest.clone(),
+            stable_redaction_digest([
+                "genome-repair-factor-release",
+                factor.repair_factor_id.as_str(),
+                factor.repair_label.as_str(),
+                factor.retag_action.as_str(),
+            ]),
+        ]);
+        let content_digests = unique_owned(vec![
+            factor.previous_label.clone(),
+            factor.repair_label.clone(),
+            factor.release_action.clone(),
+            factor.retag_action.clone(),
+        ]);
+
+        Self::new(
+            UnifiedWriterGateDomain::Genome,
+            factor.repair_factor_id.clone(),
+            [
+                UnifiedWriterGateWriteScope::Genome,
+                UnifiedWriterGateWriteScope::DurableMemory,
+            ],
+        )
+        .with_refs(
+            vec![factor.repair_factor_id.clone()],
+            evidence_ids,
+            vec![factor.rollback_anchor_id.clone()],
+            content_digests,
+            vec![GENOME_REJUVENATION_REPAIR_FACTOR_SCHEMA_VERSION.to_owned()],
+        )
+        .with_evidence(
+            validation_passed,
+            trace_or_benchmark_passed,
+            rollback_ready,
+            redacted,
+            true,
+        )
+        .with_operator_approval(false, false)
+        .with_source_flags(
+            true,
+            factor.is_safe_preview(),
+            factor.write_allowed,
+            factor.applied,
             false,
         )
         .with_raw_payload_redacted(redacted)
@@ -1066,6 +1128,25 @@ fn dna_evolution_report_redacted(report: &DnaEvolutionControllerReport) -> bool 
         })
 }
 
+fn genome_repair_factor_redacted(factor: &GenomeRepairFactorRelease) -> bool {
+    [
+        factor.repair_factor_id.as_str(),
+        factor.gene_digest.as_str(),
+        factor.previous_label.as_str(),
+        factor.repair_label.as_str(),
+        factor.release_action.as_str(),
+        factor.retag_action.as_str(),
+        factor.rollback_anchor_id.as_str(),
+        factor.replay_digest.as_str(),
+    ]
+    .into_iter()
+    .all(|value| !contains_private_or_executable_marker(value))
+        && factor
+            .blocked_reasons
+            .iter()
+            .all(|reason| !contains_private_or_executable_marker(reason))
+}
+
 fn write_scopes(scopes: &[UnifiedWriterGateWriteScope]) -> String {
     scopes
         .iter()
@@ -1436,6 +1517,54 @@ mod tests {
             gate.records[0]
                 .reason_codes
                 .contains(&"validation_evidence_missing_or_failed".to_owned())
+        );
+    }
+
+    #[test]
+    fn genome_repair_factor_constructor_holds_until_validation_and_approval() {
+        let report = crate::benchmark::run_default_genome_rejuvenation_simulation();
+        let factor = report
+            .results
+            .iter()
+            .flat_map(|result| result.repair_factors.iter())
+            .find(|factor| factor.ready_for_release && factor.ready_for_retag)
+            .expect("ready repair factor");
+        let candidate = UnifiedWriterGateCandidate::genome_repair_factor_release(factor);
+
+        assert_eq!(candidate.domain, UnifiedWriterGateDomain::Genome);
+        assert_eq!(
+            candidate.requested_writes,
+            vec![
+                UnifiedWriterGateWriteScope::DurableMemory,
+                UnifiedWriterGateWriteScope::Genome
+            ]
+        );
+        assert!(!candidate.validation_passed);
+        assert!(candidate.trace_or_benchmark_passed);
+        assert!(candidate.rollback_ready);
+        assert!(candidate.privacy_checked);
+        assert!(!candidate.operator_approved);
+        assert!(!candidate.approval_refs_match);
+        assert!(candidate.source_read_only);
+        assert!(candidate.source_preview_only);
+        assert!(candidate.raw_payload_redacted);
+
+        let gate = UnifiedWriterGate::new().evaluate([candidate]);
+
+        assert_eq!(gate.decision, UnifiedWriterGateDecision::Hold);
+        assert_eq!(gate.genome_records, 1);
+        assert_eq!(gate.held_records, 1);
+        assert!(!gate.durable_write_allowed);
+        assert!(!gate.write_allowed);
+        assert!(
+            gate.records[0]
+                .reason_codes
+                .contains(&"validation_evidence_missing_or_failed".to_owned())
+        );
+        assert!(
+            gate.records[0]
+                .reason_codes
+                .contains(&"operator_approval_missing".to_owned())
         );
     }
 

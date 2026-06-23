@@ -343,6 +343,87 @@ fn summary_gates_mutation_fixture_and_malignant_recovery_corpus() {
 }
 
 #[test]
+fn summary_gates_genome_rejuvenation_repair_factor_release() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let case = BenchmarkCase::new(
+        "genome_rejuvenation_gate",
+        TaskProfile::Coding,
+        "Validate genome rejuvenation repair factor gates.",
+    );
+    let outcome = engine.infer(
+        InferenceRequest::new(case.prompt.clone(), case.profile),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+
+    summary.record(&case, 5, &outcome);
+
+    assert_eq!(summary.genome_rejuvenation_cases(), 4);
+    assert_eq!(summary.genome_rejuvenation_repair_factors(), 5);
+    assert_eq!(
+        summary.genome_rejuvenation_ready_repair_factors(),
+        summary.genome_rejuvenation_repair_factors()
+    );
+    assert_eq!(
+        summary.genome_rejuvenation_ready_retag_plans(),
+        summary.genome_rejuvenation_repair_factors()
+    );
+    assert_eq!(summary.genome_rejuvenation_repair_factor_gate_reports(), 1);
+    assert_eq!(
+        summary.genome_rejuvenation_repair_factor_gate_holds(),
+        summary.genome_rejuvenation_repair_factors()
+    );
+    assert_eq!(summary.genome_rejuvenation_repair_factor_gate_ready(), 0);
+    assert_eq!(summary.genome_rejuvenation_repair_factor_gate_rejected(), 0);
+    assert_eq!(
+        summary.genome_rejuvenation_repair_factor_gate_durable_write_allowed(),
+        0
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("genome_rejuvenation_repair_factors=5")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("genome_rejuvenation_repair_factor_gate_holds=5")
+    );
+
+    let report = summary.evaluate(&BenchmarkGate {
+        min_average_quality: 0.0,
+        min_average_reward: 0.0,
+        min_genome_rejuvenation_cases: Some(4),
+        min_genome_rejuvenation_repair_factors: Some(5),
+        min_genome_rejuvenation_ready_repair_factors: Some(5),
+        min_genome_rejuvenation_ready_retag_plans: Some(5),
+        min_genome_rejuvenation_repair_factor_gate_holds: Some(5),
+        max_genome_rejuvenation_repair_factor_gate_ready: Some(0),
+        max_genome_rejuvenation_repair_factor_gate_rejected: Some(0),
+        max_genome_rejuvenation_repair_factor_gate_durable_write_allowed: Some(0),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(report.passed, "{:?}", report.failures);
+
+    let failing = summary.evaluate(&BenchmarkGate {
+        min_average_quality: 0.0,
+        min_average_reward: 0.0,
+        min_genome_rejuvenation_repair_factors: Some(6),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(!failing.passed);
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("genome_rejuvenation_repair_factors") })
+    );
+}
+
+#[test]
 fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
     let summary = BenchmarkSummary::new();
     let gate = BenchmarkGate {

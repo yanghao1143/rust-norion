@@ -26,11 +26,12 @@ pub use embedding_evidence::BenchmarkEmbeddingEvidence;
 pub use gate::{BenchmarkGate, BenchmarkGateReport};
 pub use genome_evidence::BenchmarkGenomeEvidence;
 pub use genome_rejuvenation::{
-    GenomeRejuvenationCase, GenomeRejuvenationCaseResult, GenomeRejuvenationDecision,
-    GenomeRejuvenationDecisionKind, GenomeRejuvenationSimulationGate,
-    GenomeRejuvenationSimulationGateReport, GenomeRejuvenationSimulationReport,
-    GenomeRejuvenationSnapshot, default_genome_rejuvenation_cases,
-    run_default_genome_rejuvenation_simulation, run_genome_rejuvenation_simulation,
+    GENOME_REJUVENATION_REPAIR_FACTOR_SCHEMA_VERSION, GenomeRejuvenationCase,
+    GenomeRejuvenationCaseResult, GenomeRejuvenationDecision, GenomeRejuvenationDecisionKind,
+    GenomeRejuvenationSimulationGate, GenomeRejuvenationSimulationGateReport,
+    GenomeRejuvenationSimulationReport, GenomeRejuvenationSnapshot, GenomeRepairFactorRelease,
+    default_genome_rejuvenation_cases, run_default_genome_rejuvenation_simulation,
+    run_genome_rejuvenation_simulation,
 };
 pub use improvement_corpus_evidence::BenchmarkImprovementCorpusEvidence;
 pub use kv_quant::{

@@ -120,6 +120,70 @@ impl BenchmarkSummary {
         self.genome_evidence.malignant_gene_failed_replay
     }
 
+    pub fn genome_rejuvenation_cases(&self) -> usize {
+        self.genome_evidence.genome_rejuvenation_cases
+    }
+
+    pub fn genome_rejuvenation_decisions(&self) -> usize {
+        self.genome_evidence.genome_rejuvenation_decisions
+    }
+
+    pub fn genome_rejuvenation_repair_factors(&self) -> usize {
+        self.genome_evidence.genome_rejuvenation_repair_factors
+    }
+
+    pub fn genome_rejuvenation_ready_repair_factors(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_ready_repair_factors
+    }
+
+    pub fn genome_rejuvenation_ready_retag_plans(&self) -> usize {
+        self.genome_evidence.genome_rejuvenation_ready_retag_plans
+    }
+
+    pub fn genome_rejuvenation_rollback_ready(&self) -> usize {
+        self.genome_evidence.genome_rejuvenation_rollback_ready
+    }
+
+    pub fn genome_rejuvenation_replay_digests(&self) -> usize {
+        self.genome_evidence.genome_rejuvenation_replay_digests
+    }
+
+    pub fn genome_rejuvenation_wasted_compute_reduction(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_wasted_compute_reduction
+    }
+
+    pub fn genome_rejuvenation_repair_factor_gate_reports(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_repair_factor_gate_reports
+    }
+
+    pub fn genome_rejuvenation_repair_factor_gate_holds(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_repair_factor_gate_holds
+    }
+
+    pub fn genome_rejuvenation_repair_factor_gate_ready(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_repair_factor_gate_ready
+    }
+
+    pub fn genome_rejuvenation_repair_factor_gate_rejected(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_repair_factor_gate_rejected
+    }
+
+    pub fn genome_rejuvenation_repair_factor_gate_explicit_apply_required(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_repair_factor_gate_explicit_apply_required
+    }
+
+    pub fn genome_rejuvenation_repair_factor_gate_durable_write_allowed(&self) -> usize {
+        self.genome_evidence
+            .genome_rejuvenation_repair_factor_gate_durable_write_allowed
+    }
+
     pub fn dna_evolution_reports(&self) -> usize {
         self.genome_evidence.dna_evolution_reports
     }

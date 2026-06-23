@@ -7,6 +7,9 @@ use crate::reasoning_genome::{
     GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind, ReasoningGenome,
 };
 
+pub const GENOME_REJUVENATION_REPAIR_FACTOR_SCHEMA_VERSION: &str =
+    "genome_rejuvenation_repair_factor_v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GenomeRejuvenationDecisionKind {
     Keep,
