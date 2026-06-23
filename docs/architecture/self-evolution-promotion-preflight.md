@@ -3,6 +3,14 @@
 Issue #20 needs a clear boundary between "approved for review" and "actually
 active". `SelfEvolutionPromotionPreflightGate` is that boundary.
 
+Before this preflight, `SelfEvolutionPromotionScorecardGate` can now decide
+whether a candidate is ready for human approval at all. The scorecard is
+advisory and digest-only: it compares correctness, latency, wasted compute,
+privacy risk, reproducibility, rollback readiness, cross-task regression, flaky
+runs, validation evidence, and lane-specific regression budgets. Its positive
+decision is `promote_for_approval`, not "apply". It does not mutate memory,
+genome state, routing state, runtime policy, Git state, or model weights.
+
 ## Inputs
 
 The gate requires three matching records:

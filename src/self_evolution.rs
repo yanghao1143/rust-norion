@@ -1,6 +1,7 @@
 use crate::adaptive_state::EvolutionLedger;
 use crate::benchmark::{BenchmarkGate, BenchmarkGateReport, BenchmarkSummary};
 use crate::hierarchy::HierarchyAdjustmentPreviewReport;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::router::RouterThresholdAdjustmentPreviewReport;
 use crate::split::bridge::KvFusionPolicyObservationDryRunReport;
 
@@ -398,6 +399,595 @@ impl SelfEvolutionAdmissionReviewPacketRefs {
 
     pub fn push_source_report_schema(&mut self, value: impl Into<String>) {
         push_unique_string(&mut self.source_report_schemas, value);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SelfEvolutionPromotionLane {
+    Memory,
+    Genome,
+    Routing,
+    RuntimeAdapter,
+    TaskSkillGene,
+    ToolPolicy,
+}
+
+impl SelfEvolutionPromotionLane {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::Genome => "genome",
+            Self::Routing => "routing",
+            Self::RuntimeAdapter => "runtime_adapter",
+            Self::TaskSkillGene => "task_skill_gene",
+            Self::ToolPolicy => "tool_policy",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionPromotionDecision {
+    PromoteForApproval,
+    HoldForEvidence,
+    InsufficientEvidence,
+    Reject,
+    Rollback,
+}
+
+impl SelfEvolutionPromotionDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PromoteForApproval => "promote_for_approval",
+            Self::HoldForEvidence => "hold_for_evidence",
+            Self::InsufficientEvidence => "insufficient_evidence",
+            Self::Reject => "reject",
+            Self::Rollback => "rollback",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SelfEvolutionRegressionBudget {
+    pub max_correctness_regression: f32,
+    pub max_latency_regression_ms: i64,
+    pub max_wasted_compute_regression: f32,
+    pub max_privacy_risk: f32,
+    pub max_cross_task_regression: f32,
+    pub max_flaky_runs: u64,
+}
+
+impl SelfEvolutionRegressionBudget {
+    pub const fn strict() -> Self {
+        Self {
+            max_correctness_regression: 0.005,
+            max_latency_regression_ms: 5,
+            max_wasted_compute_regression: 0.01,
+            max_privacy_risk: 0.0,
+            max_cross_task_regression: 0.005,
+            max_flaky_runs: 0,
+        }
+    }
+
+    pub const fn balanced() -> Self {
+        Self {
+            max_correctness_regression: 0.01,
+            max_latency_regression_ms: 25,
+            max_wasted_compute_regression: 0.03,
+            max_privacy_risk: 0.0,
+            max_cross_task_regression: 0.02,
+            max_flaky_runs: 0,
+        }
+    }
+
+    pub const fn runtime_adapter() -> Self {
+        Self {
+            max_correctness_regression: 0.005,
+            max_latency_regression_ms: 10,
+            max_wasted_compute_regression: 0.02,
+            max_privacy_risk: 0.0,
+            max_cross_task_regression: 0.01,
+            max_flaky_runs: 0,
+        }
+    }
+
+    fn normalized(self) -> Self {
+        Self {
+            max_correctness_regression: finite_or_zero(self.max_correctness_regression).max(0.0),
+            max_latency_regression_ms: self.max_latency_regression_ms.max(0),
+            max_wasted_compute_regression: finite_or_zero(self.max_wasted_compute_regression)
+                .max(0.0),
+            max_privacy_risk: finite_or_zero(self.max_privacy_risk).clamp(0.0, 1.0),
+            max_cross_task_regression: finite_or_zero(self.max_cross_task_regression).max(0.0),
+            max_flaky_runs: self.max_flaky_runs,
+        }
+    }
+}
+
+impl Default for SelfEvolutionRegressionBudget {
+    fn default() -> Self {
+        Self::balanced()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SelfEvolutionPromotionPolicy {
+    pub min_correctness_delta: f32,
+    pub min_reproducible_runs: u64,
+    pub require_validation_passed: bool,
+    pub require_rollback_ready: bool,
+    pub memory_budget: SelfEvolutionRegressionBudget,
+    pub genome_budget: SelfEvolutionRegressionBudget,
+    pub routing_budget: SelfEvolutionRegressionBudget,
+    pub runtime_adapter_budget: SelfEvolutionRegressionBudget,
+    pub task_skill_gene_budget: SelfEvolutionRegressionBudget,
+    pub tool_policy_budget: SelfEvolutionRegressionBudget,
+}
+
+impl Default for SelfEvolutionPromotionPolicy {
+    fn default() -> Self {
+        Self {
+            min_correctness_delta: 0.0,
+            min_reproducible_runs: 2,
+            require_validation_passed: true,
+            require_rollback_ready: true,
+            memory_budget: SelfEvolutionRegressionBudget::balanced(),
+            genome_budget: SelfEvolutionRegressionBudget::strict(),
+            routing_budget: SelfEvolutionRegressionBudget::balanced(),
+            runtime_adapter_budget: SelfEvolutionRegressionBudget::runtime_adapter(),
+            task_skill_gene_budget: SelfEvolutionRegressionBudget::strict(),
+            tool_policy_budget: SelfEvolutionRegressionBudget::balanced(),
+        }
+    }
+}
+
+impl SelfEvolutionPromotionPolicy {
+    pub fn budget_for(self, lane: SelfEvolutionPromotionLane) -> SelfEvolutionRegressionBudget {
+        match lane {
+            SelfEvolutionPromotionLane::Memory => self.memory_budget,
+            SelfEvolutionPromotionLane::Genome => self.genome_budget,
+            SelfEvolutionPromotionLane::Routing => self.routing_budget,
+            SelfEvolutionPromotionLane::RuntimeAdapter => self.runtime_adapter_budget,
+            SelfEvolutionPromotionLane::TaskSkillGene => self.task_skill_gene_budget,
+            SelfEvolutionPromotionLane::ToolPolicy => self.tool_policy_budget,
+        }
+        .normalized()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionPromotionArtifactRef {
+    pub label: String,
+    pub content_digest: String,
+    pub trace_id: Option<String>,
+    pub source_schema: String,
+}
+
+impl SelfEvolutionPromotionArtifactRef {
+    pub fn digest(label: impl Into<String>, content_digest: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            content_digest: content_digest.into(),
+            trace_id: None,
+            source_schema: "rust-norion-promotion-artifact-v1".to_owned(),
+        }
+    }
+
+    pub fn trace(
+        label: impl Into<String>,
+        trace_id: impl Into<String>,
+        content_digest: impl Into<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            content_digest: content_digest.into(),
+            trace_id: Some(trace_id.into()),
+            source_schema: "rust-norion-trace-artifact-v1".to_owned(),
+        }
+    }
+
+    pub fn with_source_schema(mut self, source_schema: impl Into<String>) -> Self {
+        self.source_schema = source_schema.into();
+        self
+    }
+
+    fn redacted(&self) -> Self {
+        Self {
+            label: self_evolution_review_id_component(&self.label),
+            content_digest: digest_like_or_redacted(&self.content_digest),
+            trace_id: self
+                .trace_id
+                .as_deref()
+                .map(self_evolution_review_id_component),
+            source_schema: self_evolution_review_id_component(&self.source_schema),
+        }
+    }
+
+    fn is_safe_ref(&self) -> bool {
+        !self.label.trim().is_empty()
+            && !self.content_digest.trim().is_empty()
+            && !contains_private_or_executable_marker(&self.label)
+            && !contains_private_or_executable_marker(&self.content_digest)
+            && !self
+                .trace_id
+                .as_deref()
+                .is_some_and(contains_private_or_executable_marker)
+            && !contains_private_or_executable_marker(&self.source_schema)
+            && digest_or_trace_like(&self.content_digest)
+            && self.trace_id.as_deref().map_or(true, trace_id_like)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelfEvolutionPromotionCandidate {
+    pub candidate_id: String,
+    pub lane: SelfEvolutionPromotionLane,
+    pub correctness_delta: f32,
+    pub latency_delta_ms: i64,
+    pub wasted_compute_delta: f32,
+    pub privacy_risk: f32,
+    pub reproducible_runs: u64,
+    pub cross_task_regression: f32,
+    pub flaky_runs: u64,
+    pub rollback_ready: bool,
+    pub rollback_anchor_id: String,
+    pub validation: SelfEvolutionValidationEvidence,
+    pub artifact_refs: Vec<SelfEvolutionPromotionArtifactRef>,
+}
+
+impl SelfEvolutionPromotionCandidate {
+    pub fn new(candidate_id: impl Into<String>, lane: SelfEvolutionPromotionLane) -> Self {
+        Self {
+            candidate_id: candidate_id.into(),
+            lane,
+            correctness_delta: 0.0,
+            latency_delta_ms: 0,
+            wasted_compute_delta: 0.0,
+            privacy_risk: 0.0,
+            reproducible_runs: 0,
+            cross_task_regression: 0.0,
+            flaky_runs: 0,
+            rollback_ready: false,
+            rollback_anchor_id: String::new(),
+            validation: SelfEvolutionValidationEvidence::default(),
+            artifact_refs: Vec::new(),
+        }
+    }
+
+    pub fn with_correctness_delta(mut self, correctness_delta: f32) -> Self {
+        self.correctness_delta = finite_or_zero(correctness_delta);
+        self
+    }
+
+    pub fn with_latency_delta_ms(mut self, latency_delta_ms: i64) -> Self {
+        self.latency_delta_ms = latency_delta_ms;
+        self
+    }
+
+    pub fn with_wasted_compute_delta(mut self, wasted_compute_delta: f32) -> Self {
+        self.wasted_compute_delta = finite_or_zero(wasted_compute_delta);
+        self
+    }
+
+    pub fn with_privacy_risk(mut self, privacy_risk: f32) -> Self {
+        self.privacy_risk = finite_or_zero(privacy_risk).clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn with_reproducible_runs(mut self, reproducible_runs: u64) -> Self {
+        self.reproducible_runs = reproducible_runs;
+        self
+    }
+
+    pub fn with_cross_task_regression(mut self, cross_task_regression: f32) -> Self {
+        self.cross_task_regression = finite_or_zero(cross_task_regression).max(0.0);
+        self
+    }
+
+    pub fn with_flaky_runs(mut self, flaky_runs: u64) -> Self {
+        self.flaky_runs = flaky_runs;
+        self
+    }
+
+    pub fn with_rollback(mut self, rollback_anchor_id: impl Into<String>) -> Self {
+        self.rollback_ready = true;
+        self.rollback_anchor_id = rollback_anchor_id.into();
+        self
+    }
+
+    pub fn with_validation(mut self, validation: SelfEvolutionValidationEvidence) -> Self {
+        self.validation = validation;
+        self
+    }
+
+    pub fn with_artifact_ref(mut self, artifact_ref: SelfEvolutionPromotionArtifactRef) -> Self {
+        self.artifact_refs.push(artifact_ref);
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelfEvolutionPromotionScorecard {
+    pub candidate_id: String,
+    pub lane: SelfEvolutionPromotionLane,
+    pub decision: SelfEvolutionPromotionDecision,
+    pub ready_for_human_approval: bool,
+    pub human_approval_required: bool,
+    pub correctness_delta: f32,
+    pub latency_delta_ms: i64,
+    pub wasted_compute_delta: f32,
+    pub privacy_risk: f32,
+    pub reproducible_runs: u64,
+    pub cross_task_regression: f32,
+    pub flaky_runs: u64,
+    pub rollback_ready: bool,
+    pub rollback_anchor_id: String,
+    pub validation_passed: bool,
+    pub artifact_refs: Vec<SelfEvolutionPromotionArtifactRef>,
+    pub evidence_digest: String,
+    pub blocked_reasons: Vec<String>,
+    pub read_only: bool,
+    pub report_only: bool,
+    pub preview_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl SelfEvolutionPromotionScorecard {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolution_promotion_scorecard candidate={} lane={} decision={} ready_for_human_approval={} human_approval_required={} correctness_delta={:.6} latency_delta_ms={} wasted_compute_delta={:.6} privacy_risk={:.6} reproducible_runs={} cross_task_regression={:.6} flaky_runs={} rollback_ready={} validation_passed={} artifacts={} blocked_reasons={} read_only={} report_only={} preview_only={} write_allowed={} applied={} evidence_digest={}",
+            self.candidate_id,
+            self.lane.as_str(),
+            self.decision.as_str(),
+            self.ready_for_human_approval,
+            self.human_approval_required,
+            self.correctness_delta,
+            self.latency_delta_ms,
+            self.wasted_compute_delta,
+            self.privacy_risk,
+            self.reproducible_runs,
+            self.cross_task_regression,
+            self.flaky_runs,
+            self.rollback_ready,
+            self.validation_passed,
+            self.artifact_refs.len(),
+            self.blocked_reasons.len(),
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied,
+            self.evidence_digest
+        )
+    }
+
+    pub fn review_packet_line(&self) -> String {
+        let artifact_digests = self
+            .artifact_refs
+            .iter()
+            .map(|artifact| artifact.content_digest.clone())
+            .collect::<Vec<_>>();
+        let trace_ids = self
+            .artifact_refs
+            .iter()
+            .filter_map(|artifact| artifact.trace_id.clone())
+            .collect::<Vec<_>>();
+        format!(
+            "self_evolution_promotion_packet candidate={} lane={} decision={} artifact_digests={} trace_ids={} rollback_anchor={} evidence_digest={} blocked={}",
+            self.candidate_id,
+            self.lane.as_str(),
+            self.decision.as_str(),
+            artifact_digests.join(","),
+            trace_ids.join(","),
+            self.rollback_anchor_id,
+            self.evidence_digest,
+            self.blocked_reasons.join("|")
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let candidate_id = self_evolution_json_escape(&self.candidate_id);
+        let lane = self.lane.as_str();
+        let decision = self.decision.as_str();
+        let rollback_anchor_id = self_evolution_json_escape(&self.rollback_anchor_id);
+        let evidence_digest = self_evolution_json_escape(&self.evidence_digest);
+        let blocked_reasons = self_evolution_string_array_json(&self.blocked_reasons);
+        let artifact_digests = self_evolution_string_array_json(
+            &self
+                .artifact_refs
+                .iter()
+                .map(|artifact| artifact.content_digest.clone())
+                .collect::<Vec<_>>(),
+        );
+        let trace_ids = self_evolution_string_array_json(
+            &self
+                .artifact_refs
+                .iter()
+                .filter_map(|artifact| artifact.trace_id.clone())
+                .collect::<Vec<_>>(),
+        );
+        let correctness_delta = self_evolution_f32_json(self.correctness_delta);
+        let wasted_compute_delta = self_evolution_f32_json(self.wasted_compute_delta);
+        let privacy_risk = self_evolution_f32_json(self.privacy_risk);
+        let cross_task_regression = self_evolution_f32_json(self.cross_task_regression);
+        format!(
+            "{{\"schema\":\"rust-norion-self-evolution-promotion-scorecard-v1\",\"candidate_id\":\"{candidate_id}\",\"lane\":\"{lane}\",\"decision\":\"{decision}\",\"ready_for_human_approval\":{},\"human_approval_required\":{},\"correctness_delta\":{correctness_delta},\"latency_delta_ms\":{},\"wasted_compute_delta\":{wasted_compute_delta},\"privacy_risk\":{privacy_risk},\"reproducible_runs\":{},\"cross_task_regression\":{cross_task_regression},\"flaky_runs\":{},\"rollback_ready\":{},\"rollback_anchor_id\":\"{rollback_anchor_id}\",\"validation_passed\":{},\"artifact_digests\":{artifact_digests},\"trace_ids\":{trace_ids},\"blocked_reasons\":{blocked_reasons},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"write_allowed\":{},\"applied\":{},\"evidence_digest\":\"{evidence_digest}\"}}",
+            self.ready_for_human_approval,
+            self.human_approval_required,
+            self.latency_delta_ms,
+            self.reproducible_runs,
+            self.flaky_runs,
+            self.rollback_ready,
+            self.validation_passed,
+            self.read_only,
+            self.report_only,
+            self.preview_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SelfEvolutionPromotionScorecardGate {
+    pub policy: SelfEvolutionPromotionPolicy,
+}
+
+impl Default for SelfEvolutionPromotionScorecardGate {
+    fn default() -> Self {
+        Self {
+            policy: SelfEvolutionPromotionPolicy::default(),
+        }
+    }
+}
+
+impl SelfEvolutionPromotionScorecardGate {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_policy(mut self, policy: SelfEvolutionPromotionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn evaluate(
+        &self,
+        candidate: &SelfEvolutionPromotionCandidate,
+    ) -> SelfEvolutionPromotionScorecard {
+        let budget = self.policy.budget_for(candidate.lane);
+        let validation_passed = self_evolution_promotion_validation_passed(candidate.validation);
+        let mut blocked_reasons = Vec::new();
+        let mut rollback_required = false;
+        let mut rejection_required = false;
+        let mut insufficient_evidence = false;
+
+        let candidate_id = self_evolution_review_id_component(&candidate.candidate_id);
+        if candidate.candidate_id.trim().is_empty() {
+            insufficient_evidence = true;
+            blocked_reasons.push("promotion_candidate_id_missing".to_owned());
+        }
+        if candidate.artifact_refs.is_empty() {
+            insufficient_evidence = true;
+            blocked_reasons.push("promotion_artifact_refs_missing".to_owned());
+        }
+        for artifact in &candidate.artifact_refs {
+            if !artifact.is_safe_ref() {
+                rejection_required = true;
+                blocked_reasons.push("promotion_artifact_ref_not_digest_or_trace_only".to_owned());
+                break;
+            }
+        }
+        if candidate.reproducible_runs < self.policy.min_reproducible_runs {
+            insufficient_evidence = true;
+            blocked_reasons.push(format!(
+                "promotion_reproducible_runs={}<{}",
+                candidate.reproducible_runs, self.policy.min_reproducible_runs
+            ));
+        }
+        if self.policy.require_validation_passed && !validation_passed {
+            blocked_reasons.extend(self_evolution_promotion_validation_blockers(
+                candidate.validation,
+            ));
+        }
+        if candidate.correctness_delta < -budget.max_correctness_regression {
+            rollback_required = true;
+            blocked_reasons.push(format!(
+                "promotion_correctness_regression={:.6}>{:.6}",
+                -candidate.correctness_delta, budget.max_correctness_regression
+            ));
+        }
+        if candidate.correctness_delta < self.policy.min_correctness_delta {
+            blocked_reasons.push(format!(
+                "promotion_correctness_delta={:.6}<{}",
+                candidate.correctness_delta, self.policy.min_correctness_delta
+            ));
+        }
+        if candidate.latency_delta_ms > budget.max_latency_regression_ms {
+            blocked_reasons.push(format!(
+                "promotion_latency_regression_ms={}>{}",
+                candidate.latency_delta_ms, budget.max_latency_regression_ms
+            ));
+        }
+        if candidate.wasted_compute_delta > budget.max_wasted_compute_regression {
+            blocked_reasons.push(format!(
+                "promotion_wasted_compute_regression={:.6}>{:.6}",
+                candidate.wasted_compute_delta, budget.max_wasted_compute_regression
+            ));
+        }
+        if candidate.privacy_risk > budget.max_privacy_risk {
+            rejection_required = true;
+            blocked_reasons.push(format!(
+                "promotion_privacy_risk={:.6}>{:.6}",
+                candidate.privacy_risk, budget.max_privacy_risk
+            ));
+        }
+        if candidate.cross_task_regression > budget.max_cross_task_regression {
+            rollback_required = true;
+            blocked_reasons.push(format!(
+                "promotion_cross_task_regression={:.6}>{:.6}",
+                candidate.cross_task_regression, budget.max_cross_task_regression
+            ));
+        }
+        if candidate.flaky_runs > budget.max_flaky_runs {
+            blocked_reasons.push(format!(
+                "promotion_flaky_runs={}>{}",
+                candidate.flaky_runs, budget.max_flaky_runs
+            ));
+        }
+        if self.policy.require_rollback_ready
+            && (!candidate.rollback_ready || candidate.rollback_anchor_id.trim().is_empty())
+        {
+            rollback_required = true;
+            blocked_reasons.push("promotion_rollback_not_ready".to_owned());
+        }
+
+        let decision = if rejection_required {
+            SelfEvolutionPromotionDecision::Reject
+        } else if rollback_required {
+            SelfEvolutionPromotionDecision::Rollback
+        } else if insufficient_evidence {
+            SelfEvolutionPromotionDecision::InsufficientEvidence
+        } else if blocked_reasons.is_empty() {
+            SelfEvolutionPromotionDecision::PromoteForApproval
+        } else {
+            SelfEvolutionPromotionDecision::HoldForEvidence
+        };
+
+        let artifact_refs = candidate
+            .artifact_refs
+            .iter()
+            .map(SelfEvolutionPromotionArtifactRef::redacted)
+            .collect::<Vec<_>>();
+        let evidence_digest =
+            self_evolution_promotion_digest(candidate, &artifact_refs, decision, &blocked_reasons);
+
+        SelfEvolutionPromotionScorecard {
+            candidate_id,
+            lane: candidate.lane,
+            decision,
+            ready_for_human_approval: decision
+                == SelfEvolutionPromotionDecision::PromoteForApproval,
+            human_approval_required: true,
+            correctness_delta: finite_or_zero(candidate.correctness_delta),
+            latency_delta_ms: candidate.latency_delta_ms,
+            wasted_compute_delta: finite_or_zero(candidate.wasted_compute_delta),
+            privacy_risk: finite_or_zero(candidate.privacy_risk).clamp(0.0, 1.0),
+            reproducible_runs: candidate.reproducible_runs,
+            cross_task_regression: finite_or_zero(candidate.cross_task_regression).max(0.0),
+            flaky_runs: candidate.flaky_runs,
+            rollback_ready: candidate.rollback_ready,
+            rollback_anchor_id: self_evolution_review_id_component(&candidate.rollback_anchor_id),
+            validation_passed,
+            artifact_refs,
+            evidence_digest,
+            blocked_reasons,
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            write_allowed: false,
+            applied: false,
+        }
     }
 }
 
@@ -3272,6 +3862,135 @@ fn self_evolution_json_escape(value: &str) -> String {
     out
 }
 
+fn finite_or_zero(value: f32) -> f32 {
+    if value.is_finite() { value } else { 0.0 }
+}
+
+fn self_evolution_promotion_validation_passed(validation: SelfEvolutionValidationEvidence) -> bool {
+    self_evolution_promotion_lane_passed(validation.compiler)
+        && self_evolution_promotion_lane_passed(validation.tests)
+        && self_evolution_promotion_lane_passed(validation.benchmarks)
+        && validation.experiments.failed == 0
+        && validation
+            .experiments
+            .passed
+            .saturating_add(validation.experiments.failed)
+            <= validation.experiments.items
+}
+
+fn self_evolution_promotion_lane_passed(lane: SelfEvolutionValidationLane) -> bool {
+    lane.items > 0
+        && lane.passed > 0
+        && lane.failed == 0
+        && lane.passed.saturating_add(lane.failed) <= lane.items
+}
+
+fn self_evolution_promotion_validation_blockers(
+    validation: SelfEvolutionValidationEvidence,
+) -> Vec<String> {
+    let mut blocked = Vec::new();
+    self_evolution_promotion_push_lane_blocker(&mut blocked, "compiler", validation.compiler);
+    self_evolution_promotion_push_lane_blocker(&mut blocked, "tests", validation.tests);
+    self_evolution_promotion_push_lane_blocker(&mut blocked, "benchmarks", validation.benchmarks);
+    if validation.experiments.failed > 0
+        || validation
+            .experiments
+            .passed
+            .saturating_add(validation.experiments.failed)
+            > validation.experiments.items
+    {
+        self_evolution_promotion_push_lane_blocker(
+            &mut blocked,
+            "experiments",
+            validation.experiments,
+        );
+    }
+    blocked
+}
+
+fn self_evolution_promotion_push_lane_blocker(
+    blocked: &mut Vec<String>,
+    lane_name: &str,
+    lane: SelfEvolutionValidationLane,
+) {
+    if lane.items == 0 || lane.passed == 0 {
+        blocked.push(format!("promotion_{lane_name}_validation_missing"));
+    }
+    if lane.failed > 0 {
+        blocked.push(format!(
+            "promotion_{lane_name}_validation_failed:{}",
+            lane.failed
+        ));
+    }
+    if lane.passed.saturating_add(lane.failed) > lane.items {
+        blocked.push(format!(
+            "promotion_{lane_name}_validation_accounting_invalid"
+        ));
+    }
+}
+
+fn digest_or_trace_like(value: &str) -> bool {
+    let value = value.trim();
+    value.starts_with("fnv64:")
+        || value.starts_with("sha256:")
+        || value.starts_with("digest:")
+        || value.starts_with("redaction-digest:")
+}
+
+fn trace_id_like(value: &str) -> bool {
+    let value = value.trim();
+    (value.starts_with("trace:")
+        || value.starts_with("run:")
+        || value.starts_with("gh-run:")
+        || value.starts_with("artifact:"))
+        && !value.contains(char::is_whitespace)
+}
+
+fn digest_like_or_redacted(value: &str) -> String {
+    if digest_or_trace_like(value) && !contains_private_or_executable_marker(value) {
+        self_evolution_review_id_component(value)
+    } else {
+        self_evolution_stable_digest(value)
+    }
+}
+
+fn self_evolution_promotion_digest(
+    candidate: &SelfEvolutionPromotionCandidate,
+    artifacts: &[SelfEvolutionPromotionArtifactRef],
+    decision: SelfEvolutionPromotionDecision,
+    blocked_reasons: &[String],
+) -> String {
+    let artifact_digests = artifacts
+        .iter()
+        .map(|artifact| artifact.content_digest.as_str())
+        .collect::<Vec<_>>()
+        .join("|");
+    let trace_ids = artifacts
+        .iter()
+        .filter_map(|artifact| artifact.trace_id.as_deref())
+        .collect::<Vec<_>>()
+        .join("|");
+    self_evolution_stable_digest(&format!(
+        "candidate={};lane={};decision={};correctness_delta={:.6};latency_delta_ms={};wasted_compute_delta={:.6};privacy_risk={:.6};reproducible_runs={};cross_task_regression={:.6};flaky_runs={};rollback_ready={};rollback_anchor={};validation={:?};artifacts={};traces={};blocked={}",
+        candidate.candidate_id,
+        candidate.lane.as_str(),
+        decision.as_str(),
+        finite_or_zero(candidate.correctness_delta),
+        candidate.latency_delta_ms,
+        finite_or_zero(candidate.wasted_compute_delta),
+        finite_or_zero(candidate.privacy_risk).clamp(0.0, 1.0),
+        candidate.reproducible_runs,
+        finite_or_zero(candidate.cross_task_regression).max(0.0),
+        candidate.flaky_runs,
+        candidate.rollback_ready,
+        candidate.rollback_anchor_id,
+        candidate.validation,
+        artifact_digests,
+        trace_ids,
+        blocked_reasons.join("|")
+    ))
+}
+
 fn self_evolution_experiment_decision(
     report: &SelfEvolutionAdmissionReport,
     conflicting_evidence: bool,
@@ -3779,6 +4498,32 @@ mod tests {
         )
     }
 
+    fn promotion_artifact(label: &str) -> SelfEvolutionPromotionArtifactRef {
+        SelfEvolutionPromotionArtifactRef::trace(
+            label,
+            format!("trace:{label}"),
+            self_evolution_stable_digest(label),
+        )
+    }
+
+    fn passing_promotion_candidate(
+        lane: SelfEvolutionPromotionLane,
+    ) -> SelfEvolutionPromotionCandidate {
+        SelfEvolutionPromotionCandidate::new("promotion-candidate", lane)
+            .with_correctness_delta(0.042)
+            .with_latency_delta_ms(-8)
+            .with_wasted_compute_delta(-0.03)
+            .with_privacy_risk(0.0)
+            .with_reproducible_runs(3)
+            .with_cross_task_regression(0.0)
+            .with_flaky_runs(0)
+            .with_rollback("rollback:promotion-candidate")
+            .with_validation(passing_validation_evidence())
+            .with_artifact_ref(promotion_artifact("cargo-check"))
+            .with_artifact_ref(promotion_artifact("focused-tests"))
+            .with_artifact_ref(promotion_artifact("benchmark-gate"))
+    }
+
     fn safe_router_threshold_preview() -> RouterThresholdAdjustmentPreviewReport {
         RouterThresholdAdjustmentPreviewPlanner::new().preview(
             NoironRouter::new().state(),
@@ -3913,6 +4658,173 @@ mod tests {
         );
         assert!(approval.operator_approved);
         (admission, experiment, approval)
+    }
+
+    #[test]
+    fn promotion_scorecard_promotes_digest_only_candidate_for_human_approval() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::Memory);
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::PromoteForApproval
+        );
+        assert!(scorecard.ready_for_human_approval);
+        assert!(scorecard.human_approval_required);
+        assert!(scorecard.validation_passed);
+        assert_eq!(scorecard.artifact_refs.len(), 3);
+        assert!(scorecard.artifact_refs.iter().all(|artifact| {
+            digest_or_trace_like(&artifact.content_digest)
+                && artifact.trace_id.as_deref().is_some_and(trace_id_like)
+        }));
+        assert!(scorecard.read_only);
+        assert!(scorecard.report_only);
+        assert!(scorecard.preview_only);
+        assert!(!scorecard.write_allowed);
+        assert!(!scorecard.applied);
+        assert!(scorecard.summary_line().contains("write_allowed=false"));
+        assert!(scorecard.review_packet_line().contains("artifact_digests="));
+        assert!(!contains_private_or_executable_marker(
+            &scorecard.review_packet_line()
+        ));
+    }
+
+    #[test]
+    fn promotion_scorecard_holds_failed_validation_with_artifacts_present() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::ToolPolicy)
+            .with_validation(SelfEvolutionValidationEvidence::from_lanes(
+                SelfEvolutionValidationLane::new(1, 1, 0),
+                SelfEvolutionValidationLane::new(2, 1, 1),
+                SelfEvolutionValidationLane::new(1, 1, 0),
+                SelfEvolutionValidationLane::default(),
+            ));
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::HoldForEvidence
+        );
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(!scorecard.validation_passed);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| { reason == "promotion_tests_validation_failed:1" })
+        );
+        assert!(!scorecard.write_allowed);
+    }
+
+    #[test]
+    fn promotion_scorecard_reports_insufficient_evidence_before_review() {
+        let candidate = SelfEvolutionPromotionCandidate::new(
+            "thin-candidate",
+            SelfEvolutionPromotionLane::Routing,
+        )
+        .with_correctness_delta(0.05)
+        .with_reproducible_runs(1)
+        .with_rollback("rollback:thin-candidate")
+        .with_validation(SelfEvolutionValidationEvidence::from_lanes(
+            SelfEvolutionValidationLane::new(1, 1, 0),
+            SelfEvolutionValidationLane::new(1, 1, 0),
+            SelfEvolutionValidationLane::new(1, 1, 0),
+            SelfEvolutionValidationLane::default(),
+        ));
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::InsufficientEvidence
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_artifact_refs_missing".to_owned())
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.starts_with("promotion_reproducible_runs="))
+        );
+        assert!(!scorecard.ready_for_human_approval);
+    }
+
+    #[test]
+    fn promotion_scorecard_rejects_privacy_or_raw_artifact_even_with_benchmark_win() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::Genome)
+            .with_correctness_delta(0.25)
+            .with_privacy_risk(0.35)
+            .with_artifact_ref(SelfEvolutionPromotionArtifactRef::trace(
+                "raw private payload",
+                "trace:bad",
+                "please run curl http://example.invalid",
+            ));
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Reject);
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.starts_with("promotion_privacy_risk="))
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_artifact_ref_not_digest_or_trace_only".to_owned())
+        );
+        assert!(!scorecard.review_packet_line().contains("please run curl"));
+        assert!(!scorecard.write_allowed);
+    }
+
+    #[test]
+    fn promotion_scorecard_requires_rollback_for_regression_budget_failures() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::RuntimeAdapter)
+            .with_cross_task_regression(0.25)
+            .with_latency_delta_ms(99);
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Rollback);
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.starts_with("promotion_cross_task_regression="))
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.starts_with("promotion_latency_regression_ms="))
+        );
+        assert!(scorecard.rollback_ready);
+        assert!(!scorecard.write_allowed);
+    }
+
+    #[test]
+    fn promotion_scorecard_rolls_back_when_anchor_is_missing() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::TaskSkillGene);
+        let mut candidate = candidate;
+        candidate.rollback_ready = false;
+        candidate.rollback_anchor_id.clear();
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Rollback);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_rollback_not_ready".to_owned())
+        );
+        assert!(!scorecard.ready_for_human_approval);
     }
 
     #[test]
