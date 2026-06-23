@@ -59,6 +59,30 @@ hidden reasoning traces, secrets, or unreviewed third-party source text. The
 digest lets the same candidate be correlated across issue comments, trace rows,
 and benchmark logs without exposing the payload.
 
+`SelfEvolutionPromotionScorecardGate` is the cross-lane scorecard used before a
+candidate is allowed into human approval. It evaluates memory, genome, routing,
+runtime-adapter, task-skill-gene, and tool-policy candidates against:
+
+- correctness delta
+- latency regression
+- wasted compute regression
+- privacy risk
+- reproducible run count
+- cross-task regression
+- flaky run count
+- rollback readiness
+- compiler/test/benchmark validation
+- digest-only artifact and trace references
+
+Every lane has its own `SelfEvolutionRegressionBudget`. Genome and
+task-skill-gene candidates use the strictest defaults, runtime-adapter
+candidates get a separate adapter budget, and memory/routing/tool-policy
+candidates use the balanced budget. A benchmark win is never enough by itself:
+privacy risk, missing rollback anchors, raw artifact refs, failed validation,
+or cross-task regressions block promotion. The scorecard remains
+`read_only=true`, `report_only=true`, `preview_only=true`, `write_allowed=false`,
+and `applied=false`.
+
 ## Adapter Training Handoff
 
 Adapter or LoRA training can be proposed only when all of these are true:
