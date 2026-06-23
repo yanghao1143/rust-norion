@@ -210,6 +210,7 @@ pub(crate) fn contract_markers(role: &str) -> &'static [&'static str] {
             "dependency_link",
             "source_origin",
             "validation_timestamp",
+            "deterministic_seed",
             "retention",
         ],
         _ => &["observation", "next_action", "verification"],
@@ -414,7 +415,7 @@ mod tests {
     #[test]
     fn contract_fields_parse_index_dependency_link_feedback() {
         let feedback = vec![
-            "task_kind=index preview=clean_gist: stable tags are searchable\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123\ndependency_link: review.change_request\nsource_origin: review.change_request\nvalidation_timestamp: 1781770123\nretention: keep; compact retrieval evidence"
+            "task_kind=index preview=clean_gist: stable tags are searchable\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123;deterministic_seed=fnv1a64:0123456789abcdef\ndependency_link: review.change_request\nsource_origin: review.change_request\nvalidation_timestamp: 1781770123\ndeterministic_seed: fnv1a64:0123456789abcdef\nretention: keep; compact retrieval evidence"
                 .to_owned(),
         ];
         let fields = contract_fields("index", &feedback);
@@ -427,6 +428,7 @@ mod tests {
                 "dependency_link",
                 "source_origin",
                 "validation_timestamp",
+                "deterministic_seed",
                 "retention"
             ]
         );
@@ -437,7 +439,7 @@ mod tests {
         assert_eq!(
             fields.get("tags").map(String::as_str),
             Some(
-                "role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123"
+                "role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123;deterministic_seed=fnv1a64:0123456789abcdef"
             )
         );
         assert_eq!(
@@ -453,6 +455,10 @@ mod tests {
             Some("1781770123")
         );
         assert_eq!(
+            fields.get("deterministic_seed").map(String::as_str),
+            Some("fnv1a64:0123456789abcdef")
+        );
+        assert_eq!(
             fields.get("retention").map(String::as_str),
             Some("keep; compact retrieval evidence")
         );
@@ -464,6 +470,7 @@ mod tests {
                 "dependency_link".to_owned(),
                 "source_origin".to_owned(),
                 "validation_timestamp".to_owned(),
+                "deterministic_seed".to_owned(),
                 "retention".to_owned()
             ]
         );

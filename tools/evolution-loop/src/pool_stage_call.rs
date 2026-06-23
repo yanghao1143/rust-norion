@@ -115,7 +115,7 @@ pub(crate) fn stage_prompt(input: &PoolStageCallInput<'_>) -> String {
 
 fn index_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     format!(
-        "SmartSteam index helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Do not output markdown fences, explanations, JSON blocks, or labels other than clean_gist, tags, dependency_link, source_origin, validation_timestamp, retention.\n- tags must be semicolon-separated key=value retrieval labels, not comma-separated prose.\n- tags must include role=index, case, round, primary, final_json, dependency, source_origin, and validation_timestamp labels.\n- dependency_link must name the upstream helper field or primary evidence source behind the index record.\n- source_origin must repeat the concrete upstream helper field or primary evidence source used for the index record.\n- validation_timestamp must be the exact Unix timestamp from structured_facts.\n- clean_gist must mention the smallest searchable behavior or contract fact from the evidence.\n- retention must be keep, compress, or drop with a short evidence-backed reason.\n- Keep exactly six lines and keep the field names unchanged.",
+        "SmartSteam index helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Do not output markdown fences, explanations, JSON blocks, or labels other than clean_gist, tags, dependency_link, source_origin, validation_timestamp, deterministic_seed, retention.\n- tags must be semicolon-separated key=value retrieval labels, not comma-separated prose.\n- tags must include role=index, case, round, primary, final_json, dependency, source_origin, validation_timestamp, and deterministic_seed labels.\n- dependency_link must name the upstream helper field or primary evidence source behind the index record.\n- source_origin must repeat the concrete upstream helper field or primary evidence source used for the index record.\n- validation_timestamp must be the exact Unix timestamp from structured_facts.\n- deterministic_seed must be the exact deterministic_seed from the completed lines.\n- clean_gist must mention the smallest searchable behavior or contract fact from the evidence.\n- retention must be keep, compress, or drop with a short evidence-backed reason.\n- Keep exactly seven lines and keep the field names unchanged.",
         index_field_defaults(input),
         input.case_name,
         structured_facts(input),
@@ -168,11 +168,35 @@ fn index_field_defaults(input: &PoolStageCallInput<'_>) -> String {
         })
         .unwrap_or_else(|| "index worker".to_owned());
     let validation_timestamp = option_u64_text(input.validation_timestamp_unix);
+    let deterministic_seed = deterministic_index_seed(input, primary, final_json, dependency);
     format!(
-        "clean_gist: Index round {round} {case} with {worker}; primary={primary}; final_json={final_json}; dependency={dependency}; validation_timestamp={validation_timestamp}\ntags: role=index;case={case};round={round};primary={primary};final_json={final_json};dependency={dependency};source_origin={dependency};validation_timestamp={validation_timestamp}\ndependency_link: {dependency}\nsource_origin: {dependency}\nvalidation_timestamp: {validation_timestamp}\nretention: keep; compact retrieval evidence for the next evolution round",
+        "clean_gist: Index round {round} {case} with {worker}; primary={primary}; final_json={final_json}; dependency={dependency}; validation_timestamp={validation_timestamp}; deterministic_seed={deterministic_seed}\ntags: role=index;case={case};round={round};primary={primary};final_json={final_json};dependency={dependency};source_origin={dependency};validation_timestamp={validation_timestamp};deterministic_seed={deterministic_seed}\ndependency_link: {dependency}\nsource_origin: {dependency}\nvalidation_timestamp: {validation_timestamp}\ndeterministic_seed: {deterministic_seed}\nretention: keep; compact retrieval evidence for the next evolution round",
         case = input.case_name,
         round = input.round
     )
+}
+
+fn deterministic_index_seed(
+    input: &PoolStageCallInput<'_>,
+    primary: &str,
+    final_json: &str,
+    dependency: &str,
+) -> String {
+    let validation_timestamp = option_u64_text(input.validation_timestamp_unix);
+    let seed_material = format!(
+        "index|round={}|case={}|primary={}|final_json={}|dependency={}|validation_timestamp={}",
+        input.round, input.case_name, primary, final_json, dependency, validation_timestamp
+    );
+    format!("fnv1a64:{:016x}", fnv1a64(seed_material.as_bytes()))
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
 
 fn review_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
@@ -267,7 +291,7 @@ fn normalize_contract_answer(input: &PoolStageCallInput<'_>, result: &mut PoolSt
             let has_contract = result
                 .answer
                 .as_deref()
-                .map(index_answer_has_stable_contract)
+                .map(|answer| index_answer_has_stable_contract(input, answer))
                 .unwrap_or(false);
             if !has_contract {
                 set_answer(result, index_field_defaults(input));
@@ -320,13 +344,14 @@ fn normalized_test_gate_verdict(value: &str) -> Option<&'static str> {
     }
 }
 
-fn index_answer_has_stable_contract(answer: &str) -> bool {
+fn index_answer_has_stable_contract(input: &PoolStageCallInput<'_>, answer: &str) -> bool {
     let lower = answer.to_ascii_lowercase();
     if !(lower.contains("clean_gist")
         && lower.contains("tags")
         && lower.contains("dependency_link")
         && lower.contains("source_origin")
         && lower.contains("validation_timestamp")
+        && lower.contains("deterministic_seed")
         && lower.contains("retention"))
     {
         return false;
@@ -349,10 +374,23 @@ fn index_answer_has_stable_contract(answer: &str) -> bool {
     if !is_stable_unix_timestamp(&validation_timestamp) {
         return false;
     }
+    let Some(deterministic_seed) = extract_field_value(answer, "deterministic_seed") else {
+        return false;
+    };
+    if !is_stable_deterministic_seed(&deterministic_seed) {
+        return false;
+    }
     let Some(tags) = extract_field_value(answer, "tags") else {
         return false;
     };
     if !index_tags_are_stable(&tags) {
+        return false;
+    }
+    let primary = index_tag_value(&tags, "primary").unwrap_or("missing");
+    let final_json = index_tag_value(&tags, "final_json").unwrap_or("missing");
+    let expected_seed =
+        deterministic_index_seed(input, primary, final_json, dependency_link.trim());
+    if deterministic_seed.trim() != expected_seed {
         return false;
     }
     let dependency_matches = index_tag_value(&tags, "dependency")
@@ -364,7 +402,10 @@ fn index_answer_has_stable_contract(answer: &str) -> bool {
     let source_origin_matches = index_tag_value(&tags, "source_origin")
         .map(|origin| origin == source_origin.trim())
         .unwrap_or(false);
-    dependency_matches && source_origin_matches && timestamp_matches
+    let seed_matches = index_tag_value(&tags, "deterministic_seed")
+        .map(|seed| seed == deterministic_seed.trim())
+        .unwrap_or(false);
+    dependency_matches && source_origin_matches && timestamp_matches && seed_matches
 }
 
 fn index_tags_are_stable(tags: &str) -> bool {
@@ -395,10 +436,18 @@ fn index_tags_are_stable(tags: &str) -> bool {
         && keys.iter().any(|(key, _)| key == "dependency")
         && keys.iter().any(|(key, _)| key == "source_origin")
         && keys.iter().any(|(key, _)| key == "validation_timestamp")
+        && keys.iter().any(|(key, _)| key == "deterministic_seed")
 }
 
 fn is_stable_unix_timestamp(value: &str) -> bool {
     value.chars().all(|character| character.is_ascii_digit()) && value.len() >= 10
+}
+
+fn is_stable_deterministic_seed(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("fnv1a64:") else {
+        return false;
+    };
+    hex.len() == 16 && hex.chars().all(|character| character.is_ascii_hexdigit())
 }
 
 fn index_tag_value<'a>(tags: &'a str, target_key: &str) -> Option<&'a str> {
@@ -857,6 +906,7 @@ mod tests {
     fn stage_prompt_requires_exact_bulleted_contract_output() {
         let mut index = input();
         index.task_kind = "index";
+        let seed = deterministic_index_seed(&index, "present", "present", "primary.evidence");
         let prompt = stage_prompt(&index);
 
         assert!(prompt.contains("SmartSteam index helper"));
@@ -865,12 +915,13 @@ mod tests {
         assert!(prompt.contains("tags must be semicolon-separated key=value retrieval labels"));
         assert!(prompt.contains("not comma-separated prose"));
         assert!(prompt.contains(
-            "tags: role=index;case=case-1;round=1;primary=present;final_json=present;dependency=primary.evidence;source_origin=primary.evidence;validation_timestamp=1781770000"
+            &format!("tags: role=index;case=case-1;round=1;primary=present;final_json=present;dependency=primary.evidence;source_origin=primary.evidence;validation_timestamp=1781770000;deterministic_seed={seed}")
         ));
         assert!(prompt.contains("dependency_link: primary.evidence"));
         assert!(prompt.contains("source_origin: primary.evidence"));
         assert!(prompt.contains("validation_timestamp: 1781770000"));
-        assert!(prompt.contains("Keep exactly six lines"));
+        assert!(prompt.contains(&format!("deterministic_seed: {seed}")));
+        assert!(prompt.contains("Keep exactly seven lines"));
         assert!(!prompt.contains("role_contract"));
     }
 
@@ -932,6 +983,7 @@ mod tests {
         assert!(index_prompt.contains("clean_gist"));
         assert!(index_prompt.contains("dependency_link"));
         assert!(index_prompt.contains("source_origin"));
+        assert!(index_prompt.contains("deterministic_seed"));
         assert!(index_prompt.contains("retention"));
         assert!(index_prompt.contains("role=index;case=case-1;round=1;primary=present"));
         assert!(index_prompt.contains("not comma-separated prose"));
@@ -971,7 +1023,6 @@ mod tests {
             completed_roles: &[],
             max_tokens: plan.effective_max_tokens,
         };
-
         let prompt = stage_prompt(&input);
 
         assert!(prompt.contains("structured_facts:"));
@@ -1140,6 +1191,7 @@ mod tests {
             completed_roles: &completed_roles,
             max_tokens: plan.effective_max_tokens,
         };
+        let seed = deterministic_index_seed(&input, "present", "present", "review.change_request");
 
         let prompt = stage_prompt(&input);
 
@@ -1147,11 +1199,12 @@ mod tests {
         assert!(prompt.contains("selected_role: index"));
         assert!(prompt.contains("selected_port: 8690"));
         assert!(prompt.contains(
-            "tags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123"
+            &format!("tags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123;deterministic_seed={seed}")
         ));
         assert!(prompt.contains("dependency_link: review.change_request"));
         assert!(prompt.contains("source_origin: review.change_request"));
         assert!(prompt.contains("validation_timestamp: 1781770123"));
+        assert!(prompt.contains(&format!("deterministic_seed: {seed}")));
         assert!(prompt.contains("tags must include role=index, case, round, primary, final_json"));
         assert!(prompt.contains("dependency_link must name the upstream helper field"));
         assert!(prompt.contains("source_origin must repeat the concrete upstream helper field"));
@@ -1180,6 +1233,7 @@ mod tests {
             completed_roles: &completed_roles,
             max_tokens: plan.effective_max_tokens,
         };
+        let seed = deterministic_index_seed(&input, "present", "present", "review.change_request");
         let mut result = PoolStageCallResult {
             task_kind: "index".to_owned(),
             ok: true,
@@ -1201,11 +1255,12 @@ mod tests {
         let answer = result.answer.as_deref().unwrap();
         assert!(answer.contains("clean_gist: Index round 42 case-42 with index@8690"));
         assert!(answer.contains(
-            "tags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123"
+            &format!("tags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123;deterministic_seed={seed}")
         ));
         assert!(answer.contains("dependency_link: review.change_request"));
         assert!(answer.contains("source_origin: review.change_request"));
         assert!(answer.contains("validation_timestamp: 1781770123"));
+        assert!(answer.contains(&format!("deterministic_seed: {seed}")));
         assert!(answer.contains("retention: keep; compact retrieval evidence"));
         assert_eq!(result.answer_chars, Some(answer.chars().count() as u64));
     }
@@ -1226,14 +1281,17 @@ mod tests {
             completed_roles: &[],
             max_tokens: plan.effective_max_tokens,
         };
-        let answer = "clean_gist: stable retrieval labels are present\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=primary.evidence;source_origin=primary.evidence;validation_timestamp=1781770123\ndependency_link: primary.evidence\nsource_origin: primary.evidence\nvalidation_timestamp: 1781770123\nretention: keep; labels are compact";
+        let seed = deterministic_index_seed(&input, "present", "present", "primary.evidence");
+        let answer = format!(
+            "clean_gist: stable retrieval labels are present\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=primary.evidence;source_origin=primary.evidence;validation_timestamp=1781770123;deterministic_seed={seed}\ndependency_link: primary.evidence\nsource_origin: primary.evidence\nvalidation_timestamp: 1781770123\ndeterministic_seed: {seed}\nretention: keep; labels are compact"
+        );
         let mut result = PoolStageCallResult {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
-            answer: Some(answer.to_owned()),
+            answer: Some(answer.clone()),
             elapsed_ms: Some(9),
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
@@ -1242,7 +1300,7 @@ mod tests {
 
         normalize_contract_answer(&input, &mut result);
 
-        assert_eq!(result.answer.as_deref(), Some(answer));
+        assert_eq!(result.answer.as_deref(), Some(answer.as_str()));
         assert_eq!(result.answer_chars, Some(answer.chars().count() as u64));
     }
 
@@ -1262,14 +1320,17 @@ mod tests {
             completed_roles: &[],
             max_tokens: plan.effective_max_tokens,
         };
-        let answer = "clean_gist: stable tags are present in the compact index contract\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=primary.evidence;source_origin=primary.evidence;validation_timestamp=1781770123\ndependency_link: primary.evidence\nsource_origin: primary.evidence\nvalidation_timestamp: 1781770123\nretention: keep; labels are compact";
+        let seed = deterministic_index_seed(&input, "present", "present", "primary.evidence");
+        let answer = format!(
+            "clean_gist: stable tags are present in the compact index contract\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=primary.evidence;source_origin=primary.evidence;validation_timestamp=1781770123;deterministic_seed={seed}\ndependency_link: primary.evidence\nsource_origin: primary.evidence\nvalidation_timestamp: 1781770123\ndeterministic_seed: {seed}\nretention: keep; labels are compact"
+        );
         let mut result = PoolStageCallResult {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
-            answer: Some(answer.to_owned()),
+            answer: Some(answer.clone()),
             elapsed_ms: Some(9),
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
@@ -1278,7 +1339,7 @@ mod tests {
 
         normalize_contract_answer(&input, &mut result);
 
-        assert_eq!(result.answer.as_deref(), Some(answer));
+        assert_eq!(result.answer.as_deref(), Some(answer.as_str()));
         assert_eq!(result.answer_chars, Some(answer.chars().count() as u64));
     }
 
@@ -1303,14 +1364,19 @@ mod tests {
             completed_roles: &completed_roles,
             max_tokens: plan.effective_max_tokens,
         };
-        let answer = "clean_gist: stable retrieval labels are present\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=summary.next_context;source_origin=summary.next_context;validation_timestamp=1781770123\ndependency_link: review.change_request\nsource_origin: summary.next_context\nvalidation_timestamp: 1781770123\nretention: keep; labels are compact";
+        let seed = deterministic_index_seed(&input, "present", "present", "summary.next_context");
+        let expected_seed =
+            deterministic_index_seed(&input, "present", "present", "review.change_request");
+        let answer = format!(
+            "clean_gist: stable retrieval labels are present\ntags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=summary.next_context;source_origin=summary.next_context;validation_timestamp=1781770123;deterministic_seed={seed}\ndependency_link: review.change_request\nsource_origin: summary.next_context\nvalidation_timestamp: 1781770123\ndeterministic_seed: {seed}\nretention: keep; labels are compact"
+        );
         let mut result = PoolStageCallResult {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
-            answer: Some(answer.to_owned()),
+            answer: Some(answer.clone()),
             elapsed_ms: Some(9),
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
@@ -1320,12 +1386,13 @@ mod tests {
         normalize_contract_answer(&input, &mut result);
 
         let normalized = result.answer.as_deref().unwrap();
-        assert_ne!(normalized, answer);
+        assert_ne!(normalized, answer.as_str());
         assert!(normalized.contains(
-            "tags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123"
+            &format!("tags: role=index;case=case-42;round=42;primary=present;final_json=present;dependency=review.change_request;source_origin=review.change_request;validation_timestamp=1781770123;deterministic_seed={expected_seed}")
         ));
         assert!(normalized.contains("dependency_link: review.change_request"));
         assert!(normalized.contains("source_origin: review.change_request"));
+        assert!(normalized.contains(&format!("deterministic_seed: {expected_seed}")));
         assert_eq!(result.answer_chars, Some(normalized.chars().count() as u64));
     }
 
