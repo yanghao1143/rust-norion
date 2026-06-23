@@ -1153,6 +1153,15 @@ action, or repair labels remain blocked reasons. Both reports are read-only,
 candidate-only, `auto_apply=false`, and do not authorize memory, NDKV, genome,
 or adaptive-state writes.
 
+When a repair factor is ready, the evolution-loop adapter now treats it as an
+alternate `self_improve_proposal_memory_admission_request_report_v1` source for
+the same proposal id. The request action is
+`request_repair_factor_memory_admission`, uses the repair factor's evidence ids,
+and replaces the older action-closure-blocked request candidate for that
+proposal. This releases the repair factor into the writer-plan/dry-run/approval
+queue without bypassing writer gates: memory-store and NDKV writes remain false
+until an explicit admission writer and approval record authorize them.
+
 ## Ledger Gate Report Schema
 
 `ledger_gate_report_v1` is the broad report-gate surface for the current
