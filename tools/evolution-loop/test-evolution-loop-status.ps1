@@ -1684,6 +1684,59 @@ if ($daemonStatus.live_status_bundle.daemon.daemon_round_transition_status.trans
 Assert-NextRoundDecisionReportV1 -Report $daemonStatus.live_status_bundle.next_round_decision_report_v1 -Decision $daemonStatus.next_round_decision -Name "active-daemon-live-bundle"
 Assert-NextRoundDownstreamStatusConsumersV1 -Projection $daemonStatus.live_status_bundle.next_round_downstream_status_consumers_v1 -Report $daemonStatus.live_status_bundle.next_round_decision_report_v1 -Name "active-daemon-live-bundle" -DaemonRoundTransitionStatus $daemonStatus.live_status_bundle.daemon.daemon_round_transition_status
 
+$preRoundLogLines = @(
+    "validation_gate: enabled phase=pre timeout_secs=300",
+    "next_round: 3",
+    "remote_chain_gate: passed ready:true model_api:true backend:true"
+)
+for ($busyLineIndex = 0; $busyLineIndex -lt 260; $busyLineIndex += 1) {
+    $preRoundLogLines += "health_gate: start endpoint=/health attempt=1/6 timeout_secs=900"
+    $preRoundLogLines += "backend busy; waiting 15s before retrying health gate"
+}
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $daemonDir "evolution-loop.out.log") -Value $preRoundLogLines
+$preRoundBackendBusyFixturePath = Join-Path $testDir "pre-round-backend-busy-health.json"
+Set-Content -Encoding ASCII -LiteralPath $preRoundBackendBusyFixturePath -Value '{"ok":true,"readiness_ok":false,"safe_device_ok":true,"engine_busy":true,"active_engine_requests":1,"gemma_runtime_reachable":true,"gemma_runtime_model":"status-fixture.gguf"}'
+$preRoundStatusText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -BackendHealthJsonPath $preRoundBackendBusyFixturePath -SkipRemoteChain -SkipProcess -DaemonWorkDir $daemonDir -JsonStatus
+if ($LASTEXITCODE -ne 0) {
+    throw "pre-round backend-busy status command failed with exit code $LASTEXITCODE"
+}
+$preRoundStatus = ($preRoundStatusText | Out-String | ConvertFrom-Json)
+if ($preRoundStatus.daemon.activity_state -ne "pre_round_activity") {
+    throw "pre-round backend-busy fixture was not classified as pre_round_activity"
+}
+if ($preRoundStatus.daemon.activity_reason -ne "pre_round_activity_stdout_recent") {
+    throw "pre-round backend-busy fixture did not expose pre-round activity reason"
+}
+if ($preRoundStatus.daemon.active_round -ne 3 -or $preRoundStatus.daemon.latest_next_round -ne 3) {
+    throw "pre-round backend-busy fixture did not expose pending next round"
+}
+if ($preRoundStatus.daemon.pre_round_activity -ne $true -or [string]$preRoundStatus.daemon.pre_round_activity_event -ne "backend") {
+    throw "pre-round backend-busy fixture did not expose latest pre-round event"
+}
+if ($preRoundStatus.daemon.daemon_round_transition_status.transition_kind -ne "pre_round_activity") {
+    throw "pre-round backend-busy transition kind was not exposed"
+}
+Assert-DaemonRoundTransitionConsumerStatus -Status $preRoundStatus.daemon.daemon_round_transition_status -Name "status-json:pre_round_activity" -ExpectedKind "pre_round_activity" -ExpectedRoundInProgress $false
+if ($preRoundStatus.next_round_decision.display_state -ne "safe-to-wait" -or $preRoundStatus.next_round_decision.safe_to_wait_current_round_active -ne $true -or $preRoundStatus.next_round_decision.operator_attention_blocked -ne $false) {
+    throw "pre-round backend-busy fixture did not expose safe-to-wait next-round decision"
+}
+if ($preRoundStatus.next_round_decision.reason_code -ne "pre_round_activity_wait_for_backend_or_dispatch") {
+    throw "pre-round backend-busy fixture did not expose pre-round wait reason"
+}
+if (@($preRoundStatus.failures) -contains "backend_not_ready") {
+    throw "pre-round backend-busy fixture should not fail backend readiness while daemon is safely waiting"
+}
+Assert-NextRoundDecisionReportV1 -Report $preRoundStatus.next_round_decision_report_v1 -Decision $preRoundStatus.next_round_decision -Name "pre-round-backend-busy-status"
+Assert-NextRoundDownstreamStatusConsumersV1 -Projection $preRoundStatus.next_round_downstream_status_consumers_v1 -Report $preRoundStatus.next_round_decision_report_v1 -Name "pre-round-backend-busy-status" -DaemonRoundTransitionStatus $preRoundStatus.daemon.daemon_round_transition_status
+
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $daemonDir "evolution-loop.out.log") -Value @(
+    "[round 1] case=status-selftest-0001",
+    "[round 1] stage ledger_append:done",
+    "[round 1] ok runtime_tokens=8 elapsed_ms=100",
+    "[round 2] case=status-selftest-0002",
+    "[round 2] stage generate:start"
+)
+
 $oldSourceFreshnessPaths = [Environment]::GetEnvironmentVariable("NORION_DAEMON_SOURCE_FRESHNESS_PATHS", "Process")
 $oldBinaryFreshnessPaths = [Environment]::GetEnvironmentVariable("NORION_DAEMON_BINARY_FRESHNESS_PATHS", "Process")
 $sourceFreshnessMarker = Join-Path $testDir "daemon-source-freshness-marker.rs"
