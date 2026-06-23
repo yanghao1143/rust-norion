@@ -2643,7 +2643,12 @@ function Test-BackendBusyDuringActiveDaemon {
         -or -not $DaemonStatus.checked `
         -or -not $DaemonStatus.running `
         -or -not $DaemonStatus.activity_ok `
-        -or ([string]$DaemonStatus.activity_state -ne "active" -and [string]$DaemonStatus.activity_state -ne "slow_in_progress")
+        -or (
+            [string]$DaemonStatus.activity_state -ne "active" `
+                -and [string]$DaemonStatus.activity_state -ne "slow_in_progress" `
+                -and [string]$DaemonStatus.activity_state -ne "pre_round_activity" `
+                -and [string]$DaemonStatus.activity_state -ne "slow_pre_round_activity"
+        )
     ) {
         return $false
     }
@@ -3987,6 +3992,10 @@ function Read-DaemonLogSummary {
     $latestCompletedRound = $null
     $latestDoneRound = $null
     $latestRoundLine = ""
+    $latestNextRound = $null
+    $preRoundActivity = $false
+    $preRoundActivityLine = ""
+    $preRoundActivityEvent = ""
     $postRoundActivity = $false
     $postRoundActivityLine = ""
     $postRoundActivityEvent = ""
@@ -4002,6 +4011,10 @@ function Read-DaemonLogSummary {
             post_round_activity = $postRoundActivity
             post_round_activity_event = $postRoundActivityEvent
             post_round_activity_line_preview = $postRoundActivityLine
+            latest_next_round = $latestNextRound
+            pre_round_activity = $preRoundActivity
+            pre_round_activity_event = $preRoundActivityEvent
+            pre_round_activity_line_preview = $preRoundActivityLine
             latest_round_state = $roundState
             round_in_progress = $roundInProgress
             latest_round_line_preview = $latestRoundLine
@@ -4012,12 +4025,28 @@ function Read-DaemonLogSummary {
     } catch {
         $lines = @()
     }
-    if ($lines.Count -gt 240) {
-        $lines = @($lines[($lines.Count - 240)..($lines.Count - 1)])
+    if ($lines.Count -gt 1200) {
+        $lines = @($lines[($lines.Count - 1200)..($lines.Count - 1)])
     }
     foreach ($rawLine in $lines) {
         $line = [string]$rawLine
         if ($line -notmatch '^\[round\s+(\d+)\]\s+(.+)$') {
+            if ($line -match '^next_round:\s+(\d+)\s*$') {
+                $latestNextRound = [int]$Matches[1]
+                $preRoundActivity = $true
+                $preRoundActivityLine = $line
+                $preRoundActivityEvent = "next_round"
+                continue
+            }
+            if (
+                $null -ne $latestNextRound `
+                    -and ($null -eq $latestRound -or [int]$latestNextRound -gt [int]$latestRound) `
+                    -and $line.Trim().Length -gt 0
+            ) {
+                $preRoundActivity = $true
+                $preRoundActivityLine = $line
+                $preRoundActivityEvent = ($line -split '\s+')[0]
+            }
             if ($afterRoundCompletion -and $line.Trim().Length -gt 0) {
                 $postRoundActivity = $true
                 $postRoundActivityLine = $line
@@ -4028,6 +4057,11 @@ function Read-DaemonLogSummary {
         $round = [int]$Matches[1]
         $rest = [string]$Matches[2]
         $latestRound = $round
+        if ($null -ne $latestNextRound -and $round -ge [int]$latestNextRound) {
+            $preRoundActivity = $false
+            $preRoundActivityLine = ""
+            $preRoundActivityEvent = ""
+        }
         $latestRoundLine = $line
         $completedThisLine = $false
         if ($rest -match '^stage\s+(.+)$') {
@@ -4069,6 +4103,8 @@ function Read-DaemonLogSummary {
             $roundState = "in_progress"
             $roundInProgress = $true
         }
+    } elseif ($null -ne $latestNextRound) {
+        $roundState = "pre_round_activity"
     }
     if ($latestRoundLine.Length -gt 240) {
         $latestRoundLine = $latestRoundLine.Substring(0, 240)
@@ -4076,12 +4112,19 @@ function Read-DaemonLogSummary {
     if ($postRoundActivityLine.Length -gt 240) {
         $postRoundActivityLine = $postRoundActivityLine.Substring(0, 240)
     }
+    if ($preRoundActivityLine.Length -gt 240) {
+        $preRoundActivityLine = $preRoundActivityLine.Substring(0, 240)
+    }
     return [pscustomobject][ordered]@{
         latest_round = $latestRound
         latest_stage = $latestStage
         latest_event = $latestEvent
         latest_completed_round = $latestCompletedRound
         latest_done_round = $latestDoneRound
+        latest_next_round = $latestNextRound
+        pre_round_activity = $preRoundActivity
+        pre_round_activity_event = $preRoundActivityEvent
+        pre_round_activity_line_preview = $preRoundActivityLine
         post_round_activity = $postRoundActivity
         post_round_activity_event = $postRoundActivityEvent
         post_round_activity_line_preview = $postRoundActivityLine
@@ -4285,7 +4328,13 @@ function New-NextRoundDecision {
         "post_round_activity",
         "idle_completed"
     )
-    $safeToWait = $reportGateAllowsActiveWait -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
+    $preRoundWaitKinds = @(
+        "pre_round_activity",
+        "slow_pre_round_activity"
+    )
+    $safeToWaitInProgress = $reportGateAllowsActiveWait -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
+    $safeToWaitPreRound = $reportGatePassed -eq $true -and ($preRoundWaitKinds -contains $transitionKind) -and $activityOk -eq $true
+    $safeToWait = $safeToWaitInProgress -or $safeToWaitPreRound
     $safeToContinue = $reportGatePassed -eq $true -and ($safeToContinueTransitionKinds -contains $transitionKind) -and $roundInProgress -eq $false -and $activityOk -eq $true
     $operatorBlocked = -not ($safeToWait -or $safeToContinue)
 
@@ -4293,7 +4342,9 @@ function New-NextRoundDecision {
     $reasonCode = "operator_attention_required_until_safe_next_round_evidence_present"
     if ($safeToWait) {
         $displayState = "safe-to-wait"
-        if ($null -eq $reportGatePassed) {
+        if ($safeToWaitPreRound) {
+            $reasonCode = "pre_round_activity_wait_for_backend_or_dispatch"
+        } elseif ($null -eq $reportGatePassed) {
             $reasonCode = "active_round_in_progress_report_gate_unavailable_non_strict_wait"
         } else {
             $reasonCode = "active_round_in_progress_wait_for_completion"
@@ -4344,7 +4395,7 @@ function New-NextRoundDecision {
             report_gate_passed = $reportGatePassed
             report_gate_failure_count = $reportGateFailureCount
             report_gate_allows_active_wait = [bool]$reportGateAllowsActiveWait
-            active_busy = [bool]($transitionKind -eq "normal_in_progress")
+            active_busy = [bool]($transitionKind -eq "normal_in_progress" -or ($preRoundWaitKinds -contains $transitionKind))
             round_in_progress = $roundInProgress
             activity_ok = $activityOk
             within_request_timeout = $withinRequestTimeout
@@ -4558,7 +4609,7 @@ function Read-DaemonSnapshot {
     $launchValidation = Get-LaunchValidationSummary -StderrTail $stderrTail
     $logSummary = Read-DaemonLogSummary -LogPath $stdoutLog
     $ledgerRound = Read-DaemonLatestRoundFromLedger -Path $ledgerPath
-    $activeRound = $logSummary.latest_round
+    $activeRound = if ($null -ne $logSummary.latest_round) { $logSummary.latest_round } else { $logSummary.latest_next_round }
     $lag = $null
     if ($null -ne $activeRound -and $null -ne $ledgerRound) {
         $lag = [Math]::Max(0, [int]$activeRound - [int]$ledgerRound)
@@ -4577,6 +4628,22 @@ function Read-DaemonSnapshot {
         $state = if ($stalePidFile) { "stale_pid" } else { "not_running" }
         $reason = if ($stalePidFile) { "pid_file_points_to_missing_process" } else { "daemon_process_not_running" }
         $nextStep = if ($stalePidFile) { "remove stale pid file or restart daemon" } else { "start daemon when unattended evolution should run" }
+    } elseif ($logSummary.latest_round_state -eq "pre_round_activity") {
+        if ($stdoutFreshness.age_seconds -ne $null -and [int]$stdoutFreshness.age_seconds -le $inProgressStdoutMaxAge) {
+            $state = "pre_round_activity"
+            $ok = $true
+            $reason = "pre_round_activity_stdout_recent"
+            $nextStep = "wait for health gate/backend busy wait or round dispatch"
+        } elseif ($stdoutFreshness.age_seconds -ne $null -and [int]$stdoutFreshness.age_seconds -le $roundTimeoutMaxAge) {
+            $state = "slow_pre_round_activity"
+            $ok = $true
+            $reason = "pre_round_activity_within_request_timeout"
+            $nextStep = "wait for pre-round health gate until request timeout before treating it as stale"
+        } else {
+            $state = "stale_pre_round_activity"
+            $reason = "pre_round_activity_stdout_stale"
+            $nextStep = "backend stayed busy before round dispatch; inspect health, daemon stdout, and model worker"
+        }
     } elseif ($logSummary.round_in_progress -eq $true) {
         if ($stdoutFreshness.age_seconds -ne $null -and [int]$stdoutFreshness.age_seconds -le $inProgressStdoutMaxAge) {
             $state = "active"
@@ -4635,7 +4702,15 @@ function Read-DaemonSnapshot {
             }
         }
     }
-    $stage = if ([string]$logSummary.latest_stage -ne "") { [string]$logSummary.latest_stage } else { [string]$logSummary.latest_event }
+    $stage = if ([string]$logSummary.latest_stage -ne "") {
+        [string]$logSummary.latest_stage
+    } elseif ([string]$logSummary.latest_event -ne "") {
+        [string]$logSummary.latest_event
+    } elseif ([string]$logSummary.pre_round_activity_event -ne "") {
+        [string]$logSummary.pre_round_activity_event
+    } else {
+        ""
+    }
     $stdoutAge = if ($null -ne $stdoutFreshness.age_seconds) { "$($stdoutFreshness.age_seconds)s" } else { "unknown" }
     $ledgerAge = if ($null -ne $ledgerFreshness.age_seconds) { "$($ledgerFreshness.age_seconds)s" } else { "unknown" }
     $activeText = if ($null -ne $activeRound) { [string]$activeRound } else { "unknown" }
@@ -4678,7 +4753,11 @@ function Read-DaemonSnapshot {
         latest_stage = $logSummary.latest_stage
         latest_round_state = $logSummary.latest_round_state
         latest_done_round = $logSummary.latest_done_round
+        latest_next_round = $logSummary.latest_next_round
         round_in_progress = $logSummary.round_in_progress
+        pre_round_activity = $logSummary.pre_round_activity
+        pre_round_activity_event = $logSummary.pre_round_activity_event
+        pre_round_activity_line_preview = $logSummary.pre_round_activity_line_preview
         post_round_activity = $logSummary.post_round_activity
         post_round_activity_event = $logSummary.post_round_activity_event
         post_round_activity_line_preview = $logSummary.post_round_activity_line_preview
