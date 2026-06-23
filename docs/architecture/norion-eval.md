@@ -1153,6 +1153,17 @@ action, or repair labels remain blocked reasons. Both reports are read-only,
 candidate-only, `auto_apply=false`, and do not authorize memory, NDKV, genome,
 or adaptive-state writes.
 
+`self_improve_proposal_repair_factor_retag_plan_v1` is the explicit retagging
+surface between readiness and memory admission. It projects each ready repair
+factor into `retag_repaired_gene_for_memory_admission`, preserving the previous
+label, repair label, evidence ids, repair objectives, validation requirement,
+operator approval requirement, and memory-admission requirement. Blocked repair
+factors remain present with their original blocker reasons and
+`hold_retag_until_repair_factor_ready`. The report is read-only and keeps
+`memory_store_write_allowed=false` and `ndkv_write_allowed=false`; it only tells
+the next planner that the damaged proposal has a repair label ready for gated
+re-admission.
+
 When a repair factor is ready, the evolution-loop adapter now treats it as an
 alternate `self_improve_proposal_memory_admission_request_report_v1` source for
 the same proposal id. The request action is

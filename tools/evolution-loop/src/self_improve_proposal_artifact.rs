@@ -143,6 +143,39 @@ pub(crate) struct SelfImproveProposalRepairFactorReadinessItem {
     pub(crate) blocked_reasons: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorRetagPlanReport {
+    pub(crate) action_required: bool,
+    pub(crate) repair_factor_count: usize,
+    pub(crate) retag_plan_count: usize,
+    pub(crate) blocked_count: usize,
+    pub(crate) retag_plan_ready: bool,
+    pub(crate) first_repair_factor_id: Option<String>,
+    pub(crate) first_retag_ready: bool,
+    pub(crate) first_retag_status: Option<String>,
+    pub(crate) items: Vec<SelfImproveProposalRepairFactorRetagPlanItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorRetagPlanItem {
+    pub(crate) repair_factor_id: String,
+    pub(crate) proposal_id: String,
+    pub(crate) source_round: Option<u64>,
+    pub(crate) previous_label: String,
+    pub(crate) repair_label: String,
+    pub(crate) target_action: String,
+    pub(crate) retag_action: String,
+    pub(crate) ready_for_retag: bool,
+    pub(crate) retag_status: String,
+    pub(crate) relabel_required: bool,
+    pub(crate) repair_objectives: Vec<String>,
+    pub(crate) evidence_ids: Vec<String>,
+    pub(crate) validation_required: bool,
+    pub(crate) approval_required: bool,
+    pub(crate) memory_admission_required: bool,
+    pub(crate) blocked_reasons: Vec<String>,
+}
+
 pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
     let mut proposals = Vec::new();
     let mut seen = BTreeSet::new();
@@ -232,6 +265,24 @@ pub(crate) fn option_repair_factor_readiness_report_json(
         None => repair_factor_readiness_report_json(
             &SelfImproveProposalRepairFactorReadinessReport::from_queue(
                 &empty_repair_factor_queue(),
+            ),
+            false,
+        ),
+    }
+}
+
+pub(crate) fn option_repair_factor_retag_plan_report_json(
+    artifact: Option<&SelfImproveProposalArtifact>,
+) -> String {
+    match artifact {
+        Some(artifact) => {
+            repair_factor_retag_plan_report_json(&artifact.repair_factor_retag_plan(), true)
+        }
+        None => repair_factor_retag_plan_report_json(
+            &SelfImproveProposalRepairFactorRetagPlanReport::from_readiness_report(
+                &SelfImproveProposalRepairFactorReadinessReport::from_queue(
+                    &empty_repair_factor_queue(),
+                ),
             ),
             false,
         ),
@@ -1538,6 +1589,14 @@ impl SelfImproveProposalArtifact {
         SelfImproveProposalRepairFactorReadinessReport::from_queue(&self.repair_factor_queue())
     }
 
+    pub(crate) fn repair_factor_retag_plan(
+        &self,
+    ) -> SelfImproveProposalRepairFactorRetagPlanReport {
+        SelfImproveProposalRepairFactorRetagPlanReport::from_readiness_report(
+            &self.repair_factor_readiness_report(),
+        )
+    }
+
     pub(crate) fn action_closure_report(&self) -> SelfImproveProposalActionClosureReport {
         let assignment = self.acceptance_action_assignment();
         let closure_evidence = self.action_closure_evidence(&assignment);
@@ -1979,6 +2038,72 @@ impl SelfImproveProposalRepairFactorReadinessItem {
             evidence_present,
             validation_checked: factor.validation_checked,
             validation_passed: factor.validation_passed,
+            blocked_reasons,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorRetagPlanReport {
+    fn from_readiness_report(report: &SelfImproveProposalRepairFactorReadinessReport) -> Self {
+        let items = report
+            .items
+            .iter()
+            .map(SelfImproveProposalRepairFactorRetagPlanItem::from_readiness_item)
+            .collect::<Vec<_>>();
+        let retag_plan_count = items.iter().filter(|item| item.ready_for_retag).count();
+        let blocked_count = items.len().saturating_sub(retag_plan_count);
+        let first = items.first();
+        Self {
+            action_required: report.action_required,
+            repair_factor_count: report.repair_factor_count,
+            retag_plan_count,
+            blocked_count,
+            retag_plan_ready: report.action_required
+                && report.repair_factor_count > 0
+                && blocked_count == 0,
+            first_repair_factor_id: first.map(|item| item.repair_factor_id.clone()),
+            first_retag_ready: first.map(|item| item.ready_for_retag).unwrap_or(false),
+            first_retag_status: first.map(|item| item.retag_status.clone()),
+            items,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorRetagPlanItem {
+    fn from_readiness_item(item: &SelfImproveProposalRepairFactorReadinessItem) -> Self {
+        let ready_for_retag = item.ready_for_repair_plan
+            && item.relabel_required
+            && item.new_label.starts_with("repair_factor:");
+        let retag_status = if ready_for_retag {
+            "ready_to_retag_repaired_gene"
+        } else {
+            "blocked_until_repair_factor_ready"
+        };
+        let retag_action = if ready_for_retag {
+            "retag_repaired_gene_for_memory_admission"
+        } else {
+            "hold_retag_until_repair_factor_ready"
+        };
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if item.ready_for_repair_plan && !ready_for_retag {
+            blocked_reasons.push("repair_label_not_ready".to_owned());
+        }
+        Self {
+            repair_factor_id: item.repair_factor_id.clone(),
+            proposal_id: item.proposal_id.clone(),
+            source_round: item.source_round,
+            previous_label: item.old_label.clone(),
+            repair_label: item.new_label.clone(),
+            target_action: item.target_action.clone(),
+            retag_action: retag_action.to_owned(),
+            ready_for_retag,
+            retag_status: retag_status.to_owned(),
+            relabel_required: item.relabel_required,
+            repair_objectives: item.repair_objectives.clone(),
+            evidence_ids: item.evidence_ids.clone(),
+            validation_required: true,
+            approval_required: true,
+            memory_admission_required: true,
             blocked_reasons,
         }
     }
@@ -4678,6 +4803,57 @@ fn repair_factor_readiness_item_json(
     )
 }
 
+fn repair_factor_retag_plan_report_json(
+    report: &SelfImproveProposalRepairFactorRetagPlanReport,
+    artifact_loaded: bool,
+) -> String {
+    let items = report
+        .items
+        .iter()
+        .map(repair_factor_retag_plan_item_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_retag_plan\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"repair_factor_count\":{},\"retag_plan_count\":{},\"blocked_count\":{},\"retag_plan_ready\":{},\"first_repair_factor_id\":{},\"first_retag_ready\":{},\"first_retag_status\":{},\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"items\":[{}],\"side_effects\":{}}}",
+        artifact_loaded,
+        report.action_required,
+        report.repair_factor_count,
+        report.retag_plan_count,
+        report.blocked_count,
+        report.retag_plan_ready,
+        option_string_json(report.first_repair_factor_id.as_deref()),
+        report.first_retag_ready,
+        option_string_json(report.first_retag_status.as_deref()),
+        items,
+        side_effects_json()
+    )
+}
+
+fn repair_factor_retag_plan_item_json(
+    item: &SelfImproveProposalRepairFactorRetagPlanItem,
+) -> String {
+    format!(
+        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"previous_label\":{},\"repair_label\":{},\"target_action\":{},\"retag_action\":{},\"ready_for_retag\":{},\"retag_status\":{},\"relabel_required\":{},\"repair_objectives\":{},\"evidence_ids\":{},\"validation_required\":{},\"approval_required\":{},\"memory_admission_required\":{},\"blocked_reasons\":{},\"report_only\":true,\"candidate_only\":true,\"auto_apply\":false,\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"side_effects\":{}}}",
+        json_string(&item.repair_factor_id),
+        json_string(&item.proposal_id),
+        option_u64_json(item.source_round),
+        json_string(&item.previous_label),
+        json_string(&item.repair_label),
+        json_string(&item.target_action),
+        json_string(&item.retag_action),
+        item.ready_for_retag,
+        json_string(&item.retag_status),
+        item.relabel_required,
+        json_string_array(&item.repair_objectives),
+        json_string_array(&item.evidence_ids),
+        item.validation_required,
+        item.approval_required,
+        item.memory_admission_required,
+        json_string_array(&item.blocked_reasons),
+        side_effects_json()
+    )
+}
+
 fn action_assignment_targets_json(assignment: &SelfImproveProposalActionAssignment) -> String {
     let targets = assignment
         .targets
@@ -4806,6 +4982,9 @@ mod tests {
         let repair_factor_queue_json = option_repair_factor_queue_report_json(Some(&artifact));
         let repair_factor_readiness_json =
             option_repair_factor_readiness_report_json(Some(&artifact));
+        let repair_factor_retag_plan = artifact.repair_factor_retag_plan();
+        let repair_factor_retag_plan_json =
+            option_repair_factor_retag_plan_report_json(Some(&artifact));
 
         assert_eq!(summary.projected_report_count, 3);
         assert_eq!(summary.memory_admission_accepted_count, 2);
@@ -4902,6 +5081,28 @@ mod tests {
         assert!(repair_factor_readiness_json.contains("\"validation_not_checked\""));
         assert!(repair_factor_readiness_json.contains("\"auto_apply\":false"));
         assert!(repair_factor_readiness_json.contains("\"calls_model\":false"));
+        assert_eq!(repair_factor_retag_plan.repair_factor_count, 2);
+        assert_eq!(repair_factor_retag_plan.retag_plan_count, 1);
+        assert_eq!(repair_factor_retag_plan.blocked_count, 1);
+        assert!(!repair_factor_retag_plan.retag_plan_ready);
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains(
+            "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_retag_plan\""
+        ));
+        assert!(repair_factor_retag_plan_json.contains("\"retag_plan_count\":1"));
+        assert!(repair_factor_retag_plan_json.contains("\"blocked_count\":1"));
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"retag_action\":\"retag_repaired_gene_for_memory_admission\"")
+        );
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"retag_action\":\"hold_retag_until_repair_factor_ready\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains("\"validation_not_checked\""));
     }
 
     #[test]
@@ -4910,6 +5111,7 @@ mod tests {
         let action_assignment_json = option_action_assignment_report_json(None);
         let repair_factor_queue_json = option_repair_factor_queue_report_json(None);
         let repair_factor_readiness_json = option_repair_factor_readiness_report_json(None);
+        let repair_factor_retag_plan_json = option_repair_factor_retag_plan_report_json(None);
 
         assert!(json.contains("\"artifact_loaded\":false"));
         assert!(json.contains("\"total_candidate_count\":0"));
@@ -4954,6 +5156,15 @@ mod tests {
         assert!(repair_factor_readiness_json.contains("\"blocked_count\":0"));
         assert!(repair_factor_readiness_json.contains("\"all_repair_factors_ready\":false"));
         assert!(repair_factor_readiness_json.contains("\"items\":[]"));
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains("\"artifact_loaded\":false"));
+        assert!(repair_factor_retag_plan_json.contains("\"retag_plan_count\":0"));
+        assert!(repair_factor_retag_plan_json.contains("\"blocked_count\":0"));
+        assert!(repair_factor_retag_plan_json.contains("\"retag_plan_ready\":false"));
+        assert!(repair_factor_retag_plan_json.contains("\"items\":[]"));
     }
 
     #[test]
@@ -4967,6 +5178,9 @@ mod tests {
         let repair_factor_readiness = artifact.repair_factor_readiness_report();
         let repair_factor_readiness_json =
             option_repair_factor_readiness_report_json(Some(&artifact));
+        let repair_factor_retag_plan = artifact.repair_factor_retag_plan();
+        let repair_factor_retag_plan_json =
+            option_repair_factor_retag_plan_report_json(Some(&artifact));
         let memory_admission_readiness = artifact.memory_admission_readiness_report();
         let memory_admission_request = artifact.memory_admission_request_report();
         let memory_admission_request_json =
@@ -5032,6 +5246,32 @@ mod tests {
             "\"repair_objectives\":[\"accepted_memory_admission\",\"evidence_backed_business_improvement\"]"
         ));
         assert!(repair_factor_readiness_json.contains("\"blocked_reasons\":[]"));
+        assert_eq!(repair_factor_retag_plan.repair_factor_count, 1);
+        assert_eq!(repair_factor_retag_plan.retag_plan_count, 1);
+        assert_eq!(repair_factor_retag_plan.blocked_count, 0);
+        assert!(repair_factor_retag_plan.retag_plan_ready);
+        let retag_item = repair_factor_retag_plan.items.first().unwrap();
+        assert_eq!(retag_item.previous_label, "quarantined");
+        assert_eq!(
+            retag_item.repair_label,
+            "repair_factor:convert_advisory_to_evidence_backed_business_improvement"
+        );
+        assert_eq!(
+            retag_item.retag_action,
+            "retag_repaired_gene_for_memory_admission"
+        );
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains("\"retag_plan_count\":1"));
+        assert!(repair_factor_retag_plan_json.contains("\"retag_plan_ready\":true"));
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"retag_status\":\"ready_to_retag_repaired_gene\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains("\"memory_admission_required\":true"));
+        assert!(repair_factor_retag_plan_json.contains("\"memory_store_write_allowed\":false"));
         assert_eq!(memory_admission_readiness.target_count, 1);
         assert_eq!(memory_admission_readiness.ready_count, 0);
         assert_eq!(memory_admission_readiness.blocked_count, 1);
