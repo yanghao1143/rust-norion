@@ -271,6 +271,16 @@ impl ParseState {
                 .benchmark_min_dna_evolution_replay_passed,
             benchmark_min_dna_evolution_validation_passed: self
                 .benchmark_min_dna_evolution_validation_passed,
+            benchmark_min_dna_evolution_writer_gate_reports: self
+                .benchmark_min_dna_evolution_writer_gate_reports,
+            benchmark_min_dna_evolution_writer_gate_holds: self
+                .benchmark_min_dna_evolution_writer_gate_holds,
+            benchmark_min_dna_evolution_writer_gate_explicit_apply_required: self
+                .benchmark_min_dna_evolution_writer_gate_explicit_apply_required,
+            benchmark_max_dna_evolution_writer_gate_ready: self
+                .benchmark_max_dna_evolution_writer_gate_ready,
+            benchmark_max_dna_evolution_writer_gate_durable_write_allowed: self
+                .benchmark_max_dna_evolution_writer_gate_durable_write_allowed,
             benchmark_min_memory_governance_cases: self.benchmark_min_memory_governance_cases,
             benchmark_min_memory_governance_device_profiles: self.benchmark_min_memory_governance_device_profiles,
             benchmark_min_memory_retention_activity_cases: self.benchmark_min_memory_retention_activity_cases,
