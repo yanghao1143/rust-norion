@@ -97,6 +97,7 @@ fn facts_from_status(status_body: &str) -> ModelPoolFacts {
             .count(),
         quality_cpu_fallback: quality.is_some_and(worker_looks_cpu_bound),
         quality_zero_gpu_layers: quality.is_some_and(worker_has_zero_gpu_layers),
+        helper_cpu_or_no_gpu_roles: helper_cpu_or_no_gpu_roles(status_body),
     }
 }
 
@@ -119,6 +120,24 @@ fn worker_roles(status_body: &str) -> Vec<String> {
         .unwrap_or_default()
         .into_iter()
         .filter_map(|worker| json_string_field(worker, "role"))
+        .collect()
+}
+
+fn helper_cpu_or_no_gpu_roles(status_body: &str) -> Vec<String> {
+    json_array_field(status_body, "workers")
+        .map(json_object_items)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|worker| {
+            let role = json_string_field(worker, "role")?;
+            if HELPER_ROLES.contains(&role.as_str())
+                && (worker_looks_cpu_bound(worker) || worker_has_zero_gpu_layers(worker))
+            {
+                Some(role)
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
@@ -211,6 +230,17 @@ mod tests {
         assert!(json.contains("\"safe_to_enable_pool_workers\":false"));
         assert!(json.contains("\"reason\":\"quality_worker_not_gpu_accelerated\""));
         assert!(json.contains("先修 Metal/GPU"));
+    }
+
+    #[test]
+    fn advice_blocks_helper_cpu_fallback() {
+        let json = model_pool_advice_json(
+            "{\"ok\":true,\"quality_ready\":true,\"quality_context_sufficient\":true,\"capacity\":{\"expansion_allowed\":true,\"quality_runtime_accelerated\":true},\"workers\":[{\"role\":\"quality\",\"status\":\"healthy\",\"ready\":true,\"runtime_device\":\"metal\",\"runtime_accelerator\":\"metal\",\"gpu_layers\":99},{\"role\":\"summary\",\"status\":\"healthy\",\"role_ready\":true,\"runtime_device\":\"cpu\",\"runtime_accelerator\":\"cpu\",\"gpu_layers\":0}]}",
+        );
+
+        assert!(json.contains("\"safe_to_enable_pool_workers\":false"));
+        assert!(json.contains("\"reason\":\"helper_workers_not_gpu_accelerated\""));
+        assert!(json.contains("helper 小模型仍在 CPU/无 GPU 路径(summary)"));
     }
 
     #[test]
