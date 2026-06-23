@@ -177,6 +177,105 @@ impl GenomeRejuvenationDecision {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenomeRepairFactorRelease {
+    pub repair_factor_id: String,
+    pub gene_digest: String,
+    pub decision: GenomeRejuvenationDecisionKind,
+    pub previous_label: String,
+    pub repair_label: String,
+    pub release_action: String,
+    pub retag_action: String,
+    pub ready_for_release: bool,
+    pub ready_for_retag: bool,
+    pub validation_status: GeneValidationStatus,
+    pub rollback_anchor_id: String,
+    pub replay_digest: String,
+    pub approval_required: bool,
+    pub memory_admission_required: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub blocked_reasons: Vec<String>,
+}
+
+impl GenomeRepairFactorRelease {
+    fn from_decision(case: &GenomeRejuvenationCase, decision: &GenomeRejuvenationDecision) -> Self {
+        let previous_label = previous_repair_factor_label(case);
+        let repair_label = repair_factor_label(decision.kind);
+        let ready_for_release = decision.is_safe_preview()
+            && decision.approval_required
+            && decision.validation_status == GeneValidationStatus::Pending
+            && repair_label.starts_with("repair_factor:");
+        let ready_for_retag = ready_for_release && previous_label != repair_label;
+        let release_action = if ready_for_release {
+            release_action_for_decision(decision.kind)
+        } else {
+            "hold_repair_factor_until_validation_ready"
+        };
+        let retag_action = if ready_for_retag {
+            retag_action_for_decision(decision.kind)
+        } else {
+            "hold_retag_until_repair_factor_ready"
+        };
+        let mut blocked_reasons = Vec::new();
+        if !decision.is_safe_preview() {
+            blocked_reasons.push("decision_not_safe_preview".to_owned());
+        }
+        if decision.validation_status != GeneValidationStatus::Pending {
+            blocked_reasons.push("validation_status_not_pending".to_owned());
+        }
+        if !decision.approval_required {
+            blocked_reasons.push("operator_approval_not_required".to_owned());
+        }
+        if !repair_label.starts_with("repair_factor:") {
+            blocked_reasons.push("missing_repair_factor_label".to_owned());
+        }
+        if previous_label == repair_label {
+            blocked_reasons.push("retag_label_unchanged".to_owned());
+        }
+
+        Self {
+            repair_factor_id: format!(
+                "genome-repair-factor:{}:{}",
+                case.case_digest().trim_start_matches("redaction-digest:"),
+                decision.kind.as_str()
+            ),
+            gene_digest: decision.gene_digest.clone(),
+            decision: decision.kind,
+            previous_label,
+            repair_label: repair_label.to_owned(),
+            release_action: release_action.to_owned(),
+            retag_action: retag_action.to_owned(),
+            ready_for_release,
+            ready_for_retag,
+            validation_status: decision.validation_status,
+            rollback_anchor_id: decision.rollback_anchor_id.clone(),
+            replay_digest: digest([
+                case.id.as_str(),
+                decision.kind.as_str(),
+                repair_label,
+                decision.replay_digest.as_str(),
+            ]),
+            approval_required: true,
+            memory_admission_required: true,
+            write_allowed: false,
+            applied: false,
+            blocked_reasons,
+        }
+    }
+
+    pub fn is_safe_preview(&self) -> bool {
+        self.ready_for_release
+            && self.ready_for_retag
+            && self.approval_required
+            && self.memory_admission_required
+            && !self.write_allowed
+            && !self.applied
+            && self.blocked_reasons.is_empty()
+            && self.replay_digest.starts_with("redaction-digest:")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenomeRejuvenationCaseResult {
     pub case_digest: String,
@@ -187,6 +286,7 @@ pub struct GenomeRejuvenationCaseResult {
     pub before: GenomeRejuvenationSnapshot,
     pub after: GenomeRejuvenationSnapshot,
     pub decisions: Vec<GenomeRejuvenationDecision>,
+    pub repair_factors: Vec<GenomeRepairFactorRelease>,
     pub expression_read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -213,6 +313,38 @@ impl GenomeRejuvenationCaseResult {
             .join("|")
     }
 
+    pub fn repair_factor_count(&self) -> usize {
+        self.repair_factors.len()
+    }
+
+    pub fn ready_repair_factor_count(&self) -> usize {
+        self.repair_factors
+            .iter()
+            .filter(|factor| factor.ready_for_release)
+            .count()
+    }
+
+    pub fn ready_retag_plan_count(&self) -> usize {
+        self.repair_factors
+            .iter()
+            .filter(|factor| factor.ready_for_retag)
+            .count()
+    }
+
+    pub fn repair_factor_write_allowed_count(&self) -> usize {
+        self.repair_factors
+            .iter()
+            .filter(|factor| factor.write_allowed)
+            .count()
+    }
+
+    pub fn repair_factor_applied_count(&self) -> usize {
+        self.repair_factors
+            .iter()
+            .filter(|factor| factor.applied)
+            .count()
+    }
+
     pub fn wasted_compute_reduction(&self) -> usize {
         self.after.wasted_compute_reduction(&self.before)
     }
@@ -223,13 +355,16 @@ impl GenomeRejuvenationCaseResult {
 
     pub fn ledger_line(&self) -> String {
         format!(
-            "genome_rejuvenation_v1 case={} ledger_input={} profile={:?} target={} repetitions={} decisions={} before_fitness={:.3} after_fitness={:.3} before_drift={:.3} after_drift={:.3} before_wasted={} after_wasted={} wasted_reduction={} before_memory_usefulness={:.3} after_memory_usefulness={:.3} validation={} rollback_ready={} read_only={} write_allowed={} applied={} replay_digest={}",
+            "genome_rejuvenation_v1 case={} ledger_input={} profile={:?} target={} repetitions={} decisions={} repair_factors={} repair_factor_ready={} retag_plans={} before_fitness={:.3} after_fitness={:.3} before_drift={:.3} after_drift={:.3} before_wasted={} after_wasted={} wasted_reduction={} before_memory_usefulness={:.3} after_memory_usefulness={:.3} validation={} rollback_ready={} read_only={} write_allowed={} applied={} replay_digest={}",
             self.case_digest,
             self.ledger_input_digest,
             self.profile,
             self.target_gene_digest,
             self.task_repetitions,
             self.decision_summary(),
+            self.repair_factor_count(),
+            self.ready_repair_factor_count(),
+            self.ready_retag_plan_count(),
             self.before.average_fitness,
             self.after.average_fitness,
             self.before.average_drift,
@@ -289,6 +424,41 @@ impl GenomeRejuvenationSimulationReport {
             .iter()
             .filter(|result| result.rollback_ready)
             .count()
+    }
+
+    pub fn repair_factor_count(&self) -> usize {
+        self.results
+            .iter()
+            .map(GenomeRejuvenationCaseResult::repair_factor_count)
+            .sum()
+    }
+
+    pub fn ready_repair_factor_count(&self) -> usize {
+        self.results
+            .iter()
+            .map(GenomeRejuvenationCaseResult::ready_repair_factor_count)
+            .sum()
+    }
+
+    pub fn ready_retag_plan_count(&self) -> usize {
+        self.results
+            .iter()
+            .map(GenomeRejuvenationCaseResult::ready_retag_plan_count)
+            .sum()
+    }
+
+    pub fn repair_factor_write_allowed_count(&self) -> usize {
+        self.results
+            .iter()
+            .map(GenomeRejuvenationCaseResult::repair_factor_write_allowed_count)
+            .sum()
+    }
+
+    pub fn repair_factor_applied_count(&self) -> usize {
+        self.results
+            .iter()
+            .map(GenomeRejuvenationCaseResult::repair_factor_applied_count)
+            .sum()
     }
 
     pub fn write_allowed_count(&self) -> usize {
@@ -364,10 +534,13 @@ impl GenomeRejuvenationSimulationReport {
             .collect::<Vec<_>>()
             .join("|");
         format!(
-            "genome_rejuvenation cases={} decisions={} covered={} wasted_before={} wasted_after={} wasted_reduction={} avg_memory_usefulness_delta={:.3} rollback_ready={} replay_digests={} write_allowed={} applied={} failures={}",
+            "genome_rejuvenation cases={} decisions={} covered={} repair_factors={} repair_factor_ready={} retag_plans={} wasted_before={} wasted_after={} wasted_reduction={} avg_memory_usefulness_delta={:.3} rollback_ready={} replay_digests={} write_allowed={} applied={} failures={}",
             self.case_count(),
             self.decision_count(),
             covered,
+            self.repair_factor_count(),
+            self.ready_repair_factor_count(),
+            self.ready_retag_plan_count(),
             self.total_wasted_compute_before(),
             self.total_wasted_compute_after(),
             self.total_wasted_compute_reduction(),
@@ -397,6 +570,24 @@ impl GenomeRejuvenationSimulationReport {
             "rollback_ready",
             self.rollback_ready_count(),
             gate.min_rollback_ready,
+        );
+        require_at_least(
+            &mut failures,
+            "repair_factors",
+            self.repair_factor_count(),
+            gate.min_repair_factors,
+        );
+        require_at_least(
+            &mut failures,
+            "repair_factor_ready",
+            self.ready_repair_factor_count(),
+            gate.min_ready_repair_factors,
+        );
+        require_at_least(
+            &mut failures,
+            "retag_plans",
+            self.ready_retag_plan_count(),
+            gate.min_ready_retag_plans,
         );
         require_at_least(
             &mut failures,
@@ -431,6 +622,20 @@ impl GenomeRejuvenationSimulationReport {
                 "applied {} exceeds max {}",
                 self.applied_count(),
                 gate.max_applied
+            ));
+        }
+        if self.repair_factor_write_allowed_count() > gate.max_repair_factor_write_allowed {
+            failures.push(format!(
+                "repair_factor_write_allowed {} exceeds max {}",
+                self.repair_factor_write_allowed_count(),
+                gate.max_repair_factor_write_allowed
+            ));
+        }
+        if self.repair_factor_applied_count() > gate.max_repair_factor_applied {
+            failures.push(format!(
+                "repair_factor_applied {} exceeds max {}",
+                self.repair_factor_applied_count(),
+                gate.max_repair_factor_applied
             ));
         }
         if gate.require_non_decreasing_memory_usefulness
@@ -479,10 +684,15 @@ pub struct GenomeRejuvenationSimulationGate {
     pub min_decisions: usize,
     pub require_all_decision_kinds: bool,
     pub min_rollback_ready: usize,
+    pub min_repair_factors: usize,
+    pub min_ready_repair_factors: usize,
+    pub min_ready_retag_plans: usize,
     pub min_replay_digests: usize,
     pub min_wasted_compute_reduction: usize,
     pub max_write_allowed: usize,
     pub max_applied: usize,
+    pub max_repair_factor_write_allowed: usize,
+    pub max_repair_factor_applied: usize,
     pub require_non_decreasing_memory_usefulness: bool,
     pub require_digest_only_ledger: bool,
     pub max_failures: usize,
@@ -495,10 +705,15 @@ impl Default for GenomeRejuvenationSimulationGate {
             min_decisions: 6,
             require_all_decision_kinds: true,
             min_rollback_ready: 4,
+            min_repair_factors: 5,
+            min_ready_repair_factors: 5,
+            min_ready_retag_plans: 5,
             min_replay_digests: 4,
             min_wasted_compute_reduction: 1,
             max_write_allowed: 0,
             max_applied: 0,
+            max_repair_factor_write_allowed: 0,
+            max_repair_factor_applied: 0,
             require_non_decreasing_memory_usefulness: true,
             require_digest_only_ledger: true,
             max_failures: 0,
@@ -622,6 +837,7 @@ fn run_case(case: &GenomeRejuvenationCase) -> GenomeRejuvenationCaseResult {
         .with_feedback_health(&case.expression_input)
         .express(case.expression_input);
     let decisions = decisions_for_expression(case, &expression);
+    let repair_factors = repair_factors_for_decisions(case, &decisions);
     let after = projected_after_snapshot(case, &before, &decisions, &expression);
     let rollback_ready = decisions.iter().all(|decision| {
         decision.is_safe_preview()
@@ -641,6 +857,7 @@ fn run_case(case: &GenomeRejuvenationCase) -> GenomeRejuvenationCaseResult {
         before,
         after,
         decisions,
+        repair_factors,
         expression_read_only,
         write_allowed,
         applied,
@@ -698,6 +915,17 @@ fn decisions_for_expression(
         });
     }
     decisions
+}
+
+fn repair_factors_for_decisions(
+    case: &GenomeRejuvenationCase,
+    decisions: &[GenomeRejuvenationDecision],
+) -> Vec<GenomeRepairFactorRelease> {
+    decisions
+        .iter()
+        .filter(|decision| decision.kind != GenomeRejuvenationDecisionKind::Keep)
+        .map(|decision| GenomeRepairFactorRelease::from_decision(case, decision))
+        .collect()
 }
 
 fn decision_kind_for_action(
@@ -930,6 +1158,28 @@ fn validate_result(
             failures.push(format!("{}:decision_replay_digest_missing", case.id));
         }
     }
+    for factor in &result.repair_factors {
+        if !factor.is_safe_preview() {
+            failures.push(format!(
+                "{}:repair_factor_not_safe_preview:{}",
+                case.id,
+                factor.decision.as_str()
+            ));
+        }
+        if factor.previous_label == factor.repair_label {
+            failures.push(format!("{}:repair_factor_label_not_changed", case.id));
+        }
+        if factor.write_allowed || factor.applied {
+            failures.push(format!("{}:repair_factor_write_or_apply_allowed", case.id));
+        }
+        if contains_private_or_executable_marker(&factor.previous_label)
+            || contains_private_or_executable_marker(&factor.repair_label)
+            || contains_private_or_executable_marker(&factor.release_action)
+            || contains_private_or_executable_marker(&factor.retag_action)
+        {
+            failures.push(format!("{}:repair_factor_leaked_private_marker", case.id));
+        }
+    }
     if !result.ledger_input_digest.starts_with("redaction-digest:")
         || !result.after.replay_digest.starts_with("redaction-digest:")
     {
@@ -937,6 +1187,52 @@ fn validate_result(
     }
     if contains_private_or_executable_marker(&result.ledger_line()) {
         failures.push(format!("{}:ledger_contains_private_marker", case.id));
+    }
+}
+
+fn previous_repair_factor_label(case: &GenomeRejuvenationCase) -> String {
+    if case.gene.label.trim().is_empty() || case.gene.purpose.trim().is_empty() {
+        "status:aging:missing_purpose_label".to_owned()
+    } else {
+        format!("status:{}", case.gene.derived_status().as_str())
+    }
+}
+
+fn repair_factor_label(kind: GenomeRejuvenationDecisionKind) -> &'static str {
+    match kind {
+        GenomeRejuvenationDecisionKind::Keep => "repair_factor:none",
+        GenomeRejuvenationDecisionKind::Relabel => "repair_factor:relabel_aging_gene_purpose",
+        GenomeRejuvenationDecisionKind::Refresh => "repair_factor:refresh_aged_gene_validation",
+        GenomeRejuvenationDecisionKind::Quarantine => "repair_factor:quarantine_malignant_gene",
+        GenomeRejuvenationDecisionKind::Regenerate => {
+            "repair_factor:regenerate_young_replacement_gene"
+        }
+        GenomeRejuvenationDecisionKind::Tombstone => "repair_factor:tombstone_cut_malignant_gene",
+    }
+}
+
+fn release_action_for_decision(kind: GenomeRejuvenationDecisionKind) -> &'static str {
+    match kind {
+        GenomeRejuvenationDecisionKind::Keep => "no_repair_factor_release_required",
+        GenomeRejuvenationDecisionKind::Relabel | GenomeRejuvenationDecisionKind::Refresh => {
+            "release_rejuvenation_factor_for_retag"
+        }
+        GenomeRejuvenationDecisionKind::Quarantine => "release_quarantine_factor_before_cut",
+        GenomeRejuvenationDecisionKind::Regenerate => {
+            "release_regeneration_factor_from_stable_anchor"
+        }
+        GenomeRejuvenationDecisionKind::Tombstone => "release_tombstone_factor_after_quarantine",
+    }
+}
+
+fn retag_action_for_decision(kind: GenomeRejuvenationDecisionKind) -> &'static str {
+    match kind {
+        GenomeRejuvenationDecisionKind::Keep => "no_retag_required",
+        GenomeRejuvenationDecisionKind::Relabel => "retag_aging_gene_with_current_purpose",
+        GenomeRejuvenationDecisionKind::Refresh => "retag_refreshed_gene_with_validation_anchor",
+        GenomeRejuvenationDecisionKind::Quarantine => "retag_malignant_gene_as_quarantined",
+        GenomeRejuvenationDecisionKind::Regenerate => "retag_regenerated_gene_as_young_replacement",
+        GenomeRejuvenationDecisionKind::Tombstone => "retag_cut_gene_as_tombstoned",
     }
 }
 
