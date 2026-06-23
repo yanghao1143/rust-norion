@@ -24,6 +24,7 @@ use super::replay::{
     ModelServiceReplayRequest, ModelServiceSelfImproveRequest, parse_replay_request,
     parse_self_improve_request,
 };
+use super::request_control::{ModelServiceRequestCancelRequest, parse_request_cancel_request};
 use super::rust_check::{ModelServiceRustCheckRequest, parse_rust_check_request};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +49,7 @@ pub(crate) enum ModelServiceHttpRequest {
     SelfImprove(ModelServiceSelfImproveRequest),
     BusinessCycle(ModelServiceBusinessCycleRequest),
     BusinessCycleStream(ModelServiceBusinessCycleRequest),
+    RequestCancel(ModelServiceRequestCancelRequest),
     Inspect(ModelServiceInspectRequest),
     Feedback(ModelServiceFeedbackRequest),
     RustCheck(ModelServiceRustCheckRequest),
@@ -110,6 +112,9 @@ pub(crate) fn parse_model_service_http_request(
             "/business-cycle-stream" | "/v1/business-cycle-stream" => {
                 Ok(ModelServiceHttpRequest::Info("business-cycle-stream"))
             }
+            "/requests/cancel" | "/v1/requests/cancel" => {
+                Ok(ModelServiceHttpRequest::Info("requests-cancel"))
+            }
             "/inspect" | "/v1/inspect" => Ok(ModelServiceHttpRequest::Inspect(
                 ModelServiceInspectRequest::default(),
             )),
@@ -141,6 +146,9 @@ pub(crate) fn parse_model_service_http_request(
         }
         "/v1/business-cycle-stream" | "/business-cycle-stream" => {
             parse_business_cycle_request(body).map(ModelServiceHttpRequest::BusinessCycleStream)
+        }
+        "/v1/requests/cancel" | "/requests/cancel" => {
+            parse_request_cancel_request(body).map(ModelServiceHttpRequest::RequestCancel)
         }
         "/v1/feedback" | "/feedback" => {
             parse_feedback_request(body).map(ModelServiceHttpRequest::Feedback)
@@ -327,6 +335,27 @@ mod tests {
             request,
             ModelServiceHttpRequest::BusinessCycleStream(_)
         ));
+    }
+
+    #[test]
+    fn parses_request_cancel_route() {
+        let info =
+            parse_model_service_http_request("GET /v1/requests/cancel HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(info, ModelServiceHttpRequest::Info("requests-cancel"));
+
+        let request = parse_model_service_http_request(
+            "POST /v1/requests/cancel HTTP/1.1\r\n\r\n{\"request_id\":42,\"reason\":\"stalled_generation\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+        )
+        .unwrap();
+
+        assert_eq!(
+            request,
+            ModelServiceHttpRequest::RequestCancel(ModelServiceRequestCancelRequest {
+                request_id: 42,
+                reason: "stalled_generation".to_owned(),
+                retag_label: "repair_factor:runtime_splice".to_owned(),
+            })
+        );
     }
 
     #[test]

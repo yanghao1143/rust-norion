@@ -4,7 +4,7 @@ use rust_norion::{InferenceBackend, NoironEngine};
 
 use super::super::super::business_cycle::{
     ModelServiceBusinessCycleEvent, run_model_service_business_cycle,
-    run_model_service_business_cycle_observed,
+    run_model_service_business_cycle_observed_cancelable,
 };
 use super::super::super::json::{
     service_error_json, write_http_json, write_http_sse_headers, write_sse_event,
@@ -88,7 +88,15 @@ pub(super) fn handle_business_cycle_stream<B: InferenceBackend>(
                 write_error = Some(error);
             }
         };
-        run_model_service_business_cycle_observed(engine, backend, args, request, &mut observer)
+        let mut should_cancel = || state.is_cancel_requested(request_id);
+        run_model_service_business_cycle_observed_cancelable(
+            engine,
+            backend,
+            args,
+            request,
+            &mut observer,
+            &mut should_cancel,
+        )
     };
     if let Some(error) = write_error {
         return Err(error);
@@ -103,6 +111,29 @@ pub(super) fn handle_business_cycle_stream<B: InferenceBackend>(
                 error.to_string(),
             ));
             write_sse_event(stream, "error", &error.to_string())?;
+            write_sse_event(stream, "done", "[DONE]")?;
+            return Ok(());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+            let cancellation = state.cancellation_intent(request_id);
+            let message = cancellation
+                .as_ref()
+                .map(|cancellation| {
+                    format!(
+                        "{}; repair_factor={} retag_label={} reason={}",
+                        error,
+                        cancellation.repair_factor,
+                        cancellation.retag_label,
+                        cancellation.reason
+                    )
+                })
+                .unwrap_or_else(|| error.to_string());
+            state.record_inference(ModelServiceLastInferenceTelemetry::error(
+                request_id,
+                "business-cycle-stream",
+                message.clone(),
+            ));
+            write_sse_event(stream, "error", &message)?;
             write_sse_event(stream, "done", "[DONE]")?;
             return Ok(());
         }
