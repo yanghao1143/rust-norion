@@ -106,14 +106,49 @@ function Get-BackendPidStatus {
     if (-not [int]::TryParse($raw, [ref]$processId)) {
         return [pscustomobject]@{ State = "invalid"; Pid = $raw; Process = $null; Safe = $false }
     }
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
+    $process = $null
+    try {
+        $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
+    } catch {
+        $process = $null
+    }
+    if ($null -ne $process) {
+        $command = [string]$process.CommandLine
+        $safe = $process.Name -eq "rust-norion.exe" `
+            -and $command.Contains("remote gemma via ssh tunnel") `
+            -and $command.Contains("127.0.0.1:$Port")
+        return [pscustomobject]@{ State = "running"; Pid = $processId; Process = $process; Safe = $safe }
+    }
+
+    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
     if ($null -eq $process) {
         return [pscustomobject]@{ State = "stale"; Pid = $processId; Process = $null; Safe = $false }
     }
-    $command = [string]$process.CommandLine
-    $safe = $process.Name -eq "rust-norion.exe" `
-        -and $command.Contains("remote gemma via ssh tunnel") `
-        -and $command.Contains("127.0.0.1:$Port")
+    $runDir = Split-Path -Parent $PidPath
+    $buildDir = Join-Path $runDir "build"
+    $processPath = [string]$process.Path
+    $ownsBackendPort = $false
+    try {
+        $netstatRows = & netstat.exe -ano -p tcp 2>$null
+        foreach ($row in $netstatRows) {
+            $parts = $row.Trim() -split "\s+"
+            if ($parts.Count -ge 5 `
+                    -and $parts[0] -eq "TCP" `
+                    -and $parts[1] -eq "127.0.0.1:$Port" `
+                    -and $parts[3] -eq "LISTENING" `
+                    -and $parts[4] -eq "$processId") {
+                $ownsBackendPort = $true
+                break
+            }
+        }
+    } catch {
+        $ownsBackendPort = $false
+    }
+    $safe = $process.ProcessName -eq "rust-norion" `
+        -and -not [string]::IsNullOrWhiteSpace($processPath) `
+        -and $processPath.StartsWith($buildDir, [System.StringComparison]::OrdinalIgnoreCase) `
+        -and $processPath.EndsWith("rust-norion.exe", [System.StringComparison]::OrdinalIgnoreCase) `
+        -and $ownsBackendPort
     return [pscustomobject]@{ State = "running"; Pid = $processId; Process = $process; Safe = $safe }
 }
 
