@@ -63,6 +63,7 @@ use crate::json::{
 use crate::validation;
 
 const MAX_PROJECTED_PROPOSALS: usize = 8;
+const MAX_SELF_IMPROVE_PROPOSAL_SOURCE_ROUND_AGE: u64 = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelfImproveProposalArtifact {
@@ -264,9 +265,12 @@ pub(crate) struct SelfImproveProposalRepairFactorRegenerationAdmissionItem {
 pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
     let mut proposals = Vec::new();
     let mut seen = BTreeSet::new();
+    let mut latest_observed_round = None;
 
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        update_latest_round(&mut latest_observed_round, json_u64_field(line, "round"));
         for proposal in proposals_from_ledger_line(line) {
+            update_latest_round(&mut latest_observed_round, proposal.source_round);
             let key = format!(
                 "{}:{}:{}",
                 proposal.proposal_id,
@@ -279,6 +283,17 @@ pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
         }
     }
 
+    if let Some(latest_round) = latest_observed_round {
+        let oldest_live_round =
+            latest_round.saturating_sub(MAX_SELF_IMPROVE_PROPOSAL_SOURCE_ROUND_AGE);
+        proposals.retain(|proposal| {
+            proposal
+                .source_round
+                .map(|round| round >= oldest_live_round)
+                .unwrap_or(true)
+        });
+    }
+
     let total_candidate_count = proposals.len();
     let keep_from = proposals.len().saturating_sub(MAX_PROJECTED_PROPOSALS);
     proposals.drain(..keep_from);
@@ -286,6 +301,12 @@ pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
     SelfImproveProposalArtifact {
         total_candidate_count,
         proposals,
+    }
+}
+
+fn update_latest_round(latest: &mut Option<u64>, candidate: Option<u64>) {
+    if let Some(candidate) = candidate {
+        *latest = Some(latest.map_or(candidate, |current| current.max(candidate)));
     }
 }
 
@@ -2927,6 +2948,8 @@ fn suggested_action_is_actionable(value: &str) -> bool {
         && !suggested_action_is_no_small_next_change_noise(normalized)
         && !suggested_action_is_unproven_test_seed_noise(normalized)
         && !suggested_action_is_past_primary_answer_noise(normalized)
+        && !suggested_action_is_pointer_only_primary_answer_noise(normalized)
+        && !suggested_action_is_unsupported_test_thread_flag_noise(normalized)
 }
 
 fn normalize_candidate_action_for_matching(value: &str) -> String {
@@ -3074,6 +3097,8 @@ fn suggested_action_is_unproven_test_seed_noise(value: &str) -> bool {
     }
     value.contains("test harness")
         || value.contains("test execution")
+        || value.contains("test run")
+        || value.contains("test runs")
         || value.contains("cargo test")
         || value.contains("flaky")
         || value.contains("flakiness")
@@ -3086,6 +3111,33 @@ fn suggested_action_is_past_primary_answer_noise(value: &str) -> bool {
         && (value.contains("cannot be verified")
             || value.contains("provided inputs")
             || value.contains("for round"))
+}
+
+fn suggested_action_is_pointer_only_primary_answer_noise(value: &str) -> bool {
+    value.starts_with("primary answer ledger round")
+        || value.starts_with("primary answer helper stage contract")
+        || (value.starts_with("primary answer")
+            && value.contains("helper stage contract")
+            && value.contains("change request"))
+}
+
+fn suggested_action_is_unsupported_test_thread_flag_noise(value: &str) -> bool {
+    let asks_for_max_threads = value.contains("max threads")
+        || value.contains("max-threads")
+        || value.contains("--max-threads");
+    if !asks_for_max_threads {
+        return false;
+    }
+    let targets_validation = value.contains("validation command")
+        || value.contains("cargo test")
+        || value.contains("tools evolution loop cargo toml")
+        || value.contains("test flakiness")
+        || value.contains("test flakness")
+        || value.contains("ci");
+    let lacks_supported_libtest_flag = !value.contains("test threads")
+        && !value.contains("test-threads")
+        && !value.contains("--test-threads");
+    targets_validation && lacks_supported_libtest_flag
 }
 
 fn derived_proposal_id(round: Option<u64>, action: &str, source: &str) -> String {
@@ -6457,6 +6509,14 @@ mod tests {
     #[test]
     fn action_assignment_filters_stale_noop_and_unproven_seed_noise() {
         let text = concat!(
+            r#"{"round":714,"case":"invalid-max-threads","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"test flakiness","change_request":"Update the `validation_command` in `tools/evolution-loop/Cargo.toml` to include `--max-threads 4` (primary_answer).","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-daemon-check -- --max-threads 4"}}}}"#,
+            "\n",
+            r#"{"round":715,"case":"invalid-max-threads-repeat","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"test flakness","change_request":"Add a `--max-threads 4` flag to the `validation_command` in `tools/evolution-loop/Cargo.toml` to mitigate test flakness on CI (primary_answer)","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-daemon-check"}}}}"#,
+            "\n",
+            r#"{"round":719,"case":"invalid-rng-seed","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"unproven RNG flakiness","change_request":"Add a deterministic seed to the evolution-loop's random number generation to ensure reproducible test runs (primary_answer)","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-daemon-check"}}}}"#,
+            "\n",
+            r#"{"round":729,"case":"pointer-only-primary-answer","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"pointer-only action","change_request":"primary_answer: ledger.round.719.helper_stage_contract.review.change_request","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\evolution-loop-daemon-check"}}}}"#,
+            "\n",
             r#"{"round":736,"case":"invalid-test-seed","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"flaky tests","change_request":"Add a deterministic seed to the `evolution-loop` test harness to fix flakiness, as suggested in the `primary_answer`.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
             "\n",
             r#"{"round":737,"case":"noop-explicit","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"none","change_request":"No small next change is explicitly requested or derived from the evidence, as the primary_answer addresses a past issue.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
@@ -6482,6 +6542,52 @@ mod tests {
             closure.first_target_closure_kind.as_deref(),
             Some("index_deterministic_seed_contract")
         );
+    }
+
+    #[test]
+    fn proposal_projection_retires_aged_targets_instead_of_backfilling_open_actions() {
+        let text = concat!(
+            r#"{"round":695,"case":"old-open-a","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"old advisory target","change_request":"Add a report-only dashboard for stale memory admission candidates.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":696,"case":"old-open-b","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"old advisory target","change_request":"Add a second report-only dashboard for stale memory admission candidates.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":697,"case":"old-open-c","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"old advisory target","change_request":"Add a report-only metric for historical proposal drift.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":698,"case":"old-open-d","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"old advisory target","change_request":"Add a report-only metric for historical proposal aging.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":738,"case":"recent-closed-a","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"index feedback lacks deterministic provenance","change_request":"Update the index role feedback mechanism to include a deterministic_seed field for every helper response.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":740,"case":"recent-closed-b","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"index feedback lacks deterministic provenance","change_request":"Require the index role to include the deterministic_seed field in its feedback contract.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":741,"case":"recent-closed-c","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"index feedback lacks deterministic provenance","change_request":"Make deterministic_seed a required index feedback field so retries can prove deterministic provenance.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":742,"case":"recent-closed-d","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"index feedback lacks deterministic provenance","change_request":"Update the index role feedback contract to include deterministic_seed in every report.","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n",
+            r#"{"round":743,"case":"current-noop","success":true,"self_improve_passed":true,"validation_checked":true,"validation_passed":true,"validation_command_source":"test-gate","validation_command_safety":"safe","helper_stage_contract_by_role":{"review":{"fields":{"risk":"none","change_request":"No small next change grounded in the same evidence","verification":"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"}}}}"#,
+            "\n"
+        );
+
+        let artifact = from_ledger_text(text);
+        let assignment = artifact.acceptance_action_assignment();
+        let closure = artifact.action_closure_report();
+        let regeneration_admission = artifact.repair_factor_regeneration_admission();
+
+        assert_eq!(artifact.total_candidate_count, 4);
+        assert_eq!(artifact.proposals.len(), 4);
+        assert!(
+            artifact
+                .proposals
+                .iter()
+                .all(|proposal| proposal.source_round >= Some(738))
+        );
+        assert_eq!(assignment.target_count, 4);
+        assert_eq!(closure.closed_target_count, 4);
+        assert_eq!(closure.open_target_count, 0);
+        assert!(closure.all_targets_closed());
+        assert_eq!(regeneration_admission.pending_action_closure_count, 0);
+        assert_eq!(regeneration_admission.ready_regeneration_candidate_count, 4);
+        assert!(regeneration_admission.regeneration_admission_ready);
+        assert!(!regeneration_admission.admission_write_authorized);
     }
 
     #[test]
