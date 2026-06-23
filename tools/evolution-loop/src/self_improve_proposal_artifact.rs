@@ -111,6 +111,38 @@ pub(crate) struct SelfImproveProposalRepairFactor {
     pub(crate) require_repair: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorReadinessReport {
+    pub(crate) action_required: bool,
+    pub(crate) repair_factor_count: usize,
+    pub(crate) ready_repair_factor_count: usize,
+    pub(crate) blocked_count: usize,
+    pub(crate) all_repair_factors_ready: bool,
+    pub(crate) first_repair_factor_id: Option<String>,
+    pub(crate) first_repair_factor_ready: bool,
+    pub(crate) first_repair_factor_status: Option<String>,
+    pub(crate) items: Vec<SelfImproveProposalRepairFactorReadinessItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorReadinessItem {
+    pub(crate) repair_factor_id: String,
+    pub(crate) proposal_id: String,
+    pub(crate) source_round: Option<u64>,
+    pub(crate) old_label: String,
+    pub(crate) new_label: String,
+    pub(crate) target_action: String,
+    pub(crate) ready_for_repair_plan: bool,
+    pub(crate) readiness_status: String,
+    pub(crate) relabel_required: bool,
+    pub(crate) repair_objectives: Vec<String>,
+    pub(crate) evidence_ids: Vec<String>,
+    pub(crate) evidence_present: bool,
+    pub(crate) validation_checked: bool,
+    pub(crate) validation_passed: bool,
+    pub(crate) blocked_reasons: Vec<String>,
+}
+
 pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
     let mut proposals = Vec::new();
     let mut seen = BTreeSet::new();
@@ -187,6 +219,22 @@ pub(crate) fn option_repair_factor_queue_report_json(
     match artifact {
         Some(artifact) => repair_factor_queue_report_json(&artifact.repair_factor_queue(), true),
         None => repair_factor_queue_report_json(&empty_repair_factor_queue(), false),
+    }
+}
+
+pub(crate) fn option_repair_factor_readiness_report_json(
+    artifact: Option<&SelfImproveProposalArtifact>,
+) -> String {
+    match artifact {
+        Some(artifact) => {
+            repair_factor_readiness_report_json(&artifact.repair_factor_readiness_report(), true)
+        }
+        None => repair_factor_readiness_report_json(
+            &SelfImproveProposalRepairFactorReadinessReport::from_queue(
+                &empty_repair_factor_queue(),
+            ),
+            false,
+        ),
     }
 }
 
@@ -1484,6 +1532,12 @@ impl SelfImproveProposalArtifact {
         SelfImproveProposalRepairFactorQueue::from_assignment(&self.acceptance_action_assignment())
     }
 
+    pub(crate) fn repair_factor_readiness_report(
+        &self,
+    ) -> SelfImproveProposalRepairFactorReadinessReport {
+        SelfImproveProposalRepairFactorReadinessReport::from_queue(&self.repair_factor_queue())
+    }
+
     pub(crate) fn action_closure_report(&self) -> SelfImproveProposalActionClosureReport {
         let assignment = self.acceptance_action_assignment();
         let closure_evidence = self.action_closure_evidence(&assignment);
@@ -1767,6 +1821,85 @@ impl SelfImproveProposalRepairFactor {
             evidence_backed_business_improvement: target.evidence_backed_business_improvement,
             advisory_only: target.advisory_only,
             require_repair: target.require_repair,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorReadinessReport {
+    fn from_queue(queue: &SelfImproveProposalRepairFactorQueue) -> Self {
+        let items = queue
+            .repair_factors
+            .iter()
+            .map(SelfImproveProposalRepairFactorReadinessItem::from_repair_factor)
+            .collect::<Vec<_>>();
+        let ready_repair_factor_count = items
+            .iter()
+            .filter(|item| item.ready_for_repair_plan)
+            .count();
+        let blocked_count = items.len().saturating_sub(ready_repair_factor_count);
+        let first = items.first();
+        Self {
+            action_required: queue.action_required,
+            repair_factor_count: queue.repair_factor_count,
+            ready_repair_factor_count,
+            blocked_count,
+            all_repair_factors_ready: queue.action_required
+                && queue.repair_factor_count > 0
+                && blocked_count == 0,
+            first_repair_factor_id: first.map(|item| item.repair_factor_id.clone()),
+            first_repair_factor_ready: first
+                .map(|item| item.ready_for_repair_plan)
+                .unwrap_or(false),
+            first_repair_factor_status: first.map(|item| item.readiness_status.clone()),
+            items,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorReadinessItem {
+    fn from_repair_factor(factor: &SelfImproveProposalRepairFactor) -> Self {
+        let mut blocked_reasons = Vec::new();
+        let relabel_required = factor.old_label != factor.new_label;
+        let evidence_present = !factor.evidence_ids.is_empty();
+        if factor.repair_factor_id.trim().is_empty() {
+            blocked_reasons.push("missing_repair_factor_id".to_owned());
+        }
+        if factor.target_action.trim().is_empty() || factor.target_action == "none" {
+            blocked_reasons.push("missing_target_action".to_owned());
+        }
+        if !relabel_required || !factor.new_label.starts_with("repair_factor:") {
+            blocked_reasons.push("missing_repair_factor_relabel".to_owned());
+        }
+        if !evidence_present {
+            blocked_reasons.push("missing_evidence_ids".to_owned());
+        }
+        if !factor.validation_checked {
+            blocked_reasons.push("validation_not_checked".to_owned());
+        } else if !factor.validation_passed {
+            blocked_reasons.push("validation_failed".to_owned());
+        }
+        let ready_for_repair_plan = blocked_reasons.is_empty();
+        let readiness_status = if ready_for_repair_plan {
+            "ready_for_relabel_and_repair_plan"
+        } else {
+            "blocked_until_repair_factor_evidence_is_ready"
+        };
+        Self {
+            repair_factor_id: factor.repair_factor_id.clone(),
+            proposal_id: factor.proposal_id.clone(),
+            source_round: factor.source_round,
+            old_label: factor.old_label.clone(),
+            new_label: factor.new_label.clone(),
+            target_action: factor.target_action.clone(),
+            ready_for_repair_plan,
+            readiness_status: readiness_status.to_owned(),
+            relabel_required,
+            repair_objectives: factor.missing_requirements.clone(),
+            evidence_ids: factor.evidence_ids.clone(),
+            evidence_present,
+            validation_checked: factor.validation_checked,
+            validation_passed: factor.validation_passed,
+            blocked_reasons,
         }
     }
 }
@@ -4415,6 +4548,56 @@ fn repair_factor_json(factor: &SelfImproveProposalRepairFactor) -> String {
     )
 }
 
+fn repair_factor_readiness_report_json(
+    report: &SelfImproveProposalRepairFactorReadinessReport,
+    artifact_loaded: bool,
+) -> String {
+    let items = report
+        .items
+        .iter()
+        .map(repair_factor_readiness_item_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema\":\"self_improve_proposal_repair_factor_readiness_report_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_readiness\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"repair_factor_count\":{},\"ready_repair_factor_count\":{},\"blocked_count\":{},\"all_repair_factors_ready\":{},\"first_repair_factor_id\":{},\"first_repair_factor_ready\":{},\"first_repair_factor_status\":{},\"items\":[{}],\"side_effects\":{}}}",
+        artifact_loaded,
+        report.action_required,
+        report.repair_factor_count,
+        report.ready_repair_factor_count,
+        report.blocked_count,
+        report.all_repair_factors_ready,
+        option_string_json(report.first_repair_factor_id.as_deref()),
+        report.first_repair_factor_ready,
+        option_string_json(report.first_repair_factor_status.as_deref()),
+        items,
+        side_effects_json()
+    )
+}
+
+fn repair_factor_readiness_item_json(
+    item: &SelfImproveProposalRepairFactorReadinessItem,
+) -> String {
+    format!(
+        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"old_label\":{},\"new_label\":{},\"target_action\":{},\"ready_for_repair_plan\":{},\"readiness_status\":{},\"relabel_required\":{},\"repair_objectives\":{},\"evidence_ids\":{},\"evidence_present\":{},\"validation_checked\":{},\"validation_passed\":{},\"blocked_reasons\":{},\"side_effects\":{}}}",
+        json_string(&item.repair_factor_id),
+        json_string(&item.proposal_id),
+        option_u64_json(item.source_round),
+        json_string(&item.old_label),
+        json_string(&item.new_label),
+        json_string(&item.target_action),
+        item.ready_for_repair_plan,
+        json_string(&item.readiness_status),
+        item.relabel_required,
+        json_string_array(&item.repair_objectives),
+        json_string_array(&item.evidence_ids),
+        item.evidence_present,
+        item.validation_checked,
+        item.validation_passed,
+        json_string_array(&item.blocked_reasons),
+        side_effects_json()
+    )
+}
+
 fn action_assignment_targets_json(assignment: &SelfImproveProposalActionAssignment) -> String {
     let targets = assignment
         .targets
@@ -4541,6 +4724,8 @@ mod tests {
         let json = option_acceptance_summary_json(Some(&artifact));
         let action_assignment_json = option_action_assignment_report_json(Some(&artifact));
         let repair_factor_queue_json = option_repair_factor_queue_report_json(Some(&artifact));
+        let repair_factor_readiness_json =
+            option_repair_factor_readiness_report_json(Some(&artifact));
 
         assert_eq!(summary.projected_report_count, 3);
         assert_eq!(summary.memory_admission_accepted_count, 2);
@@ -4619,6 +4804,24 @@ mod tests {
             )
         );
         assert!(repair_factor_queue_json.contains("\"side_effects\":{\"applies_code\":false"));
+        assert!(
+            repair_factor_readiness_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_readiness_report_v1\"")
+        );
+        assert!(repair_factor_readiness_json.contains(
+            "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_readiness\""
+        ));
+        assert!(repair_factor_readiness_json.contains("\"repair_factor_count\":2"));
+        assert!(repair_factor_readiness_json.contains("\"ready_repair_factor_count\":1"));
+        assert!(repair_factor_readiness_json.contains("\"blocked_count\":1"));
+        assert!(repair_factor_readiness_json.contains("\"all_repair_factors_ready\":false"));
+        assert!(
+            repair_factor_readiness_json
+                .contains("\"readiness_status\":\"ready_for_relabel_and_repair_plan\"")
+        );
+        assert!(repair_factor_readiness_json.contains("\"validation_not_checked\""));
+        assert!(repair_factor_readiness_json.contains("\"auto_apply\":false"));
+        assert!(repair_factor_readiness_json.contains("\"calls_model\":false"));
     }
 
     #[test]
@@ -4626,6 +4829,7 @@ mod tests {
         let json = option_acceptance_summary_json(None);
         let action_assignment_json = option_action_assignment_report_json(None);
         let repair_factor_queue_json = option_repair_factor_queue_report_json(None);
+        let repair_factor_readiness_json = option_repair_factor_readiness_report_json(None);
 
         assert!(json.contains("\"artifact_loaded\":false"));
         assert!(json.contains("\"total_candidate_count\":0"));
@@ -4659,6 +4863,17 @@ mod tests {
         assert!(repair_factor_queue_json.contains("\"repair_factor_count\":0"));
         assert!(repair_factor_queue_json.contains("\"first_repair_factor\":null"));
         assert!(repair_factor_queue_json.contains("\"repair_factors\":[]"));
+        assert!(
+            repair_factor_readiness_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_readiness_report_v1\"")
+        );
+        assert!(repair_factor_readiness_json.contains("\"artifact_loaded\":false"));
+        assert!(repair_factor_readiness_json.contains("\"action_required\":false"));
+        assert!(repair_factor_readiness_json.contains("\"repair_factor_count\":0"));
+        assert!(repair_factor_readiness_json.contains("\"ready_repair_factor_count\":0"));
+        assert!(repair_factor_readiness_json.contains("\"blocked_count\":0"));
+        assert!(repair_factor_readiness_json.contains("\"all_repair_factors_ready\":false"));
+        assert!(repair_factor_readiness_json.contains("\"items\":[]"));
     }
 
     #[test]
@@ -4669,6 +4884,9 @@ mod tests {
         let json = option_acceptance_summary_json(Some(&artifact));
         let repair_factor_queue = artifact.repair_factor_queue();
         let repair_factor_queue_json = option_repair_factor_queue_report_json(Some(&artifact));
+        let repair_factor_readiness = artifact.repair_factor_readiness_report();
+        let repair_factor_readiness_json =
+            option_repair_factor_readiness_report_json(Some(&artifact));
 
         assert!(json.contains("\"advisory_only_count\":1"));
         assert!(json.contains("\"evidence_backed_business_improvement_count\":0"));
@@ -4714,6 +4932,20 @@ mod tests {
         ));
         assert!(repair_factor_queue_json.contains("\"auto_apply\":false"));
         assert!(repair_factor_queue_json.contains("\"calls_model\":false"));
+        assert_eq!(repair_factor_readiness.repair_factor_count, 1);
+        assert_eq!(repair_factor_readiness.ready_repair_factor_count, 1);
+        assert_eq!(repair_factor_readiness.blocked_count, 0);
+        assert!(repair_factor_readiness.all_repair_factors_ready);
+        assert!(repair_factor_readiness.first_repair_factor_ready);
+        assert!(
+            repair_factor_readiness_json
+                .contains("\"first_repair_factor_status\":\"ready_for_relabel_and_repair_plan\"")
+        );
+        assert!(repair_factor_readiness_json.contains("\"relabel_required\":true"));
+        assert!(repair_factor_readiness_json.contains(
+            "\"repair_objectives\":[\"accepted_memory_admission\",\"evidence_backed_business_improvement\"]"
+        ));
+        assert!(repair_factor_readiness_json.contains("\"blocked_reasons\":[]"));
     }
 
     #[test]
