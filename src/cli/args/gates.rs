@@ -513,6 +513,21 @@ impl Args {
         if let Some(value) = self.benchmark_min_dna_evolution_validation_passed {
             gate.min_dna_evolution_validation_passed = Some(value);
         }
+        if let Some(value) = self.benchmark_min_dna_evolution_writer_gate_reports {
+            gate.min_dna_evolution_writer_gate_reports = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_writer_gate_holds {
+            gate.min_dna_evolution_writer_gate_holds = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_writer_gate_explicit_apply_required {
+            gate.min_dna_evolution_writer_gate_explicit_apply_required = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_dna_evolution_writer_gate_ready {
+            gate.max_dna_evolution_writer_gate_ready = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_dna_evolution_writer_gate_durable_write_allowed {
+            gate.max_dna_evolution_writer_gate_durable_write_allowed = Some(value);
+        }
         if let Some(value) = self.benchmark_min_memory_governance_cases {
             gate.min_memory_governance_cases = Some(value);
         }

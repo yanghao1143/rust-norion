@@ -100,6 +100,16 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         "23".to_owned(),
         "--benchmark-min-dna-evolution-validation-passed".to_owned(),
         "24".to_owned(),
+        "--benchmark-min-dna-evolution-writer-gate-reports".to_owned(),
+        "25".to_owned(),
+        "--benchmark-min-dna-evolution-writer-gate-holds".to_owned(),
+        "26".to_owned(),
+        "--benchmark-min-dna-evolution-writer-gate-explicit-apply-required".to_owned(),
+        "27".to_owned(),
+        "--benchmark-max-dna-evolution-writer-gate-ready".to_owned(),
+        "28".to_owned(),
+        "--benchmark-max-dna-evolution-writer-gate-durable-write-allowed".to_owned(),
+        "29".to_owned(),
     ]);
 
     assert!(args.benchmark_gate_enabled);
@@ -154,6 +164,20 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
     );
     assert_eq!(args.benchmark_min_dna_evolution_replay_passed, Some(23));
     assert_eq!(args.benchmark_min_dna_evolution_validation_passed, Some(24));
+    assert_eq!(
+        args.benchmark_min_dna_evolution_writer_gate_reports,
+        Some(25)
+    );
+    assert_eq!(args.benchmark_min_dna_evolution_writer_gate_holds, Some(26));
+    assert_eq!(
+        args.benchmark_min_dna_evolution_writer_gate_explicit_apply_required,
+        Some(27)
+    );
+    assert_eq!(args.benchmark_max_dna_evolution_writer_gate_ready, Some(28));
+    assert_eq!(
+        args.benchmark_max_dna_evolution_writer_gate_durable_write_allowed,
+        Some(29)
+    );
     let gate = args.benchmark_gate();
     assert_eq!(gate.min_reasoning_genome_expression_cases, Some(2));
     assert_eq!(
@@ -181,6 +205,17 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
     assert_eq!(gate.min_dna_evolution_transaction_replays, Some(22));
     assert_eq!(gate.min_dna_evolution_replay_passed, Some(23));
     assert_eq!(gate.min_dna_evolution_validation_passed, Some(24));
+    assert_eq!(gate.min_dna_evolution_writer_gate_reports, Some(25));
+    assert_eq!(gate.min_dna_evolution_writer_gate_holds, Some(26));
+    assert_eq!(
+        gate.min_dna_evolution_writer_gate_explicit_apply_required,
+        Some(27)
+    );
+    assert_eq!(gate.max_dna_evolution_writer_gate_ready, Some(28));
+    assert_eq!(
+        gate.max_dna_evolution_writer_gate_durable_write_allowed,
+        Some(29)
+    );
 }
 
 #[test]

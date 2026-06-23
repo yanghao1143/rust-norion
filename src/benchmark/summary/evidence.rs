@@ -164,6 +164,36 @@ impl BenchmarkSummary {
         self.genome_evidence.dna_evolution_fitness_delta_milli
     }
 
+    pub fn dna_evolution_writer_gate_reports(&self) -> usize {
+        self.genome_evidence.dna_evolution_writer_gate_reports
+    }
+
+    pub fn dna_evolution_writer_gate_preview_only(&self) -> usize {
+        self.genome_evidence.dna_evolution_writer_gate_preview_only
+    }
+
+    pub fn dna_evolution_writer_gate_holds(&self) -> usize {
+        self.genome_evidence.dna_evolution_writer_gate_holds
+    }
+
+    pub fn dna_evolution_writer_gate_rejects(&self) -> usize {
+        self.genome_evidence.dna_evolution_writer_gate_rejects
+    }
+
+    pub fn dna_evolution_writer_gate_ready(&self) -> usize {
+        self.genome_evidence.dna_evolution_writer_gate_ready
+    }
+
+    pub fn dna_evolution_writer_gate_explicit_apply_required(&self) -> usize {
+        self.genome_evidence
+            .dna_evolution_writer_gate_explicit_apply_required
+    }
+
+    pub fn dna_evolution_writer_gate_durable_write_allowed(&self) -> usize {
+        self.genome_evidence
+            .dna_evolution_writer_gate_durable_write_allowed
+    }
+
     pub fn total_reasoning_genome_lifecycle_records(&self) -> usize {
         self.genome_evidence.total_lifecycle_records
     }
