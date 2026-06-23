@@ -67,6 +67,10 @@ impl EndpointInfoSpec {
                 path: "/v1/model-pool/route-plan",
                 example: "{\"task_kind\":\"review\"}",
             },
+            "requests-cancel" => Self {
+                path: "/v1/requests/cancel",
+                example: "{\"request_id\":42,\"reason\":\"operator_runtime_splice\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+            },
             _ => Self {
                 path: "/v1/generate",
                 example: "{\"prompt\":\"用中文给一个 rust-norion 业务联调建议。\",\"profile\":\"coding\",\"case\":\"manual-generate\",\"output\":\"raw\"}",
@@ -131,6 +135,15 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/model-pool/route-plan\""));
         assert!(json.contains("\"task_kind\":\"review\""));
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_request_cancel_route() {
+        let json = model_service_endpoint_info_json(10, "requests-cancel");
+
+        assert!(json.contains("\"endpoint\":\"/v1/requests/cancel\""));
+        assert!(json.contains("\"request_id\":42"));
+        assert!(json.contains("operator_runtime_splice"));
     }
 
     #[test]

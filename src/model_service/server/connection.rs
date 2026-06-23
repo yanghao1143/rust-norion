@@ -31,9 +31,12 @@ use self::model_pool::{
     handle_model_pool_status,
 };
 use super::super::http::read_http_request;
-use super::super::json::{service_error_json, write_http_json};
+use super::super::json::{
+    option_str_service_json, service_error_json, service_json_string, write_http_json,
+};
 use super::super::request::{
-    ModelServiceChatRequest, ModelServiceHttpRequest, parse_model_service_http_request,
+    ModelServiceChatRequest, ModelServiceHttpRequest, ModelServiceRequestCancelRequest,
+    parse_model_service_http_request,
 };
 use super::health::model_service_health_json;
 use super::state::ModelServiceServerState;
@@ -99,6 +102,9 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
         }
         ModelServiceHttpRequest::Info(endpoint) => {
             handle_endpoint_info(stream, request_id, endpoint)
+        }
+        ModelServiceHttpRequest::RequestCancel(request) => {
+            handle_request_cancel(stream, request_id, state, request)
         }
         ModelServiceHttpRequest::State => {
             let _active = state.begin_engine_request(request_id, "state", "state inspection");
@@ -278,6 +284,34 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             handle_inspect(&engine, args, stream, request_id, request)
         }
     }
+}
+
+fn handle_request_cancel(
+    stream: &mut TcpStream,
+    request_id: usize,
+    state: &ModelServiceServerState,
+    request: ModelServiceRequestCancelRequest,
+) -> std::io::Result<()> {
+    let cancellation =
+        state.request_cancel(request.request_id, request.reason, request.retag_label);
+    let body = format!(
+        "{{\"ok\":true,\"request_id\":{},\"target_request_id\":{},\"target_active\":{},\"target_endpoint\":{},\"repair_factor_released\":{},\"repair_factor\":{},\"retag_applied\":{},\"retag_label\":{},\"reason\":{},\"cooperative_only\":true,\"persistent_writes\":false,\"next_step\":{}}}",
+        request_id,
+        cancellation.request_id,
+        cancellation.target_active,
+        option_str_service_json(cancellation.endpoint.as_deref()),
+        cancellation.target_active,
+        service_json_string(&cancellation.repair_factor),
+        cancellation.target_active,
+        service_json_string(&cancellation.retag_label),
+        service_json_string(&cancellation.reason),
+        service_json_string(if cancellation.target_active {
+            "active request will observe the repair factor at stream and stage boundaries"
+        } else {
+            "target request is not active; no repair factor was held"
+        })
+    );
+    write_http_json(stream, 200, "OK", &body)
 }
 
 fn chat_prompt_preview(request: &ModelServiceChatRequest) -> String {
