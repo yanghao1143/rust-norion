@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -8,8 +9,8 @@ use norion_eval::{ContextRotGate, ContextRotSignal};
 use crate::args::Config;
 use crate::http;
 use crate::json::{
-    json_bool_field, json_f64_field, json_object_field, json_string, json_string_array,
-    json_string_field, json_u64_field, preview_text,
+    json_array_field, json_bool_field, json_f64_field, json_object_field, json_string,
+    json_string_array, json_string_field, json_u64_field, parse_json_object_array, preview_text,
 };
 use crate::ledger::{RoundRecord, append_record, next_round, read_ledger_hygiene};
 use crate::pool_artifacts;
@@ -27,6 +28,10 @@ use crate::validation;
 
 const HEALTH_GATE_METADATA_ATTEMPTS: usize = 6;
 const HEALTH_GATE_METADATA_RETRY_SECS: u64 = 3;
+const RUNTIME_REQUEST_REPAIR_FACTOR: &str = "runtime_request_splice";
+const RUNTIME_REPAIR_TIMEOUT_REASON: &str = "evolution_loop_stream_timeout";
+const RUNTIME_REPAIR_STREAM_ERROR_REASON: &str = "evolution_loop_stream_error";
+const RUNTIME_REPAIR_HTTP_TIMEOUT_SECS: u64 = 10;
 const MAX_POOL_STAGE_CALL_ANSWER_PREVIEW_CHARS: usize =
     crate::helper_feedback::MAX_HELPER_STAGE_FEEDBACK_CHARS;
 
@@ -2012,6 +2017,246 @@ fn audit_index_bool(body: &str, index_report: Option<&str>, field: &str) -> Opti
         .or_else(|| json_bool_field(body, field))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveRuntimeRequest {
+    request_id: u64,
+    endpoint: String,
+    elapsed_ms: u64,
+    cancel_requested: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeRepairAttempt {
+    meta: String,
+    repair_factor_released: bool,
+}
+
+struct RuntimeRepairWatchdog {
+    done: Arc<(Mutex<bool>, Condvar)>,
+    attempt: Arc<Mutex<Option<RuntimeRepairAttempt>>>,
+    handle: thread::JoinHandle<()>,
+}
+
+impl RuntimeRepairWatchdog {
+    fn start(config: &Config, round: usize) -> Option<Self> {
+        let done = Arc::new((Mutex::new(false), Condvar::new()));
+        let attempt = Arc::new(Mutex::new(None));
+        let done_for_thread = Arc::clone(&done);
+        let attempt_for_thread = Arc::clone(&attempt);
+        let backend = config.backend.clone();
+        let stream_timeout_secs = config.timeout_secs.max(1);
+        let repair_timeout_secs = runtime_repair_http_timeout_secs(config.timeout_secs);
+        let handle = thread::Builder::new()
+            .name(format!("evolution-runtime-repair-{round}"))
+            .spawn(move || {
+                let (lock, cvar) = &*done_for_thread;
+                let Ok(done_guard) = lock.lock() else {
+                    return;
+                };
+                let Ok((done_guard, wait_result)) = cvar.wait_timeout_while(
+                    done_guard,
+                    Duration::from_secs(stream_timeout_secs),
+                    |done| !*done,
+                ) else {
+                    return;
+                };
+                if *done_guard || !wait_result.timed_out() {
+                    return;
+                }
+                drop(done_guard);
+
+                let repair = release_runtime_request_repair_factor(
+                    &backend,
+                    repair_timeout_secs,
+                    round,
+                    RUNTIME_REPAIR_TIMEOUT_REASON,
+                );
+                if let Ok(mut slot) = attempt_for_thread.lock() {
+                    *slot = Some(repair);
+                }
+            })
+            .ok()?;
+
+        Some(Self {
+            done,
+            attempt,
+            handle,
+        })
+    }
+
+    fn finish(self) -> Option<RuntimeRepairAttempt> {
+        let (lock, cvar) = &*self.done;
+        if let Ok(mut done) = lock.lock() {
+            *done = true;
+            cvar.notify_all();
+        }
+        let _ = self.handle.join();
+        self.attempt
+            .lock()
+            .ok()
+            .and_then(|mut attempt| attempt.take())
+    }
+}
+
+fn runtime_repair_http_timeout_secs(timeout_secs: u64) -> u64 {
+    timeout_secs.max(1).min(RUNTIME_REPAIR_HTTP_TIMEOUT_SECS)
+}
+
+fn runtime_repair_stream_error_reason(error: &str) -> &'static str {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("timed out") || lower.contains("timeout") {
+        RUNTIME_REPAIR_TIMEOUT_REASON
+    } else {
+        RUNTIME_REPAIR_STREAM_ERROR_REASON
+    }
+}
+
+fn runtime_repair_retag_label(round: usize) -> String {
+    format!("repair_factor:runtime_splice;source=evolution_loop;round={round}")
+}
+
+fn runtime_repair_cancel_body(request_id: u64, reason: &str, retag_label: &str) -> String {
+    format!(
+        "{{\"request_id\":{},\"reason\":{},\"retag_label\":{}}}",
+        request_id,
+        json_string(reason),
+        json_string(retag_label)
+    )
+}
+
+fn active_runtime_requests(body: &str) -> Vec<ActiveRuntimeRequest> {
+    json_array_field(body, "active_requests")
+        .map(|array| {
+            parse_json_object_array(&array)
+                .into_iter()
+                .filter_map(|request| {
+                    Some(ActiveRuntimeRequest {
+                        request_id: json_u64_field(&request, "request_id")?,
+                        endpoint: json_string_field(&request, "endpoint")?,
+                        elapsed_ms: json_u64_field(&request, "elapsed_ms").unwrap_or(0),
+                        cancel_requested: json_bool_field(&request, "cancel_requested")
+                            .unwrap_or(false),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn select_runtime_repair_target(
+    requests: &[ActiveRuntimeRequest],
+) -> Option<&ActiveRuntimeRequest> {
+    requests.iter().find(|request| {
+        is_business_cycle_runtime_endpoint(&request.endpoint) && !request.cancel_requested
+    })
+}
+
+fn is_business_cycle_runtime_endpoint(endpoint: &str) -> bool {
+    endpoint.trim_matches('/') == "business-cycle-stream"
+        || endpoint
+            .trim_end_matches('/')
+            .ends_with("/business-cycle-stream")
+}
+
+fn release_runtime_request_repair_factor(
+    backend: &str,
+    timeout_secs: u64,
+    round: usize,
+    reason: &str,
+) -> RuntimeRepairAttempt {
+    let timeout_secs = runtime_repair_http_timeout_secs(timeout_secs);
+    let health = match http::get(backend, "/health", timeout_secs) {
+        Ok(response) => response,
+        Err(error) => {
+            return RuntimeRepairAttempt {
+                meta: format!(
+                    "runtime_repair_factor release_attempt=false repair_factor={} round={} reason={} status=health_error error={}",
+                    RUNTIME_REQUEST_REPAIR_FACTOR,
+                    round,
+                    reason,
+                    preview_text(&error, 160)
+                ),
+                repair_factor_released: false,
+            };
+        }
+    };
+    if !(200..300).contains(&health.status) {
+        return RuntimeRepairAttempt {
+            meta: format!(
+                "runtime_repair_factor release_attempt=false repair_factor={} round={} reason={} status=health_http_{} body={}",
+                RUNTIME_REQUEST_REPAIR_FACTOR,
+                round,
+                reason,
+                health.status,
+                preview_text(&health.body, 160)
+            ),
+            repair_factor_released: false,
+        };
+    }
+
+    let active_requests = active_runtime_requests(&health.body);
+    let Some(target) = select_runtime_repair_target(&active_requests) else {
+        return RuntimeRepairAttempt {
+            meta: format!(
+                "runtime_repair_factor release_attempt=false repair_factor={} round={} reason={} status=no_active_business_cycle_request active_requests={}",
+                RUNTIME_REQUEST_REPAIR_FACTOR,
+                round,
+                reason,
+                active_requests.len()
+            ),
+            repair_factor_released: false,
+        };
+    };
+
+    let retag_label = runtime_repair_retag_label(round);
+    let cancel_body = runtime_repair_cancel_body(target.request_id, reason, &retag_label);
+    let cancel = match http::post_json(backend, "/v1/requests/cancel", &cancel_body, timeout_secs) {
+        Ok(response) => response,
+        Err(error) => {
+            return RuntimeRepairAttempt {
+                meta: format!(
+                    "runtime_repair_factor release_attempt=true repair_factor_released=false round={} request_id={} endpoint={} elapsed_ms={} reason={} repair_factor={} retag_label={} status=cancel_error error={}",
+                    round,
+                    target.request_id,
+                    target.endpoint,
+                    target.elapsed_ms,
+                    reason,
+                    RUNTIME_REQUEST_REPAIR_FACTOR,
+                    retag_label,
+                    preview_text(&error, 160)
+                ),
+                repair_factor_released: false,
+            };
+        }
+    };
+    let repair_factor_released = (200..300).contains(&cancel.status)
+        && json_bool_field(&cancel.body, "repair_factor_released").unwrap_or(false);
+    let repair_factor = json_string_field(&cancel.body, "repair_factor")
+        .unwrap_or_else(|| RUNTIME_REQUEST_REPAIR_FACTOR.to_owned());
+    let target_active = json_bool_field(&cancel.body, "target_active").unwrap_or(false);
+    let retag_applied = json_bool_field(&cancel.body, "retag_applied").unwrap_or(false);
+    let persistent_writes = json_bool_field(&cancel.body, "persistent_writes").unwrap_or(false);
+
+    RuntimeRepairAttempt {
+        meta: format!(
+            "runtime_repair_factor release_attempt=true repair_factor_released={} round={} request_id={} endpoint={} elapsed_ms={} reason={} repair_factor={} retag_label={} http_status={} target_active={} retag_applied={} persistent_writes={}",
+            repair_factor_released,
+            round,
+            target.request_id,
+            target.endpoint,
+            target.elapsed_ms,
+            reason,
+            repair_factor,
+            retag_label,
+            cancel.status,
+            target_active,
+            retag_applied,
+            persistent_writes
+        ),
+        repair_factor_released,
+    }
+}
+
 fn run_round(
     config: &Config,
     rust_check_code: Option<&str>,
@@ -2052,6 +2297,7 @@ fn run_round(
         final_json: None,
     };
 
+    let runtime_repair_watchdog = RuntimeRepairWatchdog::start(config, round);
     let result = http::post_event_stream(
         &config.backend,
         "/v1/business-cycle-stream",
@@ -2119,7 +2365,27 @@ fn run_round(
     if config.show_delta && outcome.delta_chars > 0 {
         println!();
     }
+    let runtime_repair_watchdog_attempt =
+        runtime_repair_watchdog.and_then(RuntimeRepairWatchdog::finish);
+    let runtime_repair_watchdog_released = runtime_repair_watchdog_attempt
+        .as_ref()
+        .is_some_and(|attempt| attempt.repair_factor_released);
+    if let Some(attempt) = runtime_repair_watchdog_attempt {
+        println!("[round {round}] meta {}", attempt.meta);
+        outcome.meta.push(attempt.meta);
+    }
     if let Err(error) = result {
+        if !runtime_repair_watchdog_released {
+            let reason = runtime_repair_stream_error_reason(&error);
+            let attempt = release_runtime_request_repair_factor(
+                &config.backend,
+                config.timeout_secs,
+                round,
+                reason,
+            );
+            println!("[round {round}] meta {}", attempt.meta);
+            outcome.meta.push(attempt.meta);
+        }
         outcome.error = Some(error);
     }
     if outcome.error.is_none() && outcome.final_json.is_none() {
@@ -2338,6 +2604,66 @@ mod tests {
         assert!(body.contains("\"gate\":\"business_cycle\""));
         assert!(body.contains("\"state_gate\":true"));
         assert!(body.contains("\"trace_gate\":true"));
+    }
+
+    #[test]
+    fn runtime_repair_target_selects_uncancelled_business_cycle_request() {
+        let health = r#"{"active_requests":[{"request_id":1,"endpoint":"generate","elapsed_ms":10,"cancel_requested":false},{"request_id":2,"endpoint":"business-cycle-stream","elapsed_ms":901000,"cancel_requested":true},{"request_id":3,"endpoint":"/v1/business-cycle-stream","elapsed_ms":902000,"cancel_requested":false}]}"#;
+
+        let active = active_runtime_requests(health);
+        let target = select_runtime_repair_target(&active).expect("repair target");
+
+        assert_eq!(target.request_id, 3);
+        assert_eq!(target.elapsed_ms, 902000);
+        assert!(!target.cancel_requested);
+    }
+
+    #[test]
+    fn runtime_repair_factor_release_posts_cancel_and_retags_active_request() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let backend = listener.local_addr().unwrap().to_string();
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let requests_for_server = Arc::clone(&requests);
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let request = read_test_http_request(&mut stream);
+                let body = if request.starts_with("GET /health") {
+                    r#"{"ok":true,"engine_busy":true,"active_engine_requests":1,"active_requests":[{"request_id":34,"endpoint":"business-cycle-stream","elapsed_ms":901234,"cancel_requested":false,"repair_factor":null,"retag_label":null,"cancel_reason":null}]}"#.to_owned()
+                } else {
+                    r#"{"ok":true,"request_id":34,"target_request_id":34,"target_active":true,"target_endpoint":"business-cycle-stream","repair_factor_released":true,"repair_factor":"runtime_request_splice","retag_applied":true,"retag_label":"repair_factor:runtime_splice;source=evolution_loop;round=748","reason":"evolution_loop_stream_timeout","cooperative_only":true,"persistent_writes":false}"#.to_owned()
+                };
+                requests_for_server.lock().unwrap().push(request);
+                write_test_http_json(&mut stream, &body);
+            }
+        });
+
+        let attempt =
+            release_runtime_request_repair_factor(&backend, 2, 748, RUNTIME_REPAIR_TIMEOUT_REASON);
+        server.join().unwrap();
+
+        assert!(attempt.repair_factor_released, "{}", attempt.meta);
+        assert!(attempt.meta.contains("request_id=34"));
+        assert!(
+            attempt
+                .meta
+                .contains("repair_factor=runtime_request_splice")
+        );
+        assert!(
+            attempt.meta.contains(
+                "retag_label=repair_factor:runtime_splice;source=evolution_loop;round=748"
+            )
+        );
+        assert!(attempt.meta.contains("persistent_writes=false"));
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[1].starts_with("POST /v1/requests/cancel"));
+        assert!(requests[1].contains("\"request_id\":34"));
+        assert!(requests[1].contains("\"reason\":\"evolution_loop_stream_timeout\""));
+        assert!(requests[1].contains(
+            "\"retag_label\":\"repair_factor:runtime_splice;source=evolution_loop;round=748\""
+        ));
     }
 
     #[test]
