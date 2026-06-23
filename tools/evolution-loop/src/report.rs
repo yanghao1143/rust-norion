@@ -1674,12 +1674,14 @@ fn print_report(
     );
     let repair_factor_retag_plan = self_improve_proposal_artifact.repair_factor_retag_plan();
     println!(
-        "self_improve_proposal_repair_factor_retag_plan_v1: action_required={} factors={} retag_plans={} blocked={} ready={} first_factor={} first_ready={} first_status={} memory_store_write_allowed=false ndkv_write_allowed=false",
+        "self_improve_proposal_repair_factor_retag_plan_v1: action_required={} factors={} retag_plans={} blocked={} ready={} regeneration_plans={} regeneration_ready={} first_factor={} first_ready={} first_status={} first_regeneration_status={} regeneration_write_authorized={} memory_store_write_allowed=false ndkv_write_allowed=false",
         repair_factor_retag_plan.action_required,
         repair_factor_retag_plan.repair_factor_count,
         repair_factor_retag_plan.retag_plan_count,
         repair_factor_retag_plan.blocked_count,
         repair_factor_retag_plan.retag_plan_ready,
+        repair_factor_retag_plan.regeneration_plan_count,
+        repair_factor_retag_plan.regeneration_plan_ready,
         repair_factor_retag_plan
             .first_repair_factor_id
             .as_deref()
@@ -1688,7 +1690,12 @@ fn print_report(
         repair_factor_retag_plan
             .first_retag_status
             .as_deref()
-            .unwrap_or("-")
+            .unwrap_or("-"),
+        repair_factor_retag_plan
+            .first_regeneration_status
+            .as_deref()
+            .unwrap_or("-"),
+        repair_factor_retag_plan.regeneration_write_authorized
     );
     let self_improve_proposal_action_closure =
         self_improve_proposal_artifact.action_closure_report();
@@ -4207,6 +4214,15 @@ fn prompt_context_text_with_self_improve_proposals(
                     .map(|item| item.blocked_reasons.join(","))
                     .filter(|value| !value.is_empty())
                     .unwrap_or_else(|| "none".to_owned());
+                let first_regeneration_status = first_retag
+                    .map(|item| item.regeneration_status.as_str())
+                    .unwrap_or("none");
+                let first_regeneration_action = first_retag
+                    .map(|item| item.regeneration_action.as_str())
+                    .unwrap_or("none");
+                let first_regeneration_ready = first_retag
+                    .map(|item| item.ready_for_regeneration)
+                    .unwrap_or(false);
                 lines.push(format!(
                     "dna_repair_factor_retag_plan=action_required:{} factors:{} retag_plans:{} blocked:{} ready:{} first_factor:{} first_ready:{} first_status:{} first_action:{} first_labels:{} first_blocked:{} memory_admission_required:true memory_store_write_allowed:false ndkv_write_allowed:false side_effects:false",
                     repair_factor_retag_plan.action_required,
@@ -4221,6 +4237,19 @@ fn prompt_context_text_with_self_improve_proposals(
                     first_retag_labels,
                     first_retag_blocked
                 ));
+                lines.push(format!(
+                    "dna_repair_factor_regeneration_plan=action_required:{} factors:{} regeneration_plans:{} blocked:{} ready:{} first_factor:{} first_ready:{} first_status:{} first_action:{} write_authorized:{} memory_admission_required:true memory_store_write_allowed:false ndkv_write_allowed:false side_effects:false",
+                    repair_factor_retag_plan.action_required,
+                    repair_factor_retag_plan.repair_factor_count,
+                    repair_factor_retag_plan.regeneration_plan_count,
+                    repair_factor_retag_plan.blocked_count,
+                    repair_factor_retag_plan.regeneration_plan_ready,
+                    first_retag_id,
+                    first_regeneration_ready,
+                    first_regeneration_status,
+                    first_regeneration_action,
+                    repair_factor_retag_plan.regeneration_write_authorized
+                ));
                 if repair_factor_readiness.ready_repair_factor_count > 0
                     && !all_action_targets_closed
                 {
@@ -4231,6 +4260,12 @@ fn prompt_context_text_with_self_improve_proposals(
                 }
                 if repair_factor_retag_plan.retag_plan_count > 0 && !all_action_targets_closed {
                     lines.push("next_dna_repair_factor_ready_for_retag_plan:true".to_owned());
+                }
+                if repair_factor_retag_plan.regeneration_plan_count > 0
+                    && !all_action_targets_closed
+                {
+                    lines
+                        .push("next_dna_repair_factor_ready_for_regeneration_plan:true".to_owned());
                 }
             }
             let closure_report = closure_report.unwrap_or_else(|| artifact.action_closure_report());
@@ -10017,8 +10052,13 @@ mod tests {
                 "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_retag_plan\"",
                 "\"retag_plan_count\":1",
                 "\"retag_plan_ready\":true",
+                "\"regeneration_plan_count\":1",
+                "\"regeneration_plan_ready\":true",
                 "\"retag_action\":\"retag_repaired_gene_for_memory_admission\"",
                 "\"retag_status\":\"ready_to_retag_repaired_gene\"",
+                "\"regeneration_action\":\"stage_repaired_gene_regeneration_for_memory_admission\"",
+                "\"regeneration_status\":\"ready_for_gated_memory_regeneration\"",
+                "\"regeneration_write_authorized\":false",
                 "\"memory_admission_required\":true",
                 "\"memory_store_write_allowed\":false",
                 "\"ndkv_write_allowed\":false",
@@ -10397,9 +10437,13 @@ mod tests {
         assert!(context.contains(
             "dna_repair_factor_retag_plan=action_required:true factors:1 retag_plans:1 blocked:0 ready:true first_factor:repair-factor-r31-r31-advisory first_ready:true first_status:ready_to_retag_repaired_gene first_action:retag_repaired_gene_for_memory_admission first_labels:quarantined->repair_factor:convert_advisory_to_evidence_backed_business_improvement first_blocked:none memory_admission_required:true memory_store_write_allowed:false ndkv_write_allowed:false side_effects:false"
         ));
+        assert!(context.contains(
+            "dna_repair_factor_regeneration_plan=action_required:true factors:1 regeneration_plans:1 blocked:0 ready:true first_factor:repair-factor-r31-r31-advisory first_ready:true first_status:ready_for_gated_memory_regeneration first_action:stage_repaired_gene_regeneration_for_memory_admission write_authorized:false memory_admission_required:true memory_store_write_allowed:false ndkv_write_allowed:false side_effects:false"
+        ));
         assert!(context.contains("next_dna_repair_factor_ready_for_repair_plan:true"));
         assert!(context.contains("next_dna_repair_factor_ready_for_release:true"));
         assert!(context.contains("next_dna_repair_factor_ready_for_retag_plan:true"));
+        assert!(context.contains("next_dna_repair_factor_ready_for_regeneration_plan:true"));
         assert!(context.contains(
             "self_improve_action_closure=targets:1 closed:0 open:1 first_target:r31-advisory first_closed:false first_kind:none first_still_requires_memory_admission:true"
         ));

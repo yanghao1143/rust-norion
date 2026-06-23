@@ -183,9 +183,13 @@ pub(crate) struct SelfImproveProposalRepairFactorRetagPlanReport {
     pub(crate) retag_plan_count: usize,
     pub(crate) blocked_count: usize,
     pub(crate) retag_plan_ready: bool,
+    pub(crate) regeneration_plan_count: usize,
+    pub(crate) regeneration_plan_ready: bool,
     pub(crate) first_repair_factor_id: Option<String>,
     pub(crate) first_retag_ready: bool,
     pub(crate) first_retag_status: Option<String>,
+    pub(crate) first_regeneration_status: Option<String>,
+    pub(crate) regeneration_write_authorized: bool,
     pub(crate) items: Vec<SelfImproveProposalRepairFactorRetagPlanItem>,
 }
 
@@ -200,6 +204,10 @@ pub(crate) struct SelfImproveProposalRepairFactorRetagPlanItem {
     pub(crate) retag_action: String,
     pub(crate) ready_for_retag: bool,
     pub(crate) retag_status: String,
+    pub(crate) regeneration_action: String,
+    pub(crate) ready_for_regeneration: bool,
+    pub(crate) regeneration_status: String,
+    pub(crate) regeneration_write_authorized: bool,
     pub(crate) relabel_required: bool,
     pub(crate) repair_objectives: Vec<String>,
     pub(crate) evidence_ids: Vec<String>,
@@ -2176,19 +2184,28 @@ impl SelfImproveProposalRepairFactorRetagPlanReport {
             .map(SelfImproveProposalRepairFactorRetagPlanItem::from_release_item)
             .collect::<Vec<_>>();
         let retag_plan_count = items.iter().filter(|item| item.ready_for_retag).count();
+        let regeneration_plan_count = items
+            .iter()
+            .filter(|item| item.ready_for_regeneration)
+            .count();
         let blocked_count = items.len().saturating_sub(retag_plan_count);
+        let retag_plan_ready =
+            report.action_required && report.repair_factor_count > 0 && blocked_count == 0;
         let first = items.first();
         Self {
             action_required: report.action_required,
             repair_factor_count: report.repair_factor_count,
             retag_plan_count,
             blocked_count,
-            retag_plan_ready: report.action_required
-                && report.repair_factor_count > 0
-                && blocked_count == 0,
+            retag_plan_ready,
+            regeneration_plan_count,
+            regeneration_plan_ready: retag_plan_ready
+                && regeneration_plan_count == retag_plan_count,
             first_repair_factor_id: first.map(|item| item.repair_factor_id.clone()),
             first_retag_ready: first.map(|item| item.ready_for_retag).unwrap_or(false),
             first_retag_status: first.map(|item| item.retag_status.clone()),
+            first_regeneration_status: first.map(|item| item.regeneration_status.clone()),
+            regeneration_write_authorized: false,
             items,
         }
     }
@@ -2213,6 +2230,17 @@ impl SelfImproveProposalRepairFactorRetagPlanItem {
         } else {
             "hold_retag_until_repair_factor_ready"
         };
+        let ready_for_regeneration = ready_for_retag;
+        let regeneration_status = if ready_for_regeneration {
+            "ready_for_gated_memory_regeneration"
+        } else {
+            "blocked_until_retag_ready"
+        };
+        let regeneration_action = if ready_for_regeneration {
+            "stage_repaired_gene_regeneration_for_memory_admission"
+        } else {
+            "hold_regeneration_until_retag_ready"
+        };
         let mut blocked_reasons = item.blocked_reasons.clone();
         if !item.ready_for_release && blocked_reasons.is_empty() {
             blocked_reasons.push("repair_factor_not_released".to_owned());
@@ -2227,6 +2255,10 @@ impl SelfImproveProposalRepairFactorRetagPlanItem {
             retag_action: retag_action.to_owned(),
             ready_for_retag,
             retag_status: retag_status.to_owned(),
+            regeneration_action: regeneration_action.to_owned(),
+            ready_for_regeneration,
+            regeneration_status: regeneration_status.to_owned(),
+            regeneration_write_authorized: false,
             relabel_required: item.relabel_required,
             repair_objectives: item.repair_objectives.clone(),
             evidence_ids: item.evidence_ids.clone(),
@@ -4992,16 +5024,20 @@ fn repair_factor_retag_plan_report_json(
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "{{\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_retag_plan\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"repair_factor_count\":{},\"retag_plan_count\":{},\"blocked_count\":{},\"retag_plan_ready\":{},\"first_repair_factor_id\":{},\"first_retag_ready\":{},\"first_retag_status\":{},\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"items\":[{}],\"side_effects\":{}}}",
+        "{{\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_retag_plan\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"repair_factor_count\":{},\"retag_plan_count\":{},\"blocked_count\":{},\"retag_plan_ready\":{},\"regeneration_plan_count\":{},\"regeneration_plan_ready\":{},\"first_repair_factor_id\":{},\"first_retag_ready\":{},\"first_retag_status\":{},\"first_regeneration_status\":{},\"regeneration_write_authorized\":{},\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"items\":[{}],\"side_effects\":{}}}",
         artifact_loaded,
         report.action_required,
         report.repair_factor_count,
         report.retag_plan_count,
         report.blocked_count,
         report.retag_plan_ready,
+        report.regeneration_plan_count,
+        report.regeneration_plan_ready,
         option_string_json(report.first_repair_factor_id.as_deref()),
         report.first_retag_ready,
         option_string_json(report.first_retag_status.as_deref()),
+        option_string_json(report.first_regeneration_status.as_deref()),
+        report.regeneration_write_authorized,
         items,
         side_effects_json()
     )
@@ -5011,7 +5047,7 @@ fn repair_factor_retag_plan_item_json(
     item: &SelfImproveProposalRepairFactorRetagPlanItem,
 ) -> String {
     format!(
-        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"previous_label\":{},\"repair_label\":{},\"target_action\":{},\"retag_action\":{},\"ready_for_retag\":{},\"retag_status\":{},\"relabel_required\":{},\"repair_objectives\":{},\"evidence_ids\":{},\"validation_required\":{},\"approval_required\":{},\"memory_admission_required\":{},\"blocked_reasons\":{},\"report_only\":true,\"candidate_only\":true,\"auto_apply\":false,\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"side_effects\":{}}}",
+        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"previous_label\":{},\"repair_label\":{},\"target_action\":{},\"retag_action\":{},\"ready_for_retag\":{},\"retag_status\":{},\"regeneration_action\":{},\"ready_for_regeneration\":{},\"regeneration_status\":{},\"regeneration_write_authorized\":{},\"relabel_required\":{},\"repair_objectives\":{},\"evidence_ids\":{},\"validation_required\":{},\"approval_required\":{},\"memory_admission_required\":{},\"blocked_reasons\":{},\"report_only\":true,\"candidate_only\":true,\"auto_apply\":false,\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"side_effects\":{}}}",
         json_string(&item.repair_factor_id),
         json_string(&item.proposal_id),
         option_u64_json(item.source_round),
@@ -5021,6 +5057,10 @@ fn repair_factor_retag_plan_item_json(
         json_string(&item.retag_action),
         item.ready_for_retag,
         json_string(&item.retag_status),
+        json_string(&item.regeneration_action),
+        item.ready_for_regeneration,
+        json_string(&item.regeneration_status),
+        item.regeneration_write_authorized,
         item.relabel_required,
         json_string_array(&item.repair_objectives),
         json_string_array(&item.evidence_ids),
@@ -5287,6 +5327,9 @@ mod tests {
         assert_eq!(repair_factor_retag_plan.retag_plan_count, 1);
         assert_eq!(repair_factor_retag_plan.blocked_count, 1);
         assert!(!repair_factor_retag_plan.retag_plan_ready);
+        assert_eq!(repair_factor_retag_plan.regeneration_plan_count, 1);
+        assert!(!repair_factor_retag_plan.regeneration_plan_ready);
+        assert!(!repair_factor_retag_plan.regeneration_write_authorized);
         assert!(
             repair_factor_retag_plan_json
                 .contains("\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\"")
@@ -5295,14 +5338,28 @@ mod tests {
             "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_retag_plan\""
         ));
         assert!(repair_factor_retag_plan_json.contains("\"retag_plan_count\":1"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_count\":1"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_ready\":false"));
         assert!(repair_factor_retag_plan_json.contains("\"blocked_count\":1"));
         assert!(
             repair_factor_retag_plan_json
                 .contains("\"retag_action\":\"retag_repaired_gene_for_memory_admission\"")
         );
+        assert!(repair_factor_retag_plan_json.contains(
+            "\"regeneration_action\":\"stage_repaired_gene_regeneration_for_memory_admission\""
+        ));
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"regeneration_status\":\"ready_for_gated_memory_regeneration\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_write_authorized\":false"));
         assert!(
             repair_factor_retag_plan_json
                 .contains("\"retag_action\":\"hold_retag_until_repair_factor_ready\"")
+        );
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"regeneration_action\":\"hold_regeneration_until_retag_ready\"")
         );
         assert!(repair_factor_retag_plan_json.contains("\"validation_not_checked\""));
     }
@@ -5376,6 +5433,9 @@ mod tests {
         assert!(repair_factor_retag_plan_json.contains("\"retag_plan_count\":0"));
         assert!(repair_factor_retag_plan_json.contains("\"blocked_count\":0"));
         assert!(repair_factor_retag_plan_json.contains("\"retag_plan_ready\":false"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_count\":0"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_ready\":false"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_write_authorized\":false"));
         assert!(repair_factor_retag_plan_json.contains("\"items\":[]"));
     }
 
@@ -5491,6 +5551,15 @@ mod tests {
         assert_eq!(repair_factor_retag_plan.retag_plan_count, 1);
         assert_eq!(repair_factor_retag_plan.blocked_count, 0);
         assert!(repair_factor_retag_plan.retag_plan_ready);
+        assert_eq!(repair_factor_retag_plan.regeneration_plan_count, 1);
+        assert!(repair_factor_retag_plan.regeneration_plan_ready);
+        assert_eq!(
+            repair_factor_retag_plan
+                .first_regeneration_status
+                .as_deref(),
+            Some("ready_for_gated_memory_regeneration")
+        );
+        assert!(!repair_factor_retag_plan.regeneration_write_authorized);
         let retag_item = repair_factor_retag_plan.items.first().unwrap();
         assert_eq!(retag_item.previous_label, "quarantined");
         assert_eq!(
@@ -5501,16 +5570,36 @@ mod tests {
             retag_item.retag_action,
             "retag_repaired_gene_for_memory_admission"
         );
+        assert_eq!(
+            retag_item.regeneration_action,
+            "stage_repaired_gene_regeneration_for_memory_admission"
+        );
+        assert!(retag_item.ready_for_regeneration);
+        assert_eq!(
+            retag_item.regeneration_status,
+            "ready_for_gated_memory_regeneration"
+        );
+        assert!(!retag_item.regeneration_write_authorized);
         assert!(
             repair_factor_retag_plan_json
                 .contains("\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\"")
         );
         assert!(repair_factor_retag_plan_json.contains("\"retag_plan_count\":1"));
         assert!(repair_factor_retag_plan_json.contains("\"retag_plan_ready\":true"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_count\":1"));
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_plan_ready\":true"));
         assert!(
             repair_factor_retag_plan_json
                 .contains("\"retag_status\":\"ready_to_retag_repaired_gene\"")
         );
+        assert!(repair_factor_retag_plan_json.contains(
+            "\"regeneration_action\":\"stage_repaired_gene_regeneration_for_memory_admission\""
+        ));
+        assert!(
+            repair_factor_retag_plan_json
+                .contains("\"regeneration_status\":\"ready_for_gated_memory_regeneration\"")
+        );
+        assert!(repair_factor_retag_plan_json.contains("\"regeneration_write_authorized\":false"));
         assert!(repair_factor_retag_plan_json.contains("\"memory_admission_required\":true"));
         assert!(repair_factor_retag_plan_json.contains("\"memory_store_write_allowed\":false"));
         assert_eq!(memory_admission_readiness.target_count, 1);
