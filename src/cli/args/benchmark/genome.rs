@@ -105,6 +105,46 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-dna-evolution-reports" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_reports = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-candidates" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_candidates = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-candidate-previews" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_candidate_previews =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-dna-evolution-activation-eligible" if index + 1 < raw.len() => {
+            *parser.benchmark_max_dna_evolution_activation_eligible =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-transaction-replays" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_transaction_replays =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-replay-passed" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_replay_passed =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-validation-passed" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_validation_passed =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         _ => None,
     }
 }

@@ -86,6 +86,20 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         "16".to_owned(),
         "--benchmark-min-malignant-gene-regeneration-candidates".to_owned(),
         "17".to_owned(),
+        "--benchmark-min-dna-evolution-reports".to_owned(),
+        "18".to_owned(),
+        "--benchmark-min-dna-evolution-candidates".to_owned(),
+        "19".to_owned(),
+        "--benchmark-min-dna-evolution-candidate-previews".to_owned(),
+        "20".to_owned(),
+        "--benchmark-max-dna-evolution-activation-eligible".to_owned(),
+        "21".to_owned(),
+        "--benchmark-min-dna-evolution-transaction-replays".to_owned(),
+        "22".to_owned(),
+        "--benchmark-min-dna-evolution-replay-passed".to_owned(),
+        "23".to_owned(),
+        "--benchmark-min-dna-evolution-validation-passed".to_owned(),
+        "24".to_owned(),
     ]);
 
     assert!(args.benchmark_gate_enabled);
@@ -124,6 +138,22 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         args.benchmark_min_malignant_gene_regeneration_candidates,
         Some(17)
     );
+    assert_eq!(args.benchmark_min_dna_evolution_reports, Some(18));
+    assert_eq!(args.benchmark_min_dna_evolution_candidates, Some(19));
+    assert_eq!(
+        args.benchmark_min_dna_evolution_candidate_previews,
+        Some(20)
+    );
+    assert_eq!(
+        args.benchmark_max_dna_evolution_activation_eligible,
+        Some(21)
+    );
+    assert_eq!(
+        args.benchmark_min_dna_evolution_transaction_replays,
+        Some(22)
+    );
+    assert_eq!(args.benchmark_min_dna_evolution_replay_passed, Some(23));
+    assert_eq!(args.benchmark_min_dna_evolution_validation_passed, Some(24));
     let gate = args.benchmark_gate();
     assert_eq!(gate.min_reasoning_genome_expression_cases, Some(2));
     assert_eq!(
@@ -144,6 +174,13 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
     assert_eq!(gate.min_malignant_gene_quarantines, Some(15));
     assert_eq!(gate.min_malignant_gene_cut_candidates, Some(16));
     assert_eq!(gate.min_malignant_gene_regeneration_candidates, Some(17));
+    assert_eq!(gate.min_dna_evolution_reports, Some(18));
+    assert_eq!(gate.min_dna_evolution_candidates, Some(19));
+    assert_eq!(gate.min_dna_evolution_candidate_previews, Some(20));
+    assert_eq!(gate.max_dna_evolution_activation_eligible, Some(21));
+    assert_eq!(gate.min_dna_evolution_transaction_replays, Some(22));
+    assert_eq!(gate.min_dna_evolution_replay_passed, Some(23));
+    assert_eq!(gate.min_dna_evolution_validation_passed, Some(24));
 }
 
 #[test]
