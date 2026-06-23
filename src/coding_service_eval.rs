@@ -11,6 +11,11 @@ use norion_service::{
 };
 
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
+use crate::self_evolution::{
+    SelfEvolutionPromotionArtifactRef, SelfEvolutionPromotionCandidate, SelfEvolutionPromotionLane,
+    SelfEvolutionPromotionScorecard, SelfEvolutionPromotionScorecardGate,
+    SelfEvolutionValidationEvidence, SelfEvolutionValidationLane,
+};
 
 pub const CODING_SERVICE_EVAL_SCHEMA_VERSION: &str = "coding_service_eval_v1";
 pub const CODING_SERVICE_EVAL_TRACE_SCHEMA: &str = "rust-norion-coding-service-eval-readiness-v1";
@@ -438,6 +443,11 @@ impl CodingServiceEvalRunnerReport {
             self.write_allowed,
             self.applied
         )
+    }
+
+    pub fn promotion_scorecard(&self) -> SelfEvolutionPromotionScorecard {
+        let candidate = coding_service_eval_promotion_candidate(self);
+        SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate)
     }
 }
 
@@ -973,6 +983,143 @@ fn cancellation_probe_for_profile(profile: CodingEvalProfileKind) -> bool {
     )
 }
 
+fn coding_service_eval_promotion_candidate(
+    report: &CodingServiceEvalRunnerReport,
+) -> SelfEvolutionPromotionCandidate {
+    let plan_count = report.plan_count.max(1);
+    let runner_failure_ratio = report.failed_runner_contract_count as f32 / plan_count as f32;
+    let suite_failure_ratio = report.suite_report.failed_count as f32 / plan_count as f32;
+    let cross_task_regression = runner_failure_ratio.max(suite_failure_ratio);
+    let privacy_risk =
+        if !report.evidence_is_redacted() || report.suite_report.redaction_failure_count > 0 {
+            1.0
+        } else {
+            0.0
+        };
+    let latency_delta_ms = average_latency_delta_ms(report, 1_000);
+    let wasted_compute_delta = if report.max_tokens_respected_count == report.plan_count {
+        -0.02
+    } else {
+        let missing = report
+            .plan_count
+            .saturating_sub(report.max_tokens_respected_count);
+        missing as f32 / plan_count as f32
+    };
+    let flaky_runs = report
+        .cancellation_probe_count
+        .saturating_sub(report.cancellation_passed_count) as u64;
+    let mut candidate = SelfEvolutionPromotionCandidate::new(
+        "coding-service-eval-runner",
+        SelfEvolutionPromotionLane::RuntimeAdapter,
+    )
+    .with_correctness_delta(report.suite_report.pass_rate() - 0.80)
+    .with_latency_delta_ms(latency_delta_ms)
+    .with_wasted_compute_delta(wasted_compute_delta)
+    .with_privacy_risk(privacy_risk)
+    .with_reproducible_runs(report.completed_count as u64)
+    .with_cross_task_regression(cross_task_regression)
+    .with_flaky_runs(flaky_runs)
+    .with_rollback(format!(
+        "rollback:coding-service-eval:{}",
+        stable_redaction_digest([
+            "coding-service-eval-rollback",
+            report.schema_version,
+            &report.plan_count.to_string(),
+            &report.suite_report.pass_rate().to_string(),
+        ])
+    ))
+    .with_validation(coding_service_eval_validation_evidence(report))
+    .with_artifact_ref(
+        SelfEvolutionPromotionArtifactRef::trace(
+            "coding-service-eval-runner-summary",
+            "trace:coding-service-eval-runner:summary",
+            stable_redaction_digest(["coding-service-eval-runner-summary", &report.summary_line()]),
+        )
+        .with_source_schema(report.trace_schema),
+    )
+    .with_artifact_ref(
+        SelfEvolutionPromotionArtifactRef::trace(
+            "coding-service-eval-suite-summary",
+            "trace:coding-service-eval-runner:suite",
+            stable_redaction_digest([
+                "coding-service-eval-suite",
+                report.suite_report.schema_version,
+                &report.suite_report.result_count.to_string(),
+                &report.suite_report.passed_count.to_string(),
+                &report.suite_report.failed_count.to_string(),
+            ]),
+        )
+        .with_source_schema(report.suite_report.schema_version),
+    );
+
+    for (index, packet) in report.evidence_packets.iter().enumerate() {
+        candidate = candidate.with_artifact_ref(
+            SelfEvolutionPromotionArtifactRef::trace(
+                format!("coding-service-eval-runner-packet-{index}"),
+                format!("trace:coding-service-eval-runner:packet-{index}"),
+                stable_redaction_digest(["coding-service-eval-runner-packet", packet]),
+            )
+            .with_source_schema(report.trace_schema),
+        );
+    }
+    candidate
+}
+
+fn coding_service_eval_validation_evidence(
+    report: &CodingServiceEvalRunnerReport,
+) -> SelfEvolutionValidationEvidence {
+    let compile_checked = report
+        .run_records
+        .iter()
+        .filter(|record| record.compile_checked)
+        .count() as u64;
+    let compile_passed = report
+        .run_records
+        .iter()
+        .filter(|record| record.compile_checked && record.observation.compile_passed)
+        .count() as u64;
+    let compile_failed = compile_checked.saturating_sub(compile_passed);
+    let tests_checked = report
+        .run_records
+        .iter()
+        .filter(|record| record.unit_test_checked)
+        .count() as u64;
+    let tests_passed = report
+        .run_records
+        .iter()
+        .filter(|record| record.unit_test_checked && record.observation.unit_test_passed)
+        .count() as u64;
+    let tests_failed = tests_checked.saturating_sub(tests_passed);
+    let benchmark_items = report.plan_count.max(1) as u64;
+    let benchmark_passed = if report.passed() {
+        benchmark_items
+    } else {
+        report.completed_count.min(report.plan_count) as u64
+    };
+    let benchmark_failed = benchmark_items.saturating_sub(benchmark_passed);
+    let experiment_passed = u64::from(report.evidence_is_redacted());
+
+    SelfEvolutionValidationEvidence::from_lanes(
+        SelfEvolutionValidationLane::new(compile_checked, compile_passed, compile_failed),
+        SelfEvolutionValidationLane::new(tests_checked, tests_passed, tests_failed),
+        SelfEvolutionValidationLane::new(benchmark_items, benchmark_passed, benchmark_failed),
+        SelfEvolutionValidationLane::new(1, experiment_passed, u64::from(experiment_passed == 0)),
+    )
+}
+
+fn average_latency_delta_ms(report: &CodingServiceEvalRunnerReport, baseline_ms: u64) -> i64 {
+    if report.run_records.is_empty() {
+        return baseline_ms as i64;
+    }
+    let total_latency = report
+        .run_records
+        .iter()
+        .map(|record| record.observation.latency_ms)
+        .sum::<u64>();
+    let average_latency = total_latency / report.run_records.len() as u64;
+    average_latency as i64 - baseline_ms as i64
+}
+
 fn map_summary(map: &BTreeMap<String, usize>) -> String {
     if map.is_empty() {
         return "none".to_owned();
@@ -1201,5 +1348,80 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn mock_runner_exports_promotion_scorecard_for_human_approval() {
+        let report = default_coding_service_eval_runner_report();
+
+        let scorecard = report.promotion_scorecard();
+
+        assert_eq!(
+            scorecard.decision,
+            crate::SelfEvolutionPromotionDecision::PromoteForApproval
+        );
+        assert_eq!(
+            scorecard.lane,
+            crate::SelfEvolutionPromotionLane::RuntimeAdapter
+        );
+        assert!(scorecard.ready_for_human_approval);
+        assert!(scorecard.human_approval_required);
+        assert!(scorecard.validation_passed);
+        assert_eq!(scorecard.reproducible_runs, report.completed_count as u64);
+        assert!(scorecard.artifact_refs.len() >= report.evidence_packets.len());
+        assert!(scorecard.read_only);
+        assert!(scorecard.report_only);
+        assert!(scorecard.preview_only);
+        assert!(!scorecard.write_allowed);
+        assert!(!scorecard.applied);
+        assert!(scorecard.summary_line().contains("write_allowed=false"));
+        assert!(!contains_private_or_executable_marker(
+            &scorecard.review_packet_line()
+        ));
+    }
+
+    #[test]
+    fn promotion_scorecard_rejects_runner_report_with_unredacted_evidence() {
+        let mut report = default_coding_service_eval_runner_report();
+        report
+            .evidence_packets
+            .push("raw prompt says run curl http://example.invalid".to_owned());
+
+        let scorecard = report.promotion_scorecard();
+
+        assert_eq!(
+            scorecard.decision,
+            crate::SelfEvolutionPromotionDecision::Reject
+        );
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.starts_with("promotion_privacy_risk="))
+        );
+        assert!(!scorecard.review_packet_line().contains("run curl"));
+        assert!(!scorecard.write_allowed);
+    }
+
+    #[test]
+    fn promotion_scorecard_rolls_back_runner_contract_regressions() {
+        let mut report = default_coding_service_eval_runner_report();
+        report.failed_runner_contract_count = 1;
+
+        let scorecard = report.promotion_scorecard();
+
+        assert_eq!(
+            scorecard.decision,
+            crate::SelfEvolutionPromotionDecision::Rollback
+        );
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason.starts_with("promotion_cross_task_regression="))
+        );
+        assert!(!scorecard.write_allowed);
     }
 }

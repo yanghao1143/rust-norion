@@ -23,6 +23,7 @@ param(
     [int]$MinRounds = 1,
     [int]$MinFeedbackTotal = 1,
     [int]$MaxDaemonInProgressStdoutAgeSeconds = 300,
+    [int]$MaxDaemonRoundTimeoutSeconds = 900,
     [int]$MaxDaemonIdleLedgerAgeSeconds = 0,
     [string]$BackendHealthJson = "",
     [string]$BackendHealthJsonPath = "",
@@ -52,7 +53,7 @@ if ($Help) {
     Write-Host "  .\tools\evolution-loop\status-evolution-loop.cmd [-RequireLatestHelperStageContracts] [-FailOnNotReady]"
     Write-Host "  .\tools\evolution-loop\status-evolution-loop.cmd [-RequireLatestTestGatePass] [-RequireLatestSafeTestGateValidationCommand] [-FailOnNotReady]"
     Write-Host "  .\tools\evolution-loop\status-evolution-loop.cmd [-StrictUnattendedEvolution] [-FailOnNotReady]"
-    Write-Host "  .\tools\evolution-loop\status-evolution-loop.cmd [-MaxDaemonInProgressStdoutAgeSeconds 300] [-MaxDaemonIdleLedgerAgeSeconds 900] [-FailOnNotReady]"
+    Write-Host "  .\tools\evolution-loop\status-evolution-loop.cmd [-MaxDaemonInProgressStdoutAgeSeconds 300] [-MaxDaemonRoundTimeoutSeconds 900] [-MaxDaemonIdleLedgerAgeSeconds 900] [-FailOnNotReady]"
     Write-Host ""
     Write-Host "Contracts:"
     Write-Host "  read_only=true"
@@ -72,6 +73,7 @@ $RequireLatestHelperStageContractsEffective = [bool]$RequireLatestHelperStageCon
 $RequireLatestTestGatePassEffective = [bool]$RequireLatestTestGatePass -or [bool]$StrictUnattendedEvolution
 $RequireLatestSafeTestGateValidationCommandEffective = [bool]$RequireLatestSafeTestGateValidationCommand -or [bool]$StrictUnattendedEvolution
 $MaxDaemonInProgressStdoutAgeSecondsEffective = if ($StrictUnattendedEvolution -and -not $PSBoundParameters.ContainsKey("MaxDaemonInProgressStdoutAgeSeconds")) { 900 } else { $MaxDaemonInProgressStdoutAgeSeconds }
+$MaxDaemonRoundTimeoutSecondsEffective = if ($StrictUnattendedEvolution -and -not $PSBoundParameters.ContainsKey("MaxDaemonRoundTimeoutSeconds")) { 900 } else { $MaxDaemonRoundTimeoutSeconds }
 $MaxDaemonIdleLedgerAgeSecondsEffective = if ($StrictUnattendedEvolution -and -not $PSBoundParameters.ContainsKey("MaxDaemonIdleLedgerAgeSeconds")) { 900 } else { $MaxDaemonIdleLedgerAgeSeconds }
 
 function Resolve-RepoPath {
@@ -2540,7 +2542,7 @@ function Test-BackendBusyDuringActiveDaemon {
         -or -not $DaemonStatus.checked `
         -or -not $DaemonStatus.running `
         -or -not $DaemonStatus.activity_ok `
-        -or [string]$DaemonStatus.activity_state -ne "active"
+        -or ([string]$DaemonStatus.activity_state -ne "active" -and [string]$DaemonStatus.activity_state -ne "slow_in_progress")
     ) {
         return $false
     }
@@ -3818,7 +3820,7 @@ function Get-DaemonTransitionKind {
         [string]$LatestRoundState
     )
 
-    if ($ActivityState -eq "active" -and $LatestRoundState -eq "in_progress") {
+    if (($ActivityState -eq "active" -or $ActivityState -eq "slow_in_progress") -and $LatestRoundState -eq "in_progress") {
         return "normal_in_progress"
     }
     if ($ActivityState -eq "round_done_waiting_ledger_commit") {
@@ -3844,8 +3846,14 @@ function New-DaemonRoundTransitionStatus {
         [object]$StdoutAgeSeconds,
         [object]$LedgerAgeSeconds,
         [int]$MaxInProgressStdoutAgeSeconds,
+        [int]$MaxRoundTimeoutSeconds,
         [int]$MaxIdleLedgerAgeSeconds
     )
+
+    $withinRequestTimeout = $false
+    if ($null -ne $StdoutAgeSeconds) {
+        $withinRequestTimeout = [int]$StdoutAgeSeconds -le [Math]::Max(1, $MaxRoundTimeoutSeconds)
+    }
 
     return [pscustomobject][ordered]@{
         schema = "daemon_round_transition_status_v1"
@@ -3862,6 +3870,8 @@ function New-DaemonRoundTransitionStatus {
         stdout_age_seconds = $StdoutAgeSeconds
         ledger_age_seconds = $LedgerAgeSeconds
         max_in_progress_stdout_age_seconds = $MaxInProgressStdoutAgeSeconds
+        max_round_timeout_seconds = $MaxRoundTimeoutSeconds
+        within_request_timeout = [bool]$withinRequestTimeout
         max_idle_ledger_age_seconds = $MaxIdleLedgerAgeSeconds
         read_only = $true
         starts_process = $false
@@ -3924,8 +3934,18 @@ function New-NextRoundDecision {
     $activityOk = if ($null -ne $transition -and (Has-Property $transition "activity_ok")) { $transition.activity_ok } else { $null }
     $reportGatePassed = if ($null -ne $reportGate -and (Has-Property $reportGate "passed")) { $reportGate.passed } else { $null }
     $reportGateFailureCount = if ($null -ne $reportGate -and (Has-Property $reportGate "failure_count")) { $reportGate.failure_count } else { $null }
+    $withinRequestTimeout = if ($null -ne $transition -and (Has-Property $transition "within_request_timeout")) { $transition.within_request_timeout } else { $null }
+    $stdoutAgeSeconds = if ($null -ne $transition -and (Has-Property $transition "stdout_age_seconds")) { $transition.stdout_age_seconds } else { $null }
+    $maxRoundTimeoutSeconds = if ($null -ne $transition -and (Has-Property $transition "max_round_timeout_seconds")) { $transition.max_round_timeout_seconds } else { $null }
+    $reportGateAllowsActiveWait = $reportGatePassed -eq $true -or (
+        $null -eq $reportGatePassed `
+            -and -not [bool]$StrictUnattendedEvolution `
+            -and $transitionKind -eq "normal_in_progress" `
+            -and $roundInProgress -eq $true `
+            -and $activityOk -eq $true
+    )
 
-    $safeToWait = $reportGatePassed -eq $true -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
+    $safeToWait = $reportGateAllowsActiveWait -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
     $safeToContinue = $reportGatePassed -eq $true -and $transitionKind -eq "round_done_waiting_ledger_commit" -and $roundInProgress -eq $false -and $activityOk -eq $true
     $operatorBlocked = -not ($safeToWait -or $safeToContinue)
 
@@ -3933,7 +3953,11 @@ function New-NextRoundDecision {
     $reasonCode = "operator_attention_required_until_safe_next_round_evidence_present"
     if ($safeToWait) {
         $displayState = "safe-to-wait"
-        $reasonCode = "active_round_in_progress_wait_for_completion"
+        if ($null -eq $reportGatePassed) {
+            $reasonCode = "active_round_in_progress_report_gate_unavailable_non_strict_wait"
+        } else {
+            $reasonCode = "active_round_in_progress_wait_for_completion"
+        }
     } elseif ($safeToContinue) {
         $displayState = "safe-to-continue-after-current-round"
         $reasonCode = "done_marker_seen_wait_for_ledger_commit_then_continue"
@@ -3973,9 +3997,13 @@ function New-NextRoundDecision {
             transition_kind = $transitionKind
             report_gate_passed = $reportGatePassed
             report_gate_failure_count = $reportGateFailureCount
+            report_gate_allows_active_wait = [bool]$reportGateAllowsActiveWait
             active_busy = [bool]($transitionKind -eq "normal_in_progress")
             round_in_progress = $roundInProgress
             activity_ok = $activityOk
+            within_request_timeout = $withinRequestTimeout
+            stdout_age_seconds = $stdoutAgeSeconds
+            max_round_timeout_seconds = $maxRoundTimeoutSeconds
         }
     }
 }
@@ -4181,6 +4209,7 @@ function Read-DaemonSnapshot {
     $stdoutFreshness = Get-StatusFileFreshness -Path $stdoutLog
     $ledgerFreshness = Get-StatusFileFreshness -Path $ledgerPath
     $inProgressStdoutMaxAge = [Math]::Max(1, [int]$MaxDaemonInProgressStdoutAgeSecondsEffective)
+    $roundTimeoutMaxAge = [Math]::Max($inProgressStdoutMaxAge, [int]$MaxDaemonRoundTimeoutSecondsEffective)
     $idleLedgerMaxAge = [Math]::Max(0, [int]$MaxDaemonIdleLedgerAgeSecondsEffective)
     $state = "unknown"
     $ok = $false
@@ -4196,6 +4225,11 @@ function Read-DaemonSnapshot {
             $ok = $true
             $reason = "round_in_progress_stdout_recent"
             $nextStep = "wait for current round to finish or inspect log_preview"
+        } elseif ($stdoutFreshness.age_seconds -ne $null -and [int]$stdoutFreshness.age_seconds -le $roundTimeoutMaxAge) {
+            $state = "slow_in_progress"
+            $ok = $true
+            $reason = "round_in_progress_within_request_timeout"
+            $nextStep = "wait for current round until request timeout before treating it as stale"
         } else {
             $state = "stale_in_progress"
             $reason = "round_in_progress_stdout_stale"
@@ -4262,6 +4296,7 @@ function Read-DaemonSnapshot {
         -StdoutAgeSeconds $stdoutFreshness.age_seconds `
         -LedgerAgeSeconds $ledgerFreshness.age_seconds `
         -MaxInProgressStdoutAgeSeconds $inProgressStdoutMaxAge `
+        -MaxRoundTimeoutSeconds $roundTimeoutMaxAge `
         -MaxIdleLedgerAgeSeconds $idleLedgerMaxAge
     return [pscustomobject][ordered]@{
         checked = $true
@@ -4288,6 +4323,7 @@ function Read-DaemonSnapshot {
         stdout_age_seconds = $stdoutFreshness.age_seconds
         ledger_age_seconds = $ledgerFreshness.age_seconds
         max_in_progress_stdout_age_seconds = $inProgressStdoutMaxAge
+        max_round_timeout_seconds = $roundTimeoutMaxAge
         max_idle_ledger_age_seconds = $idleLedgerMaxAge
         latest_round_line_preview = $logSummary.latest_round_line_preview
         operator_summary = "state=$state ok=$ok reason=$reason active_round=$activeText ledger_round=$ledgerText lag=$lagText stage=$stage stdout_age=$stdoutAge ledger_age=$ledgerAge next_step=$nextStep"
@@ -4300,6 +4336,21 @@ function Read-DaemonSnapshot {
 }
 
 $DaemonWorkDirPath = Resolve-RepoPath $DaemonWorkDir
+$daemonStatus = Read-DaemonSnapshot -WorkDirPath $DaemonWorkDirPath
+$DaemonLedgerAutoSelected = $false
+$DaemonLedgerCandidate = Join-Path $DaemonWorkDir "evolution-ledger.jsonl"
+$DaemonLedgerCandidatePath = Resolve-RepoPath $DaemonLedgerCandidate
+if (
+    -not $UseDaemonLedgerEffective `
+        -and -not $PSBoundParameters.ContainsKey("Ledger") `
+        -and -not [bool]$SkipDaemon `
+        -and $null -ne $daemonStatus `
+        -and $daemonStatus.running -eq $true `
+        -and (Test-Path -LiteralPath $DaemonLedgerCandidatePath)
+) {
+    $UseDaemonLedgerEffective = $true
+    $DaemonLedgerAutoSelected = $true
+}
 if ($UseDaemonLedgerEffective) {
     $Ledger = Join-Path $DaemonWorkDir "evolution-ledger.jsonl"
 }
@@ -4311,7 +4362,6 @@ $ledgerSummary = Ledger-Summary -Path $LedgerPath -Records @($ledgerRead.records
 $backendHealth = Read-BackendHealth -Backend $Backend
 $remoteChain = Read-RemoteChainStatus -Path $RemoteStatusPath
 $processStatus = Read-LoopProcesses
-$daemonStatus = Read-DaemonSnapshot -WorkDirPath $DaemonWorkDirPath
 $reportStatus = Read-ReportStatus -Path $ReportPath -LedgerSummary $ledgerSummary
 $ledgerReportGateEvidence = New-StrictLedgerReportGateEvidence -LedgerSummary $ledgerSummary
 $liveStatusBundle = New-LiveStatusBundle -DaemonStatus $daemonStatus -ReportStatus $reportStatus -RemoteChainStatus $remoteChain -LedgerReportGateEvidence $ledgerReportGateEvidence
@@ -4440,7 +4490,8 @@ $status = [pscustomobject][ordered]@{
     strict_unattended_evolution = [bool]$StrictUnattendedEvolution
     repo = $RepoRoot
     backend_endpoint = $Backend
-    ledger_source = if ($UseDaemonLedgerEffective) { "daemon" } else { "argument" }
+    ledger_source = if ($DaemonLedgerAutoSelected) { "daemon_auto" } elseif ($UseDaemonLedgerEffective) { "daemon" } else { "argument" }
+    daemon_ledger_auto_selected = $DaemonLedgerAutoSelected
     ledger = $ledgerSummary
     report = $reportStatus
     backend = $backendHealth

@@ -78,6 +78,20 @@ The runner is intentionally a CI-safe mock. It proves the local service/eval
 contract before a real model endpoint, HTTP transport, or benchmark runner is
 attached.
 
+## Promotion Scorecard
+
+`CodingServiceEvalRunnerReport::promotion_scorecard()` projects the offline
+runner into the self-evolution promotion gate as a `runtime_adapter` candidate.
+The scorecard carries only digest-backed artifact references for the runner
+summary, suite summary, and evidence packets. It can promote a clean runner
+report for human approval, reject unredacted evidence, or request rollback when
+runner-contract regressions appear.
+
+This bridge is still read-only and preview-only. It does not write memory,
+genome, adaptive state, experiment ledgers, or model weights, and it leaves
+`write_allowed=false` and `applied=false` until a separate human-approved
+promotion path accepts the candidate.
+
 ## CI Role
 
 `default_coding_service_eval_readiness_report()` and
