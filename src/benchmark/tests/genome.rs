@@ -227,6 +227,79 @@ fn summary_gates_live_reasoning_genome_payloads_from_feedback() {
 }
 
 #[test]
+fn summary_gates_mutation_fixture_and_malignant_recovery_corpus() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let case = BenchmarkCase::new(
+        "mutation_fixture_gate",
+        TaskProfile::Coding,
+        "Validate mutation repair fixtures and malignant recovery drills.",
+    );
+    let outcome = engine.infer(
+        InferenceRequest::new(case.prompt.clone(), case.profile),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+
+    summary.record(&case, 5, &outcome);
+
+    assert_eq!(summary.mutation_repair_fixtures(), 8);
+    assert_eq!(summary.mutation_repair_fixture_kinds(), 8);
+    assert!(summary.mutation_repair_candidates() >= 7);
+    assert!(summary.mutation_repair_review_packets() >= 8);
+    assert_eq!(summary.malignant_gene_recovery_drills(), 6);
+    assert_eq!(summary.malignant_gene_quarantines(), 6);
+    assert_eq!(summary.malignant_gene_cut_candidates(), 6);
+    assert_eq!(summary.malignant_gene_regeneration_candidates(), 6);
+    assert_eq!(summary.malignant_gene_failed_replay(), 1);
+    assert_eq!(summary.total_reasoning_genome_failures(), 0);
+    assert!(
+        summary
+            .summary_line()
+            .contains("mutation_repair_fixtures=8")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("malignant_gene_recovery_drills=6")
+    );
+
+    let report = summary.evaluate(&BenchmarkGate {
+        min_mutation_repair_fixtures: Some(8),
+        min_mutation_repair_fixture_kinds: Some(8),
+        min_mutation_repair_candidates: Some(7),
+        min_mutation_repair_review_packets: Some(8),
+        min_malignant_gene_recovery_drills: Some(6),
+        min_malignant_gene_quarantines: Some(6),
+        min_malignant_gene_cut_candidates: Some(6),
+        min_malignant_gene_regeneration_candidates: Some(6),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(report.passed, "{:?}", report.failures);
+
+    let failing = summary.evaluate(&BenchmarkGate {
+        min_mutation_repair_fixture_kinds: Some(9),
+        min_malignant_gene_regeneration_candidates: Some(7),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(!failing.passed);
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| failure.contains("mutation_repair_fixture_kinds"))
+    );
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| failure.contains("malignant_gene_regeneration_candidates"))
+    );
+}
+
+#[test]
 fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
     let summary = BenchmarkSummary::new();
     let gate = BenchmarkGate {

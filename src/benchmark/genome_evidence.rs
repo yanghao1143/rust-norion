@@ -1,13 +1,26 @@
 use crate::engine::InferenceOutcome;
 use crate::hardware::DeviceClass;
+use crate::reasoning_genome::{
+    MalignantGeneRecoveryDrillReport, MutationRepairFixtureReport,
+    default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
+};
 
 use super::{BenchmarkCase, explicit_device_count, push_unique_device};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BenchmarkGenomeEvidence {
     pub expression_cases: usize,
     pub splice_cases: usize,
     pub gene_scissors_proposal_cases: usize,
+    pub mutation_repair_fixtures: usize,
+    pub mutation_repair_fixture_kinds: usize,
+    pub mutation_repair_candidates: usize,
+    pub mutation_repair_review_packets: usize,
+    pub malignant_gene_recovery_drills: usize,
+    pub malignant_gene_quarantines: usize,
+    pub malignant_gene_cut_candidates: usize,
+    pub malignant_gene_regeneration_candidates: usize,
+    pub malignant_gene_failed_replay: usize,
     pub total_genes: usize,
     pub total_active_genes: usize,
     pub total_aged_genes: usize,
@@ -43,7 +56,100 @@ pub struct BenchmarkGenomeEvidence {
     pub(super) proposal_devices: Vec<DeviceClass>,
 }
 
+impl Default for BenchmarkGenomeEvidence {
+    fn default() -> Self {
+        let mut evidence = Self {
+            expression_cases: 0,
+            splice_cases: 0,
+            gene_scissors_proposal_cases: 0,
+            mutation_repair_fixtures: 0,
+            mutation_repair_fixture_kinds: 0,
+            mutation_repair_candidates: 0,
+            mutation_repair_review_packets: 0,
+            malignant_gene_recovery_drills: 0,
+            malignant_gene_quarantines: 0,
+            malignant_gene_cut_candidates: 0,
+            malignant_gene_regeneration_candidates: 0,
+            malignant_gene_failed_replay: 0,
+            total_genes: 0,
+            total_active_genes: 0,
+            total_aged_genes: 0,
+            total_malignant_genes: 0,
+            total_relabel_candidates: 0,
+            total_regeneration_candidates: 0,
+            total_gene_scissors_proposals: 0,
+            total_repair_payloads: 0,
+            total_regeneration_payloads: 0,
+            total_lifecycle_records: 0,
+            total_lifecycle_tombstone_candidates: 0,
+            total_lifecycle_pending_validations: 0,
+            total_lifecycle_source_evidence: 0,
+            total_splice_segments: 0,
+            total_splice_exons: 0,
+            total_splice_introns: 0,
+            total_splice_variants: 0,
+            total_splice_retained: 0,
+            total_splice_skipped: 0,
+            total_splice_quarantined: 0,
+            total_splice_repair_candidates: 0,
+            total_splice_input_tokens: 0,
+            total_splice_retained_tokens: 0,
+            total_splice_lifecycle_records: 0,
+            total_splice_lifecycle_quarantined: 0,
+            total_splice_lifecycle_held: 0,
+            total_splice_lifecycle_rejected: 0,
+            total_splice_findings: 0,
+            total_splice_proposals: 0,
+            failures: Vec::new(),
+            expression_devices: Vec::new(),
+            splice_devices: Vec::new(),
+            proposal_devices: Vec::new(),
+        };
+        evidence.record_mutation_repair_fixture_report(
+            &default_mutation_repair_fixture_corpus().evaluate(),
+        );
+        evidence.record_malignant_gene_recovery_drill_report(
+            &default_malignant_gene_recovery_drill_corpus().evaluate(),
+        );
+        evidence
+    }
+}
+
 impl BenchmarkGenomeEvidence {
+    fn record_mutation_repair_fixture_report(&mut self, report: &MutationRepairFixtureReport) {
+        self.mutation_repair_fixtures += report.results.len();
+        self.mutation_repair_fixture_kinds += report.covered_fixture_kinds.len();
+        self.mutation_repair_candidates += report.total_repair_candidate_count;
+        self.mutation_repair_review_packets += report.total_review_packet_line_count;
+        if !report.preview_only {
+            self.failures
+                .push("mutation_repair_fixture_corpus must remain preview-only".to_owned());
+        }
+        for failure in &report.failures {
+            self.failures
+                .push(format!("mutation_repair_fixture:{failure}"));
+        }
+    }
+
+    fn record_malignant_gene_recovery_drill_report(
+        &mut self,
+        report: &MalignantGeneRecoveryDrillReport,
+    ) {
+        self.malignant_gene_recovery_drills += report.results.len();
+        self.malignant_gene_quarantines += report.quarantined_count;
+        self.malignant_gene_cut_candidates += report.cut_candidate_count;
+        self.malignant_gene_regeneration_candidates += report.regeneration_candidate_count;
+        self.malignant_gene_failed_replay += report.failed_replay_count;
+        if !report.preview_only {
+            self.failures
+                .push("malignant_gene_recovery_drills must remain preview-only".to_owned());
+        }
+        for failure in &report.failures {
+            self.failures
+                .push(format!("malignant_gene_recovery_drill:{failure}"));
+        }
+    }
+
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let device = outcome.hardware_plan.device;
         let expression = &outcome.reasoning_genome;
