@@ -144,6 +144,39 @@ pub(crate) struct SelfImproveProposalRepairFactorReadinessItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorReleaseReport {
+    pub(crate) action_required: bool,
+    pub(crate) repair_factor_count: usize,
+    pub(crate) release_count: usize,
+    pub(crate) blocked_count: usize,
+    pub(crate) release_ready: bool,
+    pub(crate) first_repair_factor_id: Option<String>,
+    pub(crate) first_release_ready: bool,
+    pub(crate) first_release_status: Option<String>,
+    pub(crate) items: Vec<SelfImproveProposalRepairFactorReleaseItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorReleaseItem {
+    pub(crate) repair_factor_id: String,
+    pub(crate) proposal_id: String,
+    pub(crate) source_round: Option<u64>,
+    pub(crate) previous_label: String,
+    pub(crate) repair_label: String,
+    pub(crate) target_action: String,
+    pub(crate) release_action: String,
+    pub(crate) ready_for_release: bool,
+    pub(crate) release_status: String,
+    pub(crate) relabel_required: bool,
+    pub(crate) repair_objectives: Vec<String>,
+    pub(crate) evidence_ids: Vec<String>,
+    pub(crate) validation_required: bool,
+    pub(crate) approval_required: bool,
+    pub(crate) memory_admission_required: bool,
+    pub(crate) blocked_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelfImproveProposalRepairFactorRetagPlanReport {
     pub(crate) action_required: bool,
     pub(crate) repair_factor_count: usize,
@@ -265,6 +298,24 @@ pub(crate) fn option_repair_factor_readiness_report_json(
         None => repair_factor_readiness_report_json(
             &SelfImproveProposalRepairFactorReadinessReport::from_queue(
                 &empty_repair_factor_queue(),
+            ),
+            false,
+        ),
+    }
+}
+
+pub(crate) fn option_repair_factor_release_report_json(
+    artifact: Option<&SelfImproveProposalArtifact>,
+) -> String {
+    match artifact {
+        Some(artifact) => {
+            repair_factor_release_report_json(&artifact.repair_factor_release_report(), true)
+        }
+        None => repair_factor_release_report_json(
+            &SelfImproveProposalRepairFactorReleaseReport::from_readiness_report(
+                &SelfImproveProposalRepairFactorReadinessReport::from_queue(
+                    &empty_repair_factor_queue(),
+                ),
             ),
             false,
         ),
@@ -1589,11 +1640,19 @@ impl SelfImproveProposalArtifact {
         SelfImproveProposalRepairFactorReadinessReport::from_queue(&self.repair_factor_queue())
     }
 
+    pub(crate) fn repair_factor_release_report(
+        &self,
+    ) -> SelfImproveProposalRepairFactorReleaseReport {
+        SelfImproveProposalRepairFactorReleaseReport::from_readiness_report(
+            &self.repair_factor_readiness_report(),
+        )
+    }
+
     pub(crate) fn repair_factor_retag_plan(
         &self,
     ) -> SelfImproveProposalRepairFactorRetagPlanReport {
-        SelfImproveProposalRepairFactorRetagPlanReport::from_readiness_report(
-            &self.repair_factor_readiness_report(),
+        SelfImproveProposalRepairFactorRetagPlanReport::from_release_report(
+            &self.repair_factor_release_report(),
         )
     }
 
@@ -2043,12 +2102,78 @@ impl SelfImproveProposalRepairFactorReadinessItem {
     }
 }
 
-impl SelfImproveProposalRepairFactorRetagPlanReport {
+impl SelfImproveProposalRepairFactorReleaseReport {
     fn from_readiness_report(report: &SelfImproveProposalRepairFactorReadinessReport) -> Self {
         let items = report
             .items
             .iter()
-            .map(SelfImproveProposalRepairFactorRetagPlanItem::from_readiness_item)
+            .map(SelfImproveProposalRepairFactorReleaseItem::from_readiness_item)
+            .collect::<Vec<_>>();
+        let release_count = items.iter().filter(|item| item.ready_for_release).count();
+        let blocked_count = items.len().saturating_sub(release_count);
+        let first = items.first();
+        Self {
+            action_required: report.action_required,
+            repair_factor_count: report.repair_factor_count,
+            release_count,
+            blocked_count,
+            release_ready: report.action_required
+                && report.repair_factor_count > 0
+                && blocked_count == 0,
+            first_repair_factor_id: first.map(|item| item.repair_factor_id.clone()),
+            first_release_ready: first.map(|item| item.ready_for_release).unwrap_or(false),
+            first_release_status: first.map(|item| item.release_status.clone()),
+            items,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorReleaseItem {
+    fn from_readiness_item(item: &SelfImproveProposalRepairFactorReadinessItem) -> Self {
+        let ready_for_release = item.ready_for_repair_plan
+            && item.relabel_required
+            && item.new_label.starts_with("repair_factor:");
+        let release_status = if ready_for_release {
+            "released_for_retag_and_memory_admission"
+        } else {
+            "held_until_repair_factor_ready"
+        };
+        let release_action = if ready_for_release {
+            "release_repair_factor_for_retag_and_memory_admission"
+        } else {
+            "hold_repair_factor_until_ready"
+        };
+        let mut blocked_reasons = item.blocked_reasons.clone();
+        if item.ready_for_repair_plan && !ready_for_release {
+            blocked_reasons.push("repair_factor_release_label_not_ready".to_owned());
+        }
+        Self {
+            repair_factor_id: item.repair_factor_id.clone(),
+            proposal_id: item.proposal_id.clone(),
+            source_round: item.source_round,
+            previous_label: item.old_label.clone(),
+            repair_label: item.new_label.clone(),
+            target_action: item.target_action.clone(),
+            release_action: release_action.to_owned(),
+            ready_for_release,
+            release_status: release_status.to_owned(),
+            relabel_required: item.relabel_required,
+            repair_objectives: item.repair_objectives.clone(),
+            evidence_ids: item.evidence_ids.clone(),
+            validation_required: true,
+            approval_required: true,
+            memory_admission_required: true,
+            blocked_reasons,
+        }
+    }
+}
+
+impl SelfImproveProposalRepairFactorRetagPlanReport {
+    fn from_release_report(report: &SelfImproveProposalRepairFactorReleaseReport) -> Self {
+        let items = report
+            .items
+            .iter()
+            .map(SelfImproveProposalRepairFactorRetagPlanItem::from_release_item)
             .collect::<Vec<_>>();
         let retag_plan_count = items.iter().filter(|item| item.ready_for_retag).count();
         let blocked_count = items.len().saturating_sub(retag_plan_count);
@@ -2067,13 +2192,17 @@ impl SelfImproveProposalRepairFactorRetagPlanReport {
             items,
         }
     }
+
+    fn from_readiness_report(report: &SelfImproveProposalRepairFactorReadinessReport) -> Self {
+        Self::from_release_report(
+            &SelfImproveProposalRepairFactorReleaseReport::from_readiness_report(report),
+        )
+    }
 }
 
 impl SelfImproveProposalRepairFactorRetagPlanItem {
-    fn from_readiness_item(item: &SelfImproveProposalRepairFactorReadinessItem) -> Self {
-        let ready_for_retag = item.ready_for_repair_plan
-            && item.relabel_required
-            && item.new_label.starts_with("repair_factor:");
+    fn from_release_item(item: &SelfImproveProposalRepairFactorReleaseItem) -> Self {
+        let ready_for_retag = item.ready_for_release;
         let retag_status = if ready_for_retag {
             "ready_to_retag_repaired_gene"
         } else {
@@ -2085,15 +2214,15 @@ impl SelfImproveProposalRepairFactorRetagPlanItem {
             "hold_retag_until_repair_factor_ready"
         };
         let mut blocked_reasons = item.blocked_reasons.clone();
-        if item.ready_for_repair_plan && !ready_for_retag {
-            blocked_reasons.push("repair_label_not_ready".to_owned());
+        if !item.ready_for_release && blocked_reasons.is_empty() {
+            blocked_reasons.push("repair_factor_not_released".to_owned());
         }
         Self {
             repair_factor_id: item.repair_factor_id.clone(),
             proposal_id: item.proposal_id.clone(),
             source_round: item.source_round,
-            previous_label: item.old_label.clone(),
-            repair_label: item.new_label.clone(),
+            previous_label: item.previous_label.clone(),
+            repair_label: item.repair_label.clone(),
             target_action: item.target_action.clone(),
             retag_action: retag_action.to_owned(),
             ready_for_retag,
@@ -4803,6 +4932,55 @@ fn repair_factor_readiness_item_json(
     )
 }
 
+fn repair_factor_release_report_json(
+    report: &SelfImproveProposalRepairFactorReleaseReport,
+    artifact_loaded: bool,
+) -> String {
+    let items = report
+        .items
+        .iter()
+        .map(repair_factor_release_item_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema\":\"self_improve_proposal_repair_factor_release_report_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_release\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"repair_factor_count\":{},\"release_count\":{},\"blocked_count\":{},\"release_ready\":{},\"first_repair_factor_id\":{},\"first_release_ready\":{},\"first_release_status\":{},\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"items\":[{}],\"side_effects\":{}}}",
+        artifact_loaded,
+        report.action_required,
+        report.repair_factor_count,
+        report.release_count,
+        report.blocked_count,
+        report.release_ready,
+        option_string_json(report.first_repair_factor_id.as_deref()),
+        report.first_release_ready,
+        option_string_json(report.first_release_status.as_deref()),
+        items,
+        side_effects_json()
+    )
+}
+
+fn repair_factor_release_item_json(item: &SelfImproveProposalRepairFactorReleaseItem) -> String {
+    format!(
+        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"previous_label\":{},\"repair_label\":{},\"target_action\":{},\"release_action\":{},\"ready_for_release\":{},\"release_status\":{},\"relabel_required\":{},\"repair_objectives\":{},\"evidence_ids\":{},\"validation_required\":{},\"approval_required\":{},\"memory_admission_required\":{},\"blocked_reasons\":{},\"report_only\":true,\"candidate_only\":true,\"auto_apply\":false,\"memory_store_write_allowed\":false,\"ndkv_write_allowed\":false,\"side_effects\":{}}}",
+        json_string(&item.repair_factor_id),
+        json_string(&item.proposal_id),
+        option_u64_json(item.source_round),
+        json_string(&item.previous_label),
+        json_string(&item.repair_label),
+        json_string(&item.target_action),
+        json_string(&item.release_action),
+        item.ready_for_release,
+        json_string(&item.release_status),
+        item.relabel_required,
+        json_string_array(&item.repair_objectives),
+        json_string_array(&item.evidence_ids),
+        item.validation_required,
+        item.approval_required,
+        item.memory_admission_required,
+        json_string_array(&item.blocked_reasons),
+        side_effects_json()
+    )
+}
+
 fn repair_factor_retag_plan_report_json(
     report: &SelfImproveProposalRepairFactorRetagPlanReport,
     artifact_loaded: bool,
@@ -4982,6 +5160,8 @@ mod tests {
         let repair_factor_queue_json = option_repair_factor_queue_report_json(Some(&artifact));
         let repair_factor_readiness_json =
             option_repair_factor_readiness_report_json(Some(&artifact));
+        let repair_factor_release = artifact.repair_factor_release_report();
+        let repair_factor_release_json = option_repair_factor_release_report_json(Some(&artifact));
         let repair_factor_retag_plan = artifact.repair_factor_retag_plan();
         let repair_factor_retag_plan_json =
             option_repair_factor_retag_plan_report_json(Some(&artifact));
@@ -5081,6 +5261,28 @@ mod tests {
         assert!(repair_factor_readiness_json.contains("\"validation_not_checked\""));
         assert!(repair_factor_readiness_json.contains("\"auto_apply\":false"));
         assert!(repair_factor_readiness_json.contains("\"calls_model\":false"));
+        assert_eq!(repair_factor_release.repair_factor_count, 2);
+        assert_eq!(repair_factor_release.release_count, 1);
+        assert_eq!(repair_factor_release.blocked_count, 1);
+        assert!(!repair_factor_release.release_ready);
+        assert!(
+            repair_factor_release_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_release_report_v1\"")
+        );
+        assert!(repair_factor_release_json.contains(
+            "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_release\""
+        ));
+        assert!(repair_factor_release_json.contains("\"release_count\":1"));
+        assert!(repair_factor_release_json.contains("\"blocked_count\":1"));
+        assert!(repair_factor_release_json.contains(
+            "\"release_action\":\"release_repair_factor_for_retag_and_memory_admission\""
+        ));
+        assert!(
+            repair_factor_release_json
+                .contains("\"release_action\":\"hold_repair_factor_until_ready\"")
+        );
+        assert!(repair_factor_release_json.contains("\"validation_not_checked\""));
+        assert!(repair_factor_release_json.contains("\"memory_store_write_allowed\":false"));
         assert_eq!(repair_factor_retag_plan.repair_factor_count, 2);
         assert_eq!(repair_factor_retag_plan.retag_plan_count, 1);
         assert_eq!(repair_factor_retag_plan.blocked_count, 1);
@@ -5111,6 +5313,7 @@ mod tests {
         let action_assignment_json = option_action_assignment_report_json(None);
         let repair_factor_queue_json = option_repair_factor_queue_report_json(None);
         let repair_factor_readiness_json = option_repair_factor_readiness_report_json(None);
+        let repair_factor_release_json = option_repair_factor_release_report_json(None);
         let repair_factor_retag_plan_json = option_repair_factor_retag_plan_report_json(None);
 
         assert!(json.contains("\"artifact_loaded\":false"));
@@ -5157,6 +5360,15 @@ mod tests {
         assert!(repair_factor_readiness_json.contains("\"all_repair_factors_ready\":false"));
         assert!(repair_factor_readiness_json.contains("\"items\":[]"));
         assert!(
+            repair_factor_release_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_release_report_v1\"")
+        );
+        assert!(repair_factor_release_json.contains("\"artifact_loaded\":false"));
+        assert!(repair_factor_release_json.contains("\"release_count\":0"));
+        assert!(repair_factor_release_json.contains("\"blocked_count\":0"));
+        assert!(repair_factor_release_json.contains("\"release_ready\":false"));
+        assert!(repair_factor_release_json.contains("\"items\":[]"));
+        assert!(
             repair_factor_retag_plan_json
                 .contains("\"schema\":\"self_improve_proposal_repair_factor_retag_plan_v1\"")
         );
@@ -5178,6 +5390,8 @@ mod tests {
         let repair_factor_readiness = artifact.repair_factor_readiness_report();
         let repair_factor_readiness_json =
             option_repair_factor_readiness_report_json(Some(&artifact));
+        let repair_factor_release = artifact.repair_factor_release_report();
+        let repair_factor_release_json = option_repair_factor_release_report_json(Some(&artifact));
         let repair_factor_retag_plan = artifact.repair_factor_retag_plan();
         let repair_factor_retag_plan_json =
             option_repair_factor_retag_plan_report_json(Some(&artifact));
@@ -5246,6 +5460,33 @@ mod tests {
             "\"repair_objectives\":[\"accepted_memory_admission\",\"evidence_backed_business_improvement\"]"
         ));
         assert!(repair_factor_readiness_json.contains("\"blocked_reasons\":[]"));
+        assert_eq!(repair_factor_release.repair_factor_count, 1);
+        assert_eq!(repair_factor_release.release_count, 1);
+        assert_eq!(repair_factor_release.blocked_count, 0);
+        assert!(repair_factor_release.release_ready);
+        assert!(repair_factor_release.first_release_ready);
+        let release_item = repair_factor_release.items.first().unwrap();
+        assert_eq!(release_item.previous_label, "quarantined");
+        assert_eq!(
+            release_item.repair_label,
+            "repair_factor:convert_advisory_to_evidence_backed_business_improvement"
+        );
+        assert_eq!(
+            release_item.release_action,
+            "release_repair_factor_for_retag_and_memory_admission"
+        );
+        assert!(
+            repair_factor_release_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_release_report_v1\"")
+        );
+        assert!(repair_factor_release_json.contains("\"release_count\":1"));
+        assert!(repair_factor_release_json.contains("\"release_ready\":true"));
+        assert!(
+            repair_factor_release_json
+                .contains("\"release_status\":\"released_for_retag_and_memory_admission\"")
+        );
+        assert!(repair_factor_release_json.contains("\"memory_admission_required\":true"));
+        assert!(repair_factor_release_json.contains("\"memory_store_write_allowed\":false"));
         assert_eq!(repair_factor_retag_plan.repair_factor_count, 1);
         assert_eq!(repair_factor_retag_plan.retag_plan_count, 1);
         assert_eq!(repair_factor_retag_plan.blocked_count, 0);
