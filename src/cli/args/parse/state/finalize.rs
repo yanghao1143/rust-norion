@@ -259,6 +259,18 @@ impl ParseState {
                 .benchmark_min_malignant_gene_cut_candidates,
             benchmark_min_malignant_gene_regeneration_candidates: self
                 .benchmark_min_malignant_gene_regeneration_candidates,
+            benchmark_min_dna_evolution_reports: self.benchmark_min_dna_evolution_reports,
+            benchmark_min_dna_evolution_candidates: self.benchmark_min_dna_evolution_candidates,
+            benchmark_min_dna_evolution_candidate_previews: self
+                .benchmark_min_dna_evolution_candidate_previews,
+            benchmark_max_dna_evolution_activation_eligible: self
+                .benchmark_max_dna_evolution_activation_eligible,
+            benchmark_min_dna_evolution_transaction_replays: self
+                .benchmark_min_dna_evolution_transaction_replays,
+            benchmark_min_dna_evolution_replay_passed: self
+                .benchmark_min_dna_evolution_replay_passed,
+            benchmark_min_dna_evolution_validation_passed: self
+                .benchmark_min_dna_evolution_validation_passed,
             benchmark_min_memory_governance_cases: self.benchmark_min_memory_governance_cases,
             benchmark_min_memory_governance_device_profiles: self.benchmark_min_memory_governance_device_profiles,
             benchmark_min_memory_retention_activity_cases: self.benchmark_min_memory_retention_activity_cases,

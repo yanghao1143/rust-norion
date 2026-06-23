@@ -492,6 +492,27 @@ impl Args {
         if let Some(value) = self.benchmark_min_malignant_gene_regeneration_candidates {
             gate.min_malignant_gene_regeneration_candidates = Some(value);
         }
+        if let Some(value) = self.benchmark_min_dna_evolution_reports {
+            gate.min_dna_evolution_reports = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_candidates {
+            gate.min_dna_evolution_candidates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_candidate_previews {
+            gate.min_dna_evolution_candidate_previews = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_dna_evolution_activation_eligible {
+            gate.max_dna_evolution_activation_eligible = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_transaction_replays {
+            gate.min_dna_evolution_transaction_replays = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_replay_passed {
+            gate.min_dna_evolution_replay_passed = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_validation_passed {
+            gate.min_dna_evolution_validation_passed = Some(value);
+        }
         if let Some(value) = self.benchmark_min_memory_governance_cases {
             gate.min_memory_governance_cases = Some(value);
         }

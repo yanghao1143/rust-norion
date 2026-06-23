@@ -160,6 +160,13 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
     assert_eq!(summary.total_reasoning_genome_repair_payloads(), 2);
     assert_eq!(summary.total_reasoning_genome_regeneration_payloads(), 1);
     assert_eq!(summary.total_reasoning_genome_tombstone_candidates(), 1);
+    assert_eq!(summary.dna_evolution_reports(), 2);
+    assert!(summary.dna_evolution_candidates() >= 2);
+    assert!(summary.dna_evolution_candidate_previews() >= 2);
+    assert_eq!(summary.dna_evolution_activation_eligible(), 0);
+    assert!(summary.dna_evolution_transaction_replays() >= summary.dna_evolution_candidates());
+    assert_eq!(summary.dna_evolution_replay_passed(), 2);
+    assert_eq!(summary.dna_evolution_validation_passed(), 2);
     assert!(
         summary
             .summary_line()
@@ -175,9 +182,22 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
             .summary_line()
             .contains("reasoning_genome_lifecycle_tombstone_candidates=1")
     );
+    assert!(summary.summary_line().contains("dna_evolution_reports=2"));
+    assert!(
+        summary
+            .summary_line()
+            .contains("dna_evolution_activation_eligible=0")
+    );
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_repair_payloads: Some(2),
         min_reasoning_genome_regeneration_payloads: Some(1),
+        min_dna_evolution_reports: Some(2),
+        min_dna_evolution_candidates: Some(2),
+        min_dna_evolution_candidate_previews: Some(2),
+        max_dna_evolution_activation_eligible: Some(0),
+        min_dna_evolution_transaction_replays: Some(2),
+        min_dna_evolution_replay_passed: Some(2),
+        min_dna_evolution_validation_passed: Some(2),
         ..BenchmarkGate::default()
     });
 
@@ -311,6 +331,12 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         min_gene_scissors_proposal_device_profiles: Some(1),
         min_reasoning_genome_repair_payloads: Some(1),
         min_reasoning_genome_regeneration_payloads: Some(1),
+        min_dna_evolution_reports: Some(1),
+        min_dna_evolution_candidates: Some(1),
+        min_dna_evolution_candidate_previews: Some(1),
+        min_dna_evolution_transaction_replays: Some(1),
+        min_dna_evolution_replay_passed: Some(1),
+        min_dna_evolution_validation_passed: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -326,6 +352,12 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         "gene_scissors_proposal_device_profiles",
         "reasoning_genome_repair_payloads",
         "reasoning_genome_regeneration_payloads",
+        "dna_evolution_reports",
+        "dna_evolution_candidates",
+        "dna_evolution_candidate_previews",
+        "dna_evolution_transaction_replays",
+        "dna_evolution_replay_passed",
+        "dna_evolution_validation_passed",
     ] {
         assert!(
             report
