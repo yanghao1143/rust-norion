@@ -4,6 +4,8 @@ use crate::memory_admission::{
 };
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 use crate::reasoning_genome::{
+    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaEvolutionCandidateDecision,
+    DnaEvolutionControllerReport, DnaEvolutionValidationStatus,
     GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneScissorsOperatorDecision,
     GeneScissorsTransactionJournal, GeneValidationStatus,
 };
@@ -336,6 +338,105 @@ impl UnifiedWriterGateCandidate {
             source_active,
         )
         .with_raw_payload_redacted(journal.exports_are_redacted())
+    }
+
+    pub fn dna_evolution_controller_report(report: &DnaEvolutionControllerReport) -> Self {
+        let preview_candidates = report
+            .candidates
+            .iter()
+            .filter(|candidate| {
+                candidate.decision == DnaEvolutionCandidateDecision::CandidatePreview
+            })
+            .collect::<Vec<_>>();
+        let review_packet_ids = unique_sanitized(
+            preview_candidates
+                .iter()
+                .map(|candidate| candidate.candidate_id.as_str()),
+        );
+        let evidence_ids = unique_owned(
+            preview_candidates
+                .iter()
+                .flat_map(|candidate| candidate.validation_artifact_digests.iter().cloned())
+                .chain([stable_redaction_digest([
+                    "dna-evolution-controller-trace",
+                    &report.redacted_trace_line(),
+                ])])
+                .collect(),
+        );
+        let rollback_anchor_ids = unique_sanitized(
+            preview_candidates
+                .iter()
+                .map(|candidate| candidate.rollback_anchor_id.as_str()),
+        );
+        let content_digests = unique_owned(
+            preview_candidates
+                .iter()
+                .flat_map(|candidate| {
+                    [
+                        candidate.source_plan_id.clone(),
+                        candidate.target_gene_id.clone(),
+                        candidate
+                            .replacement_gene_id
+                            .clone()
+                            .unwrap_or_else(|| "no-replacement".to_owned()),
+                    ]
+                })
+                .chain([
+                    report.generation_id.clone(),
+                    report.stable_anchor_id.clone(),
+                    report.fitness_delta_summary(),
+                ])
+                .collect(),
+        );
+        let candidate_previews =
+            report.decision_count(DnaEvolutionCandidateDecision::CandidatePreview);
+        let activation_eligible = report.activation_eligible_count();
+        let validation_passed = report.validation_status == DnaEvolutionValidationStatus::Passed
+            && candidate_previews > 0;
+        let replay_passed = report.transaction_replay_passed
+            && report.transaction_replay_count >= report.candidate_count();
+        let rollback_ready = replay_passed
+            && !rollback_anchor_ids.is_empty()
+            && preview_candidates
+                .iter()
+                .all(|candidate| !candidate.rollback_anchor_id.trim().is_empty());
+        let operator_approved = report.operator_decision == GeneScissorsOperatorDecision::Approved
+            && activation_eligible > 0;
+        let approval_refs_match = operator_approved
+            && activation_eligible == candidate_previews
+            && report.decision_count(DnaEvolutionCandidateDecision::Hold) == 0
+            && report.decision_count(DnaEvolutionCandidateDecision::Reject) == 0
+            && report.decision_count(DnaEvolutionCandidateDecision::Rollback) == 0;
+        let redacted = dna_evolution_report_redacted(report);
+
+        Self::new(
+            UnifiedWriterGateDomain::Genome,
+            format!("dna-evolution-controller:{}", report.generation_id),
+            [UnifiedWriterGateWriteScope::Genome],
+        )
+        .with_refs(
+            review_packet_ids,
+            evidence_ids,
+            rollback_anchor_ids,
+            content_digests,
+            vec![DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION.to_owned()],
+        )
+        .with_evidence(
+            validation_passed,
+            replay_passed,
+            rollback_ready,
+            redacted,
+            true,
+        )
+        .with_operator_approval(operator_approved, approval_refs_match)
+        .with_source_flags(
+            report.read_only,
+            report.is_read_only_preview(),
+            report.write_allowed,
+            report.applied,
+            false,
+        )
+        .with_raw_payload_redacted(redacted)
     }
 
     pub fn experiment_promotion_preflight(report: &SelfEvolutionPromotionPreflightReport) -> Self {
@@ -940,6 +1041,31 @@ fn memory_preview_redacted(preview: &MemoryAdmissionPreview) -> bool {
         .all(|line| !contains_private_or_executable_marker(&line))
 }
 
+fn dna_evolution_report_redacted(report: &DnaEvolutionControllerReport) -> bool {
+    !contains_private_or_executable_marker(&report.summary_line())
+        && !contains_private_or_executable_marker(&report.redacted_trace_line())
+        && report.candidates.iter().all(|candidate| {
+            !contains_private_or_executable_marker(&candidate.candidate_id)
+                && !contains_private_or_executable_marker(&candidate.generation_id)
+                && !contains_private_or_executable_marker(&candidate.stable_anchor_id)
+                && !contains_private_or_executable_marker(&candidate.rollback_anchor_id)
+                && !contains_private_or_executable_marker(&candidate.source_plan_id)
+                && !contains_private_or_executable_marker(&candidate.target_gene_id)
+                && candidate
+                    .replacement_gene_id
+                    .as_deref()
+                    .is_none_or(|value| !contains_private_or_executable_marker(value))
+                && candidate
+                    .reason_codes
+                    .iter()
+                    .all(|reason| !contains_private_or_executable_marker(reason))
+                && candidate
+                    .validation_artifact_digests
+                    .iter()
+                    .all(|digest| !contains_private_or_executable_marker(digest))
+        })
+}
+
 fn write_scopes(scopes: &[UnifiedWriterGateWriteScope]) -> String {
     scopes
         .iter()
@@ -1023,7 +1149,9 @@ mod tests {
         MemoryKvLedgerRecord, MemoryKvLedgerWriteDecision, ReinforcedKvFusionPlan,
     };
     use crate::reasoning_genome::{
-        GeneScissorsTransaction, GeneScissorsTransactionState, GeneValidationStatus,
+        DnaEvolutionController, DnaEvolutionValidationEvidence, GeneScissorsIntent,
+        GeneScissorsTransaction, GeneScissorsTransactionJournal, GeneScissorsTransactionState,
+        GeneValidationStatus, MutationPlan,
     };
     use crate::self_evolution::SelfEvolutionPromotionPreflightDecision;
     use crate::self_goal_proposal::{
@@ -1194,6 +1322,120 @@ mod tests {
             report.records[0]
                 .reason_codes
                 .contains(&"source_active_before_unified_gate".to_owned())
+        );
+    }
+
+    #[test]
+    fn dna_evolution_constructor_holds_until_operator_approval() {
+        let report = dna_evolution_report_fixture(GeneScissorsOperatorDecision::Pending);
+        let candidate = UnifiedWriterGateCandidate::dna_evolution_controller_report(&report);
+        let policy = UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        };
+
+        assert_eq!(candidate.domain, UnifiedWriterGateDomain::Genome);
+        assert_eq!(
+            candidate.requested_writes,
+            vec![UnifiedWriterGateWriteScope::Genome]
+        );
+        assert!(candidate.validation_passed);
+        assert!(candidate.trace_or_benchmark_passed);
+        assert!(candidate.rollback_ready);
+        assert!(candidate.privacy_checked);
+        assert!(!candidate.operator_approved);
+        assert!(candidate.source_preview_only);
+        assert!(candidate.raw_payload_redacted);
+
+        let gate = UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([candidate]);
+
+        assert_eq!(gate.decision, UnifiedWriterGateDecision::Hold);
+        assert_eq!(gate.held_records, 1);
+        assert!(!gate.durable_write_allowed);
+        assert!(!gate.applied);
+        assert!(
+            gate.records[0]
+                .reason_codes
+                .contains(&"operator_approval_missing".to_owned())
+        );
+        assert!(
+            gate.records[0]
+                .reason_codes
+                .contains(&"approval_refs_missing_or_mismatched".to_owned())
+        );
+    }
+
+    #[test]
+    fn dna_evolution_constructor_ready_for_explicit_apply_after_approval() {
+        let report = dna_evolution_report_fixture(GeneScissorsOperatorDecision::Approved);
+        let candidate = UnifiedWriterGateCandidate::dna_evolution_controller_report(&report);
+        let policy = UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        };
+
+        assert_eq!(report.activation_eligible_count(), 2);
+        assert!(candidate.operator_approved);
+        assert!(candidate.approval_refs_match);
+        assert!(!candidate.source_write_allowed);
+        assert!(!candidate.source_applied);
+
+        let gate = UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([candidate]);
+
+        assert_eq!(
+            gate.decision,
+            UnifiedWriterGateDecision::ReadyForExplicitApply
+        );
+        assert_eq!(gate.ready_records, 1);
+        assert_eq!(gate.genome_records, 1);
+        assert!(gate.durable_write_allowed);
+        assert!(gate.explicit_apply_required);
+        assert!(!gate.applied);
+        assert!(gate.records[0].reason_codes.is_empty());
+    }
+
+    #[test]
+    fn dna_evolution_constructor_blocks_failed_validation() {
+        let plans = vec![dna_plan(GeneScissorsIntent::Cut, "malignant-cut")];
+        let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+            TaskProfile::Coding,
+            "stable",
+            &plans,
+        );
+        let report = DnaEvolutionController::default().preview_plans(
+            TaskProfile::Coding,
+            "parent",
+            "stable",
+            &plans,
+            &DnaEvolutionValidationEvidence::failed_tests(),
+            GeneScissorsOperatorDecision::Approved,
+            Some(&journal),
+        );
+        let candidate = UnifiedWriterGateCandidate::dna_evolution_controller_report(&report);
+        let policy = UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        };
+
+        let gate = UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([candidate]);
+
+        assert_eq!(gate.decision, UnifiedWriterGateDecision::Hold);
+        assert!(!gate.durable_write_allowed);
+        assert!(
+            gate.records[0]
+                .reason_codes
+                .contains(&"review_packet_refs_missing".to_owned())
+        );
+        assert!(
+            gate.records[0]
+                .reason_codes
+                .contains(&"validation_evidence_missing_or_failed".to_owned())
         );
     }
 
@@ -1501,6 +1743,40 @@ mod tests {
         let mut journal = GeneScissorsTransactionJournal::new(TaskProfile::Coding, "stable:gene");
         assert!(journal.append(transaction));
         journal
+    }
+
+    fn dna_evolution_report_fixture(
+        operator_decision: GeneScissorsOperatorDecision,
+    ) -> DnaEvolutionControllerReport {
+        let plans = vec![
+            dna_plan(GeneScissorsIntent::Relabel, "aged-purpose"),
+            dna_plan(GeneScissorsIntent::Repair, "repair-format"),
+        ];
+        let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+            TaskProfile::Coding,
+            "stable",
+            &plans,
+        );
+        DnaEvolutionController::default().preview_plans(
+            TaskProfile::Coding,
+            "parent",
+            "stable",
+            &plans,
+            &DnaEvolutionValidationEvidence::passing(),
+            operator_decision,
+            Some(&journal),
+        )
+    }
+
+    fn dna_plan(intent: GeneScissorsIntent, target: &str) -> MutationPlan {
+        MutationPlan::preview(
+            format!("plan-{target}-{}", intent.as_str()),
+            intent,
+            target,
+            "digest-only reason",
+            "digest-only expected effect",
+            "stable",
+        )
     }
 
     fn self_evolution_preflight_fixture(ready: bool) -> SelfEvolutionPromotionPreflightReport {
