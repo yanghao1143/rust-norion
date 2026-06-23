@@ -1141,6 +1141,18 @@ acceptance-plan source for this schema, so eval and test contracts must keep
 entrypoints, allowed inputs, produced outputs, report fields, and forbidden
 capabilities in lockstep.
 
+`self_improve_proposal_repair_factor_queue_v1` and
+`self_improve_proposal_repair_factor_readiness_report_v1` are the DNA-inspired
+repair-factor bridge for the same assignment surface. The queue relabels
+targets into report-only `repair_factor:*` records. The readiness report then
+checks whether each factor has evidence ids, a concrete target action, a real
+old-label to new-label transition, and checked/passed validation before the
+next prompt treats it as ready for a relabel-and-repair plan. Missing business
+requirements remain repair objectives; missing evidence, validation, target
+action, or repair labels remain blocked reasons. Both reports are read-only,
+candidate-only, `auto_apply=false`, and do not authorize memory, NDKV, genome,
+or adaptive-state writes.
+
 ## Ledger Gate Report Schema
 
 `ledger_gate_report_v1` is the broad report-gate surface for the current
