@@ -1674,6 +1674,34 @@ if ($daemonStatus.live_status_bundle.daemon.daemon_round_transition_status.trans
 Assert-NextRoundDecisionReportV1 -Report $daemonStatus.live_status_bundle.next_round_decision_report_v1 -Decision $daemonStatus.next_round_decision -Name "active-daemon-live-bundle"
 Assert-NextRoundDownstreamStatusConsumersV1 -Projection $daemonStatus.live_status_bundle.next_round_downstream_status_consumers_v1 -Report $daemonStatus.live_status_bundle.next_round_decision_report_v1 -Name "active-daemon-live-bundle" -DaemonRoundTransitionStatus $daemonStatus.live_status_bundle.daemon.daemon_round_transition_status
 
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $daemonDir "report.json") -Value (@{
+    rounds = 2
+    success = 2
+    failures = 0
+    success_rate = 100.0
+    report_gate = @{
+        passed = $true
+        failures = @()
+    }
+} | ConvertTo-Json -Depth 10)
+$daemonAutoReportJsonText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $daemonDir -JsonStatus
+if ($LASTEXITCODE -ne 0) {
+    throw "status daemon auto report json command failed with exit code $LASTEXITCODE"
+}
+$daemonAutoReportStatus = ($daemonAutoReportJsonText | Out-String | ConvertFrom-Json)
+if ($daemonAutoReportStatus.ledger_source -ne "daemon_auto" -or $daemonAutoReportStatus.daemon_ledger_auto_selected -ne $true) {
+    throw "daemon auto report status did not auto-select daemon ledger"
+}
+if ($daemonAutoReportStatus.report_source -ne "daemon_auto" -or $daemonAutoReportStatus.daemon_report_auto_selected -ne $true) {
+    throw "daemon auto report status did not auto-select daemon report"
+}
+if ($daemonAutoReportStatus.report.exists -ne $true -or $daemonAutoReportStatus.report.path -ne (Join-Path $daemonDir "report.json")) {
+    throw "daemon auto report status did not expose daemon report path"
+}
+if ($daemonAutoReportStatus.live_status_bundle.report_gate.passed -ne $true -or $daemonAutoReportStatus.next_round_decision.reason_code -ne "active_round_in_progress_wait_for_completion") {
+    throw "daemon auto report status did not use report-gate evidence for next-round decision"
+}
+
 $strictActiveDaemonDir = Join-Path $testDir "daemon-strict-active-ledger-gate"
 New-Item -ItemType Directory -Force -Path $strictActiveDaemonDir | Out-Null
 $strictActiveLatest = [ordered]@{

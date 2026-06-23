@@ -4395,6 +4395,26 @@ if (
 if ($UseDaemonLedgerEffective) {
     $Ledger = Join-Path $DaemonWorkDir "evolution-ledger.jsonl"
 }
+$DaemonReportAutoSelected = $false
+$DaemonReportCandidate = Join-Path $DaemonWorkDir "report.json"
+$DaemonReportCandidatePath = Resolve-RepoPath $DaemonReportCandidate
+if (
+    -not $PSBoundParameters.ContainsKey("ReportJson") `
+        -and [string]::IsNullOrWhiteSpace($ReportJson) `
+        -and -not [bool]$SkipDaemon `
+        -and $null -ne $daemonStatus `
+        -and (
+            $daemonStatus.running -eq $true `
+                -or (
+                    (Has-Property $daemonStatus "activity_ok") `
+                        -and $daemonStatus.activity_ok -eq $true
+                )
+        ) `
+        -and (Test-Path -LiteralPath $DaemonReportCandidatePath)
+) {
+    $ReportJson = $DaemonReportCandidate
+    $DaemonReportAutoSelected = $true
+}
 $LedgerPath = Resolve-RepoPath $Ledger
 $ReportPath = Resolve-RepoPath $ReportJson
 $RemoteStatusPath = Resolve-RepoPath $RemoteChainStatusJson
@@ -4533,6 +4553,8 @@ $status = [pscustomobject][ordered]@{
     backend_endpoint = $Backend
     ledger_source = if ($DaemonLedgerAutoSelected) { "daemon_auto" } elseif ($UseDaemonLedgerEffective) { "daemon" } else { "argument" }
     daemon_ledger_auto_selected = $DaemonLedgerAutoSelected
+    report_source = if ($DaemonReportAutoSelected) { "daemon_auto" } elseif (-not [string]::IsNullOrWhiteSpace($ReportJson)) { "argument" } else { "none" }
+    daemon_report_auto_selected = $DaemonReportAutoSelected
     ledger = $ledgerSummary
     report = $reportStatus
     backend = $backendHealth
