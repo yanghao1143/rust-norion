@@ -58,6 +58,53 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-mutation-repair-fixtures" if index + 1 < raw.len() => {
+            *parser.benchmark_min_mutation_repair_fixtures = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-mutation-repair-fixture-kinds" if index + 1 < raw.len() => {
+            *parser.benchmark_min_mutation_repair_fixture_kinds =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-mutation-repair-candidates" if index + 1 < raw.len() => {
+            *parser.benchmark_min_mutation_repair_candidates =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-mutation-repair-review-packets" if index + 1 < raw.len() => {
+            *parser.benchmark_min_mutation_repair_review_packets =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-malignant-gene-recovery-drills" if index + 1 < raw.len() => {
+            *parser.benchmark_min_malignant_gene_recovery_drills =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-malignant-gene-quarantines" if index + 1 < raw.len() => {
+            *parser.benchmark_min_malignant_gene_quarantines =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-malignant-gene-cut-candidates" if index + 1 < raw.len() => {
+            *parser.benchmark_min_malignant_gene_cut_candidates =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-malignant-gene-regeneration-candidates" if index + 1 < raw.len() => {
+            *parser.benchmark_min_malignant_gene_regeneration_candidates =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         _ => None,
     }
 }

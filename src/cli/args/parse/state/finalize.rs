@@ -244,6 +244,21 @@ impl ParseState {
             benchmark_min_gene_scissors_proposal_device_profiles: self.benchmark_min_gene_scissors_proposal_device_profiles,
             benchmark_min_reasoning_genome_repair_payloads: self.benchmark_min_reasoning_genome_repair_payloads,
             benchmark_min_reasoning_genome_regeneration_payloads: self.benchmark_min_reasoning_genome_regeneration_payloads,
+            benchmark_min_mutation_repair_fixtures: self.benchmark_min_mutation_repair_fixtures,
+            benchmark_min_mutation_repair_fixture_kinds: self
+                .benchmark_min_mutation_repair_fixture_kinds,
+            benchmark_min_mutation_repair_candidates: self
+                .benchmark_min_mutation_repair_candidates,
+            benchmark_min_mutation_repair_review_packets: self
+                .benchmark_min_mutation_repair_review_packets,
+            benchmark_min_malignant_gene_recovery_drills: self
+                .benchmark_min_malignant_gene_recovery_drills,
+            benchmark_min_malignant_gene_quarantines: self
+                .benchmark_min_malignant_gene_quarantines,
+            benchmark_min_malignant_gene_cut_candidates: self
+                .benchmark_min_malignant_gene_cut_candidates,
+            benchmark_min_malignant_gene_regeneration_candidates: self
+                .benchmark_min_malignant_gene_regeneration_candidates,
             benchmark_min_memory_governance_cases: self.benchmark_min_memory_governance_cases,
             benchmark_min_memory_governance_device_profiles: self.benchmark_min_memory_governance_device_profiles,
             benchmark_min_memory_retention_activity_cases: self.benchmark_min_memory_retention_activity_cases,

@@ -70,6 +70,22 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         "8".to_owned(),
         "--benchmark-min-reasoning-genome-regeneration-payloads".to_owned(),
         "9".to_owned(),
+        "--benchmark-min-mutation-repair-fixtures".to_owned(),
+        "10".to_owned(),
+        "--benchmark-min-mutation-repair-fixture-kinds".to_owned(),
+        "11".to_owned(),
+        "--benchmark-min-mutation-repair-candidates".to_owned(),
+        "12".to_owned(),
+        "--benchmark-min-mutation-repair-review-packets".to_owned(),
+        "13".to_owned(),
+        "--benchmark-min-malignant-gene-recovery-drills".to_owned(),
+        "14".to_owned(),
+        "--benchmark-min-malignant-gene-quarantines".to_owned(),
+        "15".to_owned(),
+        "--benchmark-min-malignant-gene-cut-candidates".to_owned(),
+        "16".to_owned(),
+        "--benchmark-min-malignant-gene-regeneration-candidates".to_owned(),
+        "17".to_owned(),
     ]);
 
     assert!(args.benchmark_gate_enabled);
@@ -97,6 +113,17 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         args.benchmark_min_reasoning_genome_regeneration_payloads,
         Some(9)
     );
+    assert_eq!(args.benchmark_min_mutation_repair_fixtures, Some(10));
+    assert_eq!(args.benchmark_min_mutation_repair_fixture_kinds, Some(11));
+    assert_eq!(args.benchmark_min_mutation_repair_candidates, Some(12));
+    assert_eq!(args.benchmark_min_mutation_repair_review_packets, Some(13));
+    assert_eq!(args.benchmark_min_malignant_gene_recovery_drills, Some(14));
+    assert_eq!(args.benchmark_min_malignant_gene_quarantines, Some(15));
+    assert_eq!(args.benchmark_min_malignant_gene_cut_candidates, Some(16));
+    assert_eq!(
+        args.benchmark_min_malignant_gene_regeneration_candidates,
+        Some(17)
+    );
     let gate = args.benchmark_gate();
     assert_eq!(gate.min_reasoning_genome_expression_cases, Some(2));
     assert_eq!(
@@ -109,6 +136,14 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
     assert_eq!(gate.min_gene_scissors_proposal_device_profiles, Some(7));
     assert_eq!(gate.min_reasoning_genome_repair_payloads, Some(8));
     assert_eq!(gate.min_reasoning_genome_regeneration_payloads, Some(9));
+    assert_eq!(gate.min_mutation_repair_fixtures, Some(10));
+    assert_eq!(gate.min_mutation_repair_fixture_kinds, Some(11));
+    assert_eq!(gate.min_mutation_repair_candidates, Some(12));
+    assert_eq!(gate.min_mutation_repair_review_packets, Some(13));
+    assert_eq!(gate.min_malignant_gene_recovery_drills, Some(14));
+    assert_eq!(gate.min_malignant_gene_quarantines, Some(15));
+    assert_eq!(gate.min_malignant_gene_cut_candidates, Some(16));
+    assert_eq!(gate.min_malignant_gene_regeneration_candidates, Some(17));
 }
 
 #[test]

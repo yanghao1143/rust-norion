@@ -468,6 +468,30 @@ impl Args {
         if let Some(value) = self.benchmark_min_reasoning_genome_regeneration_payloads {
             gate.min_reasoning_genome_regeneration_payloads = Some(value);
         }
+        if let Some(value) = self.benchmark_min_mutation_repair_fixtures {
+            gate.min_mutation_repair_fixtures = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_mutation_repair_fixture_kinds {
+            gate.min_mutation_repair_fixture_kinds = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_mutation_repair_candidates {
+            gate.min_mutation_repair_candidates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_mutation_repair_review_packets {
+            gate.min_mutation_repair_review_packets = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_malignant_gene_recovery_drills {
+            gate.min_malignant_gene_recovery_drills = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_malignant_gene_quarantines {
+            gate.min_malignant_gene_quarantines = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_malignant_gene_cut_candidates {
+            gate.min_malignant_gene_cut_candidates = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_malignant_gene_regeneration_candidates {
+            gate.min_malignant_gene_regeneration_candidates = Some(value);
+        }
         if let Some(value) = self.benchmark_min_memory_governance_cases {
             gate.min_memory_governance_cases = Some(value);
         }
