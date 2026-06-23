@@ -3986,8 +3986,13 @@ function New-NextRoundDecision {
             -and $activityOk -eq $true
     )
 
+    $safeToContinueTransitionKinds = @(
+        "round_done_waiting_ledger_commit",
+        "post_round_activity",
+        "idle_completed"
+    )
     $safeToWait = $reportGateAllowsActiveWait -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
-    $safeToContinue = $reportGatePassed -eq $true -and $transitionKind -eq "round_done_waiting_ledger_commit" -and $roundInProgress -eq $false -and $activityOk -eq $true
+    $safeToContinue = $reportGatePassed -eq $true -and ($safeToContinueTransitionKinds -contains $transitionKind) -and $roundInProgress -eq $false -and $activityOk -eq $true
     $operatorBlocked = -not ($safeToWait -or $safeToContinue)
 
     $displayState = "blocked-operator-attention"
@@ -4001,7 +4006,13 @@ function New-NextRoundDecision {
         }
     } elseif ($safeToContinue) {
         $displayState = "safe-to-continue-after-current-round"
-        $reasonCode = "done_marker_seen_wait_for_ledger_commit_then_continue"
+        if ($transitionKind -eq "idle_completed") {
+            $reasonCode = "idle_completed_report_gate_passed_ready_for_next_round"
+        } elseif ($transitionKind -eq "post_round_activity") {
+            $reasonCode = "post_round_activity_report_gate_passed_ready_for_next_round"
+        } else {
+            $reasonCode = "done_marker_seen_wait_for_ledger_commit_then_continue"
+        }
     } elseif ($reportGatePassed -eq $false) {
         $reasonCode = "report_gate_failed_operator_attention_required"
     } elseif ($null -eq $reportGatePassed) {

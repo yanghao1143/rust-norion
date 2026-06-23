@@ -398,8 +398,9 @@ function Assert-NextRoundDecisionFixture {
                 }
             }
             "safe-to-continue-after-current-round" {
-                if ($status.transition_kind -ne "round_done_waiting_ledger_commit" -or $status.round_in_progress -ne $false -or $example.live_status_bundle.report_gate.passed -ne $true) {
-                    throw "safe-to-continue example $($example.name) lacks done-waiting-ledger passed-gate evidence"
+                $safeToContinueKinds = @("round_done_waiting_ledger_commit", "post_round_activity", "idle_completed")
+                if (($safeToContinueKinds -notcontains $status.transition_kind) -or $status.round_in_progress -ne $false -or $example.live_status_bundle.report_gate.passed -ne $true) {
+                    throw "safe-to-continue example $($example.name) lacks completed/post-round passed-gate evidence"
                 }
                 if ($decision.continue_after_current_round -ne $true -or $decision.operator_attention_required -ne $false) {
                     throw "safe-to-continue example $($example.name) has wrong operator decision flags"
@@ -2200,13 +2201,16 @@ Set-Content -Encoding ASCII -LiteralPath (Join-Path $idleDaemonDir "evolution-lo
 Set-Content -Encoding ASCII -LiteralPath (Join-Path $idleDaemonDir "evolution-loop.err.log") -Value 'Running tools\evolution-loop\target\debug\evolution-loop.exe --backend 127.0.0.1:7979 --validation-command cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --require-configured-validation-run'
 (Get-Item -LiteralPath (Join-Path $idleDaemonDir "evolution-ledger.jsonl")).LastWriteTime = (Get-Date).AddMinutes(-20)
 
-$idleDefaultText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $idleDaemonDir -RequireDaemonHealthy -JsonStatus
+$idleDefaultText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $idleDaemonDir -RequireDaemonHealthy -JsonStatus
 if ($LASTEXITCODE -ne 0) {
     throw "idle daemon default freshness gate command failed with exit code $LASTEXITCODE"
 }
 $idleDefault = ($idleDefaultText | Out-String | ConvertFrom-Json)
 if ($idleDefault.readiness.ready -ne $true -or $idleDefault.daemon.activity_state -ne "idle_completed") {
     throw "idle daemon default freshness should stay ready when idle ledger threshold is disabled"
+}
+if ($idleDefault.next_round_decision.display_state -ne "safe-to-continue-after-current-round" -or $idleDefault.next_round_decision.reason_code -ne "idle_completed_report_gate_passed_ready_for_next_round" -or $idleDefault.next_round_decision.operator_attention_blocked -ne $false) {
+    throw "idle daemon with passed report gate should be safe to continue without operator attention"
 }
 
 $postRoundDaemonDir = Join-Path $testDir "daemon-post-round"
@@ -2222,7 +2226,7 @@ Set-Content -Encoding ASCII -LiteralPath (Join-Path $postRoundDaemonDir "evoluti
 )
 Set-Content -Encoding ASCII -LiteralPath (Join-Path $postRoundDaemonDir "evolution-loop.err.log") -Value 'Running tools\evolution-loop\target\debug\evolution-loop.exe --backend 127.0.0.1:7979 --validation-command cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --require-configured-validation-run'
 
-$postRoundText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $postRoundDaemonDir -RequireDaemonHealthy -JsonStatus
+$postRoundText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $postRoundDaemonDir -RequireDaemonHealthy -JsonStatus
 if ($LASTEXITCODE -ne 0) {
     throw "post-round activity daemon status command failed with exit code $LASTEXITCODE"
 }
@@ -2235,6 +2239,9 @@ if ($postRound.daemon.post_round_activity -ne $true) {
 }
 if ([string]$postRound.daemon.post_round_activity_line_preview -notmatch "experience_audit_gate: start") {
     throw "post-round gate activity preview did not preserve latest gate line"
+}
+if ($postRound.next_round_decision.display_state -ne "safe-to-continue-after-current-round" -or $postRound.next_round_decision.reason_code -ne "post_round_activity_report_gate_passed_ready_for_next_round" -or $postRound.next_round_decision.operator_attention_blocked -ne $false) {
+    throw "post-round activity with passed report gate should not be operator-attention blocked"
 }
 
 $doneLagDaemonDir = Join-Path $testDir "daemon-done-ledger-lag"
