@@ -399,6 +399,76 @@ function Get-SelfImproveProposalRepairFactorReadiness {
     }
 }
 
+function Get-SelfImproveProposalRepairFactorRelease {
+    param([object]$Report)
+
+    $release = Get-PropertyValue -Object $Report -Name "self_improve_proposal_repair_factor_release_report_v1"
+    if ($null -eq $release) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            action_required = $null
+            repair_factor_count = $null
+            release_count = $null
+            blocked_count = $null
+            release_ready = $null
+            first_repair_factor_id = $null
+            first_release_ready = $null
+            first_release_status = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_repair_factor_release_report_v1"
+        action_required = Convert-ToNullableBool (Get-PropertyValue -Object $release -Name "action_required")
+        repair_factor_count = Convert-ToNullableInt (Get-PropertyValue -Object $release -Name "repair_factor_count")
+        release_count = Convert-ToNullableInt (Get-PropertyValue -Object $release -Name "release_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $release -Name "blocked_count")
+        release_ready = Convert-ToNullableBool (Get-PropertyValue -Object $release -Name "release_ready")
+        first_repair_factor_id = Get-PropertyValue -Object $release -Name "first_repair_factor_id"
+        first_release_ready = Convert-ToNullableBool (Get-PropertyValue -Object $release -Name "first_release_ready")
+        first_release_status = Get-PropertyValue -Object $release -Name "first_release_status"
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $release -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $release -Name "ndkv_write_allowed")
+    }
+}
+
+function Get-SelfImproveProposalRepairFactorRetagPlan {
+    param([object]$Report)
+
+    $retag = Get-PropertyValue -Object $Report -Name "self_improve_proposal_repair_factor_retag_plan_v1"
+    if ($null -eq $retag) {
+        return [pscustomobject][ordered]@{
+            source = "unavailable"
+            action_required = $null
+            repair_factor_count = $null
+            retag_plan_count = $null
+            blocked_count = $null
+            retag_plan_ready = $null
+            first_repair_factor_id = $null
+            first_retag_ready = $null
+            first_retag_status = $null
+            memory_store_write_allowed = $null
+            ndkv_write_allowed = $null
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        source = "self_improve_proposal_repair_factor_retag_plan_v1"
+        action_required = Convert-ToNullableBool (Get-PropertyValue -Object $retag -Name "action_required")
+        repair_factor_count = Convert-ToNullableInt (Get-PropertyValue -Object $retag -Name "repair_factor_count")
+        retag_plan_count = Convert-ToNullableInt (Get-PropertyValue -Object $retag -Name "retag_plan_count")
+        blocked_count = Convert-ToNullableInt (Get-PropertyValue -Object $retag -Name "blocked_count")
+        retag_plan_ready = Convert-ToNullableBool (Get-PropertyValue -Object $retag -Name "retag_plan_ready")
+        first_repair_factor_id = Get-PropertyValue -Object $retag -Name "first_repair_factor_id"
+        first_retag_ready = Convert-ToNullableBool (Get-PropertyValue -Object $retag -Name "first_retag_ready")
+        first_retag_status = Get-PropertyValue -Object $retag -Name "first_retag_status"
+        memory_store_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $retag -Name "memory_store_write_allowed")
+        ndkv_write_allowed = Convert-ToNullableBool (Get-PropertyValue -Object $retag -Name "ndkv_write_allowed")
+    }
+}
+
 function Get-SelfImproveProposalActionClosure {
     param([object]$Report)
 
@@ -2802,6 +2872,8 @@ function Read-ReportStatus {
         $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacket -Report $report
         $proposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview = Get-SelfImproveProposalMemoryReflectionReuseLookupApprovalTokenDecisionRecordReviewPacketDecisionPreview -Report $report
         $proposalMemoryApprovalTokenIntakePreview = Get-SelfImproveProposalMemoryApprovalTokenIntakePreview -Report $report
+        $proposalRepairFactorRelease = Get-SelfImproveProposalRepairFactorRelease -Report $report
+        $proposalRepairFactorRetagPlan = Get-SelfImproveProposalRepairFactorRetagPlan -Report $report
 
         return [pscustomobject][ordered]@{
             path = $Path
@@ -2838,6 +2910,28 @@ function Read-ReportStatus {
             self_improve_proposal_repair_factor_readiness_first_factor = Get-PropertyValue -Object $proposalRepairFactorReadiness -Name "first_repair_factor_id"
             self_improve_proposal_repair_factor_readiness_first_ready = Get-PropertyValue -Object $proposalRepairFactorReadiness -Name "first_repair_factor_ready"
             self_improve_proposal_repair_factor_readiness_first_status = Get-PropertyValue -Object $proposalRepairFactorReadiness -Name "first_repair_factor_status"
+            self_improve_proposal_repair_factor_release_source = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "source"
+            self_improve_proposal_repair_factor_release_action_required = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "action_required"
+            self_improve_proposal_repair_factor_release_factor_count = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "repair_factor_count"
+            self_improve_proposal_repair_factor_release_release_count = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "release_count"
+            self_improve_proposal_repair_factor_release_blocked_count = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "blocked_count"
+            self_improve_proposal_repair_factor_release_ready = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "release_ready"
+            self_improve_proposal_repair_factor_release_first_factor = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "first_repair_factor_id"
+            self_improve_proposal_repair_factor_release_first_ready = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "first_release_ready"
+            self_improve_proposal_repair_factor_release_first_status = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "first_release_status"
+            self_improve_proposal_repair_factor_release_memory_store_write_allowed = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "memory_store_write_allowed"
+            self_improve_proposal_repair_factor_release_ndkv_write_allowed = Get-PropertyValue -Object $proposalRepairFactorRelease -Name "ndkv_write_allowed"
+            self_improve_proposal_repair_factor_retag_plan_source = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "source"
+            self_improve_proposal_repair_factor_retag_plan_action_required = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "action_required"
+            self_improve_proposal_repair_factor_retag_plan_factor_count = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "repair_factor_count"
+            self_improve_proposal_repair_factor_retag_plan_count = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "retag_plan_count"
+            self_improve_proposal_repair_factor_retag_plan_blocked_count = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "blocked_count"
+            self_improve_proposal_repair_factor_retag_plan_ready = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "retag_plan_ready"
+            self_improve_proposal_repair_factor_retag_plan_first_factor = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "first_repair_factor_id"
+            self_improve_proposal_repair_factor_retag_plan_first_ready = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "first_retag_ready"
+            self_improve_proposal_repair_factor_retag_plan_first_status = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "first_retag_status"
+            self_improve_proposal_repair_factor_retag_plan_memory_store_write_allowed = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "memory_store_write_allowed"
+            self_improve_proposal_repair_factor_retag_plan_ndkv_write_allowed = Get-PropertyValue -Object $proposalRepairFactorRetagPlan -Name "ndkv_write_allowed"
             self_improve_proposal_action_closure_source = Get-PropertyValue -Object $proposalActionClosure -Name "source"
             self_improve_proposal_action_closure_target_count = Get-PropertyValue -Object $proposalActionClosure -Name "target_count"
             self_improve_proposal_action_closure_closed_target_count = Get-PropertyValue -Object $proposalActionClosure -Name "closed_target_count"
@@ -4859,6 +4953,8 @@ if ($ReportPath.Trim().Length -gt 0) {
     $proposalFirstMissing = @($reportStatus.self_improve_proposal_action_assignment_first_missing_requirements | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ","
     Write-Host "report_self_improve_proposal_acceptance_summary_v1: source=$($reportStatus.self_improve_proposal_acceptance_summary_source) evidence_backed_business=$($reportStatus.self_improve_proposal_business_count) advisory_only=$($reportStatus.self_improve_proposal_advisory_count) repair_required=$($reportStatus.self_improve_proposal_repair_count) accepted_without_business_evidence=$($reportStatus.self_improve_proposal_accepted_without_business_evidence_count) convert_advisory_to_business_evidence=$($reportStatus.self_improve_proposal_convert_advisory_to_business_evidence) repair_unvalidated_or_unaccepted=$($reportStatus.self_improve_proposal_repair_unvalidated_or_unaccepted) requires_validation_and_memory_admission=$($reportStatus.self_improve_proposal_requires_validation_and_memory_admission) action_required=$($reportStatus.self_improve_proposal_action_required) primary_action=$($reportStatus.self_improve_proposal_primary_action) actions=$proposalActionsText action_plan_requires_validation_and_memory_admission=$($reportStatus.self_improve_proposal_action_plan_requires_validation_and_memory_admission) action_assignment_source=$($reportStatus.self_improve_proposal_action_assignment_source) action_assignment_targets=$($reportStatus.self_improve_proposal_action_assignment_target_count) action_assignment_first_target=$($reportStatus.self_improve_proposal_action_assignment_first_target) action_assignment_first_missing=$proposalFirstMissing"
     Write-Host "report_self_improve_proposal_repair_factor_readiness_report_v1: source=$($reportStatus.self_improve_proposal_repair_factor_readiness_source) action_required=$($reportStatus.self_improve_proposal_repair_factor_readiness_action_required) factors=$($reportStatus.self_improve_proposal_repair_factor_readiness_factor_count) ready=$($reportStatus.self_improve_proposal_repair_factor_readiness_ready_count) blocked=$($reportStatus.self_improve_proposal_repair_factor_readiness_blocked_count) all_ready=$($reportStatus.self_improve_proposal_repair_factor_readiness_all_ready) first_factor=$($reportStatus.self_improve_proposal_repair_factor_readiness_first_factor) first_ready=$($reportStatus.self_improve_proposal_repair_factor_readiness_first_ready) first_status=$($reportStatus.self_improve_proposal_repair_factor_readiness_first_status)"
+    Write-Host "report_self_improve_proposal_repair_factor_release_report_v1: source=$($reportStatus.self_improve_proposal_repair_factor_release_source) action_required=$($reportStatus.self_improve_proposal_repair_factor_release_action_required) factors=$($reportStatus.self_improve_proposal_repair_factor_release_factor_count) releases=$($reportStatus.self_improve_proposal_repair_factor_release_release_count) blocked=$($reportStatus.self_improve_proposal_repair_factor_release_blocked_count) release_ready=$($reportStatus.self_improve_proposal_repair_factor_release_ready) first_factor=$($reportStatus.self_improve_proposal_repair_factor_release_first_factor) first_ready=$($reportStatus.self_improve_proposal_repair_factor_release_first_ready) first_status=$($reportStatus.self_improve_proposal_repair_factor_release_first_status) memory_store_write_allowed=$($reportStatus.self_improve_proposal_repair_factor_release_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_repair_factor_release_ndkv_write_allowed)"
+    Write-Host "report_self_improve_proposal_repair_factor_retag_plan_v1: source=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_source) action_required=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_action_required) factors=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_factor_count) retag_plans=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_count) blocked=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_blocked_count) retag_plan_ready=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_ready) first_factor=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_first_factor) first_ready=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_first_ready) first_status=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_first_status) memory_store_write_allowed=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_repair_factor_retag_plan_ndkv_write_allowed)"
     Write-Host "report_self_improve_proposal_action_closure_report_v1: source=$($reportStatus.self_improve_proposal_action_closure_source) targets=$($reportStatus.self_improve_proposal_action_closure_target_count) closed=$($reportStatus.self_improve_proposal_action_closure_closed_target_count) open=$($reportStatus.self_improve_proposal_action_closure_open_target_count) first_target=$($reportStatus.self_improve_proposal_action_closure_first_target) first_closed=$($reportStatus.self_improve_proposal_action_closure_first_target_closed) first_kind=$($reportStatus.self_improve_proposal_action_closure_first_target_closure_kind) first_still_requires_memory_admission=$($reportStatus.self_improve_proposal_action_closure_first_target_still_requires_memory_admission)"
     Write-Host "report_self_improve_proposal_memory_admission_readiness_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_readiness_source) targets=$($reportStatus.self_improve_proposal_memory_admission_readiness_target_count) ready=$($reportStatus.self_improve_proposal_memory_admission_readiness_ready_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_readiness_blocked_count) first_target=$($reportStatus.self_improve_proposal_memory_admission_readiness_first_target) first_ready=$($reportStatus.self_improve_proposal_memory_admission_readiness_first_target_ready) all_closed_targets_ready=$($reportStatus.self_improve_proposal_memory_admission_readiness_all_closed_targets_ready) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_readiness_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_readiness_ndkv_write_allowed)"
     Write-Host "report_self_improve_proposal_memory_admission_request_report_v1: source=$($reportStatus.self_improve_proposal_memory_admission_request_source) targets=$($reportStatus.self_improve_proposal_memory_admission_request_target_count) requests=$($reportStatus.self_improve_proposal_memory_admission_request_request_count) blocked=$($reportStatus.self_improve_proposal_memory_admission_request_blocked_count) first_candidate=$($reportStatus.self_improve_proposal_memory_admission_request_first_candidate) first_ready=$($reportStatus.self_improve_proposal_memory_admission_request_first_candidate_ready) all_ready_targets_requested=$($reportStatus.self_improve_proposal_memory_admission_request_all_ready_targets_requested) writer_required=$($reportStatus.self_improve_proposal_memory_admission_request_writer_required) auto_apply=$($reportStatus.self_improve_proposal_memory_admission_request_auto_apply) memory_store_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_request_memory_store_write_allowed) ndkv_write_allowed=$($reportStatus.self_improve_proposal_memory_admission_request_ndkv_write_allowed)"
