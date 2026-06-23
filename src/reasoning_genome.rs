@@ -1,4 +1,5 @@
 mod audit;
+mod evolution;
 mod fixtures;
 mod model;
 mod purpose;
@@ -10,6 +11,11 @@ pub use audit::{
     DNA_LINEAGE_AUDIT_SCHEMA_VERSION, DnaLineageAuditEdge, DnaLineageAuditNode,
     DnaLineageAuditNodeKind, DnaLineageAuditPacket, DnaLineageRepairState,
     contains_blocked_payload_marker,
+};
+pub use evolution::{
+    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaEvolutionCandidate, DnaEvolutionCandidateDecision,
+    DnaEvolutionController, DnaEvolutionControllerReport, DnaEvolutionPolicy,
+    DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus,
 };
 pub use fixtures::{
     MalignantGeneDrillKind, MalignantGeneRecoveryDrill, MalignantGeneRecoveryDrillCorpus,

@@ -196,11 +196,13 @@ pub use production_runtime::{
     ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
 };
 pub use reasoning_genome::{
-    DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
-    DnaGeneSchemaError, DnaGeneSourceEvidence, GENE_PURPOSE_ONTOLOGY_VERSION,
-    GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneLifecycleAction, GeneLifecycleRecord,
-    GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GenePurposeEvidenceClass,
-    GenePurposeFreshness, GenePurposeRecord, GenePurposeRelabelDecision,
+    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaChainKind, DnaEvolutionCandidate,
+    DnaEvolutionCandidateDecision, DnaEvolutionController, DnaEvolutionControllerReport,
+    DnaEvolutionPolicy, DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, DnaGeneChain,
+    DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord, DnaGeneSchemaError, DnaGeneSourceEvidence,
+    GENE_PURPOSE_ONTOLOGY_VERSION, GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneLifecycleAction,
+    GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,
+    GenePurposeEvidenceClass, GenePurposeFreshness, GenePurposeRecord, GenePurposeRelabelDecision,
     GenePurposeRelabelEvidence, GenePurposeRelabelPolicy, GenePurposeRelabelProposal,
     GenePurposeRelabelValidator, GeneScissorsIntent, GeneScissorsOperatorDecision,
     GeneScissorsTransaction, GeneScissorsTransactionJournal, GeneScissorsTransactionJournalError,
