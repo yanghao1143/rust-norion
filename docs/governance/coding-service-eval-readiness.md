@@ -86,9 +86,31 @@ observations from the #75 corpus. Together they check corpus validity,
 request-plan coverage, capability coverage, stream/cancel execution coverage,
 suite pass rate, profile coverage, redaction, and read-only flags.
 
+The CLI surface exposes the same gates without loading or saving engine state:
+
+```text
+rust-norion --coding-service-eval-readiness
+rust-norion --coding-service-eval-runner
+rust-norion --coding-service-eval-runner --trace-schema-gate target/r97-coding-eval.jsonl
+```
+
+When `--trace` or `--trace-schema-gate` is present, the CLI appends a
+digest-only JSONL record using
+`rust-norion-coding-service-eval-readiness-v1`. The record contains report kind,
+request/completion counts, profile/language/capability labels, Rust-validation,
+compiler-check, unit-test, evidence-packet, pass-rate, read-only, write/apply,
+and redaction digests. It does not serialize raw prompts, messages, request
+packets, run records, generated code, or model outputs.
+
+`TraceSchemaGateReport` aggregates these records into
+`coding_service_eval_*` counters so the R97 benchmark/self-goal feed can prove
+that the offline coding runner covered request planning, completion,
+Rust-validation, compile/test readiness, and digest-only evidence while keeping
+memory, genome, and experiment-ledger writes disabled.
+
 The next R97 slices can now wire these reports into:
 
 - stricter local service request/response contracts for #19;
-- endpoint or CLI execution surfaces for #19;
-- benchmark gate feed and runner artifact serialization for #29;
+- endpoint execution surfaces for #19;
+- stricter benchmark gate thresholds and runner artifact serialization for #29;
 - future benchmark gates without enabling automatic memory or genome mutation.

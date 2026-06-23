@@ -489,6 +489,18 @@ pub struct TraceSchemaGateReport {
     pub self_goal_local_evidence_planned_status: usize,
     pub self_goal_local_evidence_write_allowed: usize,
     pub self_goal_local_evidence_applied: usize,
+    pub coding_service_eval_events: usize,
+    pub coding_service_eval_readiness_events: usize,
+    pub coding_service_eval_runner_events: usize,
+    pub coding_service_eval_passed: usize,
+    pub coding_service_eval_requests: usize,
+    pub coding_service_eval_completed: usize,
+    pub coding_service_eval_evidence_packets: usize,
+    pub coding_service_eval_rust_validation_checked: usize,
+    pub coding_service_eval_compile_checked: usize,
+    pub coding_service_eval_unit_test_checked: usize,
+    pub coding_service_eval_write_allowed: usize,
+    pub coding_service_eval_applied: usize,
     pub evolution_goal_queue_store_write_events: usize,
     pub evolution_goal_queue_store_write_applied: usize,
     pub evolution_goal_queue_store_write_held: usize,
@@ -755,7 +767,7 @@ impl TraceSchemaGateReport {
             self.kv_fusion_retained_tokens,
             self.kv_fusion_saved_tokens
         );
-        format!(
+        let extended = format!(
             "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} self_goal_queue_evidence_collection_events={} self_goal_queue_evidence_collection_ready={} self_goal_queue_evidence_collection_complete={} self_goal_queue_evidence_collection_steps={} self_goal_queue_evidence_collection_collected={} self_goal_queue_evidence_collection_passed={} self_goal_queue_evidence_collection_failed={} self_goal_queue_evidence_collection_missing={} self_goal_queue_evidence_collection_manual_missing={} self_goal_queue_evidence_collection_write_allowed={} self_goal_queue_evidence_collection_applied={} self_goal_local_evidence_events={} self_goal_local_evidence_enabled={} self_goal_local_evidence_dry_run={} self_goal_local_evidence_ready={} self_goal_local_evidence_steps={} self_goal_local_evidence_attempted={} self_goal_local_evidence_generated={} self_goal_local_evidence_passed={} self_goal_local_evidence_failed={} self_goal_local_evidence_skipped={} self_goal_local_evidence_manual={} self_goal_local_evidence_planned_status={} self_goal_local_evidence_write_allowed={} self_goal_local_evidence_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
@@ -877,6 +889,21 @@ impl TraceSchemaGateReport {
             self.evolution_goal_queue_store_write_reason_codes,
             self.evolution_goal_queue_store_write_durable_write_allowed,
             self.evolution_goal_queue_store_write_applied_to_disk,
+        );
+        format!(
+            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_write_allowed={} coding_service_eval_applied={}",
+            self.coding_service_eval_events,
+            self.coding_service_eval_readiness_events,
+            self.coding_service_eval_runner_events,
+            self.coding_service_eval_passed,
+            self.coding_service_eval_requests,
+            self.coding_service_eval_completed,
+            self.coding_service_eval_evidence_packets,
+            self.coding_service_eval_rust_validation_checked,
+            self.coding_service_eval_compile_checked,
+            self.coding_service_eval_unit_test_checked,
+            self.coding_service_eval_write_allowed,
+            self.coding_service_eval_applied,
         )
     }
 
@@ -1697,6 +1724,18 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_goal_local_evidence_planned_status = 0;
     let mut self_goal_local_evidence_write_allowed = 0;
     let mut self_goal_local_evidence_applied = 0;
+    let mut coding_service_eval_events = 0;
+    let mut coding_service_eval_readiness_events = 0;
+    let mut coding_service_eval_runner_events = 0;
+    let mut coding_service_eval_passed = 0;
+    let mut coding_service_eval_requests = 0;
+    let mut coding_service_eval_completed = 0;
+    let mut coding_service_eval_evidence_packets = 0;
+    let mut coding_service_eval_rust_validation_checked = 0;
+    let mut coding_service_eval_compile_checked = 0;
+    let mut coding_service_eval_unit_test_checked = 0;
+    let mut coding_service_eval_write_allowed = 0;
+    let mut coding_service_eval_applied = 0;
     let mut evolution_goal_queue_store_write_events = 0;
     let mut evolution_goal_queue_store_write_applied = 0;
     let mut evolution_goal_queue_store_write_held = 0;
@@ -2051,6 +2090,20 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_goal_local_evidence_write_allowed += summary.write_allowed;
             self_goal_local_evidence_applied += summary.applied;
         }
+        if let Some(summary) = coding_service_eval_trace_gate_summary(line) {
+            coding_service_eval_events += summary.events;
+            coding_service_eval_readiness_events += summary.readiness_events;
+            coding_service_eval_runner_events += summary.runner_events;
+            coding_service_eval_passed += summary.passed;
+            coding_service_eval_requests += summary.requests;
+            coding_service_eval_completed += summary.completed;
+            coding_service_eval_evidence_packets += summary.evidence_packets;
+            coding_service_eval_rust_validation_checked += summary.rust_validation_checked;
+            coding_service_eval_compile_checked += summary.compile_checked;
+            coding_service_eval_unit_test_checked += summary.unit_test_checked;
+            coding_service_eval_write_allowed += summary.write_allowed;
+            coding_service_eval_applied += summary.applied;
+        }
         if let Some(summary) = evolution_goal_queue_store_write_trace_gate_summary(line) {
             evolution_goal_queue_store_write_events += summary.events;
             evolution_goal_queue_store_write_applied += summary.applied;
@@ -2382,6 +2435,18 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_goal_local_evidence_planned_status,
         self_goal_local_evidence_write_allowed,
         self_goal_local_evidence_applied,
+        coding_service_eval_events,
+        coding_service_eval_readiness_events,
+        coding_service_eval_runner_events,
+        coding_service_eval_passed,
+        coding_service_eval_requests,
+        coding_service_eval_completed,
+        coding_service_eval_evidence_packets,
+        coding_service_eval_rust_validation_checked,
+        coding_service_eval_compile_checked,
+        coding_service_eval_unit_test_checked,
+        coding_service_eval_write_allowed,
+        coding_service_eval_applied,
         evolution_goal_queue_store_write_events,
         evolution_goal_queue_store_write_applied,
         evolution_goal_queue_store_write_held,
@@ -2771,6 +2836,46 @@ fn self_goal_local_evidence_trace_gate_summary(
         skipped: extract_json_usize_field(line, "skipped_step_count").unwrap_or(0),
         manual: extract_json_usize_field(line, "manual_step_count").unwrap_or(0),
         planned_status: extract_json_usize_field(line, "planned_status_count").unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct CodingServiceEvalTraceGateSummary {
+    events: usize,
+    readiness_events: usize,
+    runner_events: usize,
+    passed: usize,
+    requests: usize,
+    completed: usize,
+    evidence_packets: usize,
+    rust_validation_checked: usize,
+    compile_checked: usize,
+    unit_test_checked: usize,
+    write_allowed: usize,
+    applied: usize,
+}
+
+fn coding_service_eval_trace_gate_summary(line: &str) -> Option<CodingServiceEvalTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-coding-service-eval-readiness-v1\"") {
+        return None;
+    }
+
+    let kind = extract_json_string_field(line, "report_kind").unwrap_or_default();
+
+    Some(CodingServiceEvalTraceGateSummary {
+        events: 1,
+        readiness_events: usize::from(kind == "readiness"),
+        runner_events: usize::from(kind == "runner"),
+        passed: usize::from(extract_json_bool_field(line, "passed").unwrap_or(false)),
+        requests: extract_json_usize_field(line, "request_plan_count").unwrap_or(0),
+        completed: extract_json_usize_field(line, "completed_count").unwrap_or(0),
+        evidence_packets: extract_json_usize_field(line, "evidence_packet_count").unwrap_or(0),
+        rust_validation_checked: extract_json_usize_field(line, "rust_validation_checked_count")
+            .unwrap_or(0),
+        compile_checked: extract_json_usize_field(line, "compile_checked_count").unwrap_or(0),
+        unit_test_checked: extract_json_usize_field(line, "unit_test_checked_count").unwrap_or(0),
         write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
         applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
     })

@@ -81,6 +81,8 @@ impl ParseState {
             self_goal_queue_key: self.self_goal_queue_key,
             self_goal_queue_operator: self.self_goal_queue_operator,
             self_goal_queue_ticket: self.self_goal_queue_ticket,
+            coding_service_eval_readiness: self.coding_service_eval_readiness,
+            coding_service_eval_runner: self.coding_service_eval_runner,
             experience_hygiene: self.experience_hygiene,
             experience_hygiene_limit: self.experience_hygiene_limit,
             experience_hygiene_quarantine: self.experience_hygiene_quarantine,

@@ -521,8 +521,13 @@ writer-gate consolidation baselines.
   R97 now has the first coding service/eval readiness bridge and offline mock
   runner that turn #75 fixtures into deterministic `ChatRequest` plans, execute
   those plans through `ChatSession` streaming/cancellation paths, and score the
-  resulting observations with digest-only evidence. Continue with R97 endpoint,
-  CLI runner, and benchmark gate feed wiring next. The first safe answer to
+  resulting observations with digest-only evidence. R97 now also exposes the
+  read-only CLI runner surface and digest-only trace/benchmark feed counters for
+  those reports, so trace schema gates can observe request, completion,
+  Rust-validation, compiler-check, unit-test, and evidence-packet counts without
+  serializing prompts, messages, generated code, or raw outputs. Continue with
+  the R97 endpoint, stricter benchmark gate thresholds, and artifact
+  serialization next. The first safe answer to
   "when can it set its own goals?" is now in place as
   `SelfGoalProposalReport`: rust-norion can propose the next R97/R98 goals as
   preview-only, digest-only candidate records. `SelfGoalAdmissionGate` now
@@ -1086,9 +1091,14 @@ writer-gate consolidation baselines.
   English, Chinese, Rust, and mixed-language coding lanes. The
   `CodingServiceEvalRunnerReport` now executes those plans through an offline
   `ChatSession` mock runner with stream, cancellation, diagnostics, health,
-  model-capability, max-token, and Rust-validation coverage. #19/#29 continue
-  the local service endpoint, CLI runner, compiler/test, benchmark gate feed,
-  and artifact serialization work for self-improving coding behavior.
+  model-capability, max-token, and Rust-validation coverage. The
+  `--coding-service-eval-readiness` and `--coding-service-eval-runner` CLI
+  gates now emit read-only summaries and optional digest-only JSONL feed records
+  through `--trace` / `--trace-schema-gate`; `TraceSchemaGateReport` aggregates
+  R97 request, completed, Rust-validation, compiler-check, unit-test, evidence,
+  and write/apply counters. #19/#29 continue the local service endpoint,
+  stricter benchmark gate thresholds, and artifact serialization work for
+  self-improving coding behavior.
 - R97/R98 self-goal proposal preview: `SelfGoalProposalReport` generates the
   next bounded candidate goals from the active pursuit queue, including R97
   endpoint/CLI wiring, R97 benchmark feed wiring, the R98 memory-consolidation

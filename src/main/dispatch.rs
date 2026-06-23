@@ -11,6 +11,9 @@ use crate::cli::benchmark::{
     run_benchmark, run_benchmark_for_args, run_production_benchmark_all_devices,
     run_production_kernel_conformance_all_devices,
 };
+use crate::cli::coding_service_eval::{
+    run_coding_service_eval_readiness_cli, run_coding_service_eval_runner_cli,
+};
 use crate::cli::device::{
     print_device_gate_report, print_device_matrix_and_exit, print_device_probe_report,
 };
@@ -167,6 +170,24 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
             if !report.passed {
                 std::process::exit(2);
             }
+        }
+        return Ok(());
+    }
+    if args.coding_service_eval_readiness || args.coding_service_eval_runner {
+        let mut passed = true;
+        if args.coding_service_eval_readiness {
+            passed &= run_coding_service_eval_readiness_cli(&args)?;
+        }
+        if args.coding_service_eval_runner {
+            passed &= run_coding_service_eval_runner_cli(&args)?;
+        }
+        if let Some(trace_schema_gate_path) = &args.trace_schema_gate_path {
+            let report = evaluate_trace_schema_jsonl(trace_schema_gate_path)?;
+            print_trace_schema_gate_report(trace_schema_gate_path, &report);
+            passed &= report.passed;
+        }
+        if !passed {
+            std::process::exit(2);
         }
         return Ok(());
     }
