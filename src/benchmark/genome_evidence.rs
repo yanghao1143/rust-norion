@@ -11,7 +11,10 @@ use crate::writer_gate::{
     UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDecision,
 };
 
-use super::{BenchmarkCase, explicit_device_count, push_unique_device};
+use super::{
+    BenchmarkCase, GenomeRejuvenationSimulationGate, GenomeRejuvenationSimulationReport,
+    explicit_device_count, push_unique_device, run_default_genome_rejuvenation_simulation,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BenchmarkGenomeEvidence {
@@ -27,6 +30,20 @@ pub struct BenchmarkGenomeEvidence {
     pub malignant_gene_cut_candidates: usize,
     pub malignant_gene_regeneration_candidates: usize,
     pub malignant_gene_failed_replay: usize,
+    pub genome_rejuvenation_cases: usize,
+    pub genome_rejuvenation_decisions: usize,
+    pub genome_rejuvenation_repair_factors: usize,
+    pub genome_rejuvenation_ready_repair_factors: usize,
+    pub genome_rejuvenation_ready_retag_plans: usize,
+    pub genome_rejuvenation_rollback_ready: usize,
+    pub genome_rejuvenation_replay_digests: usize,
+    pub genome_rejuvenation_wasted_compute_reduction: usize,
+    pub genome_rejuvenation_repair_factor_gate_reports: usize,
+    pub genome_rejuvenation_repair_factor_gate_holds: usize,
+    pub genome_rejuvenation_repair_factor_gate_ready: usize,
+    pub genome_rejuvenation_repair_factor_gate_rejected: usize,
+    pub genome_rejuvenation_repair_factor_gate_explicit_apply_required: usize,
+    pub genome_rejuvenation_repair_factor_gate_durable_write_allowed: usize,
     pub dna_evolution_reports: usize,
     pub dna_evolution_candidates: usize,
     pub dna_evolution_candidate_previews: usize,
@@ -95,6 +112,20 @@ impl Default for BenchmarkGenomeEvidence {
             malignant_gene_cut_candidates: 0,
             malignant_gene_regeneration_candidates: 0,
             malignant_gene_failed_replay: 0,
+            genome_rejuvenation_cases: 0,
+            genome_rejuvenation_decisions: 0,
+            genome_rejuvenation_repair_factors: 0,
+            genome_rejuvenation_ready_repair_factors: 0,
+            genome_rejuvenation_ready_retag_plans: 0,
+            genome_rejuvenation_rollback_ready: 0,
+            genome_rejuvenation_replay_digests: 0,
+            genome_rejuvenation_wasted_compute_reduction: 0,
+            genome_rejuvenation_repair_factor_gate_reports: 0,
+            genome_rejuvenation_repair_factor_gate_holds: 0,
+            genome_rejuvenation_repair_factor_gate_ready: 0,
+            genome_rejuvenation_repair_factor_gate_rejected: 0,
+            genome_rejuvenation_repair_factor_gate_explicit_apply_required: 0,
+            genome_rejuvenation_repair_factor_gate_durable_write_allowed: 0,
             dna_evolution_reports: 0,
             dna_evolution_candidates: 0,
             dna_evolution_candidate_previews: 0,
@@ -153,6 +184,7 @@ impl Default for BenchmarkGenomeEvidence {
         evidence.record_malignant_gene_recovery_drill_report(
             &default_malignant_gene_recovery_drill_corpus().evaluate(),
         );
+        evidence.record_genome_rejuvenation_report(&run_default_genome_rejuvenation_simulation());
         evidence
     }
 }
@@ -189,6 +221,87 @@ impl BenchmarkGenomeEvidence {
         for failure in &report.failures {
             self.failures
                 .push(format!("malignant_gene_recovery_drill:{failure}"));
+        }
+    }
+
+    fn record_genome_rejuvenation_report(&mut self, report: &GenomeRejuvenationSimulationReport) {
+        self.genome_rejuvenation_cases += report.case_count();
+        self.genome_rejuvenation_decisions += report.decision_count();
+        self.genome_rejuvenation_repair_factors += report.repair_factor_count();
+        self.genome_rejuvenation_ready_repair_factors += report.ready_repair_factor_count();
+        self.genome_rejuvenation_ready_retag_plans += report.ready_retag_plan_count();
+        self.genome_rejuvenation_rollback_ready += report.rollback_ready_count();
+        self.genome_rejuvenation_replay_digests += report.replay_digest_count();
+        self.genome_rejuvenation_wasted_compute_reduction +=
+            report.total_wasted_compute_reduction();
+
+        let gate_report = report.evaluate(&GenomeRejuvenationSimulationGate::default());
+        if !gate_report.passed {
+            for failure in gate_report.failures {
+                self.failures
+                    .push(format!("genome_rejuvenation_gate:{failure}"));
+            }
+        }
+        if !report.ledger_is_digest_only()
+            || contains_private_or_executable_marker(&report.summary_line())
+        {
+            self.failures
+                .push("genome_rejuvenation_report must stay digest-only".to_owned());
+        }
+        if report.write_allowed_count() > 0
+            || report.applied_count() > 0
+            || report.repair_factor_write_allowed_count() > 0
+            || report.repair_factor_applied_count() > 0
+        {
+            self.failures.push(
+                "genome_rejuvenation_report cannot write or apply during benchmark".to_owned(),
+            );
+        }
+        for failure in &report.failures {
+            self.failures.push(format!("genome_rejuvenation:{failure}"));
+        }
+
+        let repair_factor_candidates = report
+            .results
+            .iter()
+            .flat_map(|result| result.repair_factors.iter())
+            .map(UnifiedWriterGateCandidate::genome_repair_factor_release)
+            .collect::<Vec<_>>();
+        if !repair_factor_candidates.is_empty() {
+            let writer_gate = UnifiedWriterGate::new().evaluate(repair_factor_candidates);
+            self.genome_rejuvenation_repair_factor_gate_reports += 1;
+            self.genome_rejuvenation_repair_factor_gate_holds += writer_gate.held_records;
+            self.genome_rejuvenation_repair_factor_gate_ready += writer_gate.ready_records;
+            self.genome_rejuvenation_repair_factor_gate_rejected += writer_gate.rejected_records;
+            if writer_gate.explicit_apply_required {
+                self.genome_rejuvenation_repair_factor_gate_explicit_apply_required += 1;
+            }
+            if writer_gate.durable_write_allowed {
+                self.genome_rejuvenation_repair_factor_gate_durable_write_allowed += 1;
+            }
+            if writer_gate.decision != UnifiedWriterGateDecision::Hold {
+                self.failures.push(format!(
+                    "genome_rejuvenation repair factor writer gate expected hold, got {}",
+                    writer_gate.decision.as_str()
+                ));
+            }
+            if writer_gate.ready_records > 0
+                || writer_gate.rejected_records > 0
+                || writer_gate.durable_write_allowed
+                || writer_gate.write_allowed
+                || writer_gate.applied
+            {
+                self.failures.push(
+                    "genome_rejuvenation repair factor writer gate cannot allow durable writes"
+                        .to_owned(),
+                );
+            }
+            if contains_private_or_executable_marker(&writer_gate.summary_line()) {
+                self.failures.push(
+                    "genome_rejuvenation repair factor writer gate leaked blocked marker"
+                        .to_owned(),
+                );
+            }
         }
     }
 

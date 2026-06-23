@@ -190,6 +190,100 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_genome_rejuvenation_cases) = gate.min_genome_rejuvenation_cases {
+        let observed = summary.genome_rejuvenation_cases();
+        if observed < min_genome_rejuvenation_cases {
+            failures.push(format!(
+                "genome_rejuvenation_cases {} below minimum {}",
+                observed, min_genome_rejuvenation_cases
+            ));
+        }
+    }
+
+    if let Some(min_genome_rejuvenation_repair_factors) =
+        gate.min_genome_rejuvenation_repair_factors
+    {
+        let observed = summary.genome_rejuvenation_repair_factors();
+        if observed < min_genome_rejuvenation_repair_factors {
+            failures.push(format!(
+                "genome_rejuvenation_repair_factors {} below minimum {}",
+                observed, min_genome_rejuvenation_repair_factors
+            ));
+        }
+    }
+
+    if let Some(min_genome_rejuvenation_ready_repair_factors) =
+        gate.min_genome_rejuvenation_ready_repair_factors
+    {
+        let observed = summary.genome_rejuvenation_ready_repair_factors();
+        if observed < min_genome_rejuvenation_ready_repair_factors {
+            failures.push(format!(
+                "genome_rejuvenation_ready_repair_factors {} below minimum {}",
+                observed, min_genome_rejuvenation_ready_repair_factors
+            ));
+        }
+    }
+
+    if let Some(min_genome_rejuvenation_ready_retag_plans) =
+        gate.min_genome_rejuvenation_ready_retag_plans
+    {
+        let observed = summary.genome_rejuvenation_ready_retag_plans();
+        if observed < min_genome_rejuvenation_ready_retag_plans {
+            failures.push(format!(
+                "genome_rejuvenation_ready_retag_plans {} below minimum {}",
+                observed, min_genome_rejuvenation_ready_retag_plans
+            ));
+        }
+    }
+
+    if let Some(min_genome_rejuvenation_repair_factor_gate_holds) =
+        gate.min_genome_rejuvenation_repair_factor_gate_holds
+    {
+        let observed = summary.genome_rejuvenation_repair_factor_gate_holds();
+        if observed < min_genome_rejuvenation_repair_factor_gate_holds {
+            failures.push(format!(
+                "genome_rejuvenation_repair_factor_gate_holds {} below minimum {}",
+                observed, min_genome_rejuvenation_repair_factor_gate_holds
+            ));
+        }
+    }
+
+    if let Some(max_genome_rejuvenation_repair_factor_gate_ready) =
+        gate.max_genome_rejuvenation_repair_factor_gate_ready
+    {
+        let observed = summary.genome_rejuvenation_repair_factor_gate_ready();
+        if observed > max_genome_rejuvenation_repair_factor_gate_ready {
+            failures.push(format!(
+                "genome_rejuvenation_repair_factor_gate_ready {} above maximum {}",
+                observed, max_genome_rejuvenation_repair_factor_gate_ready
+            ));
+        }
+    }
+
+    if let Some(max_genome_rejuvenation_repair_factor_gate_rejected) =
+        gate.max_genome_rejuvenation_repair_factor_gate_rejected
+    {
+        let observed = summary.genome_rejuvenation_repair_factor_gate_rejected();
+        if observed > max_genome_rejuvenation_repair_factor_gate_rejected {
+            failures.push(format!(
+                "genome_rejuvenation_repair_factor_gate_rejected {} above maximum {}",
+                observed, max_genome_rejuvenation_repair_factor_gate_rejected
+            ));
+        }
+    }
+
+    if let Some(max_genome_rejuvenation_repair_factor_gate_durable_write_allowed) =
+        gate.max_genome_rejuvenation_repair_factor_gate_durable_write_allowed
+    {
+        let observed = summary.genome_rejuvenation_repair_factor_gate_durable_write_allowed();
+        if observed > max_genome_rejuvenation_repair_factor_gate_durable_write_allowed {
+            failures.push(format!(
+                "genome_rejuvenation_repair_factor_gate_durable_write_allowed {} above maximum {}",
+                observed, max_genome_rejuvenation_repair_factor_gate_durable_write_allowed
+            ));
+        }
+    }
+
     if let Some(min_dna_evolution_reports) = gate.min_dna_evolution_reports {
         let observed = summary.dna_evolution_reports();
         if observed < min_dna_evolution_reports {
