@@ -925,6 +925,13 @@ the DNA evolution controller produced preview-only candidates with validation
 and rollback replay evidence. Keep
 `--benchmark-max-dna-evolution-activation-eligible 0` when operator approval
 must remain required before any candidate can activate.
+Add `--benchmark-min-dna-evolution-writer-gate-reports`,
+`--benchmark-min-dna-evolution-writer-gate-holds`,
+`--benchmark-min-dna-evolution-writer-gate-explicit-apply-required`,
+`--benchmark-max-dna-evolution-writer-gate-ready`, and
+`--benchmark-max-dna-evolution-writer-gate-durable-write-allowed 0` when the
+same run must prove DNA evolution candidates passed through the unified writer
+gate without enabling durable genome writes.
 
 当实验必须证明 DNA 基因链路径已经产生可审计的 expression / splice 证据，并且 Gene
 Scissors 已经输出修复 proposal 时，可以使用
@@ -945,6 +952,13 @@ trace 与 benchmark 证据还会要求老化基因的 relabel proposal 带有修
 `--benchmark-min-dna-evolution-replay-passed` 和
 `--benchmark-min-dna-evolution-validation-passed`。需要继续强制“没有维护者批准就不能激活”时，
 保留 `--benchmark-max-dna-evolution-activation-eligible 0`。
+当同一次运行还必须证明 DNA evolution 候选已经进入 unified writer gate，
+并且没有打开持久化 genome 写入时，加入
+`--benchmark-min-dna-evolution-writer-gate-reports`、
+`--benchmark-min-dna-evolution-writer-gate-holds`、
+`--benchmark-min-dna-evolution-writer-gate-explicit-apply-required`、
+`--benchmark-max-dna-evolution-writer-gate-ready` 和
+`--benchmark-max-dna-evolution-writer-gate-durable-write-allowed 0`。
 
 Use `--benchmark-min-evolution-live-*` gates when the benchmark must prove
 online inference itself mutated control policy, updated live memory feedback,

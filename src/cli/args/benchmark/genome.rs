@@ -145,6 +145,40 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-dna-evolution-writer-gate-reports" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_writer_gate_reports =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-writer-gate-holds" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_writer_gate_holds =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-writer-gate-explicit-apply-required"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_min_dna_evolution_writer_gate_explicit_apply_required =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-dna-evolution-writer-gate-ready" if index + 1 < raw.len() => {
+            *parser.benchmark_max_dna_evolution_writer_gate_ready =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-dna-evolution-writer-gate-durable-write-allowed"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_max_dna_evolution_writer_gate_durable_write_allowed =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         _ => None,
     }
 }

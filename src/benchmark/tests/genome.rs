@@ -167,6 +167,14 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
     assert!(summary.dna_evolution_transaction_replays() >= summary.dna_evolution_candidates());
     assert_eq!(summary.dna_evolution_replay_passed(), 2);
     assert_eq!(summary.dna_evolution_validation_passed(), 2);
+    assert_eq!(summary.dna_evolution_writer_gate_reports(), 2);
+    assert_eq!(summary.dna_evolution_writer_gate_holds(), 2);
+    assert_eq!(summary.dna_evolution_writer_gate_ready(), 0);
+    assert_eq!(
+        summary.dna_evolution_writer_gate_explicit_apply_required(),
+        2
+    );
+    assert_eq!(summary.dna_evolution_writer_gate_durable_write_allowed(), 0);
     assert!(
         summary
             .summary_line()
@@ -188,6 +196,16 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
             .summary_line()
             .contains("dna_evolution_activation_eligible=0")
     );
+    assert!(
+        summary
+            .summary_line()
+            .contains("dna_evolution_writer_gate_reports=2")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("dna_evolution_writer_gate_durable_write_allowed=0")
+    );
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_repair_payloads: Some(2),
         min_reasoning_genome_regeneration_payloads: Some(1),
@@ -198,6 +216,11 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
         min_dna_evolution_transaction_replays: Some(2),
         min_dna_evolution_replay_passed: Some(2),
         min_dna_evolution_validation_passed: Some(2),
+        min_dna_evolution_writer_gate_reports: Some(2),
+        min_dna_evolution_writer_gate_holds: Some(2),
+        min_dna_evolution_writer_gate_explicit_apply_required: Some(2),
+        max_dna_evolution_writer_gate_ready: Some(0),
+        max_dna_evolution_writer_gate_durable_write_allowed: Some(0),
         ..BenchmarkGate::default()
     });
 
@@ -337,6 +360,9 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         min_dna_evolution_transaction_replays: Some(1),
         min_dna_evolution_replay_passed: Some(1),
         min_dna_evolution_validation_passed: Some(1),
+        min_dna_evolution_writer_gate_reports: Some(1),
+        min_dna_evolution_writer_gate_holds: Some(1),
+        min_dna_evolution_writer_gate_explicit_apply_required: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -358,6 +384,9 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         "dna_evolution_transaction_replays",
         "dna_evolution_replay_passed",
         "dna_evolution_validation_passed",
+        "dna_evolution_writer_gate_reports",
+        "dna_evolution_writer_gate_holds",
+        "dna_evolution_writer_gate_explicit_apply_required",
     ] {
         assert!(
             report
