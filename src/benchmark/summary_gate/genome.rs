@@ -189,4 +189,76 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_dna_evolution_reports) = gate.min_dna_evolution_reports {
+        let observed = summary.dna_evolution_reports();
+        if observed < min_dna_evolution_reports {
+            failures.push(format!(
+                "dna_evolution_reports {} below minimum {}",
+                observed, min_dna_evolution_reports
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_candidates) = gate.min_dna_evolution_candidates {
+        let observed = summary.dna_evolution_candidates();
+        if observed < min_dna_evolution_candidates {
+            failures.push(format!(
+                "dna_evolution_candidates {} below minimum {}",
+                observed, min_dna_evolution_candidates
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_candidate_previews) = gate.min_dna_evolution_candidate_previews {
+        let observed = summary.dna_evolution_candidate_previews();
+        if observed < min_dna_evolution_candidate_previews {
+            failures.push(format!(
+                "dna_evolution_candidate_previews {} below minimum {}",
+                observed, min_dna_evolution_candidate_previews
+            ));
+        }
+    }
+
+    if let Some(max_dna_evolution_activation_eligible) = gate.max_dna_evolution_activation_eligible
+    {
+        let observed = summary.dna_evolution_activation_eligible();
+        if observed > max_dna_evolution_activation_eligible {
+            failures.push(format!(
+                "dna_evolution_activation_eligible {} above maximum {}",
+                observed, max_dna_evolution_activation_eligible
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_transaction_replays) = gate.min_dna_evolution_transaction_replays
+    {
+        let observed = summary.dna_evolution_transaction_replays();
+        if observed < min_dna_evolution_transaction_replays {
+            failures.push(format!(
+                "dna_evolution_transaction_replays {} below minimum {}",
+                observed, min_dna_evolution_transaction_replays
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_replay_passed) = gate.min_dna_evolution_replay_passed {
+        let observed = summary.dna_evolution_replay_passed();
+        if observed < min_dna_evolution_replay_passed {
+            failures.push(format!(
+                "dna_evolution_replay_passed {} below minimum {}",
+                observed, min_dna_evolution_replay_passed
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_validation_passed) = gate.min_dna_evolution_validation_passed {
+        let observed = summary.dna_evolution_validation_passed();
+        if observed < min_dna_evolution_validation_passed {
+            failures.push(format!(
+                "dna_evolution_validation_passed {} below minimum {}",
+                observed, min_dna_evolution_validation_passed
+            ));
+        }
+    }
 }
