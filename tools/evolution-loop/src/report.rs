@@ -1616,6 +1616,26 @@ fn print_report(
         first_action_target_id,
         first_action_target_missing
     );
+    let repair_factor_queue = self_improve_proposal_artifact.repair_factor_queue();
+    let first_repair_factor = repair_factor_queue.first_repair_factor();
+    let first_repair_factor_id = first_repair_factor
+        .map(|factor| factor.repair_factor_id.as_str())
+        .unwrap_or("-");
+    let first_repair_factor_old_label = first_repair_factor
+        .map(|factor| factor.old_label.as_str())
+        .unwrap_or("-");
+    let first_repair_factor_new_label = first_repair_factor
+        .map(|factor| factor.new_label.as_str())
+        .unwrap_or("-");
+    println!(
+        "self_improve_proposal_repair_factor_queue_v1: action_required={} factors={} first_factor={} first_label={}->{} primary_action={}",
+        repair_factor_queue.action_required,
+        repair_factor_queue.repair_factor_count,
+        first_repair_factor_id,
+        first_repair_factor_old_label,
+        first_repair_factor_new_label,
+        repair_factor_queue.primary_action
+    );
     let self_improve_proposal_action_closure =
         self_improve_proposal_artifact.action_closure_report();
     let first_closure_target = self_improve_proposal_action_closure
@@ -3898,6 +3918,7 @@ fn prompt_context_text_with_self_improve_proposals(
     {
         let acceptance = artifact.acceptance_summary_report();
         let assignment = artifact.acceptance_action_assignment();
+        let repair_factor_queue = artifact.repair_factor_queue();
         let closure_report = if assignment.target_count > 0 {
             Some(artifact.action_closure_report())
         } else {
@@ -4009,6 +4030,56 @@ fn prompt_context_text_with_self_improve_proposals(
                 first_require_repair,
                 first_missing
             ));
+            if repair_factor_queue.repair_factor_count > 0 {
+                let first_factor = repair_factor_queue.first_repair_factor();
+                let first_factor_id = first_factor
+                    .map(|factor| factor.repair_factor_id.as_str())
+                    .unwrap_or("none");
+                let first_factor_proposal = first_factor
+                    .map(|factor| factor.proposal_id.as_str())
+                    .unwrap_or("none");
+                let first_factor_round = first_factor
+                    .map(|factor| option_u64_text(factor.source_round))
+                    .unwrap_or_else(|| "none".to_owned());
+                let first_factor_evidence_ids = first_factor
+                    .map(|factor| factor.evidence_ids.join(","))
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| "none".to_owned());
+                let first_factor_missing = first_factor
+                    .map(|factor| factor.missing_requirements.join(","))
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| "none".to_owned());
+                let first_factor_old_label = first_factor
+                    .map(|factor| factor.old_label.as_str())
+                    .unwrap_or("none");
+                let first_factor_new_label = first_factor
+                    .map(|factor| factor.new_label.as_str())
+                    .unwrap_or("none");
+                let first_factor_validation_checked = first_factor
+                    .map(|factor| factor.validation_checked)
+                    .unwrap_or(false);
+                let first_factor_validation_passed = first_factor
+                    .map(|factor| factor.validation_passed)
+                    .unwrap_or(false);
+                lines.push(format!(
+                    "dna_repair_factor=action_required:{} factors:{} first_factor:{} first_proposal:{} first_round:{} old_label:{} new_label:{} target_action:{} first_evidence_ids:{} first_validation_checked:{} first_validation_passed:{} first_missing:{} side_effects:false",
+                    repair_factor_queue.action_required,
+                    repair_factor_queue.repair_factor_count,
+                    first_factor_id,
+                    first_factor_proposal,
+                    first_factor_round,
+                    first_factor_old_label,
+                    first_factor_new_label,
+                    repair_factor_queue.primary_action,
+                    first_factor_evidence_ids,
+                    first_factor_validation_checked,
+                    first_factor_validation_passed,
+                    first_factor_missing
+                ));
+                if !all_action_targets_closed {
+                    lines.push("next_dna_repair_factor_should_relabel_and_repair:true".to_owned());
+                }
+            }
             let closure_report = closure_report.unwrap_or_else(|| artifact.action_closure_report());
             let first_closure_target = closure_report.first_target_id.as_deref().unwrap_or("none");
             let first_closure_kind = closure_report
@@ -5994,7 +6065,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -6044,6 +6115,9 @@ fn report_json_with_remote_chain_and_required_latest_roles(
             self_improve_proposal_artifact
         ),
         self_improve_proposal_artifact::option_action_assignment_report_json(
+            self_improve_proposal_artifact
+        ),
+        self_improve_proposal_artifact::option_repair_factor_queue_report_json(
             self_improve_proposal_artifact
         ),
         self_improve_proposal_artifact::option_action_closure_report_json(
@@ -9759,6 +9833,13 @@ mod tests {
                 "\"evidence_backed_business_improvement\":false",
                 "\"advisory_only\":true",
                 "\"assignment\":{\"read_only\":true",
+                "\"self_improve_proposal_repair_factor_queue_v1\":{\"schema\":\"self_improve_proposal_repair_factor_queue_v1\"",
+                "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_queue\"",
+                "\"repair_factor_count\":1",
+                "\"repair_factor_id\":\"repair-factor-r26-self-improve-r26-helper_contract-projecttypedselfimprovep\"",
+                "\"old_label\":\"quarantined\"",
+                "\"new_label\":\"repair_factor:convert_advisory_to_evidence_backed_business_improvement\"",
+                "\"target_action\":\"convert_advisory_to_evidence_backed_business_improvement\"",
                 "\"self_improve_proposal_action_closure_report_v1\":{\"schema\":\"self_improve_proposal_action_closure_report_v1\"",
                 "\"consumer_surface\":\"evolution_loop_report_only_self_improve_action_closure\"",
                 "\"closed_target_count\":0",
@@ -9958,6 +10039,11 @@ mod tests {
         assert_occurrences(&json, "\"self_improve_proposal_action_assignment_v1\":{", 1);
         assert_occurrences(
             &json,
+            "\"self_improve_proposal_repair_factor_queue_v1\":{",
+            1,
+        );
+        assert_occurrences(
+            &json,
             "\"self_improve_proposal_action_closure_report_v1\":{",
             1,
         );
@@ -10108,6 +10194,10 @@ mod tests {
         assert!(context.contains(
             "self_improve_action_assignment=primary:convert_advisory_to_evidence_backed_business_improvement targets:1 first_target:r31-advisory first_round:31 first_evidence_ids:review:r31 first_memory_admission:quarantined first_validation_checked:true first_validation_passed:true first_memory_accepted:false first_business_evidence:false first_advisory_only:true first_require_repair:false first_missing:accepted_memory_admission,evidence_backed_business_improvement"
         ));
+        assert!(context.contains(
+            "dna_repair_factor=action_required:true factors:1 first_factor:repair-factor-r31-r31-advisory first_proposal:r31-advisory first_round:31 old_label:quarantined new_label:repair_factor:convert_advisory_to_evidence_backed_business_improvement target_action:convert_advisory_to_evidence_backed_business_improvement first_evidence_ids:review:r31 first_validation_checked:true first_validation_passed:true first_missing:accepted_memory_admission,evidence_backed_business_improvement side_effects:false"
+        ));
+        assert!(context.contains("next_dna_repair_factor_should_relabel_and_repair:true"));
         assert!(context.contains(
             "self_improve_action_closure=targets:1 closed:0 open:1 first_target:r31-advisory first_closed:false first_kind:none first_still_requires_memory_admission:true"
         ));

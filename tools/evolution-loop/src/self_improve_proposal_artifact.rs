@@ -85,6 +85,32 @@ pub(crate) struct SelfImproveProposal {
     pub(crate) source_admission_status: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactorQueue {
+    pub(crate) action_required: bool,
+    pub(crate) primary_action: String,
+    pub(crate) repair_factor_count: usize,
+    pub(crate) repair_factors: Vec<SelfImproveProposalRepairFactor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelfImproveProposalRepairFactor {
+    pub(crate) repair_factor_id: String,
+    pub(crate) proposal_id: String,
+    pub(crate) source_round: Option<u64>,
+    pub(crate) old_label: String,
+    pub(crate) new_label: String,
+    pub(crate) target_action: String,
+    pub(crate) evidence_ids: Vec<String>,
+    pub(crate) missing_requirements: Vec<String>,
+    pub(crate) validation_checked: bool,
+    pub(crate) validation_passed: bool,
+    pub(crate) memory_admission_accepted: bool,
+    pub(crate) evidence_backed_business_improvement: bool,
+    pub(crate) advisory_only: bool,
+    pub(crate) require_repair: bool,
+}
+
 pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
     let mut proposals = Vec::new();
     let mut seen = BTreeSet::new();
@@ -152,6 +178,15 @@ pub(crate) fn option_action_assignment_report_json(
             true,
         ),
         None => action_assignment_report_json(&empty_acceptance_action_assignment(), 0, false),
+    }
+}
+
+pub(crate) fn option_repair_factor_queue_report_json(
+    artifact: Option<&SelfImproveProposalArtifact>,
+) -> String {
+    match artifact {
+        Some(artifact) => repair_factor_queue_report_json(&artifact.repair_factor_queue(), true),
+        None => repair_factor_queue_report_json(&empty_repair_factor_queue(), false),
     }
 }
 
@@ -1445,6 +1480,10 @@ impl SelfImproveProposalArtifact {
         SelfImproveProposalActionAssignment::from_reports_and_plan(&reports, &plan)
     }
 
+    pub(crate) fn repair_factor_queue(&self) -> SelfImproveProposalRepairFactorQueue {
+        SelfImproveProposalRepairFactorQueue::from_assignment(&self.acceptance_action_assignment())
+    }
+
     pub(crate) fn action_closure_report(&self) -> SelfImproveProposalActionClosureReport {
         let assignment = self.acceptance_action_assignment();
         let closure_evidence = self.action_closure_evidence(&assignment);
@@ -1678,6 +1717,57 @@ impl SelfImproveProposalArtifact {
                     .and_then(SelfImproveProposal::action_closure_evidence)
             })
             .collect::<Vec<_>>()
+    }
+}
+
+impl SelfImproveProposalRepairFactorQueue {
+    fn from_assignment(assignment: &SelfImproveProposalActionAssignment) -> Self {
+        let repair_factors = assignment
+            .targets
+            .iter()
+            .map(|target| {
+                SelfImproveProposalRepairFactor::from_assignment_target(
+                    target,
+                    &assignment.primary_action,
+                )
+            })
+            .collect::<Vec<_>>();
+        Self {
+            action_required: assignment.action_required && !repair_factors.is_empty(),
+            primary_action: assignment.primary_action.clone(),
+            repair_factor_count: repair_factors.len(),
+            repair_factors,
+        }
+    }
+
+    pub(crate) fn first_repair_factor(&self) -> Option<&SelfImproveProposalRepairFactor> {
+        self.repair_factors.first()
+    }
+}
+
+impl SelfImproveProposalRepairFactor {
+    fn from_assignment_target(
+        target: &SelfImproveProposalActionAssignmentTarget,
+        primary_action: &str,
+    ) -> Self {
+        let old_label = current_repair_factor_label(target);
+        let new_label = next_repair_factor_label(target, primary_action);
+        Self {
+            repair_factor_id: repair_factor_id(target),
+            proposal_id: target.proposal_id.clone(),
+            source_round: target.source_round,
+            old_label,
+            new_label,
+            target_action: primary_action.to_owned(),
+            evidence_ids: target.evidence_ids.clone(),
+            missing_requirements: target.missing_requirements.clone(),
+            validation_checked: target.validation_checked,
+            validation_passed: target.validation_passed,
+            memory_admission_accepted: target.memory_admission_accepted,
+            evidence_backed_business_improvement: target.evidence_backed_business_improvement,
+            advisory_only: target.advisory_only,
+            require_repair: target.require_repair,
+        }
     }
 }
 
@@ -2140,6 +2230,44 @@ fn proposal_requests_no_fail_fast_validation_command(suggested_action: &str) -> 
         && (lower.contains("validation_command") || lower.contains("validation command"))
 }
 
+fn repair_factor_id(target: &SelfImproveProposalActionAssignmentTarget) -> String {
+    match target.source_round {
+        Some(round) => format!("repair-factor-r{}-{}", round, target.proposal_id),
+        None => format!("repair-factor-{}", target.proposal_id),
+    }
+}
+
+fn current_repair_factor_label(target: &SelfImproveProposalActionAssignmentTarget) -> String {
+    if !target.current_memory_admission_decision.trim().is_empty() {
+        target.current_memory_admission_decision.clone()
+    } else if target.require_repair {
+        "repair_required".to_owned()
+    } else if target.advisory_only {
+        "advisory_only".to_owned()
+    } else {
+        "unaccepted_memory_admission".to_owned()
+    }
+}
+
+fn next_repair_factor_label(
+    target: &SelfImproveProposalActionAssignmentTarget,
+    primary_action: &str,
+) -> String {
+    if target.require_repair || !target.validation_checked || !target.validation_passed {
+        "repair_factor:repair_unvalidated_or_unaccepted_proposal".to_owned()
+    } else if target.advisory_only
+        || primary_action == "convert_advisory_to_evidence_backed_business_improvement"
+    {
+        "repair_factor:convert_advisory_to_evidence_backed_business_improvement".to_owned()
+    } else if !target.memory_admission_accepted {
+        "repair_factor:obtain_memory_admission".to_owned()
+    } else if !target.evidence_backed_business_improvement {
+        "repair_factor:add_evidence_backed_business_improvement".to_owned()
+    } else {
+        "repair_factor:review_for_admission".to_owned()
+    }
+}
+
 fn acceptance_report_json(report: &SelfImproveProposalAcceptanceReport) -> String {
     format!(
         "{{\"schema\":\"self_improve_proposal_acceptance_v1\",\"validation_checked\":{},\"validation_passed\":{},\"validation_passed_for_promotion\":{},\"memory_admission_decision\":{},\"memory_admission_accepted\":{},\"evidence_backed_business_improvement\":{},\"advisory_only\":{},\"allow_promotion\":{},\"require_repair\":{},\"failure_reasons\":{}}}",
@@ -2193,6 +2321,10 @@ fn empty_acceptance_action_assignment() -> SelfImproveProposalActionAssignment {
     let summary = SelfImproveProposalAcceptanceSummaryReport::from_reports(&[]);
     let plan = SelfImproveProposalActionPlan::from_summary(0, &summary);
     SelfImproveProposalActionAssignment::from_reports_and_plan(&[], &plan)
+}
+
+fn empty_repair_factor_queue() -> SelfImproveProposalRepairFactorQueue {
+    SelfImproveProposalRepairFactorQueue::from_assignment(&empty_acceptance_action_assignment())
 }
 
 fn empty_action_closure_report() -> SelfImproveProposalActionClosureReport {
@@ -4236,6 +4368,53 @@ fn action_assignment_report_json(
     )
 }
 
+fn repair_factor_queue_report_json(
+    queue: &SelfImproveProposalRepairFactorQueue,
+    artifact_loaded: bool,
+) -> String {
+    let first_factor = queue
+        .first_repair_factor()
+        .map(repair_factor_json)
+        .unwrap_or_else(|| "null".to_owned());
+    let repair_factors = queue
+        .repair_factors
+        .iter()
+        .map(repair_factor_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema\":\"self_improve_proposal_repair_factor_queue_v1\",\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_queue\",\"read_only\":true,\"report_only\":true,\"candidate_only\":true,\"artifact_loaded\":{},\"auto_apply\":false,\"action_required\":{},\"primary_action\":{},\"repair_factor_count\":{},\"first_repair_factor\":{},\"repair_factors\":[{}],\"side_effects\":{}}}",
+        artifact_loaded,
+        queue.action_required,
+        json_string(&queue.primary_action),
+        queue.repair_factor_count,
+        first_factor,
+        repair_factors,
+        side_effects_json()
+    )
+}
+
+fn repair_factor_json(factor: &SelfImproveProposalRepairFactor) -> String {
+    format!(
+        "{{\"repair_factor_id\":{},\"proposal_id\":{},\"source_round\":{},\"old_label\":{},\"new_label\":{},\"target_action\":{},\"evidence_ids\":{},\"missing_requirements\":{},\"validation_checked\":{},\"validation_passed\":{},\"memory_admission_accepted\":{},\"evidence_backed_business_improvement\":{},\"advisory_only\":{},\"require_repair\":{},\"side_effects\":{}}}",
+        json_string(&factor.repair_factor_id),
+        json_string(&factor.proposal_id),
+        option_u64_json(factor.source_round),
+        json_string(&factor.old_label),
+        json_string(&factor.new_label),
+        json_string(&factor.target_action),
+        json_string_array(&factor.evidence_ids),
+        json_string_array(&factor.missing_requirements),
+        factor.validation_checked,
+        factor.validation_passed,
+        factor.memory_admission_accepted,
+        factor.evidence_backed_business_improvement,
+        factor.advisory_only,
+        factor.require_repair,
+        side_effects_json()
+    )
+}
+
 fn action_assignment_targets_json(assignment: &SelfImproveProposalActionAssignment) -> String {
     let targets = assignment
         .targets
@@ -4361,6 +4540,7 @@ mod tests {
         let summary = artifact.acceptance_summary_report();
         let json = option_acceptance_summary_json(Some(&artifact));
         let action_assignment_json = option_action_assignment_report_json(Some(&artifact));
+        let repair_factor_queue_json = option_repair_factor_queue_report_json(Some(&artifact));
 
         assert_eq!(summary.projected_report_count, 3);
         assert_eq!(summary.memory_admission_accepted_count, 2);
@@ -4417,12 +4597,35 @@ mod tests {
         assert!(action_assignment_json.contains("\"assignment\":{\"read_only\":true"));
         assert!(action_assignment_json.contains("\"auto_apply\":false"));
         assert!(action_assignment_json.contains("\"calls_model\":false"));
+        assert!(
+            repair_factor_queue_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_queue_v1\"")
+        );
+        assert!(repair_factor_queue_json.contains(
+            "\"consumer_surface\":\"evolution_loop_report_only_dna_repair_factor_queue\""
+        ));
+        assert!(repair_factor_queue_json.contains("\"repair_factor_count\":2"));
+        assert!(
+            repair_factor_queue_json
+                .contains("\"repair_factor_id\":\"repair-factor-r31-r31-advisory\"")
+        );
+        assert!(repair_factor_queue_json.contains("\"old_label\":\"quarantined\""));
+        assert!(repair_factor_queue_json.contains(
+            "\"new_label\":\"repair_factor:convert_advisory_to_evidence_backed_business_improvement\""
+        ));
+        assert!(
+            repair_factor_queue_json.contains(
+                "\"new_label\":\"repair_factor:repair_unvalidated_or_unaccepted_proposal\""
+            )
+        );
+        assert!(repair_factor_queue_json.contains("\"side_effects\":{\"applies_code\":false"));
     }
 
     #[test]
     fn acceptance_summary_prompt_guidance_is_quiet_without_candidates() {
         let json = option_acceptance_summary_json(None);
         let action_assignment_json = option_action_assignment_report_json(None);
+        let repair_factor_queue_json = option_repair_factor_queue_report_json(None);
 
         assert!(json.contains("\"artifact_loaded\":false"));
         assert!(json.contains("\"total_candidate_count\":0"));
@@ -4447,6 +4650,15 @@ mod tests {
         assert!(action_assignment_json.contains("\"action_required\":false"));
         assert!(action_assignment_json.contains("\"first_target\":null"));
         assert!(action_assignment_json.contains("\"targets\":[]"));
+        assert!(
+            repair_factor_queue_json
+                .contains("\"schema\":\"self_improve_proposal_repair_factor_queue_v1\"")
+        );
+        assert!(repair_factor_queue_json.contains("\"artifact_loaded\":false"));
+        assert!(repair_factor_queue_json.contains("\"action_required\":false"));
+        assert!(repair_factor_queue_json.contains("\"repair_factor_count\":0"));
+        assert!(repair_factor_queue_json.contains("\"first_repair_factor\":null"));
+        assert!(repair_factor_queue_json.contains("\"repair_factors\":[]"));
     }
 
     #[test]
@@ -4455,6 +4667,8 @@ mod tests {
 
         let artifact = from_ledger_text(text);
         let json = option_acceptance_summary_json(Some(&artifact));
+        let repair_factor_queue = artifact.repair_factor_queue();
+        let repair_factor_queue_json = option_repair_factor_queue_report_json(Some(&artifact));
 
         assert!(json.contains("\"advisory_only_count\":1"));
         assert!(json.contains("\"evidence_backed_business_improvement_count\":0"));
@@ -4473,6 +4687,33 @@ mod tests {
         assert!(json.contains("\"proposal_id\":\"r31-advisory\""));
         assert!(json.contains("\"current_memory_admission_decision\":\"quarantined\""));
         assert!(json.contains("\"missing_requirements\":[\"accepted_memory_admission\",\"evidence_backed_business_improvement\"]"));
+        assert!(repair_factor_queue.action_required);
+        assert_eq!(repair_factor_queue.repair_factor_count, 1);
+        let first_repair_factor = repair_factor_queue.first_repair_factor().unwrap();
+        assert_eq!(
+            first_repair_factor.repair_factor_id,
+            "repair-factor-r31-r31-advisory"
+        );
+        assert_eq!(first_repair_factor.old_label, "quarantined");
+        assert_eq!(
+            first_repair_factor.new_label,
+            "repair_factor:convert_advisory_to_evidence_backed_business_improvement"
+        );
+        assert_eq!(
+            first_repair_factor.missing_requirements,
+            vec![
+                "accepted_memory_admission".to_owned(),
+                "evidence_backed_business_improvement".to_owned()
+            ]
+        );
+        assert!(repair_factor_queue_json.contains(
+            "\"first_repair_factor\":{\"repair_factor_id\":\"repair-factor-r31-r31-advisory\""
+        ));
+        assert!(repair_factor_queue_json.contains(
+            "\"target_action\":\"convert_advisory_to_evidence_backed_business_improvement\""
+        ));
+        assert!(repair_factor_queue_json.contains("\"auto_apply\":false"));
+        assert!(repair_factor_queue_json.contains("\"calls_model\":false"));
     }
 
     #[test]
