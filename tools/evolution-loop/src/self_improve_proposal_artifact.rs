@@ -1558,8 +1558,9 @@ impl SelfImproveProposalArtifact {
     pub(crate) fn memory_admission_request_report(
         &self,
     ) -> SelfImproveProposalMemoryAdmissionRequestReport {
-        SelfImproveProposalMemoryAdmissionRequestReport::from_readiness_report(
+        memory_admission_request_report_from_readiness_and_repair(
             &self.memory_admission_readiness_report(),
+            &self.repair_factor_readiness_report(),
         )
     }
 
@@ -1822,6 +1823,85 @@ impl SelfImproveProposalRepairFactor {
             advisory_only: target.advisory_only,
             require_repair: target.require_repair,
         }
+    }
+}
+
+fn memory_admission_request_report_from_readiness_and_repair(
+    readiness: &SelfImproveProposalMemoryAdmissionReadinessReport,
+    repair_readiness: &SelfImproveProposalRepairFactorReadinessReport,
+) -> SelfImproveProposalMemoryAdmissionRequestReport {
+    let ready_repair_proposal_ids = repair_readiness
+        .items
+        .iter()
+        .filter(|item| item.ready_for_repair_plan)
+        .map(|item| item.proposal_id.clone())
+        .collect::<BTreeSet<_>>();
+    let ready_action_proposal_ids = readiness
+        .readiness_items
+        .iter()
+        .filter(|item| item.ready_for_memory_admission)
+        .map(|item| item.proposal_id.clone())
+        .collect::<BTreeSet<_>>();
+    let mut request_items = readiness
+        .readiness_items
+        .iter()
+        .filter(|item| {
+            item.ready_for_memory_admission
+                || !ready_repair_proposal_ids.contains(&item.proposal_id)
+        })
+        .map(SelfImproveProposalMemoryAdmissionRequestItem::from_readiness_item)
+        .collect::<Vec<_>>();
+    let mut inserted_repair_proposal_ids = BTreeSet::new();
+    request_items.extend(
+        repair_readiness
+            .items
+            .iter()
+            .filter(|item| item.ready_for_repair_plan)
+            .filter(|item| !ready_action_proposal_ids.contains(&item.proposal_id))
+            .filter(|item| inserted_repair_proposal_ids.insert(item.proposal_id.clone()))
+            .map(memory_admission_request_item_from_repair_factor_readiness),
+    );
+
+    let target_count = request_items.len();
+    let request_count = request_items
+        .iter()
+        .filter(|item| item.ready_for_memory_admission)
+        .count();
+    let first_candidate = request_items.first();
+
+    SelfImproveProposalMemoryAdmissionRequestReport {
+        target_count,
+        request_count,
+        blocked_count: target_count.saturating_sub(request_count),
+        first_candidate_id: first_candidate.map(|item| item.proposal_id.clone()),
+        first_candidate_ready: first_candidate.is_some_and(|item| item.ready_for_memory_admission),
+        all_ready_targets_requested: target_count > 0 && request_count == target_count,
+        writer_required: request_count > 0,
+        report_only: true,
+        candidate_only: true,
+        auto_apply: false,
+        memory_store_write_allowed: false,
+        ndkv_write_allowed: false,
+        request_items,
+    }
+}
+
+fn memory_admission_request_item_from_repair_factor_readiness(
+    item: &SelfImproveProposalRepairFactorReadinessItem,
+) -> SelfImproveProposalMemoryAdmissionRequestItem {
+    SelfImproveProposalMemoryAdmissionRequestItem {
+        proposal_id: item.proposal_id.clone(),
+        source_round: item.source_round,
+        ready_for_memory_admission: true,
+        requested_admission_action: "request_repair_factor_memory_admission".to_owned(),
+        writer_required: true,
+        evidence_ids: item.evidence_ids.clone(),
+        blocked_reasons: Vec::new(),
+        report_only: true,
+        candidate_only: true,
+        auto_apply: false,
+        memory_store_write_allowed: false,
+        ndkv_write_allowed: false,
     }
 }
 
@@ -4887,6 +4967,12 @@ mod tests {
         let repair_factor_readiness = artifact.repair_factor_readiness_report();
         let repair_factor_readiness_json =
             option_repair_factor_readiness_report_json(Some(&artifact));
+        let memory_admission_readiness = artifact.memory_admission_readiness_report();
+        let memory_admission_request = artifact.memory_admission_request_report();
+        let memory_admission_request_json =
+            option_memory_admission_request_report_json(Some(&artifact));
+        let memory_admission_decision = artifact.memory_admission_decision_report();
+        let writer_plan = artifact.memory_admission_writer_plan();
 
         assert!(json.contains("\"advisory_only_count\":1"));
         assert!(json.contains("\"evidence_backed_business_improvement_count\":0"));
@@ -4946,6 +5032,35 @@ mod tests {
             "\"repair_objectives\":[\"accepted_memory_admission\",\"evidence_backed_business_improvement\"]"
         ));
         assert!(repair_factor_readiness_json.contains("\"blocked_reasons\":[]"));
+        assert_eq!(memory_admission_readiness.target_count, 1);
+        assert_eq!(memory_admission_readiness.ready_count, 0);
+        assert_eq!(memory_admission_readiness.blocked_count, 1);
+        assert_eq!(memory_admission_request.target_count, 1);
+        assert_eq!(memory_admission_request.request_count, 1);
+        assert_eq!(memory_admission_request.blocked_count, 0);
+        assert!(memory_admission_request.all_ready_targets_requested);
+        assert!(memory_admission_request.writer_required);
+        let request_item = memory_admission_request.request_items.first().unwrap();
+        assert_eq!(request_item.proposal_id, "r31-advisory");
+        assert!(request_item.ready_for_memory_admission);
+        assert_eq!(
+            request_item.requested_admission_action,
+            "request_repair_factor_memory_admission"
+        );
+        assert!(request_item.blocked_reasons.is_empty());
+        assert!(memory_admission_request_json.contains("\"request_count\":1"));
+        assert!(memory_admission_request_json.contains("\"blocked_count\":0"));
+        assert!(
+            memory_admission_request_json.contains(
+                "\"requested_admission_action\":\"request_repair_factor_memory_admission\""
+            )
+        );
+        assert!(!memory_admission_request_json.contains("action_target_not_closed"));
+        assert!(memory_admission_decision.admission_writer_preflight_passed);
+        assert!(!memory_admission_decision.gate_blocked);
+        assert!(writer_plan.writer_plan_ready);
+        assert_eq!(writer_plan.ready_plan_count, 1);
+        assert!(!writer_plan.admission_write_authorized);
     }
 
     #[test]
