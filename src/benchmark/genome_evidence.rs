@@ -1,6 +1,9 @@
 use crate::engine::InferenceOutcome;
 use crate::hardware::DeviceClass;
+use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::reasoning_genome::{
+    DnaEvolutionCandidateDecision, DnaEvolutionController, DnaEvolutionControllerReport,
+    DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, GeneScissorsOperatorDecision,
     MalignantGeneRecoveryDrillReport, MutationRepairFixtureReport,
     default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
 };
@@ -21,6 +24,17 @@ pub struct BenchmarkGenomeEvidence {
     pub malignant_gene_cut_candidates: usize,
     pub malignant_gene_regeneration_candidates: usize,
     pub malignant_gene_failed_replay: usize,
+    pub dna_evolution_reports: usize,
+    pub dna_evolution_candidates: usize,
+    pub dna_evolution_candidate_previews: usize,
+    pub dna_evolution_holds: usize,
+    pub dna_evolution_rejects: usize,
+    pub dna_evolution_rollbacks: usize,
+    pub dna_evolution_activation_eligible: usize,
+    pub dna_evolution_transaction_replays: usize,
+    pub dna_evolution_replay_passed: usize,
+    pub dna_evolution_validation_passed: usize,
+    pub dna_evolution_fitness_delta_milli: i64,
     pub total_genes: usize,
     pub total_active_genes: usize,
     pub total_aged_genes: usize,
@@ -71,6 +85,17 @@ impl Default for BenchmarkGenomeEvidence {
             malignant_gene_cut_candidates: 0,
             malignant_gene_regeneration_candidates: 0,
             malignant_gene_failed_replay: 0,
+            dna_evolution_reports: 0,
+            dna_evolution_candidates: 0,
+            dna_evolution_candidate_previews: 0,
+            dna_evolution_holds: 0,
+            dna_evolution_rejects: 0,
+            dna_evolution_rollbacks: 0,
+            dna_evolution_activation_eligible: 0,
+            dna_evolution_transaction_replays: 0,
+            dna_evolution_replay_passed: 0,
+            dna_evolution_validation_passed: 0,
+            dna_evolution_fitness_delta_milli: 0,
             total_genes: 0,
             total_active_genes: 0,
             total_aged_genes: 0,
@@ -150,10 +175,106 @@ impl BenchmarkGenomeEvidence {
         }
     }
 
+    fn record_dna_evolution_report(
+        &mut self,
+        case: &BenchmarkCase,
+        device: DeviceClass,
+        lane: &str,
+        report: &DnaEvolutionControllerReport,
+    ) {
+        self.dna_evolution_reports += 1;
+        self.dna_evolution_candidates += report.candidate_count();
+        self.dna_evolution_candidate_previews +=
+            report.decision_count(DnaEvolutionCandidateDecision::CandidatePreview);
+        self.dna_evolution_holds += report.decision_count(DnaEvolutionCandidateDecision::Hold);
+        self.dna_evolution_rejects += report.decision_count(DnaEvolutionCandidateDecision::Reject);
+        self.dna_evolution_rollbacks +=
+            report.decision_count(DnaEvolutionCandidateDecision::Rollback);
+        self.dna_evolution_activation_eligible += report.activation_eligible_count();
+        self.dna_evolution_transaction_replays += report.transaction_replay_count;
+        self.dna_evolution_fitness_delta_milli += i64::from(report.total_fitness_delta_milli);
+        if report.transaction_replay_passed {
+            self.dna_evolution_replay_passed += 1;
+        }
+        if report.validation_status == DnaEvolutionValidationStatus::Passed {
+            self.dna_evolution_validation_passed += 1;
+        }
+        if !report.is_read_only_preview() {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} must remain read-only preview",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if report.write_allowed || report.applied {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} cannot write or apply during benchmark",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if report.activation_eligible_count() > 0 {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} cannot auto-activate without operator approval",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !report.transaction_replay_passed {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} requires passing transaction replay",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if report.transaction_replay_count < report.candidate_count() {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} transaction replay must cover candidates",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if report.validation_status != DnaEvolutionValidationStatus::Passed {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} requires passing validation evidence",
+                device.as_str(),
+                case.name
+            ));
+        }
+        let trace_line = report.redacted_trace_line();
+        if contains_private_or_executable_marker(&trace_line) {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} trace leaked blocked marker",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !trace_line.contains("\"raw_payload_included\":false") {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} trace must declare raw payload exclusion",
+                device.as_str(),
+                case.name
+            ));
+        }
+    }
+
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let device = outcome.hardware_plan.device;
         let expression = &outcome.reasoning_genome;
         let splice = &outcome.reasoning_genome_splice;
+        let dna_evolution_controller = DnaEvolutionController::default();
+        let dna_evolution_validation = DnaEvolutionValidationEvidence::passing();
+        let dna_evolution_operator = GeneScissorsOperatorDecision::Pending;
+        let dna_evolution_expression = dna_evolution_controller.preview_expression(
+            expression,
+            &dna_evolution_validation,
+            dna_evolution_operator,
+        );
+        let dna_evolution_splice = dna_evolution_controller.preview_splice(
+            splice,
+            &dna_evolution_validation,
+            dna_evolution_operator,
+        );
 
         if expression.expression_gene_count > 0 {
             self.expression_cases += 1;
@@ -198,6 +319,8 @@ impl BenchmarkGenomeEvidence {
         self.total_splice_findings += splice.findings.len();
         self.total_splice_proposals += splice.mutation_plans.len();
         self.total_gene_scissors_proposals += splice.mutation_plans.len();
+        self.record_dna_evolution_report(case, device, "expression", &dna_evolution_expression);
+        self.record_dna_evolution_report(case, device, "splice", &dna_evolution_splice);
 
         if expression.genome_id.trim().is_empty() {
             self.failures.push(format!(

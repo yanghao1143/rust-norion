@@ -120,6 +120,50 @@ impl BenchmarkSummary {
         self.genome_evidence.malignant_gene_failed_replay
     }
 
+    pub fn dna_evolution_reports(&self) -> usize {
+        self.genome_evidence.dna_evolution_reports
+    }
+
+    pub fn dna_evolution_candidates(&self) -> usize {
+        self.genome_evidence.dna_evolution_candidates
+    }
+
+    pub fn dna_evolution_candidate_previews(&self) -> usize {
+        self.genome_evidence.dna_evolution_candidate_previews
+    }
+
+    pub fn dna_evolution_holds(&self) -> usize {
+        self.genome_evidence.dna_evolution_holds
+    }
+
+    pub fn dna_evolution_rejects(&self) -> usize {
+        self.genome_evidence.dna_evolution_rejects
+    }
+
+    pub fn dna_evolution_rollbacks(&self) -> usize {
+        self.genome_evidence.dna_evolution_rollbacks
+    }
+
+    pub fn dna_evolution_activation_eligible(&self) -> usize {
+        self.genome_evidence.dna_evolution_activation_eligible
+    }
+
+    pub fn dna_evolution_transaction_replays(&self) -> usize {
+        self.genome_evidence.dna_evolution_transaction_replays
+    }
+
+    pub fn dna_evolution_replay_passed(&self) -> usize {
+        self.genome_evidence.dna_evolution_replay_passed
+    }
+
+    pub fn dna_evolution_validation_passed(&self) -> usize {
+        self.genome_evidence.dna_evolution_validation_passed
+    }
+
+    pub fn dna_evolution_fitness_delta_milli(&self) -> i64 {
+        self.genome_evidence.dna_evolution_fitness_delta_milli
+    }
+
     pub fn total_reasoning_genome_lifecycle_records(&self) -> usize {
         self.genome_evidence.total_lifecycle_records
     }
