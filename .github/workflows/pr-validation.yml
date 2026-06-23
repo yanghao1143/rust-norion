@@ -20,6 +20,7 @@ on:
       - "crates/norion-memory/**"
       - "crates/norion-test/**"
       - "tools/evolution-loop/**"
+      - "tools/smartsteam-forge/**"
   push:
     paths:
       - ".github/workflows/pr-validation.yml"
@@ -39,6 +40,7 @@ on:
       - "crates/norion-memory/**"
       - "crates/norion-test/**"
       - "tools/evolution-loop/**"
+      - "tools/smartsteam-forge/**"
   workflow_dispatch:
 
 permissions:
