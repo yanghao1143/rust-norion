@@ -261,4 +261,59 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_dna_evolution_writer_gate_reports) = gate.min_dna_evolution_writer_gate_reports
+    {
+        let observed = summary.dna_evolution_writer_gate_reports();
+        if observed < min_dna_evolution_writer_gate_reports {
+            failures.push(format!(
+                "dna_evolution_writer_gate_reports {} below minimum {}",
+                observed, min_dna_evolution_writer_gate_reports
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_writer_gate_holds) = gate.min_dna_evolution_writer_gate_holds {
+        let observed = summary.dna_evolution_writer_gate_holds();
+        if observed < min_dna_evolution_writer_gate_holds {
+            failures.push(format!(
+                "dna_evolution_writer_gate_holds {} below minimum {}",
+                observed, min_dna_evolution_writer_gate_holds
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_writer_gate_explicit_apply_required) =
+        gate.min_dna_evolution_writer_gate_explicit_apply_required
+    {
+        let observed = summary.dna_evolution_writer_gate_explicit_apply_required();
+        if observed < min_dna_evolution_writer_gate_explicit_apply_required {
+            failures.push(format!(
+                "dna_evolution_writer_gate_explicit_apply_required {} below minimum {}",
+                observed, min_dna_evolution_writer_gate_explicit_apply_required
+            ));
+        }
+    }
+
+    if let Some(max_dna_evolution_writer_gate_ready) = gate.max_dna_evolution_writer_gate_ready {
+        let observed = summary.dna_evolution_writer_gate_ready();
+        if observed > max_dna_evolution_writer_gate_ready {
+            failures.push(format!(
+                "dna_evolution_writer_gate_ready {} above maximum {}",
+                observed, max_dna_evolution_writer_gate_ready
+            ));
+        }
+    }
+
+    if let Some(max_dna_evolution_writer_gate_durable_write_allowed) =
+        gate.max_dna_evolution_writer_gate_durable_write_allowed
+    {
+        let observed = summary.dna_evolution_writer_gate_durable_write_allowed();
+        if observed > max_dna_evolution_writer_gate_durable_write_allowed {
+            failures.push(format!(
+                "dna_evolution_writer_gate_durable_write_allowed {} above maximum {}",
+                observed, max_dna_evolution_writer_gate_durable_write_allowed
+            ));
+        }
+    }
 }

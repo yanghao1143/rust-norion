@@ -7,6 +7,9 @@ use crate::reasoning_genome::{
     MalignantGeneRecoveryDrillReport, MutationRepairFixtureReport,
     default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
 };
+use crate::writer_gate::{
+    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDecision,
+};
 
 use super::{BenchmarkCase, explicit_device_count, push_unique_device};
 
@@ -35,6 +38,13 @@ pub struct BenchmarkGenomeEvidence {
     pub dna_evolution_replay_passed: usize,
     pub dna_evolution_validation_passed: usize,
     pub dna_evolution_fitness_delta_milli: i64,
+    pub dna_evolution_writer_gate_reports: usize,
+    pub dna_evolution_writer_gate_preview_only: usize,
+    pub dna_evolution_writer_gate_holds: usize,
+    pub dna_evolution_writer_gate_rejects: usize,
+    pub dna_evolution_writer_gate_ready: usize,
+    pub dna_evolution_writer_gate_explicit_apply_required: usize,
+    pub dna_evolution_writer_gate_durable_write_allowed: usize,
     pub total_genes: usize,
     pub total_active_genes: usize,
     pub total_aged_genes: usize,
@@ -96,6 +106,13 @@ impl Default for BenchmarkGenomeEvidence {
             dna_evolution_replay_passed: 0,
             dna_evolution_validation_passed: 0,
             dna_evolution_fitness_delta_milli: 0,
+            dna_evolution_writer_gate_reports: 0,
+            dna_evolution_writer_gate_preview_only: 0,
+            dna_evolution_writer_gate_holds: 0,
+            dna_evolution_writer_gate_rejects: 0,
+            dna_evolution_writer_gate_ready: 0,
+            dna_evolution_writer_gate_explicit_apply_required: 0,
+            dna_evolution_writer_gate_durable_write_allowed: 0,
             total_genes: 0,
             total_active_genes: 0,
             total_aged_genes: 0,
@@ -252,6 +269,48 @@ impl BenchmarkGenomeEvidence {
         if !trace_line.contains("\"raw_payload_included\":false") {
             self.failures.push(format!(
                 "{}:{} dna_evolution_controller {lane} trace must declare raw payload exclusion",
+                device.as_str(),
+                case.name
+            ));
+        }
+        let writer_gate = UnifiedWriterGate::new().evaluate([
+            UnifiedWriterGateCandidate::dna_evolution_controller_report(report),
+        ]);
+        self.dna_evolution_writer_gate_reports += 1;
+        self.dna_evolution_writer_gate_preview_only += writer_gate.preview_only_records;
+        self.dna_evolution_writer_gate_holds += writer_gate.held_records;
+        self.dna_evolution_writer_gate_rejects += writer_gate.rejected_records;
+        self.dna_evolution_writer_gate_ready += writer_gate.ready_records;
+        if writer_gate.explicit_apply_required {
+            self.dna_evolution_writer_gate_explicit_apply_required += 1;
+        }
+        if writer_gate.durable_write_allowed {
+            self.dna_evolution_writer_gate_durable_write_allowed += 1;
+        }
+        if writer_gate.decision == UnifiedWriterGateDecision::ReadyForExplicitApply {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} writer gate cannot become ready during benchmark",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if writer_gate.durable_write_allowed || writer_gate.write_allowed || writer_gate.applied {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} writer gate cannot allow/apply durable writes during benchmark",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if !writer_gate.explicit_apply_required {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} writer gate must preserve explicit apply boundary",
+                device.as_str(),
+                case.name
+            ));
+        }
+        if contains_private_or_executable_marker(&writer_gate.summary_line()) {
+            self.failures.push(format!(
+                "{}:{} dna_evolution_controller {lane} writer gate summary leaked blocked marker",
                 device.as_str(),
                 case.name
             ));

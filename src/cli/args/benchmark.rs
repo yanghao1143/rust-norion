@@ -190,6 +190,12 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_dna_evolution_transaction_replays: &'a mut Option<usize>,
     pub(crate) benchmark_min_dna_evolution_replay_passed: &'a mut Option<usize>,
     pub(crate) benchmark_min_dna_evolution_validation_passed: &'a mut Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_writer_gate_reports: &'a mut Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_writer_gate_holds: &'a mut Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_writer_gate_explicit_apply_required:
+        &'a mut Option<usize>,
+    pub(crate) benchmark_max_dna_evolution_writer_gate_ready: &'a mut Option<usize>,
+    pub(crate) benchmark_max_dna_evolution_writer_gate_durable_write_allowed: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_governance_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_governance_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_min_memory_retention_activity_cases: &'a mut Option<usize>,
