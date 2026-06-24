@@ -36,6 +36,31 @@ pub(crate) fn post_json(
     read_http_response(&mut stream, path)
 }
 
+pub(crate) fn post_json_url_bearer(
+    base_url: &str,
+    path: &str,
+    body: &str,
+    bearer_token: &str,
+    timeout_secs: u64,
+) -> Result<HttpResponse, String> {
+    let target = HttpTarget::parse(base_url, path)?;
+    if bearer_token.contains(['\r', '\n']) {
+        return Err("bearer token contains a newline".to_owned());
+    }
+    let mut stream = connect(&target.connect_addr, timeout_secs)?;
+    let request = format!(
+        "POST {} HTTP/1.1\r\nhost: {}\r\nauthorization: Bearer {}\r\ncontent-type: application/json; charset=utf-8\r\naccept: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        target.request_path,
+        target.host_header,
+        bearer_token,
+        body.len()
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("write POST {} failed: {error}", target.request_path))?;
+    read_http_response(&mut stream, &target.request_path)
+}
+
 pub(crate) fn post_event_stream(
     backend: &str,
     path: &str,
@@ -65,6 +90,68 @@ fn connect(backend: &str, timeout_secs: u64) -> Result<TcpStream, String> {
         .set_write_timeout(Some(Duration::from_secs(30)))
         .map_err(|error| format!("set write timeout failed: {error}"))?;
     Ok(stream)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HttpTarget {
+    connect_addr: String,
+    host_header: String,
+    request_path: String,
+}
+
+impl HttpTarget {
+    fn parse(base_url: &str, path: &str) -> Result<Self, String> {
+        let trimmed = base_url.trim();
+        if trimmed.is_empty() {
+            return Err("base URL is empty".to_owned());
+        }
+        if trimmed.contains(['\r', '\n']) {
+            return Err("base URL contains a newline".to_owned());
+        }
+        if trimmed.to_ascii_lowercase().starts_with("https://") {
+            return Err(
+                "https NewAPI base URLs are not supported by the built-in client".to_owned(),
+            );
+        }
+        let without_scheme = trimmed
+            .strip_prefix("http://")
+            .or_else(|| trimmed.strip_prefix("HTTP://"))
+            .unwrap_or(trimmed);
+        let (authority, prefix) = without_scheme
+            .split_once('/')
+            .map(|(authority, prefix)| (authority, format!("/{prefix}")))
+            .unwrap_or((without_scheme, String::new()));
+        if authority.trim().is_empty() {
+            return Err("base URL host is empty".to_owned());
+        }
+        if authority.contains('@') {
+            return Err("base URL must not contain user info".to_owned());
+        }
+        let prefix = prefix.trim_end_matches('/');
+        let path = if path.starts_with('/') {
+            path.to_owned()
+        } else {
+            format!("/{path}")
+        };
+        let request_path = if prefix.is_empty() {
+            path
+        } else {
+            format!("{prefix}{path}")
+        };
+        Ok(Self {
+            connect_addr: connect_addr(authority),
+            host_header: authority.to_owned(),
+            request_path,
+        })
+    }
+}
+
+fn connect_addr(authority: &str) -> String {
+    if authority.starts_with('[') || authority.rsplit_once(':').is_some() {
+        authority.to_owned()
+    } else {
+        format!("{authority}:80")
+    }
 }
 
 fn read_http_response(stream: &mut TcpStream, path: &str) -> Result<HttpResponse, String> {
@@ -187,6 +274,23 @@ mod tests {
 
         assert_eq!(http_status(head), 204);
         assert_eq!(body, "");
+    }
+
+    #[test]
+    fn parses_http_base_url_with_v1_prefix() {
+        let target = HttpTarget::parse("http://127.0.0.1:3000/v1", "/chat/completions").unwrap();
+
+        assert_eq!(target.connect_addr, "127.0.0.1:3000");
+        assert_eq!(target.host_header, "127.0.0.1:3000");
+        assert_eq!(target.request_path, "/v1/chat/completions");
+    }
+
+    #[test]
+    fn rejects_https_base_url_without_credentials_in_error() {
+        let error =
+            HttpTarget::parse("https://api.example.test/v1", "/chat/completions").unwrap_err();
+
+        assert!(error.contains("https NewAPI base URLs"));
     }
 
     #[test]

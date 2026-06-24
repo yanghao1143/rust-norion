@@ -6,6 +6,7 @@ use crate::json::{
     json_array_field, json_bool_field, json_object_field, json_string, json_string_array,
     json_string_field, json_u64_field, parse_json_string_array,
 };
+use crate::model_policy;
 
 const MAX_ROLE_RUNTIME_TOKEN_SHARE: f64 = 0.60;
 const ROLE_RUNTIME_TOKEN_SHARE_EPSILON: f64 = 0.0005;
@@ -1372,10 +1373,14 @@ pub(crate) fn selected_route_candidate(summary: &PoolRouteSummary) -> Option<&Po
         .map(str::trim)
         .filter(|role| !role.is_empty())
         .filter(|role| *role != "none")?;
-    summary
-        .candidate_workers
-        .iter()
-        .find(|worker| worker.role == selected_role && worker.role_ready)
+    summary.candidate_workers.iter().find(|worker| {
+        worker.role == selected_role
+            && worker.role_ready
+            && !worker
+                .model
+                .as_deref()
+                .is_some_and(model_policy::is_gpt5_series_model)
+    })
 }
 
 impl PoolAdviceSummary {
@@ -3056,6 +3061,18 @@ mod tests {
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"gpu_layers\":99"));
+    }
+
+    #[test]
+    fn route_selection_skips_gpt5_series_model_candidates() {
+        let route = parse_route(
+            r#"{"task_kind":"review","route_allowed":true,"selected_role":"review","candidate_workers":[{"role":"review","model":"gpt-5-mini","health_ok":true,"role_ready":true},{"role":"review","model":"qwen/qwen3.5-397b-a17b","health_ok":true,"role_ready":true,"base_url":"http://127.0.0.1:8688"}]}"#,
+        );
+
+        let selected = selected_route_candidate(&route).unwrap();
+
+        assert_eq!(selected.model.as_deref(), Some("qwen/qwen3.5-397b-a17b"));
+        assert_eq!(selected.base_url.as_deref(), Some("http://127.0.0.1:8688"));
     }
 
     #[test]

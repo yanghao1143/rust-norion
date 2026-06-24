@@ -1,5 +1,12 @@
+use std::env;
+use std::time::Instant;
+
 use crate::http;
-use crate::json::{json_bool_field, json_string, json_string_field, json_u64_field, preview_text};
+use crate::json::{
+    json_array_field, json_bool_field, json_object_field, json_string, json_string_field,
+    json_u64_field, parse_json_object_array, preview_text,
+};
+use crate::model_policy;
 use crate::pool_stage::PoolStageDispatchPlan;
 use crate::validation;
 
@@ -52,6 +59,17 @@ pub(crate) fn call_backend(
     timeout_secs: u64,
     input: &PoolStageCallInput<'_>,
 ) -> Result<PoolStageCallResult, String> {
+    if let Some(result) = call_newapi_from_env(timeout_secs, input) {
+        return Ok(result);
+    }
+    call_local_backend(backend, timeout_secs, input)
+}
+
+fn call_local_backend(
+    backend: &str,
+    timeout_secs: u64,
+    input: &PoolStageCallInput<'_>,
+) -> Result<PoolStageCallResult, String> {
     let body = request_body(input);
     let response = http::post_json(backend, "/v1/model-pool/call", &body, timeout_secs)
         .map_err(|error| format!("pool stage call {} failed: {error}", input.task_kind))?;
@@ -66,6 +84,124 @@ pub(crate) fn call_backend(
     let mut result = parse_response(input.task_kind, &response.body);
     normalize_contract_answer(input, &mut result);
     Ok(result)
+}
+
+fn call_newapi_from_env(
+    timeout_secs: u64,
+    input: &PoolStageCallInput<'_>,
+) -> Option<PoolStageCallResult> {
+    let config = NewApiConfig::from_env(input.task_kind)?;
+    config
+        .allowed_models
+        .iter()
+        .filter_map(|model| call_newapi_model(&config, model, timeout_secs, input).ok())
+        .next()
+}
+
+fn call_newapi_model(
+    config: &NewApiConfig,
+    model: &str,
+    timeout_secs: u64,
+    input: &PoolStageCallInput<'_>,
+) -> Result<PoolStageCallResult, String> {
+    let started = Instant::now();
+    let body = newapi_chat_completion_body(model, input);
+    let response = http::post_json_url_bearer(
+        &config.base_url,
+        newapi_chat_completions_path(&config.base_url),
+        &body,
+        &config.api_key,
+        timeout_secs,
+    )?;
+    if !(200..300).contains(&response.status) {
+        return Err(format!("NewAPI returned HTTP {}", response.status));
+    }
+    let answer = newapi_answer(&response.body).ok_or_else(|| {
+        format!(
+            "NewAPI response for {} did not include choices[0].message.content",
+            input.task_kind
+        )
+    })?;
+    if answer.trim().is_empty() {
+        return Err("NewAPI response answer is empty".to_owned());
+    }
+    let elapsed_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let mut result = PoolStageCallResult {
+        task_kind: input.task_kind.to_owned(),
+        ok: true,
+        selected_role: Some(newapi_selected_role(input)),
+        selected_port: None,
+        selected_base_url: Some(config.base_url.clone()),
+        answer: None,
+        elapsed_ms: Some(elapsed_ms),
+        answer_chars: None,
+        answer_bytes: None,
+        answer_approx_tokens: None,
+    };
+    set_answer(&mut result, answer);
+    normalize_contract_answer(input, &mut result);
+    Ok(result)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiConfig {
+    base_url: String,
+    api_key: String,
+    allowed_models: Vec<String>,
+}
+
+impl NewApiConfig {
+    fn from_env(task_kind: &str) -> Option<Self> {
+        let base_url = env::var("NORION_NEWAPI_BASE_URL")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())?;
+        let api_key = env::var("NORION_NEWAPI_API_KEY")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())?;
+        let allowed_models = env::var("NORION_NEWAPI_ALLOWED_MODELS")
+            .ok()
+            .map(|value| model_policy::sorted_allowed_models(&value, task_kind))
+            .filter(|models| !models.is_empty())?;
+        Some(Self {
+            base_url,
+            api_key,
+            allowed_models,
+        })
+    }
+}
+
+fn newapi_chat_completion_body(model: &str, input: &PoolStageCallInput<'_>) -> String {
+    format!(
+        "{{\"model\":{},\"messages\":[{{\"role\":\"user\",\"content\":{}}}],\"max_tokens\":{},\"temperature\":0.2,\"stream\":false}}",
+        json_string(model),
+        json_string(&stage_prompt(input)),
+        input.max_tokens.max(1)
+    )
+}
+
+fn newapi_chat_completions_path(base_url: &str) -> &'static str {
+    if base_url.trim_end_matches('/').ends_with("/v1") {
+        "/chat/completions"
+    } else {
+        "/v1/chat/completions"
+    }
+}
+
+fn newapi_answer(body: &str) -> Option<String> {
+    let choices = json_array_field(body, "choices")?;
+    let first_choice = parse_json_object_array(&choices).into_iter().next()?;
+    json_object_field(&first_choice, "message")
+        .and_then(|message| json_string_field(&message, "content"))
+        .or_else(|| json_string_field(&first_choice, "text"))
+}
+
+fn newapi_selected_role(input: &PoolStageCallInput<'_>) -> String {
+    input
+        .dispatch_plan
+        .map(|plan| plan.selected_role.clone())
+        .unwrap_or_else(|| input.task_kind.to_owned())
 }
 
 pub(crate) fn request_body(input: &PoolStageCallInput<'_>) -> String {
@@ -900,6 +1036,51 @@ mod tests {
         assert!(body.contains("change_request"));
         assert!(body.contains("verification"));
         assert!(!body.contains("role_contract"));
+    }
+
+    #[test]
+    fn newapi_body_uses_chat_completions_contract() {
+        let body = newapi_chat_completion_body("qwen/qwen3-next-80b-a3b-instruct", &input());
+
+        assert!(body.contains("\"model\":\"qwen/qwen3-next-80b-a3b-instruct\""));
+        assert!(body.contains("\"messages\":[{\"role\":\"user\""));
+        assert!(body.contains("\"max_tokens\":256"));
+        assert!(body.contains("\"stream\":false"));
+        assert!(body.contains("SmartSteam review helper"));
+        assert!(!body.contains("NORION_NEWAPI_API_KEY"));
+    }
+
+    #[test]
+    fn newapi_path_avoids_double_v1_prefix() {
+        assert_eq!(
+            newapi_chat_completions_path("http://127.0.0.1:3000/v1"),
+            "/chat/completions"
+        );
+        assert_eq!(
+            newapi_chat_completions_path("http://127.0.0.1:3000"),
+            "/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn parses_newapi_chat_completion_answer() {
+        let body = r#"{"choices":[{"message":{"role":"assistant","content":"risk: ok\nchange_request: keep\nverification: cargo test"}}],"usage":{"completion_tokens":17}}"#;
+
+        assert_eq!(
+            newapi_answer(body).as_deref(),
+            Some("risk: ok\nchange_request: keep\nverification: cargo test")
+        );
+    }
+
+    #[test]
+    fn newapi_selected_role_preserves_dispatch_role() {
+        let plan = index_plan();
+        let input = PoolStageCallInput {
+            dispatch_plan: Some(&plan),
+            ..input()
+        };
+
+        assert_eq!(newapi_selected_role(&input), "index");
     }
 
     #[test]
