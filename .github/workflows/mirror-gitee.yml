@@ -1,4 +1,4 @@
-name: Mirror to Gitee
+name: Sync GitHub and Gitee
 
 on:
   push:
@@ -6,14 +6,18 @@ on:
       - "**"
     tags:
       - "**"
+  schedule:
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
-  mirror:
-    name: Sync GitHub refs to Gitee
+  sync:
+    name: Safe bidirectional ref sync
     runs-on: ubuntu-latest
     if: github.repository == 'yanghao1143/rust-norion'
     steps:
@@ -22,29 +26,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Push branches and tags to Gitee
+      - name: Sync refs without overwriting contributors
         env:
+          GH_TOKEN: ${{ github.token }}
           GITEE_USERNAME: ${{ secrets.GITEE_USERNAME }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPOSITORY: babalibaba/rust-norion
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PROTECTED_BRANCHES: main codex-runtime-device-abi
         shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${GITEE_USERNAME}" || -z "${GITEE_TOKEN}" ]]; then
-            echo "GITEE_USERNAME and GITEE_TOKEN secrets are required." >&2
-            exit 1
-          fi
-
-          git remote remove gitee 2>/dev/null || true
-          git remote add gitee "https://${GITEE_USERNAME}:${GITEE_TOKEN}@gitee.com/${GITEE_REPOSITORY}.git"
-          git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' --prune
-
-          while IFS= read -r ref; do
-            branch="${ref#origin/}"
-            if [[ "${branch}" == "HEAD" ]]; then
-              continue
-            fi
-            git push gitee "refs/remotes/origin/${branch}:refs/heads/${branch}"
-          done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin)
-
-          git push gitee --tags
+        run: bash tools/ci/sync-github-gitee.sh
