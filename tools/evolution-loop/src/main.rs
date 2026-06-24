@@ -6,6 +6,7 @@ mod helper_stage_repair;
 mod http;
 mod json;
 mod ledger;
+mod model_registry;
 mod pool_artifacts;
 mod pool_dispatch;
 mod pool_lease;
