@@ -33,13 +33,25 @@ Keep `docs/runbooks/newapi-model-pool.env.example` tracked and placeholder-only.
 
 ```env
 NORION_NEWAPI_BASE_URL=https://newapi.example.invalid
-NORION_NEWAPI_API_KEY=replace-with-secret-from-vault
-NORION_NEWAPI_ALLOWED_MODELS=claude-sonnet-4,o3-mini,gemini-2.5-pro
+# Set NORION_NEWAPI_API_KEY only in local untracked env or a secret manager.
+NORION_NEWAPI_ALLOWED_MODELS=qwen/qwen3-next-80b-a3b-instruct,qwen/qwen3.5-397b-a17b
 ```
 
 `NORION_NEWAPI_ALLOWED_MODELS` is an allowlist, not a routing hint. If a model
 is not listed exactly, the router must treat it as unavailable even when the
 provider exposes it in `/v1/models`.
+
+Current recommended starting allowlist:
+
+| Model ID | Role | Notes |
+| --- | --- | --- |
+| `qwen/qwen3-next-80b-a3b-instruct` | fast/helper | Candidate for helper, summary, review, and other lower-latency routes. |
+| `qwen/qwen3.5-397b-a17b` | coding/heavy worker | Recommended candidate for harder coding, architecture, and synthesis routes where latency is acceptable. A main-thread coding probe passed a Rust small-function prompt in about 6274 ms with clean code output: `pub fn add_one(x: i32) -> i32 { x + 1 }`. |
+
+`moonshotai/kimi-k2.6` is not a default model at this time because current
+operator evidence shows duplicate-output anomalies. Keep it out of
+`NORION_NEWAPI_ALLOWED_MODELS` unless a later verification run clears that
+specific issue.
 
 Prefer stable provider model IDs over display names. Do not use wildcard values
 such as `*`, `all`, `latest`, or `default`; they make later provider changes
@@ -83,7 +95,8 @@ PowerShell spot checks:
 ```powershell
 git status --short
 git diff -- . ':!README.md' ':!LICENSE'
-git grep -n "NORION_NEWAPI_API_KEY=" -- ':!docs/runbooks/newapi-model-pool.env.example'
+$pattern = "NORION_NEWAPI_API_" + "KEY="
+git grep -n $pattern -- ':!docs/runbooks/newapi-model-pool.env.example'
 ```
 
 The last command should return no tracked secret assignment. It is acceptable
