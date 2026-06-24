@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::http;
 use crate::json::{json_string, json_string_field, json_u64_field};
@@ -582,10 +584,5 @@ mod tests {
     #[test]
     fn count_tokens_ignores_extra_whitespace() {
         assert_eq!(count_tokens(" one\n two\tthree "), 3);
-    }
-
-    #[test]
-    fn duration_import_stays_available_for_future_stream_delays() {
-        assert_eq!(Duration::from_millis(0).as_millis(), 0);
     }
 }

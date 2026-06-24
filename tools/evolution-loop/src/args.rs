@@ -93,6 +93,7 @@ pub(crate) struct Config {
     pub(crate) max_repairable_legacy_records: u64,
     pub(crate) max_legacy_metadata_without_clean_gist: u64,
     pub(crate) report: bool,
+    pub(crate) mvp_demo: bool,
     pub(crate) report_gate: bool,
     pub(crate) report_continuation_gate: bool,
     pub(crate) report_json_path: Option<PathBuf>,
@@ -161,6 +162,7 @@ where
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(ParseOutcome::Help),
+            "--mvp-demo" => config.mvp_demo = true,
             "--report" => config.report = true,
             "--report-json" => {
                 config.report = true;
@@ -579,7 +581,7 @@ where
             config.pool_route_json_path = Some(PathBuf::from(DEFAULT_POOL_ROUTE_JSON));
         }
     }
-    if config.report {
+    if config.report || config.mvp_demo {
         Ok(ParseOutcome::Report(config))
     } else {
         Ok(ParseOutcome::Run(config))
@@ -667,6 +669,7 @@ impl Default for Config {
             max_repairable_legacy_records: 0,
             max_legacy_metadata_without_clean_gist: 0,
             report: false,
+            mvp_demo: false,
             report_gate: false,
             report_continuation_gate: false,
             report_json_path: None,
@@ -774,6 +777,7 @@ Options:\n\
   --max-repairable-legacy-records N audit gate maximum repairable legacy records (default 0)\n\
   --max-legacy-metadata-without-clean-gist N audit gate maximum legacy metadata records missing clean gist (default 0)\n\
   --report                         summarize ledger and exit without backend calls\n\
+  --mvp-demo                       run local multi-model MVP wiring demo and exit without backend calls\n\
   --report-json PATH               write machine-readable report JSON artifact\n\
   --run-report-json PATH           refresh machine-readable report JSON after each run-mode round\n\
   --run-report-gate                apply report gate to --run-report-json refreshes\n\
@@ -1521,6 +1525,26 @@ mod tests {
         };
 
         assert_eq!(config.ledger_path, PathBuf::from("x.jsonl"));
+    }
+
+    #[test]
+    fn parses_mvp_demo_as_report_only_mode() {
+        let parsed = parse_args([
+            "--mvp-demo",
+            "--report-json",
+            "target/evolution/mvp-demo.json",
+        ])
+        .unwrap();
+        let ParseOutcome::Report(config) = parsed else {
+            panic!("expected report config");
+        };
+
+        assert!(config.mvp_demo);
+        assert!(config.report);
+        assert_eq!(
+            config.report_json_path,
+            Some(PathBuf::from("target/evolution/mvp-demo.json"))
+        );
     }
 
     #[test]

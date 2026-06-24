@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::BTreeMap;
 
 use crate::json::{
@@ -100,13 +102,15 @@ pub(crate) struct OutcomeSample {
 
 impl OutcomeSample {
     pub(crate) fn from_m3_json(body: &str, default_skill_tag: &str) -> Option<Self> {
-        let model_id = json_string_field(body, "model_id")
+        let model_id = json_string_field(body, "chosen_model")
+            .or_else(|| json_string_field(body, "model_id"))
             .or_else(|| json_string_field(body, "runtime_model"))
             .or_else(|| json_string_field(body, "selected_role"))?;
         let skill_tag = json_string_field(body, "skill_tag")
             .or_else(|| json_string_field(body, "task_kind"))
             .unwrap_or_else(|| default_skill_tag.to_owned());
         let success = json_bool_field(body, "success")
+            .or_else(|| json_bool_field(body, "ok"))
             .or_else(|| json_bool_field(body, "passed"))
             .unwrap_or(false);
         let latency_ms = json_f64_field(body, "latency_ms")
@@ -114,8 +118,10 @@ impl OutcomeSample {
             .or_else(|| json_u64_field(body, "elapsed_ms").map(|value| value as f64));
         let cost = json_f64_field(body, "cost")
             .or_else(|| json_f64_field(body, "cost_hint"))
+            .or_else(|| json_u64_field(body, "cost_estimate_micro_usd").map(|value| value as f64))
             .or_else(|| json_u64_field(body, "runtime_tokens").map(|tokens| tokens as f64));
         let quality_hint = json_f64_field(body, "quality_hint")
+            .or_else(|| json_f64_field(body, "quality_score"))
             .or_else(|| json_f64_field(body, "reward_hint"))
             .map(clamp01);
         let cache_hit = json_bool_field(body, "cache_hit").unwrap_or(false);
