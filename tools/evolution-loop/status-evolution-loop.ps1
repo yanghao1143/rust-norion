@@ -3818,7 +3818,10 @@ function Get-DaemonTransitionKind {
         [string]$LatestRoundState
     )
 
-    if ($ActivityState -eq "active" -and $LatestRoundState -eq "in_progress") {
+    if (($ActivityState -eq "not_running" -or $ActivityState -eq "stale_pid") -and $LatestRoundState -eq "in_progress") {
+        return "restartable_stale_round"
+    }
+    if (($ActivityState -eq "active" -or $ActivityState -eq "slow_in_progress") -and $LatestRoundState -eq "in_progress") {
         return "normal_in_progress"
     }
     if ($ActivityState -eq "round_done_waiting_ledger_commit") {
@@ -3926,7 +3929,8 @@ function New-NextRoundDecision {
     $reportGateFailureCount = if ($null -ne $reportGate -and (Has-Property $reportGate "failure_count")) { $reportGate.failure_count } else { $null }
 
     $safeToWait = $reportGatePassed -eq $true -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
-    $safeToContinue = $reportGatePassed -eq $true -and $transitionKind -eq "round_done_waiting_ledger_commit" -and $roundInProgress -eq $false -and $activityOk -eq $true
+    $safeToRestartStaleRound = $reportGatePassed -eq $true -and $transitionKind -eq "restartable_stale_round"
+    $safeToContinue = ($reportGatePassed -eq $true -and $transitionKind -eq "round_done_waiting_ledger_commit" -and $roundInProgress -eq $false -and $activityOk -eq $true) -or $safeToRestartStaleRound
     $operatorBlocked = -not ($safeToWait -or $safeToContinue)
 
     $displayState = "blocked-operator-attention"
@@ -3936,7 +3940,11 @@ function New-NextRoundDecision {
         $reasonCode = "active_round_in_progress_wait_for_completion"
     } elseif ($safeToContinue) {
         $displayState = "safe-to-continue-after-current-round"
-        $reasonCode = "done_marker_seen_wait_for_ledger_commit_then_continue"
+        if ($transitionKind -eq "restartable_stale_round") {
+            $reasonCode = "daemon_not_running_stale_round_restartable_after_report_gate_passed"
+        } else {
+            $reasonCode = "done_marker_seen_wait_for_ledger_commit_then_continue"
+        }
     } elseif ($reportGatePassed -eq $false) {
         $reasonCode = "report_gate_failed_operator_attention_required"
     } elseif ($null -eq $reportGatePassed) {

@@ -366,10 +366,16 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             println!("[round {round}] {}", plan.meta());
         }
         consecutive_pool_lease_skips = 0;
+        let pool_lease_summary = pool_lease.as_ref().map(|lease| lease.summary().to_owned());
+        if let Some(summary) = pool_lease_summary.as_deref() {
+            println!("[round {round}] pool_lease: acquired {summary}");
+        }
         let base_prompt = &base_prompts[(round - 1) % base_prompts.len()];
         let prompt_context_limit = pool_prompt_context_char_limit(pool_request_plan.as_ref());
+        println!("[round {round}] stage prompt_context:start");
         let prompt =
             prompt_with_current_context_limited(&config, base_prompt, prompt_context_limit)?;
+        println!("[round {round}] stage prompt_context:done");
         println!();
         println!("[round {round}] case={case_name}");
         println!("[round {round}] prompt={}", preview_text(&prompt, 160));
@@ -382,10 +388,6 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             );
         }
 
-        let pool_lease_summary = pool_lease.as_ref().map(|lease| lease.summary().to_owned());
-        if let Some(summary) = pool_lease_summary.as_deref() {
-            println!("[round {round}] pool_lease: acquired {summary}");
-        }
         let mut outcome = run_round(
             &config,
             rust_check_code.as_deref(),
