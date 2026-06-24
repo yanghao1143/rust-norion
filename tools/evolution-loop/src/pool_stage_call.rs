@@ -311,6 +311,35 @@ fn index_field_defaults(input: &PoolStageCallInput<'_>) -> String {
     )
 }
 
+pub(crate) fn request_fingerprint(input: &PoolStageCallInput<'_>, round_window: u64) -> String {
+    let prompt_hash = format!("fnv1a64:{:016x}", fnv1a64(stage_prompt(input).as_bytes()));
+    let route = input
+        .dispatch_plan
+        .map(|plan| {
+            format!(
+                "{}@{}:{}",
+                plan.selected_role,
+                option_u64_text(plan.selected_port),
+                plan.effective_max_tokens
+            )
+        })
+        .unwrap_or_else(|| "none".to_owned());
+    let material = format!(
+        "task_kind={};prompt_hash={};route={};round_window={}",
+        input.task_kind, prompt_hash, route, round_window
+    );
+    format!("fnv1a64:{:016x}", fnv1a64(material.as_bytes()))
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 fn review_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     format!(
         "SmartSteam review helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Never output placeholder contract descriptions.\n- Do not output these phrases as field values: highest concrete code or behavior risk; smallest improvement to make next; one check that would prove the change.\n- Every field value must cite evidence from structured_facts, primary_answer, or final_json.\n- If evidence is weak, name the concrete limitation instead of using a placeholder.\n- Keep exactly three lines, keep the field names unchanged, and do not add prose before or after the lines.",
@@ -987,6 +1016,25 @@ mod tests {
         assert!(body.contains("change_request"));
         assert!(body.contains("verification"));
         assert!(!body.contains("role_contract"));
+    }
+
+    #[test]
+    fn request_fingerprint_is_stable_and_window_scoped() {
+        let plan = test_gate_plan();
+        let input = PoolStageCallInput {
+            task_kind: "test-gate",
+            dispatch_plan: Some(&plan),
+            max_tokens: plan.effective_max_tokens,
+            ..input()
+        };
+
+        let first = request_fingerprint(&input, 22);
+        let second = request_fingerprint(&input, 22);
+        let other_window = request_fingerprint(&input, 23);
+
+        assert_eq!(first, second);
+        assert_ne!(first, other_window);
+        assert!(first.starts_with("fnv1a64:"));
     }
 
     #[test]
