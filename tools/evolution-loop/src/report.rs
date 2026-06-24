@@ -41,6 +41,7 @@ use crate::worker_window_status::{self, WorkerWindowStatusSummary};
 const MAX_HELPER_STAGE_FEEDBACK_ITEMS: usize = 3;
 const MIN_USEFUL_HELPER_STAGE_FEEDBACK_CHARS: usize = 24;
 const RECENT_FAILURE_WINDOW_RECORDS: usize = 5;
+const ROLLBACK_FAILURE_STREAK_THRESHOLD: usize = 2;
 const RECENT_REPEATED_SUCCESSFUL_ANSWER_THRESHOLD: usize = 3;
 const MIN_REPEATED_ADVICE_KEY_CHARS: usize = 24;
 const RECENT_COMPLETED_CHANGE_REQUEST_RECORDS: usize = 8;
@@ -205,6 +206,7 @@ struct ReportSummary {
     recent_stream_truncation_failures: usize,
     recent_missing_final_failures: usize,
     recent_runtime_response_failures: usize,
+    recent_failure_streak: usize,
     recent_repeated_successful_answer: Option<RepeatedAnswerSummary>,
     completed_change_requests: Vec<String>,
     invalid_change_requests: Vec<String>,
@@ -634,6 +636,11 @@ fn summarize_ledger(text: &str) -> ReportSummary {
         .take(RECENT_FAILURE_WINDOW_RECORDS)
         .filter(|record| record.has_runtime_response_failure())
         .count();
+    let recent_failure_streak = records
+        .iter()
+        .rev()
+        .take_while(|record| !record.success)
+        .count();
     let recent_repeated_successful_answer = recent_repeated_successful_answer(&records);
     let completed_change_requests = recent_completed_change_requests(&records);
     let validation_command_coverage_evidence = validation_command_coverage_evidence(&records);
@@ -681,6 +688,7 @@ fn summarize_ledger(text: &str) -> ReportSummary {
         recent_stream_truncation_failures,
         recent_missing_final_failures,
         recent_runtime_response_failures,
+        recent_failure_streak,
         recent_repeated_successful_answer,
         completed_change_requests,
         invalid_change_requests,
@@ -3497,6 +3505,267 @@ fn continuation_gate_report_json(
         option_bool_json(budget_fairness_blocked),
         string_array_json(budget_fairness_reasons)
     )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RollbackTrigger {
+    kind: &'static str,
+    fallback_strategy: &'static str,
+    evidence_id: String,
+    reason: String,
+}
+
+impl RollbackTrigger {
+    fn new(
+        kind: &'static str,
+        fallback_strategy: &'static str,
+        evidence_id: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind,
+            fallback_strategy,
+            evidence_id: evidence_id.into(),
+            reason: reason.into(),
+        }
+    }
+
+    fn priority(&self) -> u8 {
+        match self.fallback_strategy {
+            "wait-current-round" => 3,
+            "quality-only" => 2,
+            "rule-routing" => 1,
+            _ => 0,
+        }
+    }
+
+    fn json(&self) -> String {
+        format!(
+            "{{\"kind\":{},\"fallback_strategy\":{},\"evidence_id\":{},\"reason\":{}}}",
+            json_string(self.kind),
+            json_string(self.fallback_strategy),
+            json_string(&self.evidence_id),
+            json_string(&self.reason)
+        )
+    }
+}
+
+fn rollback_trigger_bundle_report_json(
+    summary: &ReportSummary,
+    pool_budget_fairness: Option<&PoolBudgetFairnessSummary>,
+    profile_outcome_replay_report: Option<&OfflineReplayReport>,
+    profile_circuit_breaker_report: Option<&CircuitBreakerReport>,
+    strict_gate_failures: &[String],
+    continuation_gate_failures: &[String],
+    gate_failures: &[String],
+) -> String {
+    let triggers = rollback_triggers(
+        summary,
+        pool_budget_fairness,
+        profile_outcome_replay_report,
+        profile_circuit_breaker_report,
+        strict_gate_failures,
+        continuation_gate_failures,
+        gate_failures,
+    );
+    let primary = triggers.iter().max_by_key(|trigger| trigger.priority());
+    let evidence_ids = triggers
+        .iter()
+        .map(|trigger| trigger.evidence_id.clone())
+        .collect::<Vec<_>>();
+    let trigger_json = triggers
+        .iter()
+        .map(RollbackTrigger::json)
+        .collect::<Vec<_>>()
+        .join(",");
+    let rollback_reason =
+        primary.map(|trigger| format!("{}: {}", trigger.kind, preview_text(&trigger.reason, 240)));
+    format!(
+        "{{\"schema\":\"report_gate_rollback_trigger_bundle_v1\",\"rollback_required\":{},\"rollback_reason\":{},\"fallback_strategy\":{},\"trigger_count\":{},\"evidence_ids\":{},\"triggers\":[{}]}}",
+        !triggers.is_empty(),
+        option_str_json(rollback_reason.as_deref()),
+        primary
+            .map(|trigger| json_string(trigger.fallback_strategy))
+            .unwrap_or_else(|| "null".to_owned()),
+        triggers.len(),
+        string_array_json(&evidence_ids),
+        trigger_json
+    )
+}
+
+fn rollback_triggers(
+    summary: &ReportSummary,
+    pool_budget_fairness: Option<&PoolBudgetFairnessSummary>,
+    profile_outcome_replay_report: Option<&OfflineReplayReport>,
+    profile_circuit_breaker_report: Option<&CircuitBreakerReport>,
+    strict_gate_failures: &[String],
+    continuation_gate_failures: &[String],
+    gate_failures: &[String],
+) -> Vec<RollbackTrigger> {
+    let all_gate_failures = combined_gate_failures(
+        strict_gate_failures,
+        continuation_gate_failures,
+        gate_failures,
+    );
+    let mut triggers = Vec::new();
+
+    if let Some(report) = profile_outcome_replay_report
+        && !report.switch_decision.allow_switch
+    {
+        triggers.push(RollbackTrigger::new(
+            "offline_regression_failed",
+            "rule-routing",
+            "profile_routing_offline_replay_report_v1.policy_switch",
+            report.switch_decision.reason.clone(),
+        ));
+    }
+
+    if summary.recent_failure_streak >= ROLLBACK_FAILURE_STREAK_THRESHOLD {
+        triggers.push(RollbackTrigger::new(
+            "failure_streak_threshold",
+            "wait-current-round",
+            "ledger_gate_report_v1.recent_failure_streak",
+            format!(
+                "latest consecutive failure streak {} reached threshold {}",
+                summary.recent_failure_streak, ROLLBACK_FAILURE_STREAK_THRESHOLD
+            ),
+        ));
+    }
+
+    if let Some(pool_budget_fairness) = pool_budget_fairness
+        && pool_budget_fairness.budget_fairness_blocked
+    {
+        let reason = if pool_budget_fairness.failure_reasons.is_empty() {
+            "model pool budget fairness blocked expansion".to_owned()
+        } else {
+            pool_budget_fairness.failure_reasons.join("; ")
+        };
+        triggers.push(RollbackTrigger::new(
+            "budget_fairness_blocked",
+            "quality-only",
+            "model_pool_budget_fairness_report_v1.failure_reasons",
+            reason,
+        ));
+    }
+
+    if let Some(report) = profile_circuit_breaker_report
+        && report.rollback_required
+    {
+        triggers.push(RollbackTrigger::new(
+            "profile_circuit_breaker_open",
+            "quality-only",
+            "profile_circuit_breaker_report_v1",
+            report
+                .rollback_reason
+                .clone()
+                .unwrap_or_else(|| "profile circuit breaker requires rollback".to_owned()),
+        ));
+    }
+
+    if let Some(reason) = first_matching_failure(&all_gate_failures, missing_helper_stage_failure) {
+        triggers.push(RollbackTrigger::new(
+            "missing_helper_stage",
+            "wait-current-round",
+            "report_gate.required_helper_stage_roles",
+            reason,
+        ));
+    }
+
+    if let Some(reason) = test_gate_rollback_reason(summary, &all_gate_failures) {
+        triggers.push(RollbackTrigger::new(
+            "test_gate_failure",
+            "wait-current-round",
+            "test_gate.latest_verdict",
+            reason,
+        ));
+    }
+
+    if let Some(reason) = validation_rollback_reason(summary, &all_gate_failures) {
+        triggers.push(RollbackTrigger::new(
+            "validation_failure",
+            "wait-current-round",
+            "validation.latest_run",
+            reason,
+        ));
+    }
+
+    if let Some(reason) =
+        first_matching_failure(&all_gate_failures, unsafe_or_stale_capacity_failure)
+    {
+        triggers.push(RollbackTrigger::new(
+            "unsafe_or_stale_capacity_metadata",
+            "quality-only",
+            "model_pool_capacity_or_alignment_gate",
+            reason,
+        ));
+    }
+
+    triggers
+}
+
+fn combined_gate_failures(
+    strict_gate_failures: &[String],
+    continuation_gate_failures: &[String],
+    gate_failures: &[String],
+) -> Vec<String> {
+    strict_gate_failures
+        .iter()
+        .chain(continuation_gate_failures)
+        .chain(gate_failures)
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn first_matching_failure(failures: &[String], predicate: fn(&str) -> bool) -> Option<String> {
+    failures.iter().find(|failure| predicate(failure)).cloned()
+}
+
+fn missing_helper_stage_failure(failure: &str) -> bool {
+    failure.contains("helper stage feedback missing required roles")
+        || failure.contains("latest final_json.pool_stage_dispatch missing")
+        || failure.contains("missing required task_kinds")
+}
+
+fn test_gate_rollback_reason(summary: &ReportSummary, failures: &[String]) -> Option<String> {
+    if let Some(verdict) = latest_test_gate_verdict(summary)
+        && verdict != "pass"
+    {
+        return Some(format!(
+            "latest test-gate helper verdict is {verdict}, expected pass"
+        ));
+    }
+    first_matching_failure(failures, |failure| {
+        failure.contains("test-gate") || failure.contains("test gate")
+    })
+}
+
+fn validation_rollback_reason(summary: &ReportSummary, failures: &[String]) -> Option<String> {
+    if let Some(last) = summary.last.as_ref()
+        && last.validation_checked.unwrap_or(false)
+        && last.validation_passed == Some(false)
+    {
+        return Some(format!(
+            "latest validation failed: round={} case={}",
+            option_u64_text(last.round),
+            last.case_name.as_deref().unwrap_or("?")
+        ));
+    }
+    first_matching_failure(failures, |failure| {
+        failure.contains("validation")
+            || failure.contains("configured validation")
+            || failure.contains("cargo validation")
+    })
+}
+
+fn unsafe_or_stale_capacity_failure(failure: &str) -> bool {
+    failure.contains("model pool capacity")
+        || failure.contains("pool alignment")
+        || failure.contains("remote chain")
+        || failure.contains("pool status")
+        || failure.contains("capacity metadata")
+        || failure.contains("dependency_precheck")
 }
 
 fn adapter_closure_bundle_report_json(
@@ -6400,7 +6669,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_repair_factor_readiness_report_v1\":{},\"self_improve_proposal_repair_factor_release_report_v1\":{},\"self_improve_proposal_repair_factor_retag_plan_v1\":{},\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"profile_routing_offline_replay_report_v1\":{},\"profile_circuit_breaker_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"evolution_goal_queue_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_repair_factor_readiness_report_v1\":{},\"self_improve_proposal_repair_factor_release_report_v1\":{},\"self_improve_proposal_repair_factor_retag_plan_v1\":{},\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"profile_routing_offline_replay_report_v1\":{},\"profile_circuit_breaker_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"report_gate_rollback_trigger_bundle_v1\":{},\"evolution_goal_queue_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -6577,6 +6846,15 @@ fn report_json_with_remote_chain_and_required_latest_roles(
         adapter_closure_bundle_report_json(
             summary,
             ledger_gate_failures,
+            strict_gate_failures,
+            continuation_gate_failures,
+            gate_failures
+        ),
+        rollback_trigger_bundle_report_json(
+            summary,
+            pool_budget_fairness,
+            profile_outcome_replay_report,
+            profile_circuit_breaker_report,
             strict_gate_failures,
             continuation_gate_failures,
             gate_failures
@@ -9922,6 +10200,7 @@ mod tests {
             1,
         );
         assert_occurrences(&json, "\"adapter_closure_bundle_report_v1\":{", 1);
+        assert_occurrences(&json, "\"report_gate_rollback_trigger_bundle_v1\":{", 1);
         assert_contains_in_order(
             &json,
             &[
@@ -9931,6 +10210,7 @@ mod tests {
                 "\"self_improve_proposal_action_closure_report_v1\":{",
                 "\"strict_report_gate\":{\"passed\":false",
                 "\"adapter_closure_bundle_report_v1\":{",
+                "\"report_gate_rollback_trigger_bundle_v1\":{",
                 "\"report_gate\":{\"passed\":false",
             ],
         );
@@ -9984,6 +10264,157 @@ mod tests {
         );
         assert!(json.contains("\"test_gate_latest_verdict\":\"pass\""));
         assert!(json.contains("\"test_gate_latest_validation_command_safety\":\"safe\""));
+    }
+
+    #[test]
+    fn rollback_bundle_reports_clean_pass_with_empty_triggers() {
+        let summary = summarize_ledger(
+            "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2}\n",
+        );
+        let json = rollback_trigger_bundle_report_json(&summary, None, None, None, &[], &[], &[]);
+
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"schema\":\"report_gate_rollback_trigger_bundle_v1\"",
+                "\"rollback_required\":false",
+                "\"rollback_reason\":null",
+                "\"fallback_strategy\":null",
+                "\"trigger_count\":0",
+                "\"evidence_ids\":[]",
+                "\"triggers\":[]",
+            ],
+        );
+    }
+
+    #[test]
+    fn rollback_bundle_uses_rule_routing_for_offline_regression_failure() {
+        let summary = summarize_ledger(
+            "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2}\n",
+        );
+        let replay = OfflineReplayReport::from_outcome_jsonl(
+            "{\"strategy\":\"single\",\"chosen_model\":\"rule\",\"task_kind\":\"review\",\"ok\":true,\"latency_ms\":1000,\"cost_estimate_micro_usd\":100,\"quality_score\":0.90}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"candidate\",\"task_kind\":\"review\",\"ok\":true,\"latency_ms\":1300,\"cost_estimate_micro_usd\":140,\"quality_score\":0.80}\n",
+            1,
+            &ScoringConfig::default(),
+        );
+        let json =
+            rollback_trigger_bundle_report_json(&summary, None, Some(&replay), None, &[], &[], &[]);
+
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"rollback_required\":true",
+                "\"fallback_strategy\":\"rule-routing\"",
+                "\"kind\":\"offline_regression_failed\"",
+                "\"evidence_id\":\"profile_routing_offline_replay_report_v1.policy_switch\"",
+            ],
+        );
+    }
+
+    #[test]
+    fn rollback_bundle_uses_quality_only_for_budget_circuit_and_capacity_triggers() {
+        let summary = summarize_ledger(
+            "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2}\n",
+        );
+        let budget = pool_artifacts::parse_budget_fairness(
+            "{\"workers\":[{\"role\":\"summary\",\"success\":true,\"feedback_applied\":1,\"runtime_tokens\":900,\"latency_ms\":1200,\"blocked_primary_12b\":false}]}\n",
+        );
+        let circuit = CircuitBreakerReport::from_outcome_jsonl(
+            "{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":1}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":2}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":3}\n",
+            &CircuitBreakerConfig::default(),
+        );
+        let strict_failures = vec![
+            "model pool capacity blocked expansion: recommendation=restore_quality_gate_first"
+                .to_owned(),
+        ];
+        let json = rollback_trigger_bundle_report_json(
+            &summary,
+            Some(&budget),
+            None,
+            Some(&circuit),
+            &strict_failures,
+            &[],
+            &[],
+        );
+
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"fallback_strategy\":\"quality-only\"",
+                "\"kind\":\"budget_fairness_blocked\"",
+                "\"kind\":\"profile_circuit_breaker_open\"",
+                "\"kind\":\"unsafe_or_stale_capacity_metadata\"",
+            ],
+        );
+    }
+
+    #[test]
+    fn rollback_bundle_waits_for_helper_test_gate_validation_and_failure_streak() {
+        let summary = summarize_ledger(
+            "{\"round\":1,\"case\":\"bad-1\",\"success\":false,\"feedback_applied\":0}\n\
+{\"round\":2,\"case\":\"bad-2\",\"success\":false,\"feedback_applied\":0,\"validation_checked\":true,\"validation_passed\":false}\n",
+        );
+        let failures = vec![
+            "latest round helper stage feedback missing required roles: review".to_owned(),
+            "latest test-gate helper verdict is fail, expected pass".to_owned(),
+            "configured validation command failed status=1".to_owned(),
+        ];
+        let json =
+            rollback_trigger_bundle_report_json(&summary, None, None, None, &failures, &[], &[]);
+
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"fallback_strategy\":\"wait-current-round\"",
+                "\"kind\":\"failure_streak_threshold\"",
+                "\"kind\":\"missing_helper_stage\"",
+                "\"kind\":\"test_gate_failure\"",
+                "\"kind\":\"validation_failure\"",
+            ],
+        );
+    }
+
+    #[test]
+    fn rollback_bundle_combined_triggers_preserve_evidence_and_precedence() {
+        let summary = summarize_ledger(
+            "{\"round\":1,\"case\":\"validation-bad\",\"success\":true,\"feedback_applied\":2,\"validation_checked\":true,\"validation_passed\":false}\n",
+        );
+        let budget = pool_artifacts::parse_budget_fairness(
+            "{\"workers\":[{\"role\":\"summary\",\"success\":true,\"feedback_applied\":1,\"runtime_tokens\":900,\"latency_ms\":1200,\"blocked_primary_12b\":false}]}\n",
+        );
+        let replay = OfflineReplayReport::from_outcome_jsonl(
+            "{\"strategy\":\"single\",\"chosen_model\":\"rule\",\"task_kind\":\"review\",\"ok\":true,\"latency_ms\":1000,\"cost_estimate_micro_usd\":100,\"quality_score\":0.90}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"candidate\",\"task_kind\":\"review\",\"ok\":true,\"latency_ms\":1300,\"cost_estimate_micro_usd\":140,\"quality_score\":0.80}\n",
+            1,
+            &ScoringConfig::default(),
+        );
+        let json = rollback_trigger_bundle_report_json(
+            &summary,
+            Some(&budget),
+            Some(&replay),
+            None,
+            &[],
+            &[],
+            &[],
+        );
+
+        assert!(json.contains("\"rollback_required\":true"));
+        assert!(json.contains("\"fallback_strategy\":\"wait-current-round\""));
+        assert!(json.contains("\"kind\":\"offline_regression_failed\""));
+        assert!(json.contains("\"kind\":\"budget_fairness_blocked\""));
+        assert!(json.contains("\"kind\":\"validation_failure\""));
+        assert!(json.contains(
+            "\"evidence_id\":\"profile_routing_offline_replay_report_v1.policy_switch\""
+        ));
+        assert!(
+            json.contains(
+                "\"evidence_id\":\"model_pool_budget_fairness_report_v1.failure_reasons\""
+            )
+        );
+        assert!(json.contains("\"evidence_id\":\"validation.latest_run\""));
     }
 
     #[test]
