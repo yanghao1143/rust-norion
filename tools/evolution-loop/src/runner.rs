@@ -1,5 +1,6 @@
-use std::fs;
-use std::path::Path;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -29,6 +30,8 @@ const HEALTH_GATE_METADATA_ATTEMPTS: usize = 6;
 const HEALTH_GATE_METADATA_RETRY_SECS: u64 = 3;
 const MAX_POOL_STAGE_CALL_ANSWER_PREVIEW_CHARS: usize =
     crate::helper_feedback::MAX_HELPER_STAGE_FEEDBACK_CHARS;
+const POOL_STAGE_DEDUPE_ROUND_WINDOW: usize = 8;
+const POOL_STAGE_DEDUPE_SCAN_LIMIT: usize = 512;
 
 #[derive(Debug, Clone, PartialEq)]
 struct RoundOutcome {
@@ -1013,8 +1016,10 @@ fn execute_pool_stage_calls(
     }
     let mut executed = 0usize;
     let mut skipped = 0usize;
+    let mut deduped = 0usize;
     let mut summaries = Vec::new();
     let mut completed_roles = initial_pool_stage_completed_roles(config);
+    let dedupe_path = pool_stage_dedupe_path(config);
     for plan in plans {
         if let Some(reason) = memory_pressure_gate_skip_reason(plan, skipped) {
             skipped += 1;
@@ -1032,27 +1037,6 @@ fn execute_pool_stage_calls(
             ));
             continue;
         }
-        let stage_lease =
-            match pool_lease::acquire_stage(config, plan, round, case_name, unix_seconds())? {
-                pool_lease::PoolLeaseAcquire::Disabled => None,
-                pool_lease::PoolLeaseAcquire::Acquired(lease) => {
-                    let summary = lease.summary().to_owned();
-                    outcome.meta.push(format!(
-                        "pool_stage_lease task_kind={} acquired {summary}",
-                        plan.task_kind
-                    ));
-                    Some(lease)
-                }
-                pool_lease::PoolLeaseAcquire::Skipped { reason } => {
-                    skipped += 1;
-                    outcome.meta.push(format!(
-                        "pool_stage_call_skipped task_kind={} {reason}",
-                        plan.task_kind
-                    ));
-                    summaries.push(format!("{}:{} skipped", plan.task_kind, plan.selected_role));
-                    continue;
-                }
-            };
         let stage_validation_evidence =
             validation_evidence.map(|evidence| pool_stage_call::PoolStageValidationEvidence {
                 phase: &evidence.phase,
@@ -1077,8 +1061,108 @@ fn execute_pool_stage_calls(
             completed_roles: &completed_roles,
             max_tokens: plan.effective_max_tokens,
         };
+        let dedupe_round_window = pool_stage_dedupe_round_window(round);
+        let request_fingerprint = pool_stage_call::request_fingerprint(&input, dedupe_round_window);
+        if let Some(path) = dedupe_path.as_ref()
+            && let Some(result) =
+                load_pool_stage_dedupe(path, &request_fingerprint, dedupe_round_window)?
+        {
+            deduped += 1;
+            append_pool_stage_dedupe_record(
+                path,
+                round,
+                case_name,
+                &request_fingerprint,
+                dedupe_round_window,
+                plan,
+                &result,
+                true,
+            )?;
+            outcome.meta.push(format!(
+                "pool_stage_call_deduped task_kind={} role={} fingerprint={} round_window={} deduped=true",
+                result.task_kind,
+                result
+                    .selected_role
+                    .as_deref()
+                    .unwrap_or(plan.selected_role.as_str()),
+                request_fingerprint,
+                dedupe_round_window
+            ));
+            if !result.ok {
+                return Err(format!(
+                    "pool stage call {} reused deduped ok=false role={}",
+                    result.task_kind,
+                    result
+                        .selected_role
+                        .as_deref()
+                        .unwrap_or(plan.selected_role.as_str())
+                ));
+            }
+            push_completed_pool_role(&mut completed_roles, &result.task_kind);
+            if let Some(selected_role) = result.selected_role.as_deref() {
+                push_completed_pool_role(&mut completed_roles, selected_role);
+            } else {
+                push_completed_pool_role(&mut completed_roles, &plan.selected_role);
+            }
+            if let Some(answer) = result.answer.as_deref() {
+                outcome.meta.push(format!(
+                    "pool_stage_call_answer task_kind={} role={} elapsed_ms={} answer_approx_tokens={} deduped=true preview={}",
+                    result.task_kind,
+                    result
+                        .selected_role
+                        .as_deref()
+                        .unwrap_or(plan.selected_role.as_str()),
+                    option_u64_text(result.elapsed_ms),
+                    option_u64_text(result.answer_approx_tokens),
+                    preview_text(answer, MAX_POOL_STAGE_CALL_ANSWER_PREVIEW_CHARS)
+                ));
+            }
+            summaries.push(format!(
+                "{}:{} deduped answer_approx_tokens={}",
+                result.task_kind,
+                result
+                    .selected_role
+                    .as_deref()
+                    .unwrap_or(plan.selected_role.as_str()),
+                option_u64_text(result.answer_approx_tokens)
+            ));
+            continue;
+        }
+        let stage_lease =
+            match pool_lease::acquire_stage(config, plan, round, case_name, unix_seconds())? {
+                pool_lease::PoolLeaseAcquire::Disabled => None,
+                pool_lease::PoolLeaseAcquire::Acquired(lease) => {
+                    let summary = lease.summary().to_owned();
+                    outcome.meta.push(format!(
+                        "pool_stage_lease task_kind={} acquired {summary}",
+                        plan.task_kind
+                    ));
+                    Some(lease)
+                }
+                pool_lease::PoolLeaseAcquire::Skipped { reason } => {
+                    skipped += 1;
+                    outcome.meta.push(format!(
+                        "pool_stage_call_skipped task_kind={} {reason}",
+                        plan.task_kind
+                    ));
+                    summaries.push(format!("{}:{} skipped", plan.task_kind, plan.selected_role));
+                    continue;
+                }
+            };
         let result = pool_stage_call::call_backend(&config.backend, config.timeout_secs, &input)?;
         drop(stage_lease);
+        if let Some(path) = dedupe_path.as_ref() {
+            append_pool_stage_dedupe_record(
+                path,
+                round,
+                case_name,
+                &request_fingerprint,
+                dedupe_round_window,
+                plan,
+                &result,
+                false,
+            )?;
+        }
         append_pool_stage_call_worker_event(config, round, case_name, plan, &result)?;
         if !result.ok {
             return Err(format!(
@@ -1127,12 +1211,113 @@ fn execute_pool_stage_calls(
         ));
     }
     Ok(Some(format!(
-        "pool_stage_call executed={} skipped={} completed_roles={} stages={}",
+        "pool_stage_call executed={} skipped={} deduped={} completed_roles={} stages={}",
         executed,
         skipped,
+        deduped,
         completed_roles.join(","),
         summaries.join(",")
     )))
+}
+
+fn pool_stage_dedupe_path(config: &Config) -> Option<PathBuf> {
+    config
+        .pool_budget_fairness_json_path
+        .as_ref()
+        .map(|path| path.with_file_name("model-pool-request-dedupe.jsonl"))
+}
+
+fn pool_stage_dedupe_round_window(round: usize) -> u64 {
+    (round / POOL_STAGE_DEDUPE_ROUND_WINDOW) as u64
+}
+
+fn load_pool_stage_dedupe(
+    path: &Path,
+    fingerprint: &str,
+    round_window: u64,
+) -> Result<Option<PoolStageCallResult>, String> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return Ok(None);
+    };
+    for line in text
+        .lines()
+        .rev()
+        .filter(|line| !line.trim().is_empty())
+        .take(POOL_STAGE_DEDUPE_SCAN_LIMIT)
+    {
+        if json_string_field(line, "fingerprint").as_deref() != Some(fingerprint) {
+            continue;
+        }
+        if json_u64_field(line, "round_window") != Some(round_window) {
+            continue;
+        }
+        if json_bool_field(line, "ok") != Some(true) {
+            continue;
+        }
+        return Ok(Some(PoolStageCallResult {
+            task_kind: json_string_field(line, "task_kind").unwrap_or_else(|| "unknown".to_owned()),
+            ok: true,
+            selected_role: json_string_field(line, "selected_role"),
+            selected_port: json_u64_field(line, "selected_port"),
+            selected_base_url: json_string_field(line, "selected_base_url"),
+            answer: json_string_field(line, "answer"),
+            elapsed_ms: json_u64_field(line, "elapsed_ms"),
+            answer_chars: json_u64_field(line, "answer_chars"),
+            answer_bytes: json_u64_field(line, "answer_bytes"),
+            answer_approx_tokens: json_u64_field(line, "answer_approx_tokens"),
+        }));
+    }
+    Ok(None)
+}
+
+fn append_pool_stage_dedupe_record(
+    path: &Path,
+    round: usize,
+    case_name: &str,
+    fingerprint: &str,
+    round_window: u64,
+    plan: &PoolStageDispatchPlan,
+    result: &PoolStageCallResult,
+    deduped: bool,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create pool stage dedupe dir: {error}"))?;
+    }
+    let selected_role = result
+        .selected_role
+        .as_deref()
+        .unwrap_or(plan.selected_role.as_str());
+    let line = format!(
+        "{{\"schema\":\"norion.pool_stage_request_dedupe.v1\",\"round\":{},\"round_window\":{},\"case\":{},\"fingerprint\":{},\"deduped\":{},\"task_kind\":{},\"selected_role\":{},\"selected_port\":{},\"selected_base_url\":{},\"ok\":{},\"answer\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{}}}\n",
+        round,
+        round_window,
+        json_string(case_name),
+        json_string(fingerprint),
+        deduped,
+        json_string(&result.task_kind),
+        json_string(selected_role),
+        option_u64_json(result.selected_port.or(plan.selected_port)),
+        option_str_json(
+            result
+                .selected_base_url
+                .as_deref()
+                .or(plan.selected_base_url.as_deref())
+        ),
+        result.ok,
+        option_str_json(result.answer.as_deref()),
+        option_u64_json(result.elapsed_ms),
+        option_u64_json(result.answer_chars),
+        option_u64_json(result.answer_bytes),
+        option_u64_json(result.answer_approx_tokens)
+    );
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("failed to open pool stage dedupe ledger: {error}"))?;
+    file.write_all(line.as_bytes())
+        .map_err(|error| format!("failed to append pool stage dedupe ledger: {error}"))
 }
 
 fn memory_pressure_gate_skip_reason(
@@ -2290,6 +2475,16 @@ fn option_u64_text(value: Option<u64>) -> String {
         .unwrap_or_else(|| "?".to_owned())
 }
 
+fn option_u64_json(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
+fn option_str_json(value: Option<&str>) -> String {
+    value.map(json_string).unwrap_or_else(|| "null".to_owned())
+}
+
 fn option_i32_text(value: Option<i32>) -> String {
     value
         .map(|value| value.to_string())
@@ -3090,6 +3285,139 @@ mod tests {
                 .meta
                 .iter()
                 .any(|item| item.contains("pool_stage_call_skipped task_kind=summary"))
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stage_calls_reuse_deduped_request_before_http() {
+        let dir = std::env::temp_dir().join(format!(
+            "smartsteam-runner-stage-call-dedupe-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let budget_path = dir.join("model-pool-budget-fairness.jsonl");
+        let config = Config {
+            backend: "127.0.0.1:9".to_owned(),
+            pool_budget_fairness_json_path: Some(budget_path.clone()),
+            ..Config::default()
+        };
+        let plan = PoolStageDispatchPlan {
+            task_kind: "summary".to_owned(),
+            selected_role: "summary".to_owned(),
+            selected_port: Some(8687),
+            selected_base_url: Some("http://127.0.0.1:8687".to_owned()),
+            context_window: Some(8192),
+            default_max_tokens: Some(768),
+            runtime_backend: Some("llama.cpp".to_owned()),
+            runtime_device: Some("metal".to_owned()),
+            runtime_accelerator: Some("metal".to_owned()),
+            gpu_layers: Some(99),
+            configured_max_tokens: 4096,
+            effective_max_tokens: 768,
+            max_tokens_clamped: true,
+            can_accept_low_priority_task: true,
+        };
+        let completed_roles = initial_pool_stage_completed_roles(&config);
+        let primary_answer = "primary answer";
+        let final_json = "{\"ok\":true}";
+        let input = PoolStageCallInput {
+            task_kind: &plan.task_kind,
+            case_name: "case-10",
+            round: 10,
+            validation_timestamp_unix: Some(1_781_770_123),
+            validation_evidence: None,
+            original_prompt: "prompt",
+            primary_answer: Some(primary_answer),
+            final_json: Some(final_json),
+            dispatch_plan: Some(&plan),
+            completed_roles: &completed_roles,
+            max_tokens: plan.effective_max_tokens,
+        };
+        let dedupe_path = pool_stage_dedupe_path(&config).unwrap();
+        let round_window = pool_stage_dedupe_round_window(10);
+        let fingerprint = pool_stage_call::request_fingerprint(&input, round_window);
+        let cached = PoolStageCallResult {
+            task_kind: "summary".to_owned(),
+            ok: true,
+            selected_role: Some("summary".to_owned()),
+            selected_port: Some(8687),
+            selected_base_url: Some("http://127.0.0.1:8687".to_owned()),
+            answer: Some(
+                "memory_update: cached helper\nnext_context: reuse dedupe\n\
+duplicate_guard: deduped=true"
+                    .to_owned(),
+            ),
+            elapsed_ms: Some(17),
+            answer_chars: Some(83),
+            answer_bytes: Some(83),
+            answer_approx_tokens: Some(21),
+        };
+        append_pool_stage_dedupe_record(
+            &dedupe_path,
+            9,
+            "case-9",
+            &fingerprint,
+            round_window,
+            &plan,
+            &cached,
+            false,
+        )
+        .unwrap();
+        let mut outcome = RoundOutcome {
+            success: true,
+            error: None,
+            runtime_tokens: Some(100),
+            runtime_model: Some("gemma".to_owned()),
+            answer: Some(primary_answer.to_owned()),
+            elapsed_ms: Some(10),
+            business_cycle_passed: Some(true),
+            feedback_applied: Some(1),
+            rust_check_checked: Some(false),
+            rust_check_passed: Some(true),
+            rust_check_feedback_applied: Some(0),
+            self_improve_passed: Some(true),
+            state_gate_checked: Some(false),
+            state_gate_passed: Some(true),
+            trace_gate_checked: Some(false),
+            trace_gate_passed: Some(true),
+            delta_chars: 0,
+            stages: Vec::new(),
+            meta: Vec::new(),
+            final_json: Some(final_json.to_owned()),
+        };
+
+        let meta = execute_pool_stage_calls(
+            &config,
+            10,
+            "case-10",
+            1_781_770_123,
+            None,
+            "prompt",
+            &mut outcome,
+            &[plan],
+        )
+        .unwrap()
+        .unwrap();
+        let dedupe_text = fs::read_to_string(&dedupe_path).unwrap();
+
+        assert!(meta.contains("executed=0"));
+        assert!(meta.contains("skipped=0"));
+        assert!(meta.contains("deduped=1"));
+        assert!(!budget_path.exists());
+        assert!(dedupe_text.contains("\"deduped\":true"));
+        assert!(
+            outcome
+                .meta
+                .iter()
+                .any(|item| item.contains("pool_stage_call_deduped task_kind=summary"))
+        );
+        assert!(
+            outcome
+                .meta
+                .iter()
+                .any(|item| item.contains("deduped=true preview=memory_update: cached helper"))
         );
         let _ = fs::remove_dir_all(dir);
     }

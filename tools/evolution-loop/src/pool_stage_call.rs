@@ -326,6 +326,26 @@ fn deterministic_index_seed(
     format!("fnv1a64:{:016x}", fnv1a64(seed_material.as_bytes()))
 }
 
+pub(crate) fn request_fingerprint(input: &PoolStageCallInput<'_>, round_window: u64) -> String {
+    let prompt_hash = format!("fnv1a64:{:016x}", fnv1a64(stage_prompt(input).as_bytes()));
+    let route = input
+        .dispatch_plan
+        .map(|plan| {
+            format!(
+                "{}@{}:{}",
+                plan.selected_role,
+                option_u64_text(plan.selected_port),
+                plan.effective_max_tokens
+            )
+        })
+        .unwrap_or_else(|| "none".to_owned());
+    let material = format!(
+        "task_kind={};prompt_hash={};route={};round_window={}",
+        input.task_kind, prompt_hash, route, round_window
+    );
+    format!("fnv1a64:{:016x}", fnv1a64(material.as_bytes()))
+}
+
 fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in bytes {
@@ -1036,6 +1056,25 @@ mod tests {
         assert!(body.contains("change_request"));
         assert!(body.contains("verification"));
         assert!(!body.contains("role_contract"));
+    }
+
+    #[test]
+    fn request_fingerprint_is_stable_and_window_scoped() {
+        let plan = test_gate_plan();
+        let input = PoolStageCallInput {
+            task_kind: "test-gate",
+            dispatch_plan: Some(&plan),
+            max_tokens: plan.effective_max_tokens,
+            ..input()
+        };
+
+        let first = request_fingerprint(&input, 22);
+        let second = request_fingerprint(&input, 22);
+        let other_window = request_fingerprint(&input, 23);
+
+        assert_eq!(first, second);
+        assert_ne!(first, other_window);
+        assert!(first.starts_with("fnv1a64:"));
     }
 
     #[test]
