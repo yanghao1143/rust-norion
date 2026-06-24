@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use crate::json::{
-    json_bool_field, json_f64_field, json_string, json_string_array, json_string_field,
-    json_u64_field,
+    json_bool_field, json_f64_field, json_object_field, json_string, json_string_array,
+    json_string_field, json_u64_field,
 };
 
 pub(crate) const SCORING_VERSION: &str = "profile-scoring.v1";
@@ -292,6 +292,192 @@ impl OfflineRegressionReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OfflineReplayAggregate {
+    pub(crate) sample_count: usize,
+    pub(crate) ok_count: usize,
+    pub(crate) failure_count: usize,
+    pub(crate) drift_count: usize,
+    pub(crate) raw_quality: f64,
+    pub(crate) quality: f64,
+    pub(crate) latency_ms: f64,
+    pub(crate) cost: f64,
+    pub(crate) drift_penalty: f64,
+}
+
+impl OfflineReplayAggregate {
+    fn empty() -> Self {
+        Self {
+            sample_count: 0,
+            ok_count: 0,
+            failure_count: 0,
+            drift_count: 0,
+            raw_quality: 0.0,
+            quality: 0.0,
+            latency_ms: 0.0,
+            cost: 0.0,
+            drift_penalty: 0.0,
+        }
+    }
+
+    fn from_samples(samples: &[OutcomeSample]) -> Self {
+        if samples.is_empty() {
+            return Self::empty();
+        }
+        let sample_count = samples.len();
+        let ok_count = samples.iter().filter(|sample| sample.success).count();
+        let failure_count = sample_count.saturating_sub(ok_count);
+        let drift_count = samples
+            .iter()
+            .filter(|sample| sample.drift_detected)
+            .count();
+        let raw_quality = samples
+            .iter()
+            .map(|sample| {
+                sample
+                    .quality_hint
+                    .unwrap_or(if sample.success { 0.6 } else { 0.0 })
+            })
+            .sum::<f64>()
+            / sample_count as f64;
+        let latency_ms = average_option(samples.iter().filter_map(|sample| sample.latency_ms));
+        let cost = average_option(samples.iter().filter_map(|sample| sample.cost));
+        let drift_penalty = (drift_count as f64 / sample_count as f64) * 0.10;
+        let quality = clamp01(raw_quality - drift_penalty);
+        Self {
+            sample_count,
+            ok_count,
+            failure_count,
+            drift_count,
+            raw_quality,
+            quality,
+            latency_ms,
+            cost,
+            drift_penalty,
+        }
+    }
+
+    fn regression_aggregate(&self) -> RegressionAggregate {
+        RegressionAggregate {
+            quality: self.quality,
+            latency_ms: self.latency_ms,
+            cost: self.cost,
+        }
+    }
+
+    fn json_report(&self) -> String {
+        format!(
+            "{{\"sample_count\":{},\"ok_count\":{},\"failure_count\":{},\"drift_count\":{},\"raw_quality\":{:.6},\"quality\":{:.6},\"latency_ms\":{:.3},\"cost\":{:.6},\"drift_penalty\":{:.6}}}",
+            self.sample_count,
+            self.ok_count,
+            self.failure_count,
+            self.drift_count,
+            self.raw_quality,
+            self.quality,
+            self.latency_ms,
+            self.cost,
+            self.drift_penalty
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OfflineReplayReport {
+    pub(crate) schema: String,
+    pub(crate) version: String,
+    pub(crate) candidate_policy: String,
+    pub(crate) total_records: usize,
+    pub(crate) ignored_records: usize,
+    pub(crate) min_samples_per_group: usize,
+    pub(crate) rule_baseline: OfflineReplayAggregate,
+    pub(crate) profile_candidate: OfflineReplayAggregate,
+    pub(crate) offline_regression: OfflineRegressionReport,
+    pub(crate) switch_decision: PolicySwitchDecision,
+}
+
+impl OfflineReplayReport {
+    pub(crate) fn from_outcome_jsonl(
+        text: &str,
+        min_samples_per_group: usize,
+        config: &ScoringConfig,
+    ) -> Self {
+        let mut rule_samples = Vec::new();
+        let mut profile_samples = Vec::new();
+        let mut total_records = 0usize;
+        let mut ignored_records = 0usize;
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            total_records += 1;
+            let Some(strategy) = replay_strategy(line) else {
+                ignored_records += 1;
+                continue;
+            };
+            let Some(sample) = OutcomeSample::from_m3_json(line, "general") else {
+                ignored_records += 1;
+                continue;
+            };
+            let strategy = strategy.to_ascii_lowercase();
+            if strategy == "single" || strategy.contains("rule") {
+                rule_samples.push(sample);
+            } else if strategy.contains("profile") {
+                profile_samples.push(sample);
+            } else {
+                ignored_records += 1;
+            }
+        }
+        let rule_baseline = OfflineReplayAggregate::from_samples(&rule_samples);
+        let profile_candidate = OfflineReplayAggregate::from_samples(&profile_samples);
+        let mut offline_regression = OfflineRegressionReport::compare(
+            config.version.clone(),
+            &rule_baseline.regression_aggregate(),
+            &profile_candidate.regression_aggregate(),
+        );
+        if rule_baseline.sample_count < min_samples_per_group
+            || profile_candidate.sample_count < min_samples_per_group
+        {
+            offline_regression.passed = false;
+            offline_regression.blocked_reason = Some(format!(
+                "offline_regression_blocked insufficient_samples rule={} profile={} min={}",
+                rule_baseline.sample_count, profile_candidate.sample_count, min_samples_per_group
+            ));
+        }
+        let switch_decision = offline_regression.switch_decision(config);
+        Self {
+            schema: "norion.profile_routing_offline_replay_report.v1".to_owned(),
+            version: SCORING_VERSION.to_owned(),
+            candidate_policy: config.version.clone(),
+            total_records,
+            ignored_records,
+            min_samples_per_group,
+            rule_baseline,
+            profile_candidate,
+            offline_regression,
+            switch_decision,
+        }
+    }
+
+    pub(crate) fn json_report(&self) -> String {
+        format!(
+            "{{\"schema\":{},\"version\":{},\"candidate_policy\":{},\"total_records\":{},\"ignored_records\":{},\"min_samples_per_group\":{},\"rule_baseline\":{},\"profile_candidate\":{},\"offline_regression\":{},\"policy_switch\":{}}}",
+            json_string(&self.schema),
+            json_string(&self.version),
+            json_string(&self.candidate_policy),
+            self.total_records,
+            self.ignored_records,
+            self.min_samples_per_group,
+            self.rule_baseline.json_report(),
+            self.profile_candidate.json_report(),
+            self.offline_regression.json_report(),
+            policy_switch_json(&self.switch_decision)
+        )
+    }
+}
+
+pub(crate) fn option_offline_replay_json(summary: Option<&OfflineReplayReport>) -> String {
+    summary
+        .map(OfflineReplayReport::json_report)
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct RegressionAggregate {
     pub(crate) quality: f64,
@@ -502,6 +688,27 @@ fn inverse_penalty(value: Option<f64>, scale: f64) -> f64 {
     clamp01(1.0 / (1.0 + value.max(0.0) / scale.max(1.0)))
 }
 
+fn replay_strategy(line: &str) -> Option<String> {
+    json_string_field(line, "strategy").or_else(|| {
+        json_object_field(line, "route_decision")
+            .and_then(|route| json_string_field(&route, "strategy"))
+    })
+}
+
+fn average_option(values: impl Iterator<Item = f64>) -> f64 {
+    let mut total = 0.0;
+    let mut count = 0usize;
+    for value in values.filter(|value| value.is_finite()) {
+        total += value;
+        count += 1;
+    }
+    if count == 0 {
+        0.0
+    } else {
+        total / count as f64
+    }
+}
+
 fn clamp01(value: f64) -> f64 {
     if !value.is_finite() {
         return 0.0;
@@ -511,6 +718,15 @@ fn clamp01(value: f64) -> f64 {
 
 fn option_str_json(value: Option<&str>) -> String {
     value.map(json_string).unwrap_or_else(|| "null".to_owned())
+}
+
+fn policy_switch_json(decision: &PolicySwitchDecision) -> String {
+    format!(
+        "{{\"allow_switch\":{},\"policy_version\":{},\"reason\":{}}}",
+        decision.allow_switch,
+        json_string(&decision.policy_version),
+        json_string(&decision.reason)
+    )
 }
 
 #[cfg(test)]
@@ -692,6 +908,88 @@ mod tests {
     }
 
     #[test]
+    fn offline_replay_allows_profile_switch_from_outcome_log() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            &replay_log(
+                &[(true, 0.70, 1400, 600), (true, 0.72, 1300, 580)],
+                &[(true, 0.84, 900, 620, false), (true, 0.86, 850, 610, false)],
+            ),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.total_records, 4);
+        assert_eq!(report.rule_baseline.sample_count, 2);
+        assert_eq!(report.profile_candidate.sample_count, 2);
+        assert!(report.offline_regression.passed);
+        assert!(report.switch_decision.allow_switch);
+        assert!(report.json_report().contains("\"allow_switch\":true"));
+    }
+
+    #[test]
+    fn offline_replay_blocks_quality_regression() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            &replay_log(&[(true, 0.90, 1000, 100)], &[(true, 0.80, 900, 90, false)]),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.offline_regression.passed);
+        assert!(!report.switch_decision.allow_switch);
+        assert!(report.switch_decision.reason.contains("quality_delta"));
+    }
+
+    #[test]
+    fn offline_replay_blocks_latency_regression() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            &replay_log(
+                &[(true, 0.90, 1000, 100)],
+                &[(true, 0.90, 1300, 120, false)],
+            ),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.offline_regression.passed);
+        assert!(report.switch_decision.reason.contains("latency_delta_ms"));
+    }
+
+    #[test]
+    fn offline_replay_blocks_cost_regression() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            &replay_log(
+                &[(true, 0.90, 1000, 100)],
+                &[(true, 0.90, 1100, 140, false)],
+            ),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.offline_regression.passed);
+        assert!(report.switch_decision.reason.contains("cost_delta"));
+    }
+
+    #[test]
+    fn offline_replay_blocks_insufficient_samples_and_reports_drift() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            &replay_log(&[(true, 0.90, 1000, 100)], &[(true, 0.95, 800, 80, true)]),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.profile_candidate.drift_count, 1);
+        assert!(report.profile_candidate.drift_penalty > 0.0);
+        assert!(!report.switch_decision.allow_switch);
+        assert!(
+            report
+                .switch_decision
+                .reason
+                .contains("insufficient_samples")
+        );
+        assert!(report.json_report().contains("\"drift_penalty\""));
+    }
+
+    #[test]
     fn explanation_json_contains_version_and_candidate_reasons() {
         let mut scorer = OnlineScorer::new(ScoringConfig::default());
         scorer.update(sample("quality", "code", true));
@@ -703,5 +1001,25 @@ mod tests {
         assert!(explanation.contains(SCORING_VERSION));
         assert!(explanation.contains("candidate_reasons"));
         assert!(explanation.contains("profile_route_best"));
+    }
+
+    fn replay_log(
+        rule: &[(bool, f64, u64, u64)],
+        profile: &[(bool, f64, u64, u64, bool)],
+    ) -> String {
+        let mut lines = Vec::new();
+        for (index, (ok, quality, latency, cost)) in rule.iter().enumerate() {
+            lines.push(format!(
+                "{{\"strategy\":\"single\",\"chosen_model\":\"rule-{index}\",\"task_kind\":\"review\",\"ok\":{},\"latency_ms\":{},\"cost_estimate_micro_usd\":{},\"quality_score\":{:.3}}}",
+                ok, latency, cost, quality
+            ));
+        }
+        for (index, (ok, quality, latency, cost, drift)) in profile.iter().enumerate() {
+            lines.push(format!(
+                "{{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"profile-{index}\",\"task_kind\":\"review\",\"ok\":{},\"latency_ms\":{},\"cost_estimate_micro_usd\":{},\"quality_score\":{:.3},\"drift_detected\":{}}}",
+                ok, latency, cost, quality, drift
+            ));
+        }
+        lines.join("\n")
     }
 }

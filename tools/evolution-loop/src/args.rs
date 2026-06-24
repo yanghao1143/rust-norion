@@ -33,6 +33,8 @@ pub(crate) struct Config {
     pub(crate) pool_status_json_path: Option<PathBuf>,
     pub(crate) pool_route_json_path: Option<PathBuf>,
     pub(crate) pool_budget_fairness_json_path: Option<PathBuf>,
+    pub(crate) profile_outcome_log_path: Option<PathBuf>,
+    pub(crate) profile_outcome_min_samples: usize,
     pub(crate) remote_chain_status_json_path: Option<PathBuf>,
     pub(crate) worker_window_status_json_path: Option<PathBuf>,
     pub(crate) clean_room_batch_status_json_path: Option<PathBuf>,
@@ -372,6 +374,17 @@ where
                     "--pool-budget-fairness-json",
                 )?));
             }
+            "--profile-outcome-log" => {
+                config.profile_outcome_log_path =
+                    Some(PathBuf::from(value(&mut args, "--profile-outcome-log")?));
+            }
+            "--profile-outcome-min-samples" => {
+                config.profile_outcome_min_samples = parse_usize(
+                    &value(&mut args, "--profile-outcome-min-samples")?,
+                    "--profile-outcome-min-samples",
+                )?
+                .max(1);
+            }
             "--remote-chain-status-json" => {
                 config.remote_chain_status_json_path = Some(PathBuf::from(value(
                     &mut args,
@@ -609,6 +622,8 @@ impl Default for Config {
             pool_status_json_path: None,
             pool_route_json_path: None,
             pool_budget_fairness_json_path: None,
+            profile_outcome_log_path: None,
+            profile_outcome_min_samples: 2,
             remote_chain_status_json_path: None,
             worker_window_status_json_path: None,
             clean_room_batch_status_json_path: None,
@@ -723,6 +738,8 @@ Options:\n\
   --pool-status-json PATH          read gemma-chain pool-status -JsonStatus artifact into reports and prompt context\n\
   --pool-route-json PATH           read gemma-chain pool-route-plan -JsonStatus artifact into reports and prompt context\n\
   --pool-budget-fairness-json PATH write model_worker_v1 events during runs and read them into reports/report gate\n\
+  --profile-outcome-log PATH       replay M3 outcome JSONL into offline profile-routing regression reports\n\
+  --profile-outcome-min-samples N  minimum rule/profile samples before profile routing can switch (default 2)\n\
   --remote-chain-status-json PATH  read status-remote-gemma-chain -JsonStatus artifact into reports and prompt context\n\
   --worker-window-status-json PATH read Codex worker-window paused/polluted/replacement status into report JSON only\n\
   --clean-room-batch-status-json PATH read R24/R25 clean-room batch closure status into report JSON only\n\
@@ -1470,6 +1487,27 @@ mod tests {
             PoolLeaseBusyPolicy::SkipLowPriority
         );
         assert_eq!(config.max_pool_lease_skips, Some(7));
+    }
+
+    #[test]
+    fn parses_profile_outcome_replay_options_without_forcing_report_mode() {
+        let parsed = parse_args([
+            "--profile-outcome-log",
+            "target/evolution/model-pool-outcomes.jsonl",
+            "--profile-outcome-min-samples",
+            "8",
+        ])
+        .unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert_eq!(
+            config.profile_outcome_log_path,
+            Some(PathBuf::from("target/evolution/model-pool-outcomes.jsonl"))
+        );
+        assert_eq!(config.profile_outcome_min_samples, 8);
+        assert!(!config.report_gate);
     }
 
     #[test]
