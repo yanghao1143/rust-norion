@@ -4732,6 +4732,7 @@ function New-NextRoundDownstreamStatusConsumersV1 {
 function New-SupervisorRecoveryPlanV1 {
     param(
         [object]$DaemonStatus,
+        [object]$BackendHealth,
         [object]$NextRoundDecisionReportV1,
         [object]$EvolutionGoalQueue,
         [object[]]$ReadinessFailures = @()
@@ -4749,7 +4750,16 @@ function New-SupervisorRecoveryPlanV1 {
     $operatorAttention = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "operator_attention_required")) { [bool]$NextRoundDecisionReportV1.operator_attention_required } else { $true }
     $decisionReason = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "reason_code")) { [string]$NextRoundDecisionReportV1.reason_code } else { "next_round_decision_unavailable" }
     $failures = @($ReadinessFailures | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $backendChecked = $null -ne $BackendHealth -and (Has-Property $BackendHealth "checked") -and $BackendHealth.checked -eq $true
+    $backendBusy = $backendChecked -and (Has-Property $BackendHealth "engine_busy") -and [bool]$BackendHealth.engine_busy
+    $backendActiveRequests = if ($backendChecked -and (Has-Property $BackendHealth "active_engine_requests") -and $null -ne $BackendHealth.active_engine_requests) { [int]$BackendHealth.active_engine_requests } else { 0 }
+    $backendReady = if ($backendChecked -and (Has-Property $BackendHealth "readiness_ok")) { [bool]$BackendHealth.readiness_ok } else { $true }
+    $backendOk = if ($backendChecked -and (Has-Property $BackendHealth "ok")) { [bool]$BackendHealth.ok } else { $true }
+    $backendSafeDevice = if ($backendChecked -and (Has-Property $BackendHealth "safe_device_ok")) { [bool]$BackendHealth.safe_device_ok } else { $true }
     $backendBlocked = @($failures | Where-Object { $_ -match "backend|engine_busy|remote_chain" }).Count -gt 0
+    if ($backendChecked -and ($backendBusy -or $backendActiveRequests -gt 0 -or -not $backendOk -or -not $backendReady -or -not $backendSafeDevice)) {
+        $backendBlocked = $true
+    }
 
     $firstGoal = $null
     if ($null -ne $EvolutionGoalQueue -and (Has-Property $EvolutionGoalQueue "goals")) {
@@ -4803,6 +4813,12 @@ function New-SupervisorRecoveryPlanV1 {
         daemon_activity_state = $activityState
         transition_kind = $transitionKind
         active_round = $activeRound
+        backend_checked = [bool]$backendChecked
+        backend_busy = [bool]$backendBusy
+        backend_active_engine_requests = $backendActiveRequests
+        backend_readiness_ok = [bool]$backendReady
+        backend_ok = [bool]$backendOk
+        backend_safe_device_ok = [bool]$backendSafeDevice
         readiness_failures = @($failures)
         recovery_goal_id = if ($null -ne $firstGoal -and (Has-Property $firstGoal "goal_id")) { $firstGoal.goal_id } else { $null }
         recovery_goal_kind = if ($null -ne $firstGoal -and (Has-Property $firstGoal "kind")) { $firstGoal.kind } else { $null }
@@ -5185,7 +5201,7 @@ if ($null -ne $daemonStatus) {
     $daemonStatus | Add-Member -NotePropertyName "evolution_goal_queue_v1" -NotePropertyValue $evolutionGoalQueue -Force
 }
 $liveStatusBundle | Add-Member -NotePropertyName "evolution_goal_queue_v1" -NotePropertyValue $evolutionGoalQueue -Force
-$supervisorRecoveryPlanV1 = New-SupervisorRecoveryPlanV1 -DaemonStatus $daemonStatus -NextRoundDecisionReportV1 $nextRoundDecisionReportV1 -EvolutionGoalQueue $evolutionGoalQueue -ReadinessFailures $failures
+$supervisorRecoveryPlanV1 = New-SupervisorRecoveryPlanV1 -DaemonStatus $daemonStatus -BackendHealth $backendHealth -NextRoundDecisionReportV1 $nextRoundDecisionReportV1 -EvolutionGoalQueue $evolutionGoalQueue -ReadinessFailures $failures
 $liveStatusBundle | Add-Member -NotePropertyName "supervisor_recovery_plan_v1" -NotePropertyValue $supervisorRecoveryPlanV1 -Force
 
 $nextStep = if ($failures.Count -gt 0) {

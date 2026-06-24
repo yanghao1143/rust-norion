@@ -2439,6 +2439,22 @@ if ($restartable.supervisor_recovery_plan_v1.recovery_goal_releases_repair_facto
 }
 Assert-SupervisorRecoveryPlan -Plan $restartable.live_status_bundle.supervisor_recovery_plan_v1 -Name "restartable-stale-live-bundle" -ExpectedAction "start_daemon"
 
+$restartableBackendBusyFixture = Join-Path $testDir "restartable-stale-backend-busy-health.json"
+Set-Content -Encoding ASCII -LiteralPath $restartableBackendBusyFixture -Value '{"ok":true,"readiness_ok":false,"safe_device_ok":true,"engine_busy":true,"active_engine_requests":1,"gemma_runtime_reachable":true,"gemma_runtime_model":"status-fixture.gguf"}'
+$restartableBusyText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -BackendHealthJsonPath $restartableBackendBusyFixture -SkipRemoteChain -SkipProcess -DaemonWorkDir $restartableDaemonDir -RequireDaemonHealthy -JsonStatus -FailOnNotReady
+if ($LASTEXITCODE -eq 0) {
+    throw "restartable stale daemon with busy backend and FailOnNotReady should exit nonzero before supervisor starts it"
+}
+$restartableBusy = ($restartableBusyText | Out-String | ConvertFrom-Json)
+Assert-SupervisorRecoveryPlan -Plan $restartableBusy.supervisor_recovery_plan_v1 -Name "restartable-stale-backend-busy-status-top" -ExpectedAction "wait_backend"
+if ($restartableBusy.supervisor_recovery_plan_v1.allowed_to_start_daemon -eq $true) {
+    throw "restartable stale daemon supervisor plan allowed start while backend was busy"
+}
+if ($restartableBusy.supervisor_recovery_plan_v1.backend_busy -ne $true -or $restartableBusy.supervisor_recovery_plan_v1.backend_active_engine_requests -ne 1) {
+    throw "restartable stale daemon supervisor plan did not carry backend busy evidence"
+}
+Assert-SupervisorRecoveryPlan -Plan $restartableBusy.live_status_bundle.supervisor_recovery_plan_v1 -Name "restartable-stale-backend-busy-live-bundle" -ExpectedAction "wait_backend"
+
 $idleDaemonDir = Join-Path $testDir "daemon-idle"
 New-Item -ItemType Directory -Force -Path $idleDaemonDir | Out-Null
 Set-Content -Encoding ASCII -LiteralPath (Join-Path $idleDaemonDir "evolution-loop.pid") -Value ([string]$PID)
