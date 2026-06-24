@@ -84,6 +84,37 @@ function Assert-DaemonRoundTransitionConsumerStatus {
     }
 }
 
+function Assert-EvolutionGoalQueue {
+    param(
+        [object]$Queue,
+        [string]$Name,
+        [string]$ExpectedKind
+    )
+
+    if ($null -eq $Queue) {
+        throw "$Name missing evolution_goal_queue_v1"
+    }
+    if ($Queue.schema -ne "evolution_goal_queue_v1") {
+        throw "$Name goal queue schema mismatch"
+    }
+    if ($Queue.read_only -ne $true -or $Queue.report_only -ne $true -or $Queue.side_effects -ne $false) {
+        throw "$Name goal queue broke read-only/report-only side-effect contract"
+    }
+    if ($Queue.starts_process -ne $false -or $Queue.sends_prompt -ne $false) {
+        throw "$Name goal queue introduced process or prompt side effects"
+    }
+    if ($Queue.queue_len -le 0) {
+        throw "$Name goal queue should not be empty"
+    }
+    if (@($Queue.goal_kinds) -notcontains $ExpectedKind) {
+        throw "$Name goal queue missing expected kind $ExpectedKind"
+    }
+    $matching = @($Queue.goals | Where-Object { $_.kind -eq $ExpectedKind })
+    if ($matching.Count -eq 0 -or $matching[0].ready_for_next_round -ne $true) {
+        throw "$Name goal queue missing executable $ExpectedKind goal"
+    }
+}
+
 function Assert-DaemonRoundTransitionConsumerFixture {
     param([string]$Path)
 
@@ -2318,6 +2349,12 @@ $daemonStaleFailures = @($daemonStale.readiness.failures)
 if (($daemonStaleFailures -join ",") -notmatch "daemon_not_healthy") {
     throw "daemon healthy gate did not report daemon_not_healthy"
 }
+Assert-EvolutionGoalQueue -Queue $daemonStale.evolution_goal_queue_v1 -Name "stale-status-top" -ExpectedKind "repair"
+Assert-EvolutionGoalQueue -Queue $daemonStale.daemon.evolution_goal_queue_v1 -Name "stale-status-daemon" -ExpectedKind "repair"
+Assert-EvolutionGoalQueue -Queue $daemonStale.live_status_bundle.evolution_goal_queue_v1 -Name "stale-status-live-bundle" -ExpectedKind "repair"
+if (@($daemonStale.evolution_goal_queue_v1.goals | Where-Object { $_.kind -eq "repair" -and $_.releases_repair_factor -eq $true }).Count -eq 0) {
+    throw "stale status goal queue did not release a repair factor"
+}
 
 $daemonStaleFailText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $daemonDir -RequireDaemonHealthy -JsonStatus -FailOnNotReady
 if ($LASTEXITCODE -eq 0) {
@@ -2452,6 +2489,8 @@ if ($doneLag.live_status_bundle.daemon.daemon_round_transition_status.transition
 }
 Assert-NextRoundDecisionReportV1 -Report $doneLag.live_status_bundle.next_round_decision_report_v1 -Decision $doneLag.next_round_decision -Name "done-lag-live-bundle"
 Assert-NextRoundDownstreamStatusConsumersV1 -Projection $doneLag.live_status_bundle.next_round_downstream_status_consumers_v1 -Report $doneLag.live_status_bundle.next_round_decision_report_v1 -Name "done-lag-live-bundle" -DaemonRoundTransitionStatus $doneLag.live_status_bundle.daemon.daemon_round_transition_status
+Assert-EvolutionGoalQueue -Queue $doneLag.evolution_goal_queue_v1 -Name "done-lag-status-top" -ExpectedKind "splice"
+Assert-EvolutionGoalQueue -Queue $doneLag.live_status_bundle.evolution_goal_queue_v1 -Name "done-lag-live-bundle" -ExpectedKind "splice"
 
 $stalePostRoundDaemonDir = Join-Path $testDir "daemon-post-round-stale"
 New-Item -ItemType Directory -Force -Path $stalePostRoundDaemonDir | Out-Null

@@ -795,6 +795,77 @@ function New-DaemonRoundTransitionStatus {
     }
 }
 
+function New-EvolutionGoalItem {
+    param(
+        [string]$Kind,
+        [string]$IdSuffix,
+        [string]$Trigger,
+        [int]$Priority,
+        [object]$SourceRound,
+        [string]$Action,
+        [string]$Reason
+    )
+
+    $roundText = if ($null -ne $SourceRound) { "r$SourceRound" } else { "unknown" }
+    return [pscustomobject][ordered]@{
+        goal_id = "evolution-goal-$roundText-$IdSuffix"
+        kind = $Kind
+        trigger = $Trigger
+        priority = $Priority
+        source_round = $SourceRound
+        action = $Action
+        reason = if ($Reason.Length -gt 220) { $Reason.Substring(0, 220) } else { $Reason }
+        ready_for_next_round = $true
+        releases_repair_factor = $Kind -eq "repair" -or $Kind -eq "splice"
+        relabel_required = $Kind -eq "relabel"
+    }
+}
+
+function New-EvolutionGoalQueue {
+    param(
+        [string]$Source,
+        [object]$Activity,
+        [object]$ActiveRound,
+        [object]$LedgerLagRounds,
+        [bool]$ValidationExecutionOk = $true
+    )
+
+    $goals = @()
+    $activityState = if ($null -ne $Activity) { [string]$Activity.state } else { "" }
+    $activityReason = if ($null -ne $Activity) { [string]$Activity.reason } else { "" }
+
+    if ($activityState.StartsWith("stale") -or $activityState -eq "stale_pid" -or $activityState -eq "in_progress_no_stdout") {
+        $goals += New-EvolutionGoalItem -Kind "repair" -IdSuffix "daemon-stale" -Trigger "daemon_activity" -Priority 100 -SourceRound $ActiveRound -Action "release_repair_factor_for_stale_daemon_round" -Reason $activityReason
+    }
+    if ($activityState -eq "ledger_lag_after_completion") {
+        $goals += New-EvolutionGoalItem -Kind "splice" -IdSuffix "ledger-lag-after-completion" -Trigger "daemon_activity" -Priority 94 -SourceRound $ActiveRound -Action "splice_completed_round_terminal_evidence_into_ledger" -Reason $activityReason
+    }
+    if ($activityState -eq "round_done_waiting_ledger_commit" -or ($null -ne $LedgerLagRounds -and [int]$LedgerLagRounds -gt 0 -and $activityState -notmatch "^slow")) {
+        $goals += New-EvolutionGoalItem -Kind "splice" -IdSuffix "done-waiting-ledger" -Trigger "daemon_activity" -Priority 90 -SourceRound $ActiveRound -Action "splice_done_marker_to_ledger_commit_repair" -Reason $activityReason
+    }
+    if ($activityState -eq "slow_in_progress" -or $activityState -eq "slow_pre_round_activity") {
+        $goals += New-EvolutionGoalItem -Kind "fallback" -IdSuffix "slow-daemon" -Trigger "daemon_activity" -Priority 82 -SourceRound $ActiveRound -Action "fallback_runtime_or_pool_route_before_next_round" -Reason $activityReason
+    }
+    if (-not $ValidationExecutionOk) {
+        $goals += New-EvolutionGoalItem -Kind "relabel" -IdSuffix "validation-execution-missing" -Trigger "daemon_validation" -Priority 76 -SourceRound $ActiveRound -Action "relabel_validation_gate_to_repair_target" -Reason "daemon launch command does not enforce validation execution"
+    }
+
+    $goalKinds = @($goals | ForEach-Object { [string]$_.kind } | Sort-Object -Unique)
+    return [pscustomobject][ordered]@{
+        schema = "evolution_goal_queue_v1"
+        source = $Source
+        read_only = $true
+        report_only = $true
+        side_effects = $false
+        starts_process = $false
+        sends_prompt = $false
+        queue_len = [int]$goals.Count
+        executable_goal_count = [int]@($goals | Where-Object { $_.ready_for_next_round -eq $true }).Count
+        goal_kinds = @($goalKinds)
+        goals = @($goals)
+    }
+}
+
 function Daemon-Status {
     param(
         [string]$PidFile,
@@ -856,6 +927,8 @@ function Daemon-Status {
     $activity = Get-DaemonActivitySummary -Running $running -StalePidFile $stalePidFile -AdoptedOrphan $adoptedOrphan -LogSummary $logSummary -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness -LedgerLagRounds $ledgerLagRounds -BackendBusyStatus $backendBusyStatus -RoundTimeoutSecs $TimeoutSecs
     $operatorSummary = Format-DaemonOperatorSummary -Activity $activity -LogSummary $logSummary -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness -ActiveRound $activeRound -LedgerLatestRound $ledgerLatestRound -LedgerLagRounds $ledgerLagRounds
     $transitionStatus = New-DaemonRoundTransitionStatus -Activity $activity -LogSummary $logSummary -ActiveRound $activeRound -LedgerLatestRound $ledgerLatestRound -LedgerLagRounds $ledgerLagRounds -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness
+    $validationExecutionOk = (-not $RequireValidationExecution) -or $launchValidation.validation_execution_enforced
+    $evolutionGoalQueue = New-EvolutionGoalQueue -Source "daemon" -Activity $activity -ActiveRound $activeRound -LedgerLagRounds $ledgerLagRounds -ValidationExecutionOk:$validationExecutionOk
     return [pscustomobject][ordered]@{
         schema_version = 1
         contract_version = "smartsteam.evolution-loop.daemon.v1"
@@ -889,8 +962,9 @@ function Daemon-Status {
         operator_summary = $operatorSummary
         last_stop_reason = Read-LastStopReason -Path $LogPath
         validation_execution_required = $RequireValidationExecution
-        validation_execution_ok = (-not $RequireValidationExecution) -or $launchValidation.validation_execution_enforced
+        validation_execution_ok = $validationExecutionOk
         validation_execution_failure = if ($RequireValidationExecution -and -not $launchValidation.validation_execution_enforced) { "daemon launch command does not enforce validation execution" } else { "" }
+        evolution_goal_queue_v1 = $evolutionGoalQueue
         launch_validation = $launchValidation
         log_summary = $logSummary
         stdout_tail = $stdoutTail

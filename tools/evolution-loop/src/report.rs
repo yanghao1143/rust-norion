@@ -17,6 +17,7 @@ use norion_eval::{
 use crate::args::Config;
 use crate::clean_room_batch_status::{self, CleanRoomBatchStatusSummary};
 use crate::clean_room_handoff::{self, CleanRoomHandoffSummary};
+use crate::goal_queue::{self, GoalQueueInput};
 use crate::helper_feedback;
 use crate::helper_stage_repair::{self, HelperStageRepairStatus};
 use crate::json::{
@@ -6314,7 +6315,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_repair_factor_readiness_report_v1\":{},\"self_improve_proposal_repair_factor_release_report_v1\":{},\"self_improve_proposal_repair_factor_retag_plan_v1\":{},\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_repair_factor_readiness_report_v1\":{},\"self_improve_proposal_repair_factor_release_report_v1\":{},\"self_improve_proposal_repair_factor_retag_plan_v1\":{},\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"evolution_goal_queue_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -6493,11 +6494,31 @@ fn report_json_with_remote_chain_and_required_latest_roles(
             continuation_gate_failures,
             gate_failures
         ),
+        ledger_goal_queue_report_json(summary, gate_failures),
         option_record_json(summary.last.as_ref()),
         record_array_json(&summary.recent_failures),
         gate_failures.is_empty(),
         string_array_json(gate_failures)
     )
+}
+
+fn ledger_goal_queue_report_json(summary: &ReportSummary, gate_failures: &[String]) -> String {
+    goal_queue::ledger_goal_queue_json(GoalQueueInput {
+        source: "ledger_report",
+        latest_round: summary.last.as_ref().and_then(|record| record.round),
+        latest_success: summary.last.as_ref().map(|record| record.success),
+        latest_error: summary
+            .last
+            .as_ref()
+            .and_then(|record| record.error.as_deref()),
+        stream_truncation_failures: summary.stream_truncation_failures,
+        missing_final_failures: summary.missing_final_failures,
+        runtime_response_failures: summary.runtime_response_failures,
+        recent_stream_truncation_failures: summary.recent_stream_truncation_failures,
+        recent_missing_final_failures: summary.recent_missing_final_failures,
+        recent_runtime_response_failures: summary.recent_runtime_response_failures,
+        gate_failures,
+    })
 }
 
 fn pool_alignment_summary(
@@ -7052,6 +7073,50 @@ mod tests {
         assert!(json.contains("\"failure_kinds\":{\"chain_not_ready\":1}"));
         assert!(json.contains("\"backend_8686_reachable\":false"));
         assert!(json.contains("\"report_gate\":{\"passed\":true"));
+    }
+
+    #[test]
+    fn report_json_exposes_evolution_goal_queue_for_failed_or_stuck_ledger() {
+        let text = "{\"round\":1,\"case\":\"truncated\",\"success\":false,\"error\":\"/v1/business-cycle-stream stream truncated before terminal event\"}\n\
+{\"round\":2,\"case\":\"missing-final\",\"success\":false,\"error\":\"stream ended without final event\",\"runtime_tokens\":0,\"answer\":\"runtime backend error\"}\n";
+        let summary = summarize_ledger(text);
+        let gate_failures = vec![
+            "latest helper stage feedback for review missing required fields".to_owned(),
+            "latest test-gate validation was not checked".to_owned(),
+        ];
+        let json = report_json(&summary, None, None, None, &gate_failures);
+
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"evolution_goal_queue_v1\":{\"schema\":\"evolution_goal_queue_v1\"",
+                "\"read_only\":true",
+                "\"report_only\":true",
+                "\"side_effects\":false",
+                "\"starts_process\":false",
+                "\"sends_prompt\":false",
+            ],
+        );
+        assert!(json.contains("\"kind\":\"repair\""));
+        assert!(json.contains("\"kind\":\"splice\""));
+        assert!(json.contains("\"kind\":\"fallback\""));
+        assert!(json.contains("\"kind\":\"relabel\""));
+        assert!(json.contains("\"releases_repair_factor\":true"));
+        assert!(json.contains("\"relabel_required\":true"));
+        assert!(json.contains("\"source_round\":2"));
+    }
+
+    #[test]
+    fn report_json_keeps_evolution_goal_queue_empty_for_clean_success() {
+        let text = "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2,\"runtime_tokens\":11,\"runtime_model\":\"google/gemma\"}\n";
+        let summary = summarize_ledger(text);
+        let json = report_json(&summary, None, None, None, &[]);
+
+        assert!(
+            json.contains("\"evolution_goal_queue_v1\":{\"schema\":\"evolution_goal_queue_v1\"")
+        );
+        assert!(json.contains("\"queue_len\":0"));
+        assert!(json.contains("\"goals\":[]"));
     }
 
     #[test]

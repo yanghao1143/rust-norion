@@ -53,6 +53,37 @@ function Assert-DaemonRoundTransitionConsumerStatus {
     }
 }
 
+function Assert-EvolutionGoalQueue {
+    param(
+        [object]$Queue,
+        [string]$Name,
+        [string]$ExpectedKind
+    )
+
+    if ($null -eq $Queue) {
+        throw "$Name missing evolution_goal_queue_v1"
+    }
+    if ($Queue.schema -ne "evolution_goal_queue_v1") {
+        throw "$Name goal queue schema mismatch"
+    }
+    if ($Queue.read_only -ne $true -or $Queue.report_only -ne $true -or $Queue.side_effects -ne $false) {
+        throw "$Name goal queue broke read-only/report-only side-effect contract"
+    }
+    if ($Queue.starts_process -ne $false -or $Queue.sends_prompt -ne $false) {
+        throw "$Name goal queue introduced process or prompt side effects"
+    }
+    if ($Queue.queue_len -le 0) {
+        throw "$Name goal queue should not be empty"
+    }
+    if (@($Queue.goal_kinds) -notcontains $ExpectedKind) {
+        throw "$Name goal queue missing expected kind $ExpectedKind"
+    }
+    $matching = @($Queue.goals | Where-Object { $_.kind -eq $ExpectedKind })
+    if ($matching.Count -eq 0 -or $matching[0].ready_for_next_round -ne $true) {
+        throw "$Name goal queue missing executable $ExpectedKind goal"
+    }
+}
+
 $transitionConsumerFixtureJson = Get-Content -Raw -LiteralPath $transitionConsumerFixture | ConvertFrom-Json
 if ($transitionConsumerFixtureJson.consumer_contract.daemon_json_path -ne "daemon.daemon_round_transition_status") {
     throw "transition consumer fixture daemon json path changed"
@@ -542,6 +573,7 @@ $strictMissingDaemonFailures = @($strictMissingDaemon.loop.readiness.failures) -
 if ($strictMissingDaemonFailures -notmatch "latest_helper_stage_roles_missing" -or $strictMissingDaemonFailures -notmatch "latest_test_gate_not_pass") {
     throw "daemon strict unattended evolution did not expose expected strict failures: $strictMissingDaemonFailures"
 }
+Assert-EvolutionGoalQueue -Queue $strictMissingDaemon.loop.evolution_goal_queue_v1 -Name "daemon-strict-missing-loop" -ExpectedKind "relabel"
 
 $daemonWorkDir = Join-Path $RepoRoot $workDir
 New-Item -ItemType Directory -Force -Path $daemonWorkDir | Out-Null
@@ -727,6 +759,10 @@ if ($staleProgress.daemon.daemon_round_transition_status.activity_reason -ne "ro
 if ([string]$staleProgress.daemon.operator_summary -notmatch "state=stale_in_progress") {
     throw "daemon stale progress summary did not expose operator summary"
 }
+Assert-EvolutionGoalQueue -Queue $staleProgress.daemon.evolution_goal_queue_v1 -Name "daemon-stale-progress" -ExpectedKind "repair"
+if (@($staleProgress.daemon.evolution_goal_queue_v1.goals | Where-Object { $_.kind -eq "repair" -and $_.releases_repair_factor -eq $true }).Count -eq 0) {
+    throw "daemon stale progress goal queue did not release a repair factor"
+}
 
 $staleProgressFailText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $daemon -JsonStatus -WorkDir $workDir -SkipBackend -SkipRemoteChain -FailOnUnhealthy 2>&1
 if ($LASTEXITCODE -eq 0) {
@@ -834,6 +870,7 @@ Assert-DaemonRoundTransitionConsumerStatus -Status $doneLag.daemon.daemon_round_
 if ($doneLag.daemon.ledger_lag_rounds -ne 1) {
     throw "daemon done-marker ledger-lag summary did not expose ledger lag"
 }
+Assert-EvolutionGoalQueue -Queue $doneLag.daemon.evolution_goal_queue_v1 -Name "daemon-done-lag" -ExpectedKind "splice"
 
 Write-Host "evolution_loop_daemon_selftest=PASS"
 Write-Host "starts_process=false"

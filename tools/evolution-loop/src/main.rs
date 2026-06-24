@@ -1,6 +1,7 @@
 mod args;
 mod clean_room_batch_status;
 mod clean_room_handoff;
+mod goal_queue;
 mod helper_feedback;
 mod helper_stage_repair;
 mod http;

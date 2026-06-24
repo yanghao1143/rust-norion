@@ -4331,6 +4331,93 @@ function New-DaemonRoundTransitionStatus {
     }
 }
 
+function New-EvolutionGoalItem {
+    param(
+        [string]$Kind,
+        [string]$IdSuffix,
+        [string]$Trigger,
+        [int]$Priority,
+        [object]$SourceRound,
+        [string]$Action,
+        [string]$Reason
+    )
+
+    $roundText = if ($null -ne $SourceRound) { "r$SourceRound" } else { "unknown" }
+    return [pscustomobject][ordered]@{
+        goal_id = "evolution-goal-$roundText-$IdSuffix"
+        kind = $Kind
+        trigger = $Trigger
+        priority = $Priority
+        source_round = $SourceRound
+        action = $Action
+        reason = if ($Reason.Length -gt 220) { $Reason.Substring(0, 220) } else { $Reason }
+        ready_for_next_round = $true
+        releases_repair_factor = $Kind -eq "repair" -or $Kind -eq "splice"
+        relabel_required = $Kind -eq "relabel"
+    }
+}
+
+function New-EvolutionGoalQueue {
+    param(
+        [string]$Source,
+        [object]$DaemonStatus,
+        [object]$ReportStatus = $null,
+        [object[]]$ReadinessFailures = @()
+    )
+
+    $goals = @()
+    $activityState = if ($null -ne $DaemonStatus -and (Has-Property $DaemonStatus "activity_state")) { [string]$DaemonStatus.activity_state } elseif ($null -ne $DaemonStatus -and (Has-Property $DaemonStatus "activity")) { [string]$DaemonStatus.activity.state } else { "" }
+    $activityReason = if ($null -ne $DaemonStatus -and (Has-Property $DaemonStatus "activity_reason")) { [string]$DaemonStatus.activity_reason } elseif ($null -ne $DaemonStatus -and (Has-Property $DaemonStatus "activity")) { [string]$DaemonStatus.activity.reason } else { "" }
+    $sourceRound = if ($null -ne $DaemonStatus -and (Has-Property $DaemonStatus "active_round")) { $DaemonStatus.active_round } else { $null }
+    $ledgerLag = if ($null -ne $DaemonStatus -and (Has-Property $DaemonStatus "ledger_lag_rounds")) { $DaemonStatus.ledger_lag_rounds } else { $null }
+
+    if ($activityState.StartsWith("stale") -or $activityState -eq "stale_pid" -or $activityState -eq "in_progress_no_stdout") {
+        $goals += New-EvolutionGoalItem -Kind "repair" -IdSuffix "daemon-stale" -Trigger "daemon_activity" -Priority 100 -SourceRound $sourceRound -Action "release_repair_factor_for_stale_daemon_round" -Reason $activityReason
+    }
+    if ($activityState -eq "ledger_lag_after_completion") {
+        $goals += New-EvolutionGoalItem -Kind "splice" -IdSuffix "ledger-lag-after-completion" -Trigger "daemon_activity" -Priority 94 -SourceRound $sourceRound -Action "splice_completed_round_terminal_evidence_into_ledger" -Reason $activityReason
+    }
+    if ($activityState -eq "round_done_waiting_ledger_commit" -or ($null -ne $ledgerLag -and [int]$ledgerLag -gt 0 -and $activityState -notmatch "^slow")) {
+        $goals += New-EvolutionGoalItem -Kind "splice" -IdSuffix "done-waiting-ledger" -Trigger "daemon_activity" -Priority 90 -SourceRound $sourceRound -Action "splice_done_marker_to_ledger_commit_repair" -Reason $activityReason
+    }
+    if ($activityState -eq "slow_in_progress" -or $activityState -eq "slow_pre_round_activity") {
+        $goals += New-EvolutionGoalItem -Kind "fallback" -IdSuffix "slow-daemon" -Trigger "daemon_activity" -Priority 82 -SourceRound $sourceRound -Action "fallback_runtime_or_pool_route_before_next_round" -Reason $activityReason
+    }
+
+    if ($null -ne $ReportStatus -and (Has-Property $ReportStatus "report_gate_passed") -and $ReportStatus.report_gate_passed -eq $false) {
+        $goals += New-EvolutionGoalItem -Kind "relabel" -IdSuffix "report-gate" -Trigger "report_gate" -Priority 78 -SourceRound $sourceRound -Action "relabel_report_gate_failure_to_repair_target" -Reason "report gate failed"
+    }
+
+    foreach ($failure in @($ReadinessFailures)) {
+        $failureText = [string]$failure
+        if ([string]::IsNullOrWhiteSpace($failureText)) {
+            continue
+        }
+        if ($failureText -match "helper|test_gate|test-gate|validation|role|label") {
+            $goals += New-EvolutionGoalItem -Kind "relabel" -IdSuffix ($failureText -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant() -Trigger "readiness_failure" -Priority 76 -SourceRound $sourceRound -Action "relabel_failed_gate_to_repair_target" -Reason $failureText
+        } elseif ($failureText -match "backend|remote_chain") {
+            $goals += New-EvolutionGoalItem -Kind "fallback" -IdSuffix ($failureText -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant() -Trigger "readiness_failure" -Priority 74 -SourceRound $sourceRound -Action "fallback_runtime_or_pool_route" -Reason $failureText
+        } elseif ($failureText -match "latest_round_not_successful|daemon_not_healthy") {
+            $goals += New-EvolutionGoalItem -Kind "repair" -IdSuffix ($failureText -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant() -Trigger "readiness_failure" -Priority 72 -SourceRound $sourceRound -Action "repair_latest_failed_or_unhealthy_round" -Reason $failureText
+        }
+    }
+
+    $goalKinds = @($goals | ForEach-Object { [string]$_.kind } | Sort-Object -Unique)
+    return [pscustomobject][ordered]@{
+        schema = "evolution_goal_queue_v1"
+        source = $Source
+        read_only = $true
+        report_only = $true
+        side_effects = $false
+        starts_process = $false
+        sends_prompt = $false
+        queue_len = [int]$goals.Count
+        executable_goal_count = [int]@($goals | Where-Object { $_.ready_for_next_round -eq $true }).Count
+        goal_kinds = @($goalKinds)
+        goals = @($goals)
+    }
+}
+
 function New-LiveStatusBundle {
     param(
         [object]$DaemonStatus,
@@ -5008,6 +5095,12 @@ if ($RequireLatestSafeTestGateValidationCommandEffective) {
     }
 }
 
+$evolutionGoalQueue = New-EvolutionGoalQueue -Source "status" -DaemonStatus $daemonStatus -ReportStatus $reportStatus -ReadinessFailures $failures
+if ($null -ne $daemonStatus) {
+    $daemonStatus | Add-Member -NotePropertyName "evolution_goal_queue_v1" -NotePropertyValue $evolutionGoalQueue -Force
+}
+$liveStatusBundle | Add-Member -NotePropertyName "evolution_goal_queue_v1" -NotePropertyValue $evolutionGoalQueue -Force
+
 $nextStep = if ($failures.Count -gt 0) {
     "fix status failures before unattended evolution"
 } elseif ($daemonStatus.checked -and (Has-Property $daemonStatus "daemon_restart_recommended") -and $daemonStatus.daemon_restart_recommended) {
@@ -5048,6 +5141,7 @@ $status = [pscustomobject][ordered]@{
     next_round_decision = $nextRoundDecision
     next_round_decision_report_v1 = $nextRoundDecisionReportV1
     next_round_downstream_status_consumers_v1 = $nextRoundDownstreamStatusConsumersV1
+    evolution_goal_queue_v1 = $evolutionGoalQueue
     readiness = [pscustomobject][ordered]@{
         ready = $failures.Count -eq 0
         failures = $failures
