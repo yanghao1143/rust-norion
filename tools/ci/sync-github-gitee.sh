@@ -17,6 +17,9 @@ require_env GH_TOKEN
 
 SYNC_PREFIX="${SYNC_PREFIX:-sync/gitee}"
 PROTECTED_BRANCHES="${PROTECTED_BRANCHES:-main codex-runtime-device-abi}"
+SYNC_RETRY_ATTEMPTS="${SYNC_RETRY_ATTEMPTS:-3}"
+SYNC_RETRY_DELAY_SECS="${SYNC_RETRY_DELAY_SECS:-10}"
+SYNC_GIT_TIMEOUT_SECS="${SYNC_GIT_TIMEOUT_SECS:-120}"
 
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -24,10 +27,39 @@ git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git remote remove gitee 2>/dev/null || true
 git remote add gitee "https://${GITEE_USERNAME}:${GITEE_TOKEN}@gitee.com/${GITEE_REPOSITORY}.git"
 
+git_net() {
+  timeout "${SYNC_GIT_TIMEOUT_SECS}" \
+    git \
+      -c http.lowSpeedLimit=1 \
+      -c http.lowSpeedTime=30 \
+      "$@"
+}
+
+retry() {
+  local attempt=1
+  local status=0
+
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+
+    status=$?
+    if (( attempt >= SYNC_RETRY_ATTEMPTS )); then
+      echo "Command failed after ${attempt} attempt(s): $*" >&2
+      return "${status}"
+    fi
+
+    echo "Command failed with status ${status}; retrying in ${SYNC_RETRY_DELAY_SECS}s: $*" >&2
+    sleep "${SYNC_RETRY_DELAY_SECS}"
+    attempt=$((attempt + 1))
+  done
+}
+
 echo "Fetching GitHub and Gitee branch refs..."
-git fetch origin '+refs/heads/*:refs/remotes/origin/*' --prune
-git fetch gitee '+refs/heads/*:refs/remotes/gitee/*' --prune
-git fetch origin '+refs/tags/*:refs/tags/*' --prune || true
+retry git_net fetch origin '+refs/heads/*:refs/remotes/origin/*' --prune
+retry git_net fetch gitee '+refs/heads/*:refs/remotes/gitee/*' --prune
+retry git_net fetch origin '+refs/tags/*:refs/tags/*' --prune || true
 
 branch_ref_exists() {
   git show-ref --verify --quiet "$1"
@@ -59,7 +91,7 @@ open_or_update_gitee_pr() {
   local title="sync: import Gitee ${branch}"
 
   echo "Publishing ${sync_branch} for ${branch}: ${reason}"
-  git push origin "refs/remotes/gitee/${branch}:refs/heads/${sync_branch}"
+  retry git_net push origin "refs/remotes/gitee/${branch}:refs/heads/${sync_branch}"
 
   local existing_pr
   existing_pr="$(gh pr list \
@@ -96,7 +128,7 @@ sync_gitee_branches_into_github() {
 
     if ! branch_ref_exists "${github_ref}"; then
       echo "GitHub is missing ${branch}; creating it from Gitee."
-      git push origin "${gitee_ref}:refs/heads/${branch}"
+      retry git_net push origin "${gitee_ref}:refs/heads/${branch}"
       continue
     fi
 
@@ -114,7 +146,7 @@ sync_gitee_branches_into_github() {
         open_or_update_gitee_pr "${branch}" "Gitee is ahead of protected GitHub branch ${branch}."
       else
         echo "Fast-forwarding GitHub ${branch} from Gitee."
-        if ! git push origin "${gitee_ref}:refs/heads/${branch}"; then
+        if ! retry git_net push origin "${gitee_ref}:refs/heads/${branch}"; then
           open_or_update_gitee_pr "${branch}" "GitHub rejected a fast-forward update for ${branch}."
         fi
       fi
@@ -143,7 +175,7 @@ sync_github_branches_into_gitee() {
 
     if ! branch_ref_exists "${gitee_ref}"; then
       echo "Gitee is missing ${branch}; creating it from GitHub."
-      git push gitee "${github_ref}:refs/heads/${branch}"
+      retry git_net push gitee "${github_ref}:refs/heads/${branch}"
       continue
     fi
 
@@ -158,7 +190,7 @@ sync_github_branches_into_gitee() {
 
     if is_ancestor "${gitee_ref}" "${github_ref}"; then
       echo "Fast-forwarding Gitee ${branch} from GitHub."
-      git push gitee "${github_ref}:refs/heads/${branch}"
+      retry git_net push gitee "${github_ref}:refs/heads/${branch}"
       continue
     fi
 
@@ -184,8 +216,10 @@ sync_tags() {
   origin_tags="$(mktemp)"
   gitee_tags="$(mktemp)"
 
-  git ls-remote --tags origin | grep -v '\^{}' > "${origin_tags}" || true
-  git ls-remote --tags gitee | grep -v '\^{}' > "${gitee_tags}" || true
+  retry git_net ls-remote --tags origin > "${origin_tags}.all" || true
+  retry git_net ls-remote --tags gitee > "${gitee_tags}.all" || true
+  grep -v '\^{}' "${origin_tags}.all" > "${origin_tags}" || true
+  grep -v '\^{}' "${gitee_tags}.all" > "${gitee_tags}" || true
 
   while read -r sha ref; do
     [[ -z "${sha:-}" || -z "${ref:-}" ]] && continue
@@ -194,7 +228,7 @@ sync_tags() {
     gitee_sha="$(tag_sha_from_file "${gitee_tags}" "${tag}")"
     if [[ -z "${gitee_sha}" ]]; then
       echo "Creating missing Gitee tag ${tag}."
-      git push gitee "refs/tags/${tag}:refs/tags/${tag}"
+      retry git_net push gitee "refs/tags/${tag}:refs/tags/${tag}"
     elif [[ "${gitee_sha}" != "${sha}" ]]; then
       echo "Tag conflict for ${tag}; leaving both sides unchanged."
     fi
@@ -207,8 +241,8 @@ sync_tags() {
     origin_sha="$(tag_sha_from_file "${origin_tags}" "${tag}")"
     if [[ -z "${origin_sha}" ]]; then
       echo "Importing missing GitHub tag ${tag} from Gitee."
-      git fetch gitee "refs/tags/${tag}:refs/tags/${tag}"
-      git push origin "refs/tags/${tag}:refs/tags/${tag}"
+      retry git_net fetch gitee "refs/tags/${tag}:refs/tags/${tag}"
+      retry git_net push origin "refs/tags/${tag}:refs/tags/${tag}"
     elif [[ "${origin_sha}" != "${sha}" ]]; then
       echo "Tag conflict for ${tag}; leaving both sides unchanged."
     fi
