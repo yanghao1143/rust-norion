@@ -11,3 +11,9 @@ noiron-memory.tsv
 state/
 !src/**/state/
 !src/**/state/*.rs
+
+# Local secrets and machine-specific runtime configuration.
+.env
+.env.*
+!.env.example
+!*.env.example
