@@ -139,10 +139,11 @@ pub use planning::{
     RuntimePlanningReadinessSummary, RuntimePlanningSummary,
 };
 pub use profile::{
-    HierarchyAdjustmentFeedback, HierarchyAdjustmentFeedbackSummary, HierarchyWeightFocus,
-    HierarchyWeights, HierarchyWeightsSummary, ProfileHierarchyObservations,
+    HierarchyAdjustmentFeedback, HierarchyAdjustmentFeedbackSummary, HierarchyMutationKind,
+    HierarchyWeightFocus, HierarchyWeights, HierarchyWeightsSummary, ProfileHierarchyObservations,
     ProfileHierarchyWeights, ProfileHierarchyWeightsSummary, TaskAwareHierarchyAdjustmentPolicy,
-    TaskAwareHierarchyAdjustmentReport, TaskProfile,
+    TaskAwareHierarchyAdjustmentReport, TaskAwareHierarchyMutationHistory,
+    TaskAwareHierarchyMutationPlan, TaskAwareHierarchyMutationRecord, TaskProfile,
 };
 pub use quant::{
     KvQuantizationPlan, QuantizationError, QuantizedKvBlock, QuantizedKvPayloadSummary,
