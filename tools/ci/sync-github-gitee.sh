@@ -69,6 +69,10 @@ is_ancestor() {
   git merge-base --is-ancestor "$1" "$2"
 }
 
+same_tree() {
+  [[ "$(git rev-parse "$1^{tree}")" == "$(git rev-parse "$2^{tree}")" ]]
+}
+
 is_protected_branch() {
   local branch="$1"
   for protected in ${PROTECTED_BRANCHES}; do
@@ -141,6 +145,11 @@ sync_gitee_branches_into_github() {
       continue
     fi
 
+    if same_tree "${github_ref}" "${gitee_ref}"; then
+      echo "GitHub and Gitee content already match for ${branch}; no import PR needed."
+      continue
+    fi
+
     if is_ancestor "${github_ref}" "${gitee_ref}"; then
       if is_protected_branch "${branch}"; then
         open_or_update_gitee_pr "${branch}" "Gitee is ahead of protected GitHub branch ${branch}."
@@ -185,6 +194,11 @@ sync_github_branches_into_gitee() {
     github_sha="$(git rev-parse "${github_ref}")"
 
     if [[ "${gitee_sha}" == "${github_sha}" ]]; then
+      continue
+    fi
+
+    if same_tree "${gitee_ref}" "${github_ref}"; then
+      echo "GitHub and Gitee content already match for ${branch}; skipping outbound push."
       continue
     fi
 
