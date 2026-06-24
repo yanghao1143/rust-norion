@@ -30,7 +30,9 @@ use crate::pool_artifacts::{
     self, PoolBudgetFairnessSummary, PoolManifestSummary, PoolRouteSummary, PoolStatusSummary,
 };
 use crate::pool_stage;
-use crate::profile_scoring::{self, OfflineReplayReport, ScoringConfig};
+use crate::profile_scoring::{
+    self, CircuitBreakerConfig, CircuitBreakerReport, OfflineReplayReport, ScoringConfig,
+};
 use crate::remote_chain::{self, RemoteChainStatusSummary};
 use crate::self_improve_proposal_artifact::{self, SelfImproveProposalArtifact};
 use crate::validation;
@@ -294,6 +296,24 @@ fn load_profile_outcome_replay_report(
     )))
 }
 
+fn load_profile_circuit_breaker_report(
+    config: &Config,
+) -> Result<Option<CircuitBreakerReport>, String> {
+    let Some(path) = config.profile_outcome_log_path.as_deref() else {
+        return Ok(None);
+    };
+    let text = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "read profile outcome log {} failed: {error}",
+            path.display()
+        )
+    })?;
+    Ok(Some(CircuitBreakerReport::from_outcome_jsonl(
+        &text,
+        &CircuitBreakerConfig::default(),
+    )))
+}
+
 pub(crate) fn run(config: Config) -> Result<(), String> {
     let text = fs::read_to_string(&config.ledger_path).map_err(|error| {
         format!(
@@ -309,6 +329,7 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
     let pool_budget_fairness =
         pool_artifacts::load_budget_fairness(config.pool_budget_fairness_json_path.as_deref())?;
     let profile_outcome_replay_report = load_profile_outcome_replay_report(&config)?;
+    let profile_circuit_breaker_report = load_profile_circuit_breaker_report(&config)?;
     let remote_chain_status =
         remote_chain::load_status(config.remote_chain_status_json_path.as_deref())?;
     let worker_window_status =
@@ -330,6 +351,7 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
         pool_route.as_ref(),
         pool_budget_fairness.as_ref(),
         profile_outcome_replay_report.as_ref(),
+        profile_circuit_breaker_report.as_ref(),
         worker_window_status.as_ref(),
         clean_room_batch_status.as_ref(),
         clean_room_handoff.as_ref(),
@@ -378,6 +400,7 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             pool_route.as_ref(),
             pool_budget_fairness.as_ref(),
             profile_outcome_replay_report.as_ref(),
+            profile_circuit_breaker_report.as_ref(),
             worker_window_status.as_ref(),
             clean_room_batch_status.as_ref(),
             clean_room_handoff.as_ref(),
@@ -433,6 +456,7 @@ pub(crate) fn write_run_report_json(
     let pool_budget_fairness =
         pool_artifacts::load_budget_fairness(config.pool_budget_fairness_json_path.as_deref())?;
     let profile_outcome_replay_report = load_profile_outcome_replay_report(config)?;
+    let profile_circuit_breaker_report = load_profile_circuit_breaker_report(config)?;
     let remote_chain_status =
         remote_chain::load_status(config.remote_chain_status_json_path.as_deref())?;
     let worker_window_status =
@@ -489,6 +513,7 @@ pub(crate) fn write_run_report_json(
         pool_route.as_ref(),
         pool_budget_fairness.as_ref(),
         profile_outcome_replay_report.as_ref(),
+        profile_circuit_breaker_report.as_ref(),
         worker_window_status.as_ref(),
         clean_room_batch_status.as_ref(),
         clean_room_handoff.as_ref(),
@@ -1405,6 +1430,7 @@ fn print_report(
     pool_route: Option<&PoolRouteSummary>,
     pool_budget_fairness: Option<&PoolBudgetFairnessSummary>,
     profile_outcome_replay_report: Option<&OfflineReplayReport>,
+    profile_circuit_breaker_report: Option<&CircuitBreakerReport>,
     worker_window_status: Option<&WorkerWindowStatusSummary>,
     clean_room_batch_status: Option<&CleanRoomBatchStatusSummary>,
     clean_room_handoff: Option<&CleanRoomHandoffSummary>,
@@ -1569,6 +1595,18 @@ fn print_report(
             report.profile_candidate.sample_count,
             report.switch_decision.allow_switch,
             report.switch_decision.reason
+        );
+    }
+    if let Some(report) = profile_circuit_breaker_report {
+        println!(
+            "profile_circuit_breaker_report_v1: total_records={} profiles={} open={} half_open={} rollback_required={} fallback_strategy={} reason={}",
+            report.total_records,
+            report.profile_count,
+            report.open_count,
+            report.half_open_count,
+            report.rollback_required,
+            report.fallback_strategy,
+            report.rollback_reason.as_deref().unwrap_or("none")
         );
     }
     if let Some(worker_window_status) = worker_window_status {
@@ -6207,6 +6245,7 @@ fn write_report_json(
     pool_route: Option<&PoolRouteSummary>,
     pool_budget_fairness: Option<&PoolBudgetFairnessSummary>,
     profile_outcome_replay_report: Option<&OfflineReplayReport>,
+    profile_circuit_breaker_report: Option<&CircuitBreakerReport>,
     worker_window_status: Option<&WorkerWindowStatusSummary>,
     clean_room_batch_status: Option<&CleanRoomBatchStatusSummary>,
     clean_room_handoff: Option<&CleanRoomHandoffSummary>,
@@ -6235,6 +6274,7 @@ fn write_report_json(
             pool_route,
             pool_budget_fairness,
             profile_outcome_replay_report,
+            profile_circuit_breaker_report,
             worker_window_status,
             clean_room_batch_status,
             clean_room_handoff,
@@ -6292,6 +6332,7 @@ fn report_json_with_required_latest_helper_stage_roles(
         None,
         None,
         None,
+        None,
         required_latest_helper_stage_roles,
         &[],
         &[],
@@ -6325,6 +6366,7 @@ fn report_json_with_remote_chain(
         pool_route,
         pool_budget_fairness,
         None,
+        None,
         worker_window_status,
         clean_room_batch_status,
         clean_room_handoff,
@@ -6345,6 +6387,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
     pool_route: Option<&PoolRouteSummary>,
     pool_budget_fairness: Option<&PoolBudgetFairnessSummary>,
     profile_outcome_replay_report: Option<&OfflineReplayReport>,
+    profile_circuit_breaker_report: Option<&CircuitBreakerReport>,
     worker_window_status: Option<&WorkerWindowStatusSummary>,
     clean_room_batch_status: Option<&CleanRoomBatchStatusSummary>,
     clean_room_handoff: Option<&CleanRoomHandoffSummary>,
@@ -6357,7 +6400,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_repair_factor_readiness_report_v1\":{},\"self_improve_proposal_repair_factor_release_report_v1\":{},\"self_improve_proposal_repair_factor_retag_plan_v1\":{},\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"profile_routing_offline_replay_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"evolution_goal_queue_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_repair_factor_queue_v1\":{},\"self_improve_proposal_repair_factor_readiness_report_v1\":{},\"self_improve_proposal_repair_factor_release_report_v1\":{},\"self_improve_proposal_repair_factor_retag_plan_v1\":{},\"self_improve_proposal_repair_factor_regeneration_admission_report_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"profile_routing_offline_replay_report_v1\":{},\"profile_circuit_breaker_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"evolution_goal_queue_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -6519,6 +6562,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
         pool_artifacts::option_alignment_json(pool_alignment.as_ref()),
         pool_artifacts::option_budget_fairness_json(pool_budget_fairness),
         profile_scoring::option_offline_replay_json(profile_outcome_replay_report),
+        profile_scoring::option_circuit_breaker_json(profile_circuit_breaker_report),
         worker_window_status::option_status_json(worker_window_status),
         clean_room_batch_status::option_status_json(clean_room_batch_status),
         clean_room_handoff::option_status_json(clean_room_handoff),
@@ -11149,6 +11193,69 @@ mod tests {
             ],
         );
         assert_occurrences(&json, "\"profile_routing_offline_replay_report_v1\":{", 1);
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"profile_circuit_breaker_report_v1\":{\"schema\":\"norion.profile_circuit_breaker_report.v1\"",
+                "\"open_count\":0",
+                "\"rollback_required\":false",
+            ],
+        );
+
+        let _ = fs::remove_file(ledger_path);
+        let _ = fs::remove_file(outcome_path);
+        let _ = fs::remove_file(report_path);
+    }
+
+    #[test]
+    fn run_report_json_embeds_profile_circuit_breaker_report() {
+        let dir = std::env::temp_dir();
+        let unique = format!(
+            "smartsteam-run-report-profile-circuit-breaker-{}",
+            std::process::id()
+        );
+        let ledger_path = dir.join(format!("{unique}.jsonl"));
+        let outcome_path = dir.join(format!("{unique}-outcomes.jsonl"));
+        let report_path = dir.join(format!("{unique}.json"));
+        let _ = fs::remove_file(&ledger_path);
+        let _ = fs::remove_file(&outcome_path);
+        let _ = fs::remove_file(&report_path);
+        fs::write(
+            &ledger_path,
+            "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2}\n",
+        )
+        .unwrap();
+        fs::write(
+            &outcome_path,
+            "{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"profile-bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":10}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"profile-bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":11}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"profile-bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":12}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"profile-good\",\"task_kind\":\"review\",\"ok\":true,\"latency_ms\":900,\"cost_estimate_micro_usd\":620,\"quality_score\":0.84,\"timestamp_unix\":12}\n",
+        )
+        .unwrap();
+        let config = Config {
+            ledger_path: ledger_path.clone(),
+            profile_outcome_log_path: Some(outcome_path.clone()),
+            profile_outcome_min_samples: 1,
+            ..Config::default()
+        };
+
+        write_run_report_json(&config, &report_path, true, false).unwrap();
+        let json = fs::read_to_string(&report_path).unwrap();
+
+        assert_contains_in_order(
+            &json,
+            &[
+                "\"profile_circuit_breaker_report_v1\":{\"schema\":\"norion.profile_circuit_breaker_report.v1\"",
+                "\"open_count\":1",
+                "\"rollback_required\":true",
+                "\"rollback_reason\":\"profile_circuit_breaker_degraded profiles=profile-bad:review:timeout\"",
+                "\"fallback_strategy\":\"rule-routing|quality-only\"",
+                "\"state\":\"open\"",
+                "\"last_reason\":\"timeout\"",
+            ],
+        );
+        assert_occurrences(&json, "\"profile_circuit_breaker_report_v1\":{", 1);
 
         let _ = fs::remove_file(ledger_path);
         let _ = fs::remove_file(outcome_path);

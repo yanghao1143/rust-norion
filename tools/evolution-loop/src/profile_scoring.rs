@@ -93,11 +93,13 @@ pub(crate) struct OutcomeSample {
     pub(crate) model_id: String,
     pub(crate) skill_tag: String,
     pub(crate) success: bool,
+    pub(crate) error_kind: Option<String>,
     pub(crate) latency_ms: Option<f64>,
     pub(crate) cost: Option<f64>,
     pub(crate) quality_hint: Option<f64>,
     pub(crate) cache_hit: bool,
     pub(crate) drift_detected: bool,
+    pub(crate) timestamp_unix: Option<u64>,
 }
 
 impl OutcomeSample {
@@ -133,11 +135,13 @@ impl OutcomeSample {
             model_id,
             skill_tag,
             success,
+            error_kind: json_string_field(body, "error_kind"),
             latency_ms,
             cost,
             quality_hint,
             cache_hit,
             drift_detected,
+            timestamp_unix: json_u64_field(body, "timestamp_unix"),
         })
     }
 }
@@ -146,6 +150,7 @@ impl OutcomeSample {
 pub(crate) struct ScoringConfig {
     pub(crate) version: String,
     pub(crate) rollback_hint: String,
+    pub(crate) circuit_breaker: CircuitBreakerConfig,
     pub(crate) success_alpha: f64,
     pub(crate) reliability_alpha: f64,
     pub(crate) latency_alpha: f64,
@@ -171,6 +176,7 @@ impl Default for ScoringConfig {
         Self {
             version: SCORING_VERSION.to_owned(),
             rollback_hint: "disable profile routing and fall back to rule routing".to_owned(),
+            circuit_breaker: CircuitBreakerConfig::default(),
             success_alpha: 0.30,
             reliability_alpha: 0.20,
             latency_alpha: 0.25,
@@ -199,6 +205,9 @@ pub(crate) struct RoutingScore {
     pub(crate) skill_tag: String,
     pub(crate) score: f64,
     pub(crate) explore: bool,
+    pub(crate) circuit_state: String,
+    pub(crate) circuit_reason: Option<String>,
+    pub(crate) probe_allowed: bool,
     pub(crate) reason: String,
 }
 
@@ -478,6 +487,386 @@ pub(crate) fn option_offline_replay_json(summary: Option<&OfflineReplayReport>) 
         .unwrap_or_else(|| "null".to_owned())
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CircuitBreakerConfig {
+    pub(crate) enabled: bool,
+    pub(crate) failure_threshold: u64,
+    pub(crate) cooldown_seconds: u64,
+    pub(crate) quality_drop_threshold: f64,
+    pub(crate) budget_overrun_threshold: f64,
+    pub(crate) severe_budget_multiplier: f64,
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            failure_threshold: 3,
+            cooldown_seconds: 300,
+            quality_drop_threshold: 0.35,
+            budget_overrun_threshold: 10_000.0,
+            severe_budget_multiplier: 2.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CircuitBreakerState {
+    Closed,
+    Open,
+    HalfOpen,
+}
+
+impl CircuitBreakerState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Closed => "closed",
+            Self::Open => "open",
+            Self::HalfOpen => "half_open",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CircuitBreakerDecision {
+    pub(crate) state: CircuitBreakerState,
+    pub(crate) selectable: bool,
+    pub(crate) probe_allowed: bool,
+    pub(crate) reason: Option<String>,
+}
+
+impl CircuitBreakerDecision {
+    fn closed() -> Self {
+        Self {
+            state: CircuitBreakerState::Closed,
+            selectable: true,
+            probe_allowed: false,
+            reason: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CircuitBreakerProfileReport {
+    pub(crate) model_id: String,
+    pub(crate) skill_tag: String,
+    pub(crate) state: CircuitBreakerState,
+    pub(crate) consecutive_degraded: u64,
+    pub(crate) total_degraded: u64,
+    pub(crate) total_recovered: u64,
+    pub(crate) last_reason: Option<String>,
+    pub(crate) last_sample_unix: Option<u64>,
+    pub(crate) opened_at_unix: Option<u64>,
+    pub(crate) opened_until_unix: Option<u64>,
+    pub(crate) probe_allowed: bool,
+}
+
+impl CircuitBreakerProfileReport {
+    fn json_report(&self) -> String {
+        format!(
+            "{{\"model_id\":{},\"skill_tag\":{},\"state\":{},\"consecutive_degraded\":{},\"total_degraded\":{},\"total_recovered\":{},\"last_reason\":{},\"last_sample_unix\":{},\"opened_at_unix\":{},\"opened_until_unix\":{},\"probe_allowed\":{}}}",
+            json_string(&self.model_id),
+            json_string(&self.skill_tag),
+            json_string(self.state.as_str()),
+            self.consecutive_degraded,
+            self.total_degraded,
+            self.total_recovered,
+            option_str_json(self.last_reason.as_deref()),
+            option_u64_json(self.last_sample_unix),
+            option_u64_json(self.opened_at_unix),
+            option_u64_json(self.opened_until_unix),
+            self.probe_allowed
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CircuitBreakerEntry {
+    model_id: String,
+    skill_tag: String,
+    state: CircuitBreakerState,
+    consecutive_degraded: u64,
+    total_degraded: u64,
+    total_recovered: u64,
+    last_reason: Option<String>,
+    last_sample_unix: Option<u64>,
+    opened_at_unix: Option<u64>,
+    opened_until_unix: Option<u64>,
+}
+
+impl CircuitBreakerEntry {
+    fn new(model_id: impl Into<String>, skill_tag: impl Into<String>) -> Self {
+        Self {
+            model_id: model_id.into(),
+            skill_tag: skill_tag.into(),
+            state: CircuitBreakerState::Closed,
+            consecutive_degraded: 0,
+            total_degraded: 0,
+            total_recovered: 0,
+            last_reason: None,
+            last_sample_unix: None,
+            opened_at_unix: None,
+            opened_until_unix: None,
+        }
+    }
+
+    fn state_at(&self, now_unix: u64) -> CircuitBreakerState {
+        if self.state == CircuitBreakerState::Open
+            && self
+                .opened_until_unix
+                .is_some_and(|opened_until| now_unix >= opened_until)
+        {
+            CircuitBreakerState::HalfOpen
+        } else {
+            self.state
+        }
+    }
+
+    fn open(&mut self, now_unix: u64, reason: String, config: &CircuitBreakerConfig) {
+        self.state = CircuitBreakerState::Open;
+        self.opened_at_unix = Some(now_unix);
+        self.opened_until_unix = Some(now_unix.saturating_add(config.cooldown_seconds));
+        self.last_reason = Some(reason);
+    }
+
+    fn close(&mut self) {
+        self.state = CircuitBreakerState::Closed;
+        self.consecutive_degraded = 0;
+        self.opened_at_unix = None;
+        self.opened_until_unix = None;
+        self.last_reason = None;
+    }
+
+    fn snapshot(&self, now_unix: u64) -> CircuitBreakerProfileReport {
+        let state = self.state_at(now_unix);
+        CircuitBreakerProfileReport {
+            model_id: self.model_id.clone(),
+            skill_tag: self.skill_tag.clone(),
+            state,
+            consecutive_degraded: self.consecutive_degraded,
+            total_degraded: self.total_degraded,
+            total_recovered: self.total_recovered,
+            last_reason: self.last_reason.clone(),
+            last_sample_unix: self.last_sample_unix,
+            opened_at_unix: self.opened_at_unix,
+            opened_until_unix: self.opened_until_unix,
+            probe_allowed: state == CircuitBreakerState::HalfOpen,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ProfileCircuitBreaker {
+    config: CircuitBreakerConfig,
+    entries: BTreeMap<(String, String), CircuitBreakerEntry>,
+}
+
+impl ProfileCircuitBreaker {
+    pub(crate) fn new(config: CircuitBreakerConfig) -> Self {
+        Self {
+            config,
+            entries: BTreeMap::new(),
+        }
+    }
+
+    pub(crate) fn observe(&mut self, sample: &OutcomeSample, observed_unix: u64) {
+        if !self.config.enabled {
+            return;
+        }
+        let key = (sample.model_id.clone(), sample.skill_tag.clone());
+        let entry = self
+            .entries
+            .entry(key)
+            .or_insert_with(|| CircuitBreakerEntry::new(&sample.model_id, &sample.skill_tag));
+        let state_before = entry.state_at(observed_unix);
+        entry.state = state_before;
+        entry.last_sample_unix = Some(observed_unix);
+
+        if let Some(reason) = degradation_reason(sample, &self.config) {
+            entry.consecutive_degraded = entry.consecutive_degraded.saturating_add(1);
+            entry.total_degraded = entry.total_degraded.saturating_add(1);
+            entry.last_reason = Some(reason.clone());
+            if state_before == CircuitBreakerState::HalfOpen
+                || entry.consecutive_degraded >= self.config.failure_threshold
+                || severe_degradation(sample, &reason, &self.config)
+            {
+                entry.open(observed_unix, reason, &self.config);
+            }
+        } else if state_before == CircuitBreakerState::HalfOpen
+            || state_before == CircuitBreakerState::Closed
+        {
+            if state_before == CircuitBreakerState::HalfOpen {
+                entry.total_recovered = entry.total_recovered.saturating_add(1);
+            }
+            entry.close();
+            entry.last_sample_unix = Some(observed_unix);
+        } else {
+            entry.consecutive_degraded = 0;
+        }
+    }
+
+    pub(crate) fn decision(
+        &self,
+        model_id: &str,
+        skill_tag: &str,
+        now_unix: u64,
+    ) -> CircuitBreakerDecision {
+        if !self.config.enabled {
+            return CircuitBreakerDecision::closed();
+        }
+        let Some(entry) = self
+            .entries
+            .get(&(model_id.to_owned(), skill_tag.to_owned()))
+        else {
+            return CircuitBreakerDecision::closed();
+        };
+        let snapshot = entry.snapshot(now_unix);
+        match snapshot.state {
+            CircuitBreakerState::Closed => CircuitBreakerDecision::closed(),
+            CircuitBreakerState::Open => CircuitBreakerDecision {
+                state: CircuitBreakerState::Open,
+                selectable: false,
+                probe_allowed: false,
+                reason: Some(format!(
+                    "circuit_open reason={} opened_until_unix={}",
+                    snapshot.last_reason.as_deref().unwrap_or("degraded"),
+                    snapshot.opened_until_unix.unwrap_or(0)
+                )),
+            },
+            CircuitBreakerState::HalfOpen => CircuitBreakerDecision {
+                state: CircuitBreakerState::HalfOpen,
+                selectable: false,
+                probe_allowed: true,
+                reason: Some(format!(
+                    "circuit_half_open_probe reason={} opened_until_unix={}",
+                    snapshot.last_reason.as_deref().unwrap_or("degraded"),
+                    snapshot.opened_until_unix.unwrap_or(0)
+                )),
+            },
+        }
+    }
+
+    pub(crate) fn snapshots(&self, now_unix: u64) -> Vec<CircuitBreakerProfileReport> {
+        self.entries
+            .values()
+            .map(|entry| entry.snapshot(now_unix))
+            .collect()
+    }
+}
+
+impl Default for ProfileCircuitBreaker {
+    fn default() -> Self {
+        Self::new(CircuitBreakerConfig::default())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CircuitBreakerReport {
+    pub(crate) schema: String,
+    pub(crate) version: String,
+    pub(crate) total_records: usize,
+    pub(crate) ignored_records: usize,
+    pub(crate) profile_count: usize,
+    pub(crate) open_count: usize,
+    pub(crate) half_open_count: usize,
+    pub(crate) rollback_required: bool,
+    pub(crate) rollback_reason: Option<String>,
+    pub(crate) fallback_strategy: String,
+    pub(crate) profiles: Vec<CircuitBreakerProfileReport>,
+}
+
+impl CircuitBreakerReport {
+    pub(crate) fn from_outcome_jsonl(text: &str, config: &CircuitBreakerConfig) -> Self {
+        let mut breaker = ProfileCircuitBreaker::new(config.clone());
+        let mut total_records = 0usize;
+        let mut ignored_records = 0usize;
+        let mut observed_clock = 0u64;
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            total_records += 1;
+            let Some(sample) = OutcomeSample::from_m3_json(line, "general") else {
+                ignored_records += 1;
+                continue;
+            };
+            observed_clock = observed_clock.saturating_add(1);
+            let observed_unix = sample.timestamp_unix.unwrap_or(observed_clock);
+            observed_clock = observed_clock.max(observed_unix);
+            breaker.observe(&sample, observed_unix);
+        }
+        let profiles = breaker.snapshots(observed_clock);
+        let open_count = profiles
+            .iter()
+            .filter(|profile| profile.state == CircuitBreakerState::Open)
+            .count();
+        let half_open_count = profiles
+            .iter()
+            .filter(|profile| profile.state == CircuitBreakerState::HalfOpen)
+            .count();
+        let rollback_required = open_count > 0 || half_open_count > 0;
+        let rollback_reason = rollback_required.then(|| {
+            let degraded = profiles
+                .iter()
+                .filter(|profile| profile.state != CircuitBreakerState::Closed)
+                .map(|profile| {
+                    format!(
+                        "{}:{}:{}",
+                        profile.model_id,
+                        profile.skill_tag,
+                        profile.last_reason.as_deref().unwrap_or("degraded")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("profile_circuit_breaker_degraded profiles={degraded}")
+        });
+        Self {
+            schema: "norion.profile_circuit_breaker_report.v1".to_owned(),
+            version: SCORING_VERSION.to_owned(),
+            total_records,
+            ignored_records,
+            profile_count: profiles.len(),
+            open_count,
+            half_open_count,
+            rollback_required,
+            rollback_reason,
+            fallback_strategy: if rollback_required {
+                "rule-routing|quality-only".to_owned()
+            } else {
+                "none".to_owned()
+            },
+            profiles,
+        }
+    }
+
+    pub(crate) fn json_report(&self) -> String {
+        let profiles = self
+            .profiles
+            .iter()
+            .map(CircuitBreakerProfileReport::json_report)
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(
+            "{{\"schema\":{},\"version\":{},\"total_records\":{},\"ignored_records\":{},\"profile_count\":{},\"open_count\":{},\"half_open_count\":{},\"rollback_required\":{},\"rollback_reason\":{},\"fallback_strategy\":{},\"profiles\":[{}]}}",
+            json_string(&self.schema),
+            json_string(&self.version),
+            self.total_records,
+            self.ignored_records,
+            self.profile_count,
+            self.open_count,
+            self.half_open_count,
+            self.rollback_required,
+            option_str_json(self.rollback_reason.as_deref()),
+            json_string(&self.fallback_strategy),
+            profiles
+        )
+    }
+}
+
+pub(crate) fn option_circuit_breaker_json(report: Option<&CircuitBreakerReport>) -> String {
+    report
+        .map(CircuitBreakerReport::json_report)
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct RegressionAggregate {
     pub(crate) quality: f64,
@@ -496,21 +885,30 @@ pub(crate) struct PolicySwitchDecision {
 pub(crate) struct OnlineScorer {
     config: ScoringConfig,
     profiles: BTreeMap<(String, String), ModelProfileScore>,
+    circuit_breaker: ProfileCircuitBreaker,
     exploration_remaining: u64,
+    observed_clock_unix: u64,
 }
 
 impl OnlineScorer {
     pub(crate) fn new(config: ScoringConfig) -> Self {
         let exploration_remaining = config.epsilon_budget;
+        let circuit_breaker = ProfileCircuitBreaker::new(config.circuit_breaker.clone());
         Self {
             config,
             profiles: BTreeMap::new(),
+            circuit_breaker,
             exploration_remaining,
+            observed_clock_unix: 0,
         }
     }
 
     pub(crate) fn update(&mut self, sample: OutcomeSample) -> &ModelProfileScore {
         let key = (sample.model_id.clone(), sample.skill_tag.clone());
+        self.observed_clock_unix = self.observed_clock_unix.saturating_add(1);
+        let observed_unix = sample.timestamp_unix.unwrap_or(self.observed_clock_unix);
+        self.observed_clock_unix = self.observed_clock_unix.max(observed_unix);
+        self.circuit_breaker.observe(&sample, observed_unix);
         let profile = self
             .profiles
             .entry(key)
@@ -546,13 +944,23 @@ impl OnlineScorer {
             + profile.cache_hit_rate * self.config.cache_hit_weight;
         let negative = profile.drift_penalty * self.config.drift_penalty_weight + failure_penalty;
         let score = clamp01(positive - negative);
+        let circuit = self
+            .circuit_breaker
+            .decision(model_id, skill_tag, self.observed_clock_unix);
+        let circuit_penalty = if circuit.selectable { score } else { 0.0 };
+        let circuit_reason = circuit.reason.clone();
+        let circuit_state = circuit.state.as_str().to_owned();
+        let probe_allowed = circuit.probe_allowed;
         RoutingScore {
             model_id: model_id.to_owned(),
             skill_tag: skill_tag.to_owned(),
-            score,
+            score: circuit_penalty,
             explore: false,
+            circuit_state,
+            circuit_reason,
+            probe_allowed,
             reason: format!(
-                "version={} success_rate={:.3} reliability={:.3} quality_hint={:.3} latency_component={:.3} cost_component={:.3} cache_hit_rate={:.3} drift_penalty={:.3} failure_streak={} score={:.3}",
+                "version={} success_rate={:.3} reliability={:.3} quality_hint={:.3} latency_component={:.3} cost_component={:.3} cache_hit_rate={:.3} drift_penalty={:.3} failure_streak={} circuit_state={} circuit_reason={} score={:.3}",
                 self.config.version,
                 profile.success_rate,
                 profile.reliability,
@@ -562,7 +970,9 @@ impl OnlineScorer {
                 profile.cache_hit_rate,
                 profile.drift_penalty,
                 profile.recent_failure_streak,
-                score
+                circuit.state.as_str(),
+                circuit.reason.as_deref().unwrap_or("none"),
+                circuit_penalty
             ),
         }
     }
@@ -584,19 +994,43 @@ impl OnlineScorer {
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| left.model_id.cmp(&right.model_id))
         });
-        let selected_index = if self.should_explore(exploration_roll.unwrap_or(1.0)) {
+        let explore_requested = self.exploration_requested(exploration_roll.unwrap_or(1.0));
+        let explore_index = if explore_requested {
             scores
                 .iter()
                 .enumerate()
-                .skip(1)
-                .min_by(|(_, left), (_, right)| left.model_id.cmp(&right.model_id))
+                .find(|(_, score)| score.probe_allowed)
                 .map(|(index, _)| index)
-                .unwrap_or(0)
+                .or_else(|| {
+                    scores
+                        .iter()
+                        .enumerate()
+                        .skip(1)
+                        .find(|(_, score)| score.circuit_state == "closed")
+                        .map(|(index, _)| index)
+                })
+                .or_else(|| {
+                    scores
+                        .iter()
+                        .enumerate()
+                        .find(|(_, score)| score.circuit_state == "closed")
+                        .map(|(index, _)| index)
+                })
         } else {
-            0
+            None
+        };
+        let selected_index = if let Some(index) = explore_index {
+            self.exploration_remaining = self.exploration_remaining.saturating_sub(1);
+            index
+        } else {
+            scores
+                .iter()
+                .enumerate()
+                .find(|(_, score)| score.circuit_state == "closed")
+                .map(|(index, _)| index)?
         };
         let selected = scores.get_mut(selected_index)?;
-        selected.explore = selected_index != 0;
+        selected.explore = explore_index.is_some();
         let selected_model_id = selected.model_id.clone();
         let selected_skill_tag = selected.skill_tag.clone();
         let selected_by_exploration = selected.explore;
@@ -641,7 +1075,7 @@ impl OnlineScorer {
         self.exploration_remaining
     }
 
-    fn should_explore(&mut self, exploration_roll: f64) -> bool {
+    fn exploration_requested(&self, exploration_roll: f64) -> bool {
         if !self.config.exploration_enabled
             || self.config.epsilon <= 0.0
             || self.exploration_remaining == 0
@@ -649,7 +1083,6 @@ impl OnlineScorer {
             return false;
         }
         if exploration_roll <= self.config.epsilon {
-            self.exploration_remaining = self.exploration_remaining.saturating_sub(1);
             true
         } else {
             false
@@ -695,6 +1128,51 @@ fn replay_strategy(line: &str) -> Option<String> {
     })
 }
 
+fn degradation_reason(sample: &OutcomeSample, config: &CircuitBreakerConfig) -> Option<String> {
+    if !sample.success {
+        let error = sample
+            .error_kind
+            .as_deref()
+            .unwrap_or("protocol_error")
+            .to_ascii_lowercase();
+        if error.contains("timeout") || error.contains("timed out") {
+            return Some("timeout".to_owned());
+        }
+        if error.contains("validation") || error.contains("test") {
+            return Some("validation_error".to_owned());
+        }
+        if error.contains("protocol")
+            || error.contains("json")
+            || error.contains("parse")
+            || error.contains("stream")
+        {
+            return Some("protocol_error".to_owned());
+        }
+        return Some("protocol_error".to_owned());
+    }
+    if sample
+        .cost
+        .is_some_and(|cost| cost >= config.budget_overrun_threshold)
+    {
+        return Some("budget_overrun".to_owned());
+    }
+    if sample
+        .quality_hint
+        .is_some_and(|quality| quality <= config.quality_drop_threshold)
+    {
+        return Some("quality_drop".to_owned());
+    }
+    None
+}
+
+fn severe_degradation(sample: &OutcomeSample, reason: &str, config: &CircuitBreakerConfig) -> bool {
+    reason == "validation_error"
+        || sample.cost.is_some_and(|cost| {
+            cost >= config.budget_overrun_threshold * config.severe_budget_multiplier.max(1.0)
+        })
+        || sample.quality_hint.is_some_and(|quality| quality <= 0.05)
+}
+
 fn average_option(values: impl Iterator<Item = f64>) -> f64 {
     let mut total = 0.0;
     let mut count = 0usize;
@@ -720,6 +1198,12 @@ fn option_str_json(value: Option<&str>) -> String {
     value.map(json_string).unwrap_or_else(|| "null".to_owned())
 }
 
+fn option_u64_json(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 fn policy_switch_json(decision: &PolicySwitchDecision) -> String {
     format!(
         "{{\"allow_switch\":{},\"policy_version\":{},\"reason\":{}}}",
@@ -738,11 +1222,13 @@ mod tests {
             model_id: model_id.to_owned(),
             skill_tag: skill_tag.to_owned(),
             success,
+            error_kind: None,
             latency_ms: Some(1_000.0),
             cost: Some(100.0),
             quality_hint: Some(if success { 0.9 } else { 0.1 }),
             cache_hit: false,
             drift_detected: false,
+            timestamp_unix: None,
         }
     }
 
@@ -858,6 +1344,140 @@ mod tests {
         assert_eq!(sample.cost, Some(444.0));
         assert_eq!(sample.quality_hint, Some(0.82));
         assert!(sample.cache_hit);
+    }
+
+    #[test]
+    fn circuit_breaker_routes_away_from_open_profile() {
+        let config = ScoringConfig {
+            circuit_breaker: CircuitBreakerConfig {
+                failure_threshold: 2,
+                cooldown_seconds: 100,
+                ..CircuitBreakerConfig::default()
+            },
+            ..ScoringConfig::default()
+        };
+        let mut scorer = OnlineScorer::new(config);
+        let mut failing = sample("degraded", "review", false);
+        failing.error_kind = Some("timeout".to_owned());
+        failing.timestamp_unix = Some(10);
+        scorer.update(failing.clone());
+        failing.timestamp_unix = Some(11);
+        scorer.update(failing);
+        let mut healthy = sample("healthy", "review", true);
+        healthy.timestamp_unix = Some(12);
+        scorer.update(healthy);
+
+        let decision = scorer
+            .route(
+                &[
+                    CandidateModel::new("degraded"),
+                    CandidateModel::new("healthy"),
+                ],
+                "review",
+                Some(1.0),
+            )
+            .unwrap();
+        let degraded_score = decision
+            .scores
+            .iter()
+            .find(|score| score.model_id == "degraded")
+            .unwrap();
+
+        assert_eq!(decision.selected_model_id, "healthy");
+        assert_eq!(degraded_score.circuit_state, "open");
+        assert!(degraded_score.reason.contains("timeout"));
+    }
+
+    #[test]
+    fn circuit_breaker_half_open_uses_bounded_exploration_probe() {
+        let config = ScoringConfig {
+            exploration_enabled: true,
+            epsilon: 1.0,
+            epsilon_budget: 1,
+            circuit_breaker: CircuitBreakerConfig {
+                failure_threshold: 1,
+                cooldown_seconds: 10,
+                ..CircuitBreakerConfig::default()
+            },
+            ..ScoringConfig::default()
+        };
+        let mut scorer = OnlineScorer::new(config);
+        let mut failing = sample("degraded", "review", false);
+        failing.error_kind = Some("protocol_json_parse".to_owned());
+        failing.timestamp_unix = Some(10);
+        scorer.update(failing);
+        let mut healthy = sample("healthy", "review", true);
+        healthy.timestamp_unix = Some(21);
+        scorer.update(healthy);
+
+        let decision = scorer
+            .route(
+                &[
+                    CandidateModel::new("degraded"),
+                    CandidateModel::new("healthy"),
+                ],
+                "review",
+                Some(0.0),
+            )
+            .unwrap();
+
+        assert_eq!(decision.selected_model_id, "degraded");
+        assert!(decision.selected_by_exploration);
+        assert_eq!(scorer.exploration_remaining(), 0);
+        assert!(
+            decision
+                .scores
+                .iter()
+                .any(|score| score.model_id == "degraded"
+                    && score.circuit_state == "half_open"
+                    && score.probe_allowed)
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_successful_probe_closes_and_recovers() {
+        let config = ScoringConfig {
+            circuit_breaker: CircuitBreakerConfig {
+                failure_threshold: 1,
+                cooldown_seconds: 5,
+                ..CircuitBreakerConfig::default()
+            },
+            ..ScoringConfig::default()
+        };
+        let mut breaker = ProfileCircuitBreaker::new(config.circuit_breaker.clone());
+        let mut failing = sample("probe", "summary", false);
+        failing.error_kind = Some("timeout".to_owned());
+        breaker.observe(&failing, 10);
+        let mut recovered = sample("probe", "summary", true);
+        recovered.timestamp_unix = Some(16);
+        breaker.observe(&recovered, 16);
+
+        let decision = breaker.decision("probe", "summary", 16);
+        let snapshot = breaker.snapshots(16).pop().unwrap();
+
+        assert_eq!(decision.state, CircuitBreakerState::Closed);
+        assert!(decision.selectable);
+        assert_eq!(snapshot.total_recovered, 1);
+    }
+
+    #[test]
+    fn circuit_breaker_report_marks_rollback_and_fallback_strategy() {
+        let report = CircuitBreakerReport::from_outcome_jsonl(
+            "{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":10}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":11}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"bad\",\"task_kind\":\"review\",\"ok\":false,\"error_kind\":\"timeout\",\"timestamp_unix\":12}\n\
+{\"strategy\":\"profile-scoring.v1\",\"chosen_model\":\"good\",\"task_kind\":\"review\",\"ok\":true,\"quality_score\":0.92,\"timestamp_unix\":12}\n",
+            &CircuitBreakerConfig::default(),
+        );
+        let json = report.json_report();
+
+        assert_eq!(report.total_records, 4);
+        assert_eq!(report.open_count, 1);
+        assert!(report.rollback_required);
+        assert_eq!(report.fallback_strategy, "rule-routing|quality-only");
+        assert!(json.contains("\"state\":\"open\""));
+        assert!(json.contains("\"last_reason\":\"timeout\""));
+        assert!(json.contains("\"rollback_required\":true"));
     }
 
     #[test]
