@@ -131,9 +131,12 @@ flowchart LR
 
 rust-norion 需要很多人一起把控制层、记忆、runtime 边界、文档和实验跑实。贡献者不只是提交代码的人，也包括写 runbook、复现实验、补测试、做架构 review、整理 issue、接入后端、改进中文/英文文档的人。
 
+这里会认真给贡献者留位置：可署名、可展示、可进入 Hall of Fame、可在 release notes 里被点名，也可以按规则晋升为 Trusted Contributor、Reviewer、Module Collaborator 或 Maintainer。
+
 想留下名字、展示成果、认领方向，先看：
 
 - [贡献者专区与荣誉墙](docs/contributor-zone.md)
+- [贡献者角色与审核规则](docs/governance/contributor-roles-and-review.md)
 - [贡献规则](CONTRIBUTING.md)
 - [路线图](ROADMAP.md)
 
@@ -148,7 +151,7 @@ rust-norion 需要很多人一起把控制层、记忆、runtime 边界、文档
 | Benchmark / CI | 可复现 benchmark、轻量 gate、失败样例、trace schema 验证。 |
 | 社区协作 | issue triage、任务拆分、PR review、贡献者周报、成果展示。 |
 
-贡献者可以在 PR 里附上 “Contributor Card”，合并后可进入专区索引；重要模块贡献会在 release notes、README 链接或 docs 荣誉墙里展示。
+贡献者可以在 PR 里附上 “Contributor Card”。合并后可进入专区索引；重要模块贡献会在 release notes、README 链接或 docs 荣誉墙里展示。Reviewer / Module Collaborator 的晋升有明确标准，但受保护分支仍需要 owner / CODEOWNER 审核，仓库不会因为扩大社区而牺牲安全边界。
 
 ## 后端接入边界
 

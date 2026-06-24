@@ -134,14 +134,19 @@ are enough repeat contributors to justify a separate chat space.
 Growth should be explicit and reversible:
 
 1. Contributor: opens issues, docs fixes, tests, examples, or focused code PRs.
-2. Module collaborator: repeatedly contributes to one module and can triage or
+2. Trusted contributor: repeatedly ships narrow, validated work and helps shape
+   issues or reviews.
+3. Reviewer: provides trusted review recommendations in approved lanes.
+4. Module collaborator: repeatedly contributes to one module and can triage or
    review that module's issues.
-3. Maintainer: trusted to approve scoped areas after sustained high-quality
-   contributions.
+5. Maintainer: trusted to approve scoped areas after sustained high-quality
+   contributions and an explicit owner decision.
 
 Protected branches still require owner/maintainer approval. Commercial use is
 allowed under GPL-3.0 terms, but public collaboration does not bypass review,
 attribution, validation, or third-party license compatibility requirements.
+Detailed role and promotion rules live in
+[Contributor Roles and Review Governance](contributor-roles-and-review.md).
 
 ## Single-Maintainer Guardrails
 

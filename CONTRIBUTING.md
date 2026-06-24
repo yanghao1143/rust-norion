@@ -49,6 +49,8 @@ include a short contributor card:
 - one-sentence impact summary
 - validation command or reproduction note
 - optional link to an issue, demo, trace, benchmark, or design note
+- optional showcase request: README, Hall of Fame, release notes, module docs,
+  or none
 
 Merged contributions can be referenced from
 [docs/contributor-zone.md](docs/contributor-zone.md), release notes, runbooks,
@@ -57,6 +59,12 @@ or roadmap updates when they materially improve a module or developer workflow.
 Recognition does not bypass review, branch protection, license compatibility,
 validation gates, or maintainer approval. It is a way to give visible credit
 for useful work while keeping the repository safe and reviewable.
+
+Contributor roles, reviewer promotion, module collaborator scope, maintainer
+promotion, recusal, and loss-of-trust rules are defined in
+[docs/governance/contributor-roles-and-review.md](docs/governance/contributor-roles-and-review.md).
+Reviewer status is earned, scoped, and reversible. It does not replace
+CODEOWNER or repository-owner approval on protected branches.
 
 ## Pull Requests
 
