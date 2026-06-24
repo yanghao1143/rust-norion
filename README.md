@@ -1728,4 +1728,3 @@ must remain open source under GPL-3.0-compatible terms.
 ## 友情链接
 
 本项目在 [LINUX DO](https://linux.do/) 公益推广，[LINUX DO](https://linux.do/) 是一个真诚、友善、团结、专业的新型综合性社区，欢迎来玩。
-
