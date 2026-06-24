@@ -120,8 +120,32 @@ pub(crate) struct PoolCapacitySummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolWorkerRoleState {
     pub(crate) role: String,
+    pub(crate) port: Option<u64>,
+    pub(crate) base_url: Option<String>,
     pub(crate) tcp_reachable: bool,
     pub(crate) health_ok: bool,
+    pub(crate) ready: bool,
+    pub(crate) role_ready: bool,
+    pub(crate) status: Option<String>,
+    pub(crate) role_block_reason: Option<String>,
+    pub(crate) low_priority: Option<bool>,
+    pub(crate) can_accept_low_priority_task: Option<bool>,
+    pub(crate) model: Option<String>,
+    pub(crate) context_window: Option<u64>,
+    pub(crate) runtime_backend: Option<String>,
+    pub(crate) runtime_device: Option<String>,
+    pub(crate) runtime_accelerator: Option<String>,
+    pub(crate) gpu_layers: Option<u64>,
+    pub(crate) route_count: Option<u64>,
+    pub(crate) selected_count: Option<u64>,
+    pub(crate) blocked_count: Option<u64>,
+    pub(crate) in_flight: Option<u64>,
+    pub(crate) queued_count: Option<u64>,
+    pub(crate) success_count: Option<u64>,
+    pub(crate) failure_count: Option<u64>,
+    pub(crate) avg_latency_ms: Option<u64>,
+    pub(crate) latency_p50_ms: Option<u64>,
+    pub(crate) latency_p95_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1439,8 +1463,40 @@ fn parse_worker_role_states(text: &str) -> Vec<PoolWorkerRoleState> {
             let role = json_string_field(worker_json, "role")?;
             Some(PoolWorkerRoleState {
                 role,
+                port: json_u64_field(worker_json, "port"),
+                base_url: json_string_field(worker_json, "base_url"),
                 tcp_reachable: json_bool_field(worker_json, "tcp_reachable").unwrap_or(false),
                 health_ok: json_bool_field(worker_json, "health_ok").unwrap_or(false),
+                ready: json_bool_field(worker_json, "ready").unwrap_or(false),
+                role_ready: json_bool_field(worker_json, "role_ready").unwrap_or(false),
+                status: json_string_field(worker_json, "status"),
+                role_block_reason: json_string_field(worker_json, "role_block_reason"),
+                low_priority: json_bool_field(worker_json, "low_priority"),
+                can_accept_low_priority_task: json_bool_field(
+                    worker_json,
+                    "can_accept_low_priority_task",
+                ),
+                model: json_string_field(worker_json, "model"),
+                context_window: json_u64_field(worker_json, "context_window")
+                    .or_else(|| json_u64_field(worker_json, "default_context_tokens")),
+                runtime_backend: json_string_field(worker_json, "runtime_backend"),
+                runtime_device: json_string_field(worker_json, "runtime_device"),
+                runtime_accelerator: json_string_field(worker_json, "runtime_accelerator"),
+                gpu_layers: json_u64_field(worker_json, "gpu_layers"),
+                route_count: json_u64_field(worker_json, "route_count"),
+                selected_count: json_u64_field(worker_json, "selected_count"),
+                blocked_count: json_u64_field(worker_json, "blocked_count"),
+                in_flight: json_u64_field(worker_json, "in_flight"),
+                queued_count: json_u64_field(worker_json, "queued_count")
+                    .or_else(|| json_u64_field(worker_json, "queue_depth"))
+                    .or_else(|| json_u64_field(worker_json, "queued")),
+                success_count: json_u64_field(worker_json, "success_count"),
+                failure_count: json_u64_field(worker_json, "failure_count"),
+                avg_latency_ms: json_u64_field(worker_json, "avg_latency_ms"),
+                latency_p50_ms: json_u64_field(worker_json, "latency_p50_ms")
+                    .or_else(|| json_u64_field(worker_json, "p50_latency_ms")),
+                latency_p95_ms: json_u64_field(worker_json, "latency_p95_ms")
+                    .or_else(|| json_u64_field(worker_json, "p95_latency_ms")),
             })
         })
         .collect()
@@ -2308,11 +2364,35 @@ fn role_states_json(roles: &[PoolWorkerRoleState]) -> String {
         .iter()
         .map(|role| {
             format!(
-                "{{\"role\":{},\"tcp_reachable\":{},\"health_ok\":{},\"status\":{}}}",
+                "{{\"role\":{},\"port\":{},\"base_url\":{},\"tcp_reachable\":{},\"health_ok\":{},\"ready\":{},\"role_ready\":{},\"status\":{},\"reported_status\":{},\"role_block_reason\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"queued_count\":{},\"success_count\":{},\"failure_count\":{},\"avg_latency_ms\":{},\"latency_p50_ms\":{},\"latency_p95_ms\":{}}}",
                 json_string(&role.role),
+                option_u64_json(role.port),
+                option_str_json(role.base_url.as_deref()),
                 role.tcp_reachable,
                 role.health_ok,
-                json_string(role_status(role))
+                role.ready,
+                role.role_ready,
+                json_string(role_status(role)),
+                option_str_json(role.status.as_deref()),
+                option_str_json(role.role_block_reason.as_deref()),
+                option_bool_json(role.low_priority),
+                option_bool_json(role.can_accept_low_priority_task),
+                option_str_json(role.model.as_deref()),
+                option_u64_json(role.context_window),
+                option_str_json(role.runtime_backend.as_deref()),
+                option_str_json(role.runtime_device.as_deref()),
+                option_str_json(role.runtime_accelerator.as_deref()),
+                option_u64_json(role.gpu_layers),
+                option_u64_json(role.route_count),
+                option_u64_json(role.selected_count),
+                option_u64_json(role.blocked_count),
+                option_u64_json(role.in_flight),
+                option_u64_json(role.queued_count),
+                option_u64_json(role.success_count),
+                option_u64_json(role.failure_count),
+                option_u64_json(role.avg_latency_ms),
+                option_u64_json(role.latency_p50_ms),
+                option_u64_json(role.latency_p95_ms)
             )
         })
         .collect::<Vec<_>>()
@@ -2589,11 +2669,48 @@ fn roles_context_text(roles: &[PoolWorkerRoleState]) -> String {
     if roles.is_empty() {
         return "unknown".to_owned();
     }
-    roles
+    let statuses = roles
         .iter()
         .map(|role| format!("{}:{}", role.role, role_status(role)))
         .collect::<Vec<_>>()
-        .join(",")
+        .join(",");
+    let portraits = roles
+        .iter()
+        .map(role_capacity_portrait_text)
+        .collect::<Vec<_>>()
+        .join(";");
+    format!("{statuses} portraits:{portraits}")
+}
+
+fn role_capacity_portrait_text(role: &PoolWorkerRoleState) -> String {
+    format!(
+        "{}@{} status:{} ready:{} role_ready:{} reported_status:{} block:{} in_flight:{} queued:{} routes:{}/{}/{} success_failure:{}/{} latency_ms:avg:{} p50:{} p95:{} runtime:{}/{}/{} gpu_layers:{} model:{} context:{} low_priority:{} accepts_low_priority:{}",
+        role.role,
+        option_u64_text(role.port),
+        role_status(role),
+        role.ready,
+        role.role_ready,
+        role.status.as_deref().unwrap_or("none"),
+        role.role_block_reason.as_deref().unwrap_or("none"),
+        option_u64_text(role.in_flight),
+        option_u64_text(role.queued_count),
+        option_u64_text(role.route_count),
+        option_u64_text(role.selected_count),
+        option_u64_text(role.blocked_count),
+        option_u64_text(role.success_count),
+        option_u64_text(role.failure_count),
+        option_u64_text(role.avg_latency_ms),
+        option_u64_text(role.latency_p50_ms),
+        option_u64_text(role.latency_p95_ms),
+        role.runtime_backend.as_deref().unwrap_or("none"),
+        role.runtime_device.as_deref().unwrap_or("none"),
+        role.runtime_accelerator.as_deref().unwrap_or("none"),
+        option_u64_text(role.gpu_layers),
+        role.model.as_deref().unwrap_or("none"),
+        option_u64_text(role.context_window),
+        option_bool_text(role.low_priority),
+        option_bool_text(role.can_accept_low_priority_task)
+    )
 }
 
 fn role_list_text<F>(roles: &[PoolWorkerRoleState], predicate: F) -> String
@@ -2794,7 +2911,8 @@ mod tests {
 
     #[test]
     fn parses_pool_status_as_read_only_context() {
-        let text = "{\"summary\":\"pool\",\"launch_allowed\":false,\"launch_block_reason\":\"quality_worker_down\",\"chain_classification\":\"quality_worker_down\",\"min_context_tokens\":262144,\"capacity\":{\"policy\":\"one_quality_plus_small_helpers\",\"expansion_allowed\":false,\"recommendation\":\"restore_quality_gate_first\",\"worker_count\":2,\"healthy_worker_count\":1,\"helper_worker_count\":1,\"healthy_helper_worker_count\":1,\"metal_worker_count\":1,\"cpu_worker_count\":0,\"unknown_runtime_worker_count\":0,\"zero_gpu_layer_worker_count\":0,\"quality_runtime_accelerated\":null},\"workers\":[{\"port\":8686,\"role\":\"quality\",\"tcp_reachable\":false,\"health_ok\":false},{\"port\":8687,\"role\":\"summary\",\"tcp_reachable\":true,\"health_ok\":true}]}\n";
+        let text = r#"{"summary":"pool","launch_allowed":false,"launch_block_reason":"quality_worker_down","chain_classification":"quality_worker_down","min_context_tokens":262144,"capacity":{"policy":"one_quality_plus_small_helpers","expansion_allowed":false,"recommendation":"restore_quality_gate_first","worker_count":2,"healthy_worker_count":1,"helper_worker_count":1,"healthy_helper_worker_count":1,"metal_worker_count":1,"cpu_worker_count":0,"unknown_runtime_worker_count":0,"zero_gpu_layer_worker_count":0,"quality_runtime_accelerated":null},"workers":[{"port":8686,"base_url":"http://127.0.0.1:8686","role":"quality","tcp_reachable":false,"health_ok":false,"ready":false,"role_ready":false,"status":"blocked","role_block_reason":"quality_worker_down","low_priority":false,"can_accept_low_priority_task":false,"model":"qwen-quality","context_window":262144,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":99,"route_count":8,"selected_count":7,"blocked_count":1,"in_flight":0,"queued_count":1,"success_count":6,"failure_count":1,"avg_latency_ms":1210,"latency_p50_ms":1000,"latency_p95_ms":1400},{"port":8687,"base_url":"http://127.0.0.1:8687","role":"summary","tcp_reachable":true,"health_ok":true,"ready":true,"role_ready":true,"status":"ready","low_priority":true,"can_accept_low_priority_task":true,"model":"qwen-summary","context_window":8192,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":80,"route_count":12,"selected_count":10,"blocked_count":2,"in_flight":1,"queued_count":2,"success_count":9,"failure_count":1,"avg_latency_ms":320,"latency_p50_ms":250,"latency_p95_ms":700}]}
+"#;
         let pool = parse_status(text);
         let context = status_context_text(&pool);
         let json = option_status_json(Some(&pool));
@@ -2828,8 +2946,15 @@ mod tests {
         assert_eq!(pool.roles.len(), 2);
         assert_eq!(pool.roles[0].role, "quality");
         assert_eq!(pool.roles[0].tcp_reachable, false);
+        assert_eq!(pool.roles[0].port, Some(8686));
+        assert_eq!(pool.roles[0].queued_count, Some(1));
+        assert_eq!(pool.roles[0].latency_p95_ms, Some(1400));
         assert_eq!(pool.roles[1].role, "summary");
         assert_eq!(pool.roles[1].health_ok, true);
+        assert_eq!(pool.roles[1].ready, true);
+        assert_eq!(pool.roles[1].role_ready, true);
+        assert_eq!(pool.roles[1].in_flight, Some(1));
+        assert_eq!(pool.roles[1].runtime_accelerator.as_deref(), Some("metal"));
         assert!(context.contains("launch_allowed:false"));
         assert!(context.contains("workers_reachable:1/2"));
         assert!(context.contains("capacity:policy:one_quality_plus_small_helpers"));
@@ -2838,6 +2963,11 @@ mod tests {
         assert!(context.contains("helpers:1/1"));
         assert!(context.contains("runtime:metal:1 cpu:0 unknown:0 gpu0:0"));
         assert!(context.contains("roles:quality:unreachable,summary:healthy"));
+        assert!(context.contains("portraits:quality@8686"));
+        assert!(context.contains("summary@8687 status:healthy ready:true role_ready:true"));
+        assert!(context.contains("in_flight:1 queued:2"));
+        assert!(context.contains("latency_ms:avg:320 p50:250 p95:700"));
+        assert!(context.contains("runtime:llama.cpp/metal/metal"));
         assert!(context.contains("available_roles:summary"));
         assert!(context.contains("blocked_roles:quality"));
         assert!(context.contains("advice:safe_to_enable_pool_workers:false"));
@@ -2849,6 +2979,14 @@ mod tests {
         assert!(json.contains("\"quality_runtime_accelerated\":null"));
         assert!(json.contains("\"reachable\":1"));
         assert!(json.contains("\"roles\":[{\"role\":\"quality\""));
+        assert!(json.contains("\"port\":8687"));
+        assert!(json.contains("\"ready\":true"));
+        assert!(json.contains("\"role_ready\":true"));
+        assert!(json.contains("\"reported_status\":\"ready\""));
+        assert!(json.contains("\"in_flight\":1"));
+        assert!(json.contains("\"queued_count\":2"));
+        assert!(json.contains("\"avg_latency_ms\":320"));
+        assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"status\":\"healthy\""));
         assert!(json.contains("\"advice\":{\"read_only\":true"));
         assert!(json.contains("\"avoid_extra_12b\":true"));

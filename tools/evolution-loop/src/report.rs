@@ -7330,7 +7330,8 @@ mod tests {
 
     #[test]
     fn pool_status_summary_is_reported_as_read_only_context() {
-        let text = "{\"summary\":\"pool\",\"launch_allowed\":false,\"launch_block_reason\":\"quality_worker_down\",\"chain_classification\":\"quality_worker_down\",\"min_context_tokens\":262144,\"workers\":[{\"port\":8686,\"role\":\"quality\",\"tcp_reachable\":false,\"health_ok\":false},{\"port\":8687,\"role\":\"summary\",\"tcp_reachable\":true,\"health_ok\":true}]}\n";
+        let text = r#"{"summary":"pool","launch_allowed":false,"launch_block_reason":"quality_worker_down","chain_classification":"quality_worker_down","min_context_tokens":262144,"workers":[{"port":8686,"role":"quality","tcp_reachable":false,"health_ok":false,"ready":false,"role_ready":false,"status":"blocked","role_block_reason":"quality_worker_down","in_flight":0,"queued_count":1,"avg_latency_ms":1210,"latency_p50_ms":1000,"latency_p95_ms":1400,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":99},{"port":8687,"role":"summary","tcp_reachable":true,"health_ok":true,"ready":true,"role_ready":true,"status":"ready","low_priority":true,"can_accept_low_priority_task":true,"in_flight":1,"queue_depth":2,"success_count":9,"failure_count":1,"avg_latency_ms":320,"p50_latency_ms":250,"p95_latency_ms":700,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":80}]}
+"#;
         let pool = pool_artifacts::parse_status(text);
         let ledger = "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2}\n";
         let summary = summarize_ledger(ledger);
@@ -7355,15 +7356,31 @@ mod tests {
         assert_eq!(pool.roles[0].tcp_reachable, false);
         assert_eq!(pool.roles[1].role, "summary");
         assert_eq!(pool.roles[1].health_ok, true);
+        assert_eq!(pool.roles[1].in_flight, Some(1));
+        assert_eq!(pool.roles[1].queued_count, Some(2));
+        assert_eq!(pool.roles[1].latency_p95_ms, Some(700));
+        assert_eq!(pool.roles[1].runtime_accelerator.as_deref(), Some("metal"));
         assert!(gate_failures.is_empty(), "{gate_failures:?}");
         assert!(context.contains("launch_allowed:false"));
         assert!(context.contains("workers_reachable:1/2"));
         assert!(context.contains("roles:quality:unreachable,summary:healthy"));
+        assert!(context.contains("portraits:quality@8686"));
+        assert!(context.contains("summary@8687 status:healthy ready:true role_ready:true"));
+        assert!(context.contains("in_flight:1 queued:2"));
+        assert!(context.contains("latency_ms:avg:320 p50:250 p95:700"));
+        assert!(context.contains("runtime:llama.cpp/metal/metal"));
         assert!(context.contains("available_roles:summary"));
         assert!(context.contains("blocked_roles:quality"));
         assert!(json.contains("\"model_pool\":{\"launch_allowed\":false"));
         assert!(json.contains("\"reachable\":1"));
         assert!(json.contains("\"roles\":[{\"role\":\"quality\""));
+        assert!(json.contains("\"port\":8687"));
+        assert!(json.contains("\"role_ready\":true"));
+        assert!(json.contains("\"reported_status\":\"ready\""));
+        assert!(json.contains("\"in_flight\":1"));
+        assert!(json.contains("\"queued_count\":2"));
+        assert!(json.contains("\"avg_latency_ms\":320"));
+        assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"status\":\"healthy\""));
     }
 
