@@ -14,6 +14,12 @@ const DEFAULT_HELPER_ROLES: [&str; 4] = ["summary", "review", "index", "test-gat
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolStatusSummary {
+    pub(crate) generated_unix: Option<u64>,
+    pub(crate) observed_unix: Option<u64>,
+    pub(crate) metadata_age_seconds: Option<u64>,
+    pub(crate) max_age_seconds: Option<u64>,
+    pub(crate) capacity_metadata_required: bool,
+    pub(crate) metadata_stale: bool,
     pub(crate) launch_allowed: Option<bool>,
     pub(crate) launch_block_reason: Option<String>,
     pub(crate) chain_classification: Option<String>,
@@ -141,6 +147,8 @@ pub(crate) struct PoolWorkerRoleState {
     pub(crate) blocked_count: Option<u64>,
     pub(crate) in_flight: Option<u64>,
     pub(crate) queued_count: Option<u64>,
+    pub(crate) lease_wait_ms: Option<u64>,
+    pub(crate) lease_wait_p95_ms: Option<u64>,
     pub(crate) success_count: Option<u64>,
     pub(crate) failure_count: Option<u64>,
     pub(crate) avg_latency_ms: Option<u64>,
@@ -452,7 +460,37 @@ pub(crate) fn parse_status(text: &str) -> PoolStatusSummary {
     } else {
         roles.iter().filter(|worker| worker.health_ok).count()
     };
+    let generated_unix = json_u64_field(text, "generated_unix")
+        .or_else(|| json_u64_field(text, "timestamp_unix"))
+        .or_else(|| json_u64_field(text, "updated_unix"));
+    let observed_unix =
+        json_u64_field(text, "observed_unix").or_else(|| json_u64_field(text, "now_unix"));
+    let metadata_age_seconds = json_u64_field(text, "metadata_age_seconds")
+        .or_else(|| json_u64_field(text, "age_seconds"))
+        .or_else(|| json_u64_field(text, "status_age_seconds"))
+        .or_else(|| json_u64_field(text, "status_age_ms").map(|value| value.div_ceil(1000)))
+        .or_else(|| computed_metadata_age_seconds(generated_unix, observed_unix));
+    let max_age_seconds = json_u64_field(text, "max_age_seconds")
+        .or_else(|| json_u64_field(text, "max_status_age_seconds"))
+        .or_else(|| json_u64_field(text, "stale_after_seconds"));
+    let capacity_metadata_required = json_bool_field(text, "capacity_metadata_required")
+        .or_else(|| json_bool_field(text, "require_capacity_metadata"))
+        .or_else(|| json_bool_field(text, "metadata_required"))
+        .unwrap_or(false);
+    let metadata_stale = json_bool_field(text, "metadata_stale")
+        .or_else(|| json_bool_field(text, "capacity_metadata_stale"))
+        .or_else(|| json_bool_field(text, "stale"))
+        .unwrap_or(false)
+        || metadata_age_seconds
+            .zip(max_age_seconds)
+            .is_some_and(|(age, max_age)| age > max_age);
     PoolStatusSummary {
+        generated_unix,
+        observed_unix,
+        metadata_age_seconds,
+        max_age_seconds,
+        capacity_metadata_required,
+        metadata_stale,
         launch_allowed: json_bool_field(text, "launch_allowed"),
         launch_block_reason: json_string_field(text, "launch_block_reason"),
         chain_classification: json_string_field(text, "chain_classification"),
@@ -675,7 +713,7 @@ pub(crate) fn option_alignment_json(summary: Option<&PoolAlignmentSummary>) -> S
 
 pub(crate) fn status_context_text(summary: &PoolStatusSummary) -> String {
     format!(
-        "launch_allowed:{} classification:{} reason:{} workers_reachable:{}/{} workers_healthy:{}/{} min_context_tokens:{} capacity:{} roles:{} available_roles:{} blocked_roles:{} advice:{}",
+        "launch_allowed:{} classification:{} reason:{} workers_reachable:{}/{} workers_healthy:{}/{} min_context_tokens:{} metadata:{} capacity:{} roles:{} available_roles:{} blocked_roles:{} advice:{}",
         option_bool_text(summary.launch_allowed),
         summary.chain_classification.as_deref().unwrap_or("?"),
         summary.launch_block_reason.as_deref().unwrap_or("none"),
@@ -684,6 +722,7 @@ pub(crate) fn status_context_text(summary: &PoolStatusSummary) -> String {
         summary.healthy_workers,
         summary.worker_count,
         option_u64_text(summary.min_context_tokens),
+        capacity_metadata_context_text(summary),
         capacity_context_text(summary.capacity.as_ref()),
         roles_context_text(&summary.roles),
         role_list_text(&summary.roles, |role| role.health_ok),
@@ -814,6 +853,9 @@ pub(crate) fn status_advice_context_text(summary: &PoolStatusSummary) -> String 
 
 pub(crate) fn capacity_gate_failure(summary: &PoolStatusSummary) -> Option<String> {
     let context = status_context_text(summary);
+    if let Some(metadata_failure) = capacity_metadata_gate_failure(summary) {
+        return Some(format!("{metadata_failure}; {context}"));
+    }
     let Some(capacity) = summary.capacity.as_ref() else {
         return Some(format!("capacity missing; {context}"));
     };
@@ -1490,6 +1532,11 @@ fn parse_worker_role_states(text: &str) -> Vec<PoolWorkerRoleState> {
                 queued_count: json_u64_field(worker_json, "queued_count")
                     .or_else(|| json_u64_field(worker_json, "queue_depth"))
                     .or_else(|| json_u64_field(worker_json, "queued")),
+                lease_wait_ms: json_u64_field(worker_json, "lease_wait_ms")
+                    .or_else(|| json_u64_field(worker_json, "lease_wait_elapsed_ms")),
+                lease_wait_p95_ms: json_u64_field(worker_json, "lease_wait_p95_ms")
+                    .or_else(|| json_u64_field(worker_json, "lease_wait_p95"))
+                    .or_else(|| json_u64_field(worker_json, "lease_wait_p95_millis")),
                 success_count: json_u64_field(worker_json, "success_count"),
                 failure_count: json_u64_field(worker_json, "failure_count"),
                 avg_latency_ms: json_u64_field(worker_json, "avg_latency_ms"),
@@ -2212,11 +2259,12 @@ fn role_budget_json(role: &PoolRoleBudgetSummary) -> String {
 
 fn status_json(summary: &PoolStatusSummary) -> String {
     format!(
-        "{{\"launch_allowed\":{},\"launch_block_reason\":{},\"chain_classification\":{},\"min_context_tokens\":{},\"capacity\":{},\"workers\":{{\"total\":{},\"reachable\":{},\"healthy\":{}}},\"roles\":{},\"advice\":{}}}",
+        "{{\"launch_allowed\":{},\"launch_block_reason\":{},\"chain_classification\":{},\"min_context_tokens\":{},\"metadata\":{},\"capacity\":{},\"workers\":{{\"total\":{},\"reachable\":{},\"healthy\":{}}},\"roles\":{},\"advice\":{}}}",
         option_bool_json(summary.launch_allowed),
         option_str_json(summary.launch_block_reason.as_deref()),
         option_str_json(summary.chain_classification.as_deref()),
         option_u64_json(summary.min_context_tokens),
+        capacity_metadata_json(summary),
         option_capacity_json(summary.capacity.as_ref()),
         summary.worker_count,
         summary.reachable_workers,
@@ -2364,13 +2412,14 @@ fn role_states_json(roles: &[PoolWorkerRoleState]) -> String {
         .iter()
         .map(|role| {
             format!(
-                "{{\"role\":{},\"port\":{},\"base_url\":{},\"tcp_reachable\":{},\"health_ok\":{},\"ready\":{},\"role_ready\":{},\"status\":{},\"reported_status\":{},\"role_block_reason\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"queued_count\":{},\"success_count\":{},\"failure_count\":{},\"avg_latency_ms\":{},\"latency_p50_ms\":{},\"latency_p95_ms\":{}}}",
+                "{{\"role\":{},\"port\":{},\"base_url\":{},\"tcp_reachable\":{},\"health_ok\":{},\"ready\":{},\"busy\":{},\"role_ready\":{},\"status\":{},\"reported_status\":{},\"role_block_reason\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"queued_count\":{},\"lease_wait_ms\":{},\"lease_wait_p95_ms\":{},\"success_count\":{},\"failure_count\":{},\"avg_latency_ms\":{},\"latency_p50_ms\":{},\"latency_p95_ms\":{}}}",
                 json_string(&role.role),
                 option_u64_json(role.port),
                 option_str_json(role.base_url.as_deref()),
                 role.tcp_reachable,
                 role.health_ok,
                 role.ready,
+                role_busy(role),
                 role.role_ready,
                 json_string(role_status(role)),
                 option_str_json(role.status.as_deref()),
@@ -2388,6 +2437,8 @@ fn role_states_json(roles: &[PoolWorkerRoleState]) -> String {
                 option_u64_json(role.blocked_count),
                 option_u64_json(role.in_flight),
                 option_u64_json(role.queued_count),
+                option_u64_json(role.lease_wait_ms),
+                option_u64_json(role.lease_wait_p95_ms),
                 option_u64_json(role.success_count),
                 option_u64_json(role.failure_count),
                 option_u64_json(role.avg_latency_ms),
@@ -2535,10 +2586,94 @@ fn capacity_context_text(summary: Option<&PoolCapacitySummary>) -> String {
     )
 }
 
+fn capacity_metadata_context_text(summary: &PoolStatusSummary) -> String {
+    format!(
+        "generated_unix:{} observed_unix:{} age_seconds:{} max_age_seconds:{} required:{} stale:{}",
+        option_u64_text(summary.generated_unix),
+        option_u64_text(summary.observed_unix),
+        option_u64_text(summary.metadata_age_seconds),
+        option_u64_text(summary.max_age_seconds),
+        summary.capacity_metadata_required,
+        summary.metadata_stale
+    )
+}
+
+fn capacity_metadata_gate_failure(summary: &PoolStatusSummary) -> Option<String> {
+    if summary.metadata_stale {
+        return Some(format!(
+            "capacity metadata stale age_seconds={} max_age_seconds={}",
+            option_u64_text(summary.metadata_age_seconds),
+            option_u64_text(summary.max_age_seconds)
+        ));
+    }
+    if summary.max_age_seconds.is_some() && summary.metadata_age_seconds.is_none() {
+        return Some(format!(
+            "capacity metadata max_age_seconds={} but age_seconds missing",
+            option_u64_text(summary.max_age_seconds)
+        ));
+    }
+    if summary.capacity_metadata_required && summary.metadata_age_seconds.is_none() {
+        return Some("capacity metadata required but age_seconds missing".to_owned());
+    }
+    if summary.capacity_metadata_required {
+        let missing_role_metadata = summary
+            .roles
+            .iter()
+            .filter_map(required_role_capacity_metadata_failure)
+            .collect::<Vec<_>>();
+        if !missing_role_metadata.is_empty() {
+            return Some(format!(
+                "capacity role metadata missing:{}",
+                missing_role_metadata.join("|")
+            ));
+        }
+    }
+    None
+}
+
+fn required_role_capacity_metadata_failure(role: &PoolWorkerRoleState) -> Option<String> {
+    let mut missing = Vec::new();
+    if role.in_flight.is_none() {
+        missing.push("in_flight");
+    }
+    if role.queued_count.is_none() {
+        missing.push("queued_count");
+    }
+    if role.lease_wait_ms.is_none() {
+        missing.push("lease_wait_ms");
+    }
+    if role.lease_wait_p95_ms.is_none() {
+        missing.push("lease_wait_p95_ms");
+    }
+    if role.latency_p50_ms.is_none() {
+        missing.push("latency_p50_ms");
+    }
+    if role.latency_p95_ms.is_none() {
+        missing.push("latency_p95_ms");
+    }
+    if missing.is_empty() {
+        None
+    } else {
+        Some(format!("{}={}", role.role, missing.join(",")))
+    }
+}
+
 fn option_capacity_json(summary: Option<&PoolCapacitySummary>) -> String {
     summary
         .map(capacity_json)
         .unwrap_or_else(|| "null".to_owned())
+}
+
+fn capacity_metadata_json(summary: &PoolStatusSummary) -> String {
+    format!(
+        "{{\"generated_unix\":{},\"observed_unix\":{},\"age_seconds\":{},\"max_age_seconds\":{},\"required\":{},\"stale\":{}}}",
+        option_u64_json(summary.generated_unix),
+        option_u64_json(summary.observed_unix),
+        option_u64_json(summary.metadata_age_seconds),
+        option_u64_json(summary.max_age_seconds),
+        summary.capacity_metadata_required,
+        summary.metadata_stale
+    )
 }
 
 fn capacity_json(summary: &PoolCapacitySummary) -> String {
@@ -2684,16 +2819,19 @@ fn roles_context_text(roles: &[PoolWorkerRoleState]) -> String {
 
 fn role_capacity_portrait_text(role: &PoolWorkerRoleState) -> String {
     format!(
-        "{}@{} status:{} ready:{} role_ready:{} reported_status:{} block:{} in_flight:{} queued:{} routes:{}/{}/{} success_failure:{}/{} latency_ms:avg:{} p50:{} p95:{} runtime:{}/{}/{} gpu_layers:{} model:{} context:{} low_priority:{} accepts_low_priority:{}",
+        "{}@{} status:{} ready:{} busy:{} role_ready:{} reported_status:{} block:{} in_flight:{} queued:{} lease_wait_ms:{} lease_wait_p95_ms:{} routes:{}/{}/{} success_failure:{}/{} latency_ms:avg:{} p50:{} p95:{} runtime:{}/{}/{} gpu_layers:{} model:{} context:{} low_priority:{} accepts_low_priority:{}",
         role.role,
         option_u64_text(role.port),
         role_status(role),
         role.ready,
+        role_busy(role),
         role.role_ready,
         role.status.as_deref().unwrap_or("none"),
         role.role_block_reason.as_deref().unwrap_or("none"),
         option_u64_text(role.in_flight),
         option_u64_text(role.queued_count),
+        option_u64_text(role.lease_wait_ms),
+        option_u64_text(role.lease_wait_p95_ms),
         option_u64_text(role.route_count),
         option_u64_text(role.selected_count),
         option_u64_text(role.blocked_count),
@@ -2737,6 +2875,17 @@ fn role_status(role: &PoolWorkerRoleState) -> &'static str {
     } else {
         "unreachable"
     }
+}
+
+fn role_busy(role: &PoolWorkerRoleState) -> bool {
+    role.in_flight.unwrap_or(0) > 0 || role.queued_count.unwrap_or(0) > 0
+}
+
+fn computed_metadata_age_seconds(
+    generated_unix: Option<u64>,
+    observed_unix: Option<u64>,
+) -> Option<u64> {
+    observed_unix?.checked_sub(generated_unix?)
 }
 
 fn option_f64_json(value: Option<f64>) -> String {
@@ -2911,12 +3060,18 @@ mod tests {
 
     #[test]
     fn parses_pool_status_as_read_only_context() {
-        let text = r#"{"summary":"pool","launch_allowed":false,"launch_block_reason":"quality_worker_down","chain_classification":"quality_worker_down","min_context_tokens":262144,"capacity":{"policy":"one_quality_plus_small_helpers","expansion_allowed":false,"recommendation":"restore_quality_gate_first","worker_count":2,"healthy_worker_count":1,"helper_worker_count":1,"healthy_helper_worker_count":1,"metal_worker_count":1,"cpu_worker_count":0,"unknown_runtime_worker_count":0,"zero_gpu_layer_worker_count":0,"quality_runtime_accelerated":null},"workers":[{"port":8686,"base_url":"http://127.0.0.1:8686","role":"quality","tcp_reachable":false,"health_ok":false,"ready":false,"role_ready":false,"status":"blocked","role_block_reason":"quality_worker_down","low_priority":false,"can_accept_low_priority_task":false,"model":"qwen-quality","context_window":262144,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":99,"route_count":8,"selected_count":7,"blocked_count":1,"in_flight":0,"queued_count":1,"success_count":6,"failure_count":1,"avg_latency_ms":1210,"latency_p50_ms":1000,"latency_p95_ms":1400},{"port":8687,"base_url":"http://127.0.0.1:8687","role":"summary","tcp_reachable":true,"health_ok":true,"ready":true,"role_ready":true,"status":"ready","low_priority":true,"can_accept_low_priority_task":true,"model":"qwen-summary","context_window":8192,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":80,"route_count":12,"selected_count":10,"blocked_count":2,"in_flight":1,"queued_count":2,"success_count":9,"failure_count":1,"avg_latency_ms":320,"latency_p50_ms":250,"latency_p95_ms":700}]}
+        let text = r#"{"summary":"pool","generated_unix":1000,"observed_unix":1012,"max_age_seconds":30,"capacity_metadata_required":true,"launch_allowed":false,"launch_block_reason":"quality_worker_down","chain_classification":"quality_worker_down","min_context_tokens":262144,"capacity":{"policy":"one_quality_plus_small_helpers","expansion_allowed":false,"recommendation":"restore_quality_gate_first","worker_count":2,"healthy_worker_count":1,"helper_worker_count":1,"healthy_helper_worker_count":1,"metal_worker_count":1,"cpu_worker_count":0,"unknown_runtime_worker_count":0,"zero_gpu_layer_worker_count":0,"quality_runtime_accelerated":null},"workers":[{"port":8686,"base_url":"http://127.0.0.1:8686","role":"quality","tcp_reachable":false,"health_ok":false,"ready":false,"role_ready":false,"status":"blocked","role_block_reason":"quality_worker_down","low_priority":false,"can_accept_low_priority_task":false,"model":"qwen-quality","context_window":262144,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":99,"route_count":8,"selected_count":7,"blocked_count":1,"in_flight":0,"queued_count":1,"lease_wait_ms":0,"lease_wait_p95_ms":2,"success_count":6,"failure_count":1,"avg_latency_ms":1210,"latency_p50_ms":1000,"latency_p95_ms":1400},{"port":8687,"base_url":"http://127.0.0.1:8687","role":"summary","tcp_reachable":true,"health_ok":true,"ready":true,"role_ready":true,"status":"ready","low_priority":true,"can_accept_low_priority_task":true,"model":"qwen-summary","context_window":8192,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":80,"route_count":12,"selected_count":10,"blocked_count":2,"in_flight":1,"queued_count":2,"lease_wait_ms":14,"lease_wait_p95_ms":80,"success_count":9,"failure_count":1,"avg_latency_ms":320,"latency_p50_ms":250,"latency_p95_ms":700}]}
 "#;
         let pool = parse_status(text);
         let context = status_context_text(&pool);
         let json = option_status_json(Some(&pool));
 
+        assert_eq!(pool.generated_unix, Some(1000));
+        assert_eq!(pool.observed_unix, Some(1012));
+        assert_eq!(pool.metadata_age_seconds, Some(12));
+        assert_eq!(pool.max_age_seconds, Some(30));
+        assert!(pool.capacity_metadata_required);
+        assert!(!pool.metadata_stale);
         assert_eq!(pool.launch_allowed, Some(false));
         assert_eq!(
             pool.chain_classification.as_deref(),
@@ -2948,14 +3103,19 @@ mod tests {
         assert_eq!(pool.roles[0].tcp_reachable, false);
         assert_eq!(pool.roles[0].port, Some(8686));
         assert_eq!(pool.roles[0].queued_count, Some(1));
+        assert_eq!(pool.roles[0].lease_wait_ms, Some(0));
         assert_eq!(pool.roles[0].latency_p95_ms, Some(1400));
         assert_eq!(pool.roles[1].role, "summary");
         assert_eq!(pool.roles[1].health_ok, true);
         assert_eq!(pool.roles[1].ready, true);
         assert_eq!(pool.roles[1].role_ready, true);
         assert_eq!(pool.roles[1].in_flight, Some(1));
+        assert_eq!(pool.roles[1].lease_wait_p95_ms, Some(80));
         assert_eq!(pool.roles[1].runtime_accelerator.as_deref(), Some("metal"));
         assert!(context.contains("launch_allowed:false"));
+        assert!(context.contains(
+            "metadata:generated_unix:1000 observed_unix:1012 age_seconds:12 max_age_seconds:30 required:true stale:false"
+        ));
         assert!(context.contains("workers_reachable:1/2"));
         assert!(context.contains("capacity:policy:one_quality_plus_small_helpers"));
         assert!(context.contains("expansion_allowed:false"));
@@ -2964,8 +3124,11 @@ mod tests {
         assert!(context.contains("runtime:metal:1 cpu:0 unknown:0 gpu0:0"));
         assert!(context.contains("roles:quality:unreachable,summary:healthy"));
         assert!(context.contains("portraits:quality@8686"));
-        assert!(context.contains("summary@8687 status:healthy ready:true role_ready:true"));
+        assert!(
+            context.contains("summary@8687 status:healthy ready:true busy:true role_ready:true")
+        );
         assert!(context.contains("in_flight:1 queued:2"));
+        assert!(context.contains("lease_wait_ms:14 lease_wait_p95_ms:80"));
         assert!(context.contains("latency_ms:avg:320 p50:250 p95:700"));
         assert!(context.contains("runtime:llama.cpp/metal/metal"));
         assert!(context.contains("available_roles:summary"));
@@ -2974,6 +3137,9 @@ mod tests {
         assert!(context.contains("next_step:start_or_fix_quality_worker_8686"));
         assert!(context.contains("reason:quality_worker_not_ready"));
         assert!(json.contains("\"launch_allowed\":false"));
+        assert!(json.contains("\"metadata\":{\"generated_unix\":1000"));
+        assert!(json.contains("\"age_seconds\":12"));
+        assert!(json.contains("\"required\":true"));
         assert!(json.contains("\"capacity\":{\"policy\":\"one_quality_plus_small_helpers\""));
         assert!(json.contains("\"expansion_allowed\":false"));
         assert!(json.contains("\"quality_runtime_accelerated\":null"));
@@ -2981,10 +3147,12 @@ mod tests {
         assert!(json.contains("\"roles\":[{\"role\":\"quality\""));
         assert!(json.contains("\"port\":8687"));
         assert!(json.contains("\"ready\":true"));
+        assert!(json.contains("\"busy\":true"));
         assert!(json.contains("\"role_ready\":true"));
         assert!(json.contains("\"reported_status\":\"ready\""));
         assert!(json.contains("\"in_flight\":1"));
         assert!(json.contains("\"queued_count\":2"));
+        assert!(json.contains("\"lease_wait_p95_ms\":80"));
         assert!(json.contains("\"avg_latency_ms\":320"));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"status\":\"healthy\""));
@@ -3015,6 +3183,38 @@ mod tests {
                 .unwrap()
                 .contains("capacity missing")
         );
+    }
+
+    #[test]
+    fn capacity_gate_blocks_stale_capacity_metadata() {
+        let stale = parse_status(
+            "{\"metadata_age_seconds\":120,\"max_age_seconds\":60,\"capacity\":{\"expansion_allowed\":true},\"workers\":[{\"role\":\"quality\",\"tcp_reachable\":true,\"health_ok\":true}]}\n",
+        );
+        let explicit_stale = parse_status(
+            "{\"metadata_stale\":true,\"capacity\":{\"expansion_allowed\":true},\"workers\":[{\"role\":\"quality\",\"tcp_reachable\":true,\"health_ok\":true}]}\n",
+        );
+
+        let stale_failure = capacity_gate_failure(&stale).unwrap();
+        assert!(stale.metadata_stale);
+        assert!(stale_failure.contains("capacity metadata stale"));
+        assert!(stale_failure.contains("age_seconds=120"));
+        assert!(stale_failure.contains("max_age_seconds=60"));
+        assert!(
+            capacity_gate_failure(&explicit_stale)
+                .unwrap()
+                .contains("capacity metadata stale")
+        );
+    }
+
+    #[test]
+    fn capacity_gate_blocks_missing_required_role_capacity_metadata() {
+        let missing_role_metadata = parse_status(
+            "{\"capacity_metadata_required\":true,\"metadata_age_seconds\":10,\"capacity\":{\"expansion_allowed\":true},\"workers\":[{\"role\":\"quality\",\"tcp_reachable\":true,\"health_ok\":true,\"in_flight\":0,\"queued_count\":0,\"lease_wait_ms\":0,\"latency_p50_ms\":1,\"latency_p95_ms\":2}]}\n",
+        );
+
+        let failure = capacity_gate_failure(&missing_role_metadata).unwrap();
+        assert!(failure.contains("capacity role metadata missing"));
+        assert!(failure.contains("quality=lease_wait_p95_ms"));
     }
 
     #[test]
