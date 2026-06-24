@@ -4,6 +4,7 @@ mod clean_room_handoff;
 mod helper_feedback;
 mod helper_stage_repair;
 mod http;
+mod inference_backend;
 mod json;
 mod ledger;
 mod model_registry;
