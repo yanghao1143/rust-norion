@@ -127,6 +127,29 @@ flowchart LR
 | `docs/runbooks` | 本地/远程模型链路和运维验证步骤。 |
 | `ROADMAP.md` | 优先级更细的长期路线图。 |
 
+## 贡献者专区
+
+rust-norion 需要很多人一起把控制层、记忆、runtime 边界、文档和实验跑实。贡献者不只是提交代码的人，也包括写 runbook、复现实验、补测试、做架构 review、整理 issue、接入后端、改进中文/英文文档的人。
+
+想留下名字、展示成果、认领方向，先看：
+
+- [贡献者专区与荣誉墙](docs/contributor-zone.md)
+- [贡献规则](CONTRIBUTING.md)
+- [路线图](ROADMAP.md)
+
+可以优先认领的方向：
+
+| 方向 | 适合贡献 |
+| --- | --- |
+| 控制层核心 | routing、hierarchy、reflection、scheduler、writer gate 的测试、trace 和小步实现。 |
+| 记忆系统 | KV/Gist memory、经验检索、memory hygiene、语义索引、状态迁移。 |
+| Runtime 边界 | `ModelRuntime`、manifest gate、command runtime、reference kernel、设备 profile。 |
+| 文档与教程 | 新人 quickstart、中文 runbook、架构图、FAQ、实验复现记录。 |
+| Benchmark / CI | 可复现 benchmark、轻量 gate、失败样例、trace schema 验证。 |
+| 社区协作 | issue triage、任务拆分、PR review、贡献者周报、成果展示。 |
+
+贡献者可以在 PR 里附上 “Contributor Card”，合并后可进入专区索引；重要模块贡献会在 release notes、README 链接或 docs 荣誉墙里展示。
+
 ## 后端接入边界
 
 接入真实模型时优先实现 `ModelRuntime`，再用 `RuntimeBackend` 接入控制层；高度定制的自研运行时也可以直接实现 `InferenceBackend`。

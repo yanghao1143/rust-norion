@@ -38,6 +38,26 @@ Small typo or documentation fixes can go straight to a pull request, but the
 maintainer may still ask for an issue when the change affects project policy or
 architecture.
 
+## Contributor Recognition
+
+Contributors are encouraged to make their work visible. A pull request may
+include a short contributor card:
+
+- preferred display name and GitHub/Gitee handle
+- contribution lane: core, memory, runtime, docs, benchmark, governance,
+  runbook, community, or research reproduction
+- one-sentence impact summary
+- validation command or reproduction note
+- optional link to an issue, demo, trace, benchmark, or design note
+
+Merged contributions can be referenced from
+[docs/contributor-zone.md](docs/contributor-zone.md), release notes, runbooks,
+or roadmap updates when they materially improve a module or developer workflow.
+
+Recognition does not bypass review, branch protection, license compatibility,
+validation gates, or maintainer approval. It is a way to give visible credit
+for useful work while keeping the repository safe and reviewable.
+
 ## Pull Requests
 
 Every pull request should include:
