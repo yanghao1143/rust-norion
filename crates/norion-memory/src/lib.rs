@@ -22,6 +22,7 @@ pub mod replay;
 pub mod retention;
 pub mod reuse;
 pub mod runtime_projection;
+pub mod self_evolving;
 pub mod service;
 pub mod short_term;
 pub mod skills;
@@ -113,6 +114,12 @@ pub use reuse::{
 pub use runtime_projection::{
     AdaptiveStateMemoryProjection, DefaultRuntimeStateProjector, MemoryProjectionAudit,
     MemoryProjectionMismatch, StateInspectionMemoryProjection,
+};
+pub use self_evolving::{
+    AdaptiveHeuristic, AdaptiveHeuristicInput, CaseOutcome, EpisodeInput, EpisodeMatch,
+    EpisodeQuery, HeuristicMatch, HeuristicQuery, InMemorySelfEvolvingMemory, RetrospectiveEpisode,
+    SelfEvolvingCaseReflection, SelfEvolvingMemory, SelfEvolvingMemorySnapshot,
+    SelfEvolvingReflectionReport, ToolReliabilityRecord, ToolReliabilityUpdate,
 };
 pub use service::{
     MemoryAdapterStatus, MemoryCapabilityCoverage, MemoryConsumerProfile, MemoryReadinessReport,
