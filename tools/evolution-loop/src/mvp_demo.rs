@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::args::Config;
 use crate::json::json_string;
@@ -10,6 +11,7 @@ use crate::profile_scoring as scoring;
 use crate::routing_rules as rules;
 
 const DEMO_SCHEMA: &str = "norion.multi_model_mvp_demo.v1";
+static DEMO_OUTCOME_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq)]
 struct MvpDemoResult {
@@ -157,9 +159,11 @@ fn summarize_demo_outcomes(outcomes: &[RequestOutcome]) -> Result<OutcomeSummary
 }
 
 fn demo_outcome_path() -> PathBuf {
+    let nonce = DEMO_OUTCOME_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "rust-norion-mvp-demo-{}-outcomes.jsonl",
-        process::id()
+        "rust-norion-mvp-demo-{}-{}-outcomes.jsonl",
+        process::id(),
+        nonce
     ))
 }
 
