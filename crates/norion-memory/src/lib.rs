@@ -93,7 +93,8 @@ pub use placement::{
     TieredMemoryPlanner,
 };
 pub use repair::{
-    DefaultMemoryRepairPlanner, MemoryRepairAction, MemoryRepairItem, MemoryRepairPlan,
+    DefaultMemoryRepairPlanner, GenomeRepairFactor, GenomeRepairFactorKind, GenomeRepairFactorPlan,
+    GenomeRepairSkippedFactor, MemoryRepairAction, MemoryRepairItem, MemoryRepairPlan,
     MemoryRepairPlanner, MemoryRepairSkippedItem,
 };
 pub use replay::{

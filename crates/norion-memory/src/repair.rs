@@ -40,6 +40,265 @@ pub struct MemoryRepairSkippedItem {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GenomeRepairFactorKind {
+    RelabelPurposeTag,
+    SpliceIntron,
+    QuarantineMalignantMutation,
+    ExciseDuplicateGene,
+}
+
+impl GenomeRepairFactorKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RelabelPurposeTag => "relabel_purpose_tag",
+            Self::SpliceIntron => "splice_intron",
+            Self::QuarantineMalignantMutation => "quarantine_malignant_mutation",
+            Self::ExciseDuplicateGene => "excise_duplicate_gene",
+        }
+    }
+
+    pub fn from_repair_action(action: MemoryRepairAction) -> Self {
+        match action {
+            MemoryRepairAction::RepairCleanGist => Self::RelabelPurposeTag,
+            MemoryRepairAction::CompactContext => Self::SpliceIntron,
+            MemoryRepairAction::Quarantine => Self::QuarantineMalignantMutation,
+            MemoryRepairAction::DeleteDuplicate => Self::ExciseDuplicateGene,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenomeRepairFactor {
+    pub experience_id: String,
+    pub source_action: MemoryRepairAction,
+    pub kind: GenomeRepairFactorKind,
+    pub reason: String,
+    pub proposed_label: String,
+    pub operator_review_required: bool,
+    pub requires_writer_gate: bool,
+    pub persistent_writes_allowed: bool,
+}
+
+impl GenomeRepairFactor {
+    pub fn detail_code(&self) -> String {
+        format!(
+            "{}:{}:{}",
+            self.kind.as_str(),
+            self.reason,
+            hex_id(&self.experience_id)
+        )
+    }
+
+    pub fn status_line(&self) -> String {
+        format!(
+            "genome_repair_factor kind={} action={} id={} reason={} proposed_label={} operator_review_required={} requires_writer_gate={} persistent_writes_allowed={}",
+            self.kind.as_str(),
+            self.source_action.as_str(),
+            hex_id(&self.experience_id),
+            self.reason,
+            self.proposed_label,
+            self.operator_review_required,
+            self.requires_writer_gate,
+            self.persistent_writes_allowed,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenomeRepairSkippedFactor {
+    pub experience_id: String,
+    pub source_action: MemoryRepairAction,
+    pub kind: GenomeRepairFactorKind,
+    pub reason: String,
+}
+
+impl GenomeRepairSkippedFactor {
+    pub fn detail_code(&self) -> String {
+        format!(
+            "skipped:{}:{}:{}",
+            self.kind.as_str(),
+            self.reason,
+            hex_id(&self.experience_id)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GenomeRepairFactorPlan {
+    pub factors: Vec<GenomeRepairFactor>,
+    pub skipped: Vec<GenomeRepairSkippedFactor>,
+}
+
+impl GenomeRepairFactorPlan {
+    pub fn from_repair_plan(plan: &MemoryRepairPlan) -> Self {
+        let mut factors = plan
+            .items
+            .iter()
+            .map(GenomeRepairFactor::from_repair_item)
+            .collect::<Vec<_>>();
+        let mut skipped = plan
+            .skipped
+            .iter()
+            .map(GenomeRepairSkippedFactor::from_repair_skipped_item)
+            .collect::<Vec<_>>();
+        sort_repair_factors(&mut factors);
+        sort_skipped_repair_factors(&mut skipped);
+        Self { factors, skipped }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.factors.is_empty() && self.skipped.is_empty()
+    }
+
+    pub fn operator_review_required(&self) -> bool {
+        !self.factors.is_empty()
+    }
+
+    pub fn requires_writer_gate(&self) -> bool {
+        !self.factors.is_empty()
+    }
+
+    pub fn persistent_writes_allowed(&self) -> bool {
+        false
+    }
+
+    pub fn factors_for_kind(&self, kind: GenomeRepairFactorKind) -> Vec<&GenomeRepairFactor> {
+        self.factors
+            .iter()
+            .filter(|factor| factor.kind == kind)
+            .collect()
+    }
+
+    pub fn skipped_for_kind(
+        &self,
+        kind: GenomeRepairFactorKind,
+    ) -> Vec<&GenomeRepairSkippedFactor> {
+        self.skipped
+            .iter()
+            .filter(|factor| factor.kind == kind)
+            .collect()
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        self.factors
+            .iter()
+            .map(|factor| factor.reason.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn skipped_reason_codes(&self) -> Vec<String> {
+        self.skipped
+            .iter()
+            .map(|factor| factor.reason.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn safety_codes(&self) -> Vec<String> {
+        let mut codes = BTreeSet::from(["persistent_writes_blocked".to_owned()]);
+        if self.operator_review_required() {
+            codes.insert("operator_review_required".to_owned());
+        }
+        if self.requires_writer_gate() {
+            codes.insert("writer_gate_required".to_owned());
+        }
+        codes.into_iter().collect()
+    }
+
+    pub fn detail_codes(&self) -> Vec<String> {
+        self.factors
+            .iter()
+            .map(GenomeRepairFactor::detail_code)
+            .chain(
+                self.skipped
+                    .iter()
+                    .map(GenomeRepairSkippedFactor::detail_code),
+            )
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn detail_codes_for_kind(&self, kind: GenomeRepairFactorKind) -> Vec<String> {
+        let prefix = format!("{}:", kind.as_str());
+        self.detail_codes()
+            .into_iter()
+            .filter(|code| code.starts_with(&prefix))
+            .collect()
+    }
+
+    pub fn skipped_detail_codes(&self) -> Vec<String> {
+        self.detail_codes()
+            .into_iter()
+            .filter(|code| code.starts_with("skipped:"))
+            .collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "genome_repair_factor_plan empty={} factors={} skipped={} relabel_purpose_tag={} splice_intron={} quarantine_malignant_mutation={} excise_duplicate_gene={} skipped_relabel_purpose_tag={} skipped_splice_intron={} skipped_quarantine_malignant_mutation={} skipped_excise_duplicate_gene={} operator_review_required={} requires_writer_gate={} persistent_writes_allowed={} safety_codes={} reason_codes={} skipped_reason_codes={} detail_codes={}",
+            self.is_empty(),
+            self.factors.len(),
+            self.skipped.len(),
+            self.factors_for_kind(GenomeRepairFactorKind::RelabelPurposeTag)
+                .len(),
+            self.factors_for_kind(GenomeRepairFactorKind::SpliceIntron)
+                .len(),
+            self.factors_for_kind(GenomeRepairFactorKind::QuarantineMalignantMutation)
+                .len(),
+            self.factors_for_kind(GenomeRepairFactorKind::ExciseDuplicateGene)
+                .len(),
+            self.skipped_for_kind(GenomeRepairFactorKind::RelabelPurposeTag)
+                .len(),
+            self.skipped_for_kind(GenomeRepairFactorKind::SpliceIntron)
+                .len(),
+            self.skipped_for_kind(GenomeRepairFactorKind::QuarantineMalignantMutation)
+                .len(),
+            self.skipped_for_kind(GenomeRepairFactorKind::ExciseDuplicateGene)
+                .len(),
+            self.operator_review_required(),
+            self.requires_writer_gate(),
+            self.persistent_writes_allowed(),
+            join_codes(self.safety_codes()),
+            join_codes(self.reason_codes()),
+            join_codes(self.skipped_reason_codes()),
+            join_codes(self.detail_codes()),
+        )
+    }
+}
+
+impl GenomeRepairFactor {
+    fn from_repair_item(item: &MemoryRepairItem) -> Self {
+        let kind = GenomeRepairFactorKind::from_repair_action(item.action);
+        Self {
+            experience_id: item.experience_id.clone(),
+            source_action: item.action,
+            kind,
+            reason: item.reason.clone(),
+            proposed_label: proposed_factor_label(kind, item.proposed_lesson.as_deref()),
+            operator_review_required: true,
+            requires_writer_gate: true,
+            persistent_writes_allowed: false,
+        }
+    }
+}
+
+impl GenomeRepairSkippedFactor {
+    fn from_repair_skipped_item(item: &MemoryRepairSkippedItem) -> Self {
+        let kind = GenomeRepairFactorKind::from_repair_action(item.action);
+        Self {
+            experience_id: item.experience_id.clone(),
+            source_action: item.action,
+            kind,
+            reason: item.reason.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MemoryRepairPlan {
     pub items: Vec<MemoryRepairItem>,
@@ -144,6 +403,10 @@ impl MemoryRepairPlan {
             .into_iter()
             .filter(|code| code.contains(&needle))
             .collect()
+    }
+
+    pub fn genome_repair_factor_plan(&self) -> GenomeRepairFactorPlan {
+        GenomeRepairFactorPlan::from_repair_plan(self)
     }
 
     pub fn summary_line(&self) -> String {
@@ -436,6 +699,51 @@ fn action_rank(action: MemoryRepairAction) -> u8 {
     }
 }
 
+fn proposed_factor_label(kind: GenomeRepairFactorKind, proposed_lesson: Option<&str>) -> String {
+    match kind {
+        GenomeRepairFactorKind::RelabelPurposeTag => {
+            let proposed_lesson = proposed_lesson.unwrap_or_default().trim_start();
+            if proposed_lesson.starts_with("reuse_response:") {
+                "purpose:reuse_response".to_owned()
+            } else if proposed_lesson.starts_with("revise_response:") {
+                "purpose:revise_response".to_owned()
+            } else {
+                "purpose:repair_clean_gist".to_owned()
+            }
+        }
+        GenomeRepairFactorKind::SpliceIntron => "context:splice_intron".to_owned(),
+        GenomeRepairFactorKind::QuarantineMalignantMutation => {
+            "mutation:malignant_quarantine".to_owned()
+        }
+        GenomeRepairFactorKind::ExciseDuplicateGene => "gene:duplicate_cut".to_owned(),
+    }
+}
+
+fn sort_repair_factors(factors: &mut [GenomeRepairFactor]) {
+    factors.sort_by(|left, right| {
+        repair_factor_rank(left.kind)
+            .cmp(&repair_factor_rank(right.kind))
+            .then_with(|| left.experience_id.cmp(&right.experience_id))
+    });
+}
+
+fn sort_skipped_repair_factors(factors: &mut [GenomeRepairSkippedFactor]) {
+    factors.sort_by(|left, right| {
+        repair_factor_rank(left.kind)
+            .cmp(&repair_factor_rank(right.kind))
+            .then_with(|| left.experience_id.cmp(&right.experience_id))
+    });
+}
+
+fn repair_factor_rank(kind: GenomeRepairFactorKind) -> u8 {
+    match kind {
+        GenomeRepairFactorKind::QuarantineMalignantMutation => 0,
+        GenomeRepairFactorKind::ExciseDuplicateGene => 1,
+        GenomeRepairFactorKind::SpliceIntron => 2,
+        GenomeRepairFactorKind::RelabelPurposeTag => 3,
+    }
+}
+
 fn join_codes(codes: Vec<String>) -> String {
     if codes.is_empty() {
         "none".to_owned()
@@ -455,6 +763,132 @@ fn hex_id(id: &str) -> String {
 mod tests {
     use super::*;
     use crate::{DefaultExperienceGovernance, ExperienceGovernance, MemoryScope};
+
+    #[test]
+    fn repair_plan_projects_genome_repair_factors_without_writes() {
+        let plan = MemoryRepairPlan {
+            items: vec![
+                MemoryRepairItem {
+                    experience_id: "aged".to_owned(),
+                    action: MemoryRepairAction::RepairCleanGist,
+                    reason: "repair_dirty_clean_gist".to_owned(),
+                    proposed_lesson: Some(
+                        "reuse_response: stable anchor but not raw status text".to_owned(),
+                    ),
+                    source_gist: Some("stable anchor but not raw status text".to_owned()),
+                },
+                MemoryRepairItem {
+                    experience_id: "intron".to_owned(),
+                    action: MemoryRepairAction::CompactContext,
+                    reason: "compact_long_context_without_gist".to_owned(),
+                    proposed_lesson: None,
+                    source_gist: None,
+                },
+                MemoryRepairItem {
+                    experience_id: "malignant".to_owned(),
+                    action: MemoryRepairAction::Quarantine,
+                    reason: "governance_quarantine_candidate".to_owned(),
+                    proposed_lesson: None,
+                    source_gist: None,
+                },
+                MemoryRepairItem {
+                    experience_id: "duplicate".to_owned(),
+                    action: MemoryRepairAction::DeleteDuplicate,
+                    reason: "deduplicate_exact_fingerprint".to_owned(),
+                    proposed_lesson: None,
+                    source_gist: None,
+                },
+            ],
+            skipped: vec![MemoryRepairSkippedItem {
+                experience_id: "missing".to_owned(),
+                action: MemoryRepairAction::RepairCleanGist,
+                reason: "missing_clean_gist".to_owned(),
+            }],
+        };
+
+        let factors = plan.genome_repair_factor_plan();
+
+        assert!(!factors.persistent_writes_allowed());
+        assert!(factors.operator_review_required());
+        assert!(factors.requires_writer_gate());
+        assert_eq!(
+            factors.safety_codes(),
+            vec![
+                "operator_review_required".to_owned(),
+                "persistent_writes_blocked".to_owned(),
+                "writer_gate_required".to_owned(),
+            ]
+        );
+        assert_eq!(
+            factors.factors_for_kind(GenomeRepairFactorKind::RelabelPurposeTag)[0].proposed_label,
+            "purpose:reuse_response"
+        );
+        assert_eq!(
+            factors.factors_for_kind(GenomeRepairFactorKind::SpliceIntron)[0].proposed_label,
+            "context:splice_intron"
+        );
+        assert_eq!(
+            factors.factors_for_kind(GenomeRepairFactorKind::QuarantineMalignantMutation)[0]
+                .proposed_label,
+            "mutation:malignant_quarantine"
+        );
+        assert_eq!(
+            factors.factors_for_kind(GenomeRepairFactorKind::ExciseDuplicateGene)[0].proposed_label,
+            "gene:duplicate_cut"
+        );
+        assert_eq!(
+            factors.summary_line(),
+            "genome_repair_factor_plan empty=false factors=4 skipped=1 relabel_purpose_tag=1 splice_intron=1 quarantine_malignant_mutation=1 excise_duplicate_gene=1 skipped_relabel_purpose_tag=1 skipped_splice_intron=0 skipped_quarantine_malignant_mutation=0 skipped_excise_duplicate_gene=0 operator_review_required=true requires_writer_gate=true persistent_writes_allowed=false safety_codes=operator_review_required|persistent_writes_blocked|writer_gate_required reason_codes=compact_long_context_without_gist|deduplicate_exact_fingerprint|governance_quarantine_candidate|repair_dirty_clean_gist skipped_reason_codes=missing_clean_gist detail_codes=excise_duplicate_gene:deduplicate_exact_fingerprint:6475706c6963617465|quarantine_malignant_mutation:governance_quarantine_candidate:6d616c69676e616e74|relabel_purpose_tag:repair_dirty_clean_gist:61676564|skipped:relabel_purpose_tag:missing_clean_gist:6d697373696e67|splice_intron:compact_long_context_without_gist:696e74726f6e"
+        );
+        assert_eq!(
+            factors.factors_for_kind(GenomeRepairFactorKind::RelabelPurposeTag)[0].status_line(),
+            "genome_repair_factor kind=relabel_purpose_tag action=repair_clean_gist id=61676564 reason=repair_dirty_clean_gist proposed_label=purpose:reuse_response operator_review_required=true requires_writer_gate=true persistent_writes_allowed=false"
+        );
+        assert_eq!(
+            factors.detail_codes_for_kind(GenomeRepairFactorKind::RelabelPurposeTag),
+            vec!["relabel_purpose_tag:repair_dirty_clean_gist:61676564".to_owned()]
+        );
+        assert_eq!(
+            factors.skipped_detail_codes(),
+            vec!["skipped:relabel_purpose_tag:missing_clean_gist:6d697373696e67".to_owned()]
+        );
+        assert!(!factors.summary_line().contains("stable anchor"));
+        assert!(!factors.factors[3].status_line().contains("stable anchor"));
+    }
+
+    #[test]
+    fn skipped_genome_repair_factors_remain_audit_only() {
+        let plan = MemoryRepairPlan {
+            items: Vec::new(),
+            skipped: vec![MemoryRepairSkippedItem {
+                experience_id: "missing-record".to_owned(),
+                action: MemoryRepairAction::Quarantine,
+                reason: "missing_record".to_owned(),
+            }],
+        };
+
+        let factors = plan.genome_repair_factor_plan();
+
+        assert!(factors.factors.is_empty());
+        assert_eq!(factors.skipped.len(), 1);
+        assert!(!factors.operator_review_required());
+        assert!(!factors.requires_writer_gate());
+        assert!(!factors.persistent_writes_allowed());
+        assert_eq!(
+            factors.safety_codes(),
+            vec!["persistent_writes_blocked".to_owned()]
+        );
+        assert_eq!(
+            factors.skipped_detail_codes(),
+            vec![
+                "skipped:quarantine_malignant_mutation:missing_record:6d697373696e672d7265636f7264"
+                    .to_owned(),
+            ]
+        );
+        assert!(factors.summary_line().contains(
+            "operator_review_required=false requires_writer_gate=false persistent_writes_allowed=false"
+        ));
+    }
 
     #[test]
     fn repair_plan_projects_governance_actions() {
