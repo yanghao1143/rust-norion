@@ -4269,6 +4269,9 @@ function Get-DaemonTransitionKind {
         [string]$LatestRoundState
     )
 
+    if (($ActivityState -eq "not_running" -or $ActivityState -eq "stale_pid") -and $LatestRoundState -eq "in_progress") {
+        return "restartable_stale_round"
+    }
     if (($ActivityState -eq "active" -or $ActivityState -eq "slow_in_progress") -and $LatestRoundState -eq "in_progress") {
         return "normal_in_progress"
     }
@@ -4406,7 +4409,8 @@ function New-NextRoundDecision {
     $safeToWaitInProgress = $reportGateAllowsActiveWait -and $transitionKind -eq "normal_in_progress" -and $roundInProgress -eq $true -and $activityOk -eq $true
     $safeToWaitPreRound = $reportGatePassed -eq $true -and ($preRoundWaitKinds -contains $transitionKind) -and $activityOk -eq $true
     $safeToWait = $safeToWaitInProgress -or $safeToWaitPreRound
-    $safeToContinue = $reportGatePassed -eq $true -and ($safeToContinueTransitionKinds -contains $transitionKind) -and $roundInProgress -eq $false -and $activityOk -eq $true
+    $safeToRestartStaleRound = $reportGatePassed -eq $true -and $transitionKind -eq "restartable_stale_round"
+    $safeToContinue = ($reportGatePassed -eq $true -and ($safeToContinueTransitionKinds -contains $transitionKind) -and $roundInProgress -eq $false -and $activityOk -eq $true) -or $safeToRestartStaleRound
     $operatorBlocked = -not ($safeToWait -or $safeToContinue)
 
     $displayState = "blocked-operator-attention"
@@ -4426,6 +4430,8 @@ function New-NextRoundDecision {
             $reasonCode = "idle_completed_report_gate_passed_ready_for_next_round"
         } elseif ($transitionKind -eq "post_round_activity") {
             $reasonCode = "post_round_activity_report_gate_passed_ready_for_next_round"
+        } elseif ($transitionKind -eq "restartable_stale_round") {
+            $reasonCode = "daemon_not_running_stale_round_restartable_after_report_gate_passed"
         } else {
             $reasonCode = "done_marker_seen_wait_for_ledger_commit_then_continue"
         }

@@ -309,20 +309,20 @@ if (-not $Once) {
 
 do {
     $statusResult = Invoke-DaemonStatus
-    $status = $statusResult.Status
-    $daemon = $status.loop.daemon
+    $loopStatus = $statusResult.Status
+    $daemon = $loopStatus.loop.daemon
     $round = if ($null -ne $daemon) { $daemon.active_round } else { "" }
     $state = if ($null -ne $daemon) { $daemon.activity_state } else { "missing" }
     $running = if ($null -ne $daemon) { $daemon.running } else { $false }
 
-    if (Should-StartDaemon -Status $status) {
+    if (Should-StartDaemon -Status $loopStatus) {
         Write-Host "supervisor: daemon_start_required running=$running state=$state active_round=$round"
         $startOutput = Invoke-DaemonStart
         if (-not [string]::IsNullOrWhiteSpace($startOutput)) {
             Write-Host $startOutput.TrimEnd()
         }
     } else {
-        Write-Host "supervisor: daemon_ok running=$running state=$state active_round=$round readiness=$($status.loop.readiness.ready)"
+        Write-Host "supervisor: daemon_ok running=$running state=$state active_round=$round readiness=$($loopStatus.loop.readiness.ready)"
     }
 
     if ($Once) {

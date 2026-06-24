@@ -26,6 +26,7 @@ param(
     [switch]$EnableTestGateValidationRun,
     [switch]$StrictUnattendedEvolution,
     [switch]$RequireValidationExecution,
+    [switch]$RefreshRemoteChainStatus,
     [switch]$SkipBackend,
     [switch]$SkipRemoteChain,
     [switch]$FailOnUnhealthy,
@@ -187,7 +188,17 @@ function Find-DaemonOrphanProcesses {
     if ($normalizedLedger.Trim().Length -eq 0) {
         return @()
     }
-    $normalizedLedger = $normalizedLedger.ToLowerInvariant()
+    $normalizedLedger = Normalize-ProcessMatchText $normalizedLedger
+    $ledgerFile = Normalize-ProcessMatchText (Split-Path -Leaf $LedgerPath)
+    $ledgerDir = Normalize-ProcessMatchText (Split-Path -Parent $LedgerPath)
+    $ledgerDirTail = ""
+    if ($ledgerDir -match '(target\\evolution\\daemon)$') {
+        $ledgerDirTail = $Matches[1]
+    }
+    $ledgerRelativeTail = ""
+    if ($ledgerFile.Trim().Length -gt 0 -and $ledgerDirTail.Trim().Length -gt 0) {
+        $ledgerRelativeTail = "$ledgerDirTail\$ledgerFile"
+    }
 
     try {
         $processes = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine)
@@ -201,11 +212,24 @@ function Find-DaemonOrphanProcesses {
         if ($commandLine.Trim().Length -eq 0) {
             continue
         }
-        $lowerCommand = $commandLine.ToLowerInvariant()
-        if (-not $lowerCommand.Contains($normalizedLedger)) {
+        $normalizedCommand = Normalize-ProcessMatchText $commandLine
+        $matchesLedger = $normalizedCommand.Contains($normalizedLedger)
+        if (-not $matchesLedger -and $ledgerFile.Trim().Length -gt 0 -and $ledgerDirTail.Trim().Length -gt 0) {
+            $matchesLedger = $normalizedCommand.Contains($ledgerFile) -and $normalizedCommand.Contains($ledgerDirTail)
+        }
+        if (-not $matchesLedger -and $ledgerRelativeTail.Trim().Length -gt 0) {
+            $matchesLedger = $normalizedCommand.Contains($ledgerRelativeTail)
+        }
+        if (-not $matchesLedger -and $ledgerDirTail.Trim().Length -gt 0) {
+            $matchesLedger = $normalizedCommand.Contains("evolution-loop.launch.ps1") -and $normalizedCommand.Contains($ledgerDirTail)
+        }
+        if (-not $matchesLedger) {
             continue
         }
-        if ($lowerCommand -notmatch 'evolution-loop') {
+        if ($normalizedCommand -notmatch 'evolution-loop') {
+            continue
+        }
+        if ($normalizedCommand.Contains("daemon-evolution-loop.ps1") -or $normalizedCommand.Contains("status-evolution-loop.ps1")) {
             continue
         }
         if ([int]$process.ProcessId -eq $PID) {
@@ -217,7 +241,89 @@ function Find-DaemonOrphanProcesses {
         $matchedProcesses += $process
     }
 
+    if ($matchedProcesses.Count -eq 0) {
+        $rawLedger = [string]$LedgerPath
+        $rawLedgerFile = [string](Split-Path -Leaf $LedgerPath)
+        foreach ($process in $processes) {
+            $commandLine = [string]$process.CommandLine
+            if ($commandLine.Trim().Length -eq 0) {
+                continue
+            }
+            $commandLower = $commandLine.ToLowerInvariant()
+            $matchesRawLedger = $commandLine.Contains($rawLedger)
+            if (-not $matchesRawLedger -and $rawLedgerFile.Trim().Length -gt 0) {
+                $matchesRawLedger = $commandLine.Contains($rawLedgerFile) -and $commandLower.Contains("target\evolution\daemon")
+            }
+            if (-not $matchesRawLedger) {
+                $matchesRawLedger = $commandLower.Contains("evolution-loop.launch.ps1") -and $commandLower.Contains("target\evolution\daemon")
+            }
+            if (-not $matchesRawLedger -or -not $commandLower.Contains("evolution-loop")) {
+                continue
+            }
+            if ($commandLower.Contains("daemon-evolution-loop.ps1") -or $commandLower.Contains("status-evolution-loop.ps1")) {
+                continue
+            }
+            if ([int]$process.ProcessId -eq $PID) {
+                continue
+            }
+            if ($StalePid -gt 0 -and [int]$process.ProcessId -eq $StalePid) {
+                continue
+            }
+            $matchedProcesses += $process
+        }
+    }
+
     return @($matchedProcesses | Sort-Object ProcessId -Unique)
+}
+
+function Select-DaemonAdoptionProcess {
+    param([object[]]$Processes)
+
+    $items = @($Processes)
+    if ($items.Count -eq 0) {
+        return $null
+    }
+
+    $ids = @{}
+    foreach ($process in $items) {
+        $ids[[int]$process.ProcessId] = $true
+    }
+
+    $ranked = @()
+    foreach ($process in $items) {
+        $name = ([string]$process.Name).ToLowerInvariant()
+        $command = Normalize-ProcessMatchText ([string]$process.CommandLine)
+        $rank = 50
+        if (-not $ids.ContainsKey([int]$process.ParentProcessId)) {
+            $rank -= 20
+        }
+        if ($command.Contains("evolution-loop.launch.ps1")) {
+            $rank -= 10
+        } elseif ($command.Contains("start-evolution-loop.ps1")) {
+            $rank -= 8
+        } elseif ($name -eq "cargo.exe") {
+            $rank -= 6
+        } elseif ($name -eq "evolution-loop.exe") {
+            $rank -= 4
+        }
+        $ranked += [pscustomobject]@{
+            rank = $rank
+            pid = [int]$process.ProcessId
+            process = $process
+        }
+    }
+
+    $preferred = @($ranked | Sort-Object rank, pid | Select-Object -First 1)
+    if ($preferred.Count -eq 0) {
+        return $null
+    }
+    return $preferred[0].process
+}
+
+function Normalize-ProcessMatchText {
+    param([string]$Text)
+
+    return (([string]$Text).ToLowerInvariant() -replace '/', '\' -replace '\\+', '\')
 }
 
 function Stop-DaemonMatchedProcesses {
@@ -513,10 +619,13 @@ function Get-DaemonActivitySummary {
     param(
         [bool]$Running,
         [bool]$StalePidFile,
+        [bool]$AdoptedOrphan,
         [object]$LogSummary,
         [object]$StdoutFreshness,
         [object]$LedgerFreshness,
-        [object]$LedgerLagRounds
+        [object]$LedgerLagRounds,
+        [object]$BackendBusyStatus,
+        [int]$RoundTimeoutSecs = 900
     )
 
     $stdoutAge = $StdoutFreshness.age_seconds
@@ -530,10 +639,15 @@ function Get-DaemonActivitySummary {
         $state = "not_running"
         $reason = "daemon_process_not_running"
         $nextStep = "start daemon when unattended evolution should run"
-    } elseif ($StalePidFile) {
+    } elseif ($StalePidFile -and -not $AdoptedOrphan) {
         $state = "stale_pid"
         $reason = "pid_file_points_to_missing_process"
         $nextStep = "remove stale pid file or restart daemon"
+    } elseif ($AdoptedOrphan -and $null -eq $LogSummary.latest_round) {
+        $state = "running_adopted_orphan"
+        $ok = $true
+        $reason = "matched_live_evolution_process_by_ledger"
+        $nextStep = "wait for the adopted evolution-loop process or inspect backend health"
     } elseif ($LogSummary.round_in_progress -eq $true) {
         if ($null -eq $stdoutAge) {
             $state = "in_progress_no_stdout"
@@ -544,6 +658,15 @@ function Get-DaemonActivitySummary {
             $ok = $true
             $reason = "round_in_progress_stdout_recent"
             $nextStep = "wait for current round to finish or inspect log_preview"
+        } elseif ($null -ne $BackendBusyStatus -and $BackendBusyStatus.checked -eq $true -and $BackendBusyStatus.busy -eq $true -and [int]$stdoutAge -le $RoundTimeoutSecs) {
+            $state = "slow_in_progress"
+            $ok = $true
+            $reason = "round_in_progress_backend_busy_within_timeout"
+            $nextStep = "wait for active backend request to finish before starting or replaying another round"
+        } elseif ($null -ne $BackendBusyStatus -and $BackendBusyStatus.checked -eq $true -and $BackendBusyStatus.busy -eq $true) {
+            $state = "stale_in_progress"
+            $reason = "round_in_progress_backend_busy_past_timeout"
+            $nextStep = "inspect backend request timeout, model worker, and daemon stdout"
         } else {
             $state = "stale_in_progress"
             $reason = "round_in_progress_stdout_stale"
@@ -581,6 +704,11 @@ function Get-DaemonActivitySummary {
         stdout_age_seconds = $stdoutAge
         ledger_age_seconds = $ledgerAge
         ledger_lag_rounds = $LedgerLagRounds
+        backend_busy_checked = if ($null -ne $BackendBusyStatus) { $BackendBusyStatus.checked } else { $false }
+        backend_busy = if ($null -ne $BackendBusyStatus) { $BackendBusyStatus.busy } else { $false }
+        backend_active_engine_requests = if ($null -ne $BackendBusyStatus) { $BackendBusyStatus.active_engine_requests } else { 0 }
+        backend_active_endpoints = if ($null -ne $BackendBusyStatus) { $BackendBusyStatus.active_endpoints } else { @() }
+        max_round_timeout_seconds = $RoundTimeoutSecs
     }
 }
 
@@ -614,7 +742,10 @@ function Get-DaemonTransitionKind {
         [string]$LatestRoundState
     )
 
-    if ($ActivityState -eq "active" -and $LatestRoundState -eq "in_progress") {
+    if (($ActivityState -eq "not_running" -or $ActivityState -eq "stale_pid") -and $LatestRoundState -eq "in_progress") {
+        return "restartable_stale_round"
+    }
+    if (($ActivityState -eq "active" -or $ActivityState -eq "slow_in_progress") -and $LatestRoundState -eq "in_progress") {
         return "normal_in_progress"
     }
     if ($ActivityState -eq "round_done_waiting_ledger_commit") {
@@ -652,6 +783,11 @@ function New-DaemonRoundTransitionStatus {
         stdout_age_seconds = $StdoutFreshness.age_seconds
         ledger_age_seconds = $LedgerFreshness.age_seconds
         max_in_progress_stdout_age_seconds = 300
+        max_round_timeout_seconds = $Activity.max_round_timeout_seconds
+        backend_busy_checked = $Activity.backend_busy_checked
+        backend_busy = $Activity.backend_busy
+        backend_active_engine_requests = $Activity.backend_active_engine_requests
+        backend_active_endpoints = $Activity.backend_active_endpoints
         max_idle_ledger_age_seconds = $null
         read_only = $true
         starts_process = $false
@@ -676,6 +812,29 @@ function Daemon-Status {
     $pidValue = Read-PidFileValue -PidFile $PidFile
     $pidFileExists = Test-Path -LiteralPath $PidFile -PathType Leaf
     $stalePidFile = $pidFileExists -and $null -ne $pidValue -and -not $running
+    $orphanProcesses = @()
+    if (-not $running) {
+        $stalePidValue = 0
+        if ($null -ne $pidValue) {
+            $stalePidValue = [int]$pidValue
+        }
+        $orphanProcesses = @(Find-DaemonOrphanProcesses -LedgerPath $LedgerPath -StalePid $stalePidValue)
+        if ($orphanProcesses.Count -eq 0 -and $stalePidValue -gt 0) {
+            $orphanProcesses = @(Find-DaemonOrphanProcesses -LedgerPath $LedgerPath)
+        }
+        if ($orphanProcesses.Count -gt 0) {
+            $running = $true
+        }
+    }
+    $adoptedOrphan = $orphanProcesses.Count -gt 0
+    $adoptedPid = $null
+    if ($adoptedOrphan) {
+        $preferred = Select-DaemonAdoptionProcess -Processes $orphanProcesses
+        if ($null -ne $preferred) {
+            $adoptedPid = [int]$preferred.ProcessId
+        }
+    }
+    $orphanPids = @($orphanProcesses | ForEach-Object { [int]$_.ProcessId } | Sort-Object -Unique)
     $stdoutTail = Read-LogTail -Path $LogPath
     $stdoutProgressTail = Read-LogTail -Path $LogPath -Count 240
     $stderrTail = Read-LogTail -Path $ErrPath
@@ -690,7 +849,11 @@ function Daemon-Status {
     $stdoutFreshness = Get-FileFreshness -Path $LogPath
     $stderrFreshness = Get-FileFreshness -Path $ErrPath
     $ledgerFreshness = Get-FileFreshness -Path $LedgerPath
-    $activity = Get-DaemonActivitySummary -Running $running -StalePidFile $stalePidFile -LogSummary $logSummary -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness -LedgerLagRounds $ledgerLagRounds
+    $backendBusyStatus = $null
+    if ((-not $SkipBackend) -and $running -and $logSummary.round_in_progress -eq $true -and $null -ne $stdoutFreshness.age_seconds -and [int]$stdoutFreshness.age_seconds -gt 300) {
+        $backendBusyStatus = Get-BackendBusyStatus -Backend $Backend
+    }
+    $activity = Get-DaemonActivitySummary -Running $running -StalePidFile $stalePidFile -AdoptedOrphan $adoptedOrphan -LogSummary $logSummary -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness -LedgerLagRounds $ledgerLagRounds -BackendBusyStatus $backendBusyStatus -RoundTimeoutSecs $TimeoutSecs
     $operatorSummary = Format-DaemonOperatorSummary -Activity $activity -LogSummary $logSummary -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness -ActiveRound $activeRound -LedgerLatestRound $ledgerLatestRound -LedgerLagRounds $ledgerLagRounds
     $transitionStatus = New-DaemonRoundTransitionStatus -Activity $activity -LogSummary $logSummary -ActiveRound $activeRound -LedgerLatestRound $ledgerLatestRound -LedgerLagRounds $ledgerLagRounds -StdoutFreshness $stdoutFreshness -LedgerFreshness $ledgerFreshness
     return [pscustomobject][ordered]@{
@@ -701,10 +864,13 @@ function Daemon-Status {
         sends_prompt = $false
         repo = $RepoRoot
         running = $running
-        pid = if ($running) { $process.Id } else { $null }
+        pid = if ($null -ne $process) { $process.Id } elseif ($adoptedOrphan) { $adoptedPid } else { $null }
+        pid_source = if ($null -ne $process) { "pid_file" } elseif ($adoptedOrphan) { "adopted_orphan_ledger_match" } else { "none" }
         pid_file_exists = $pidFileExists
         stale_pid_file = $stalePidFile
         stale_pid = if ($stalePidFile) { $pidValue } else { $null }
+        adopted_orphan_process_count = $orphanProcesses.Count
+        adopted_orphan_pids = $orphanPids
         pid_file = $PidFile
         ledger = $LedgerPath
         ledger_latest_round = $ledgerLatestRound
@@ -743,6 +909,183 @@ function Quote-CommandArgument {
         return $text
     }
     return '"' + ($text -replace '"', '\"') + '"'
+}
+
+function Quote-PowerShellLiteral {
+    param([object]$Value)
+
+    return "'" + (([string]$Value) -replace "'", "''") + "'"
+}
+
+function Quote-WindowsCommandArgument {
+    param([object]$Value)
+
+    $text = [string]$Value
+    return '"' + ($text -replace '"', '\"') + '"'
+}
+
+function Quote-CmdPathArgument {
+    param([object]$Value)
+
+    $text = [string]$Value
+    return '"' + ($text -replace '"', '""') + '"'
+}
+
+function Test-ProcessIdRunning {
+    param([object]$PidValue)
+
+    if ($null -eq $PidValue) {
+        return $false
+    }
+    try {
+        $pidNumber = [int64]$PidValue
+        if ($pidNumber -le 0 -or $pidNumber -gt [int64][int]::MaxValue) {
+            return $false
+        }
+        $process = Get-Process -Id ([int]$pidNumber) -ErrorAction Stop
+        return $null -ne $process
+    } catch {
+        return $false
+    }
+}
+
+function Remove-StalePoolLeases {
+    param([string]$LeaseDir)
+
+    $removed = @()
+    if ($LeaseDir.Trim().Length -eq 0 -or -not (Test-Path -LiteralPath $LeaseDir -PathType Container)) {
+        return [pscustomobject][ordered]@{
+            removed_count = 0
+            removed = @()
+        }
+    }
+
+    $nowUnix = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    foreach ($lease in @(Get-ChildItem -LiteralPath $LeaseDir -Filter "*.lease.json" -File -ErrorAction SilentlyContinue)) {
+        try {
+            $body = Get-Content -LiteralPath $lease.FullName -Raw
+            $json = $body | ConvertFrom-Json
+        } catch {
+            continue
+        }
+
+        $ownerPid = 0
+        if ($json.PSObject.Properties.Name -contains "owner_pid") {
+            try {
+                $ownerPid = [int64]$json.owner_pid
+            } catch {
+                $ownerPid = 0
+            }
+        }
+        $expiresUnix = 0
+        if ($json.PSObject.Properties.Name -contains "expires_unix") {
+            try {
+                $expiresUnix = [int64]$json.expires_unix
+            } catch {
+                $expiresUnix = 0
+            }
+        }
+
+        $reason = ""
+        if ($ownerPid -gt 0 -and -not (Test-ProcessIdRunning -PidValue $ownerPid)) {
+            $reason = "stale_owner"
+        } elseif ($expiresUnix -gt 0 -and $expiresUnix -le $nowUnix) {
+            $reason = "expired"
+        }
+
+        if ($reason.Trim().Length -eq 0) {
+            continue
+        }
+
+        try {
+            Remove-Item -LiteralPath $lease.FullName -Force
+            $removed += [pscustomobject][ordered]@{
+                path = $lease.FullName
+                owner_pid = $ownerPid
+                expires_unix = $expiresUnix
+                reason = $reason
+            }
+        } catch {
+            $removed += [pscustomobject][ordered]@{
+                path = $lease.FullName
+                owner_pid = $ownerPid
+                expires_unix = $expiresUnix
+                reason = "remove_failed:$($_.Exception.Message)"
+            }
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        removed_count = $removed.Count
+        removed = @($removed)
+    }
+}
+
+function Start-DetachedDaemonProcess {
+    param(
+        [string]$PowerShellExe,
+        [string]$LaunchScript,
+        [string]$RepoRoot,
+        [string]$StdoutLog,
+        [string]$StderrLog
+    )
+
+    $daemonCommand = @(
+        (Quote-CmdPathArgument $PowerShellExe),
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", (Quote-CmdPathArgument $LaunchScript)
+    ) -join " "
+    $cmdPayload = "$daemonCommand 1> $(Quote-CmdPathArgument $StdoutLog) 2> $(Quote-CmdPathArgument $StderrLog)"
+    $cmdLine = "cmd.exe /d /s /c `"$cmdPayload`""
+
+    try {
+        $startup = $null
+        try {
+            $startup = ([wmiclass]"Win32_ProcessStartup").CreateInstance()
+            $startup.ShowWindow = 0
+        } catch {
+            $startup = $null
+        }
+
+        $arguments = @{
+            CommandLine = $cmdLine
+            CurrentDirectory = $RepoRoot
+        }
+        if ($null -ne $startup) {
+            $arguments.ProcessStartupInformation = $startup
+        }
+        $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments $arguments
+        if ($null -ne $result -and [int]$result.ReturnValue -eq 0 -and [int]$result.ProcessId -gt 0) {
+            return [pscustomobject][ordered]@{
+                process = Get-Process -Id ([int]$result.ProcessId) -ErrorAction SilentlyContinue
+                pid = [int]$result.ProcessId
+                launch_mode = "cim_cmd_redirect"
+                command_line = $cmdLine
+                error = ""
+            }
+        }
+        $returnValue = if ($null -ne $result) { [string]$result.ReturnValue } else { "null_result" }
+        $cimError = "Win32_Process.Create returned $returnValue"
+    } catch {
+        $cimError = $_.Exception.Message
+    }
+
+    $fallback = Start-Process `
+        -FilePath $PowerShellExe `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $LaunchScript) `
+        -WorkingDirectory $RepoRoot `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $StdoutLog `
+        -RedirectStandardError $StderrLog `
+        -PassThru
+    return [pscustomobject][ordered]@{
+        process = $fallback
+        pid = [int]$fallback.Id
+        launch_mode = "start_process_redirect"
+        command_line = "$PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $LaunchScript"
+        error = $cimError
+    }
 }
 
 function Get-NestedValue {
@@ -874,6 +1217,62 @@ function Get-BackendRuntimeContext {
     return Convert-ToPositiveInt (Get-NestedValue -Value $health -Path @("gemma_runtime_context_window"))
 }
 
+function Get-BackendBusyStatus {
+    param([string]$Backend)
+
+    $base = Normalize-BackendBaseUri -Backend $Backend
+    if ($base.Trim().Length -eq 0) {
+        return [pscustomobject][ordered]@{
+            checked = $false
+            busy = $false
+            active_engine_requests = 0
+            active_business_cycle_stream = $false
+            active_request_ids = @()
+            active_endpoints = @()
+            error = "backend_empty"
+        }
+    }
+
+    try {
+        $health = Invoke-RestMethod -Uri "$base/health" -TimeoutSec 8
+    } catch {
+        return [pscustomobject][ordered]@{
+            checked = $true
+            busy = $false
+            active_engine_requests = 0
+            active_business_cycle_stream = $false
+            active_request_ids = @()
+            active_endpoints = @()
+            error = $_.Exception.Message
+        }
+    }
+
+    $activeCount = Convert-ToPositiveInt (Get-NestedValue -Value $health -Path @("active_engine_requests"))
+    $requestIds = @()
+    $endpoints = @()
+    foreach ($request in @($health.active_requests)) {
+        $requestId = Get-NestedValue -Value $request -Path @("request_id")
+        if ($null -ne $requestId) {
+            $requestIds += [string]$requestId
+        }
+        $endpoint = Get-NestedValue -Value $request -Path @("endpoint")
+        if ($null -ne $endpoint -and ([string]$endpoint).Trim().Length -gt 0) {
+            $endpoints += [string]$endpoint
+        }
+    }
+    $uniqueEndpoints = @($endpoints | Sort-Object -Unique)
+
+    return [pscustomobject][ordered]@{
+        checked = $true
+        busy = [bool]($activeCount -gt 0 -or [bool](Get-NestedValue -Value $health -Path @("engine_busy")))
+        active_engine_requests = $activeCount
+        active_business_cycle_stream = @($uniqueEndpoints | Where-Object { $_ -eq "business-cycle-stream" }).Count -gt 0
+        active_request_ids = @($requestIds | Sort-Object -Unique)
+        active_endpoints = $uniqueEndpoints
+        error = ""
+    }
+}
+
 function Resolve-MinRuntimeContext {
     param(
         [int]$ExplicitMinRuntimeContext,
@@ -973,6 +1372,7 @@ $ModelCacheStatusPath = Resolve-RepoPath $ModelCacheStatusJson
 $PidFile = Join-Path $WorkDirPath "evolution-loop.pid"
 $StdoutLog = Join-Path $WorkDirPath "evolution-loop.out.log"
 $StderrLog = Join-Path $WorkDirPath "evolution-loop.err.log"
+$DaemonScriptPath = $MyInvocation.MyCommand.Path
 $StartScript = Join-Path $ScriptDir "start-evolution-loop.ps1"
 $StatusScript = Join-Path $ScriptDir "status-evolution-loop.ps1"
 $PowerShellExe = "powershell.exe"
@@ -981,6 +1381,47 @@ if ($null -ne $PwshCommand -and -not [string]::IsNullOrWhiteSpace([string]$PwshC
     $PowerShellExe = [string]$PwshCommand.Source
 }
 $ResolvedMinRuntimeContext = Resolve-MinRuntimeContext -ExplicitMinRuntimeContext $MinRuntimeContext -Backend $Backend -RemoteChainStatusPath $RemoteChainStatusPath
+
+function Get-DaemonStatusViaSelf {
+    param(
+        [string]$ScriptPath,
+        [string]$PowerShellExe,
+        [string]$PidWorkDir,
+        [string]$LedgerPath,
+        [string]$ReportPath,
+        [string]$Backend,
+        [string]$RemoteChainStatusPath,
+        [string]$ModelCacheStatusPath,
+        [int]$MinRuntimeContext
+    )
+
+    $args = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $ScriptPath,
+        "-JsonStatus",
+        "-Backend", $Backend,
+        "-Ledger", $LedgerPath,
+        "-ReportJson", $ReportPath,
+        "-WorkDir", $PidWorkDir,
+        "-RemoteChainStatusJson", $RemoteChainStatusPath,
+        "-ModelCacheStatusJson", $ModelCacheStatusPath,
+        "-MinRuntimeContext", $MinRuntimeContext,
+        "-SkipBackend",
+        "-SkipRemoteChain"
+    )
+    try {
+        $raw = & $PowerShellExe @args 2>$null
+        $text = ($raw | Out-String).Trim()
+        if ($text.Length -eq 0) {
+            return $null
+        }
+        $status = $text | ConvertFrom-Json
+        return $status.daemon
+    } catch {
+        return $null
+    }
+}
 
 if ($Status -or $JsonStatus) {
     $daemon = Daemon-Status -PidFile $PidFile -LedgerPath $LedgerPath -ReportPath $ReportPath -RemoteChainStatusPath $RemoteChainStatusPath -ModelCacheStatusPath $ModelCacheStatusPath -LogPath $StdoutLog -ErrPath $StderrLog -RequireValidationExecution:$RequireValidationExecutionEffective
@@ -1015,7 +1456,10 @@ if ($Status -or $JsonStatus) {
     } else {
         Write-Host "SmartSteam evolution-loop daemon"
         Write-Host "read_only=true starts_process=false sends_prompt=false"
-        Write-Host "running=$($daemon.running) pid=$($daemon.pid) stale_pid_file=$($daemon.stale_pid_file) stale_pid=$($daemon.stale_pid)"
+        Write-Host "running=$($daemon.running) pid=$($daemon.pid) pid_source=$($daemon.pid_source) stale_pid_file=$($daemon.stale_pid_file) stale_pid=$($daemon.stale_pid) adopted_orphan_count=$($daemon.adopted_orphan_process_count)"
+        if ($daemon.adopted_orphan_process_count -gt 0) {
+            Write-Host "adopted_orphan_pids=$($daemon.adopted_orphan_pids -join ',')"
+        }
         if ($daemon.last_stop_reason.Trim().Length -gt 0) {
             Write-Host "last_stop_reason=$($daemon.last_stop_reason)"
         }
@@ -1112,7 +1556,52 @@ if ($Stop) {
 
 if ($Start) {
     New-Item -ItemType Directory -Force -Path $WorkDirPath | Out-Null
+    $PoolLeaseDirPath = Join-Path $WorkDirPath "pool-leases"
     $existing = Get-LiveProcess -PidFile $PidFile
+    $existingOrphans = @()
+    $existingAdoptionProcess = $null
+    $existingAdoptionPid = $null
+    $daemonBeforeStart = $null
+    if ($null -eq $existing) {
+        $stalePid = Read-PidFileValue -PidFile $PidFile
+        $stalePidValue = 0
+        if ($null -ne $stalePid) {
+            $stalePidValue = [int]$stalePid
+        }
+        $existingOrphans = @(Find-DaemonOrphanProcesses -LedgerPath $LedgerPath -StalePid $stalePidValue)
+        if ($existingOrphans.Count -eq 0 -and $stalePidValue -gt 0) {
+            $existingOrphans = @(Find-DaemonOrphanProcesses -LedgerPath $LedgerPath)
+        }
+        if ($existingOrphans.Count -eq 0) {
+            $daemonBeforeStart = Daemon-Status -PidFile $PidFile -LedgerPath $LedgerPath -ReportPath $ReportPath -RemoteChainStatusPath $RemoteChainStatusPath -ModelCacheStatusPath $ModelCacheStatusPath -LogPath $StdoutLog -ErrPath $StderrLog -RequireValidationExecution:$RequireValidationExecutionEffective
+            if ($daemonBeforeStart.adopted_orphan_process_count -gt 0) {
+                $existingOrphans = @($daemonBeforeStart.adopted_orphan_pids)
+                $existingAdoptionPid = $daemonBeforeStart.pid
+            }
+        }
+        if ($existingOrphans.Count -eq 0) {
+            $daemonBeforeStart = Get-DaemonStatusViaSelf -ScriptPath $DaemonScriptPath -PowerShellExe $PowerShellExe -PidWorkDir $WorkDirPath -LedgerPath $LedgerPath -ReportPath $ReportPath -Backend $Backend -RemoteChainStatusPath $RemoteChainStatusPath -ModelCacheStatusPath $ModelCacheStatusPath -MinRuntimeContext $ResolvedMinRuntimeContext.Value
+            if ($null -ne $daemonBeforeStart -and $daemonBeforeStart.adopted_orphan_process_count -gt 0) {
+                $existingOrphans = @($daemonBeforeStart.adopted_orphan_pids)
+                $existingAdoptionPid = $daemonBeforeStart.pid
+            }
+        }
+        if ($existingOrphans.Count -gt 0 -and $existingOrphans[0].PSObject.Properties.Name -contains "ProcessId") {
+            $existingAdoptionProcess = Select-DaemonAdoptionProcess -Processes $existingOrphans
+            if ($null -ne $existingAdoptionProcess) {
+                $existingAdoptionPid = [int]$existingAdoptionProcess.ProcessId
+            }
+        }
+    }
+    $existingOrphanPids = (@($existingOrphans | ForEach-Object {
+        if ($_.PSObject.Properties.Name -contains "ProcessId") {
+            [int]$_.ProcessId
+        } else {
+            [int]$_
+        }
+    } | Sort-Object -Unique) -join ",")
+    $staleLeaseCleanup = if ((-not $CheckOnly) -and $null -eq $existing -and $existingOrphans.Count -eq 0) { Remove-StalePoolLeases -LeaseDir $PoolLeaseDirPath } else { [pscustomobject][ordered]@{ removed_count = 0; removed = @() } }
+    $backendBusyStatus = if ($null -eq $existing -and $existingOrphans.Count -eq 0) { Get-BackendBusyStatus -Backend $Backend } else { $null }
 
     $promptText = $Prompt
     if ($promptText.Trim().Length -eq 0) {
@@ -1136,7 +1625,6 @@ if ($Start) {
         "-ReportJson", $ReportPath,
         "-PostRunReportGate",
         "-PostRunContinuationGate",
-        "-RefreshRemoteChainStatus",
         "-RemoteChainStatusJson", $RemoteChainStatusPath,
         "-ModelCacheStatusJson", $ModelCacheStatusPath,
         "-RemoteChainGate",
@@ -1149,7 +1637,7 @@ if ($Start) {
         "-RequirePoolBudgetPolicy",
         "-PoolAlignmentGate",
         "-RequirePoolRoute",
-        "-PoolLeaseDir", (Join-Path $WorkDirPath "pool-leases"),
+        "-PoolLeaseDir", $PoolLeaseDirPath,
         "-PoolLeaseBusyPolicy", "skip-low-priority",
         "-MinRuntimeContext", $ResolvedMinRuntimeContext.Value,
         "-ExperienceAuditGate",
@@ -1164,6 +1652,9 @@ if ($Start) {
         "-RequireSafeTestGateValidationCommand",
         "-Prompt", $promptText
     )
+    if ($RefreshRemoteChainStatus -or (-not $SkipRemoteChain)) {
+        $StartArgs += "-RefreshRemoteChainStatus"
+    }
     $configuredValidationEnabled = $EnableConfiguredValidationRun -or ((-not $DisableConfiguredValidationRun) -and (-not $EnableTestGateValidationRun))
 
     if ($EnableTestGateValidationRun) {
@@ -1184,6 +1675,11 @@ if ($Start) {
 
     $StartProcessArgs = @($StartArgs | ForEach-Object { Quote-CommandArgument $_ })
     $StartCommandLine = $StartProcessArgs -join " "
+    $LaunchScript = Join-Path $WorkDirPath "evolution-loop.launch.ps1"
+    $StartScriptArgs = @()
+    if ($StartArgs.Count -gt 5) {
+        $StartScriptArgs = @($StartArgs[5..($StartArgs.Count - 1)])
+    }
 
     if ($CheckOnly) {
         Write-Host "check_only=true"
@@ -1193,11 +1689,30 @@ if ($Start) {
         if ($null -ne $existing) {
             Write-Host "existing_pid=$($existing.Id)"
         }
+        Write-Host "existing_orphan_count=$($existingOrphans.Count)"
+        if ($existingOrphans.Count -gt 0) {
+            Write-Host "existing_orphan_pids=$existingOrphanPids"
+        }
+        Write-Host "stale_pool_lease_removed_count=$($staleLeaseCleanup.removed_count)"
+        if ($staleLeaseCleanup.removed_count -gt 0) {
+            Write-Host "stale_pool_lease_removed=$((@($staleLeaseCleanup.removed) | ForEach-Object { "$($_.reason):$($_.path)" }) -join ',')"
+        }
+        if ($null -ne $backendBusyStatus) {
+            Write-Host "backend_busy_checked=$($backendBusyStatus.checked)"
+            Write-Host "backend_busy=$($backendBusyStatus.busy)"
+            Write-Host "backend_active_engine_requests=$($backendBusyStatus.active_engine_requests)"
+            Write-Host "backend_active_endpoints=$($backendBusyStatus.active_endpoints -join ',')"
+            Write-Host "backend_active_request_ids=$($backendBusyStatus.active_request_ids -join ',')"
+            if ($backendBusyStatus.error.Trim().Length -gt 0) {
+                Write-Host "backend_busy_error=$($backendBusyStatus.error)"
+            }
+        }
         Write-Host "pid_file=$PidFile"
         Write-Host "stdout_log=$StdoutLog"
         Write-Host "stderr_log=$StderrLog"
         Write-Host "min_runtime_context=$($ResolvedMinRuntimeContext.Value)"
         Write-Host "min_runtime_context_source=$($ResolvedMinRuntimeContext.Source)"
+        Write-Host "launch_script=$LaunchScript"
         Write-Host "command=$PowerShellExe $StartCommandLine"
         exit 0
     }
@@ -1206,17 +1721,92 @@ if ($Start) {
         Write-Host "daemon_start: already_running pid=$($existing.Id)"
         exit 0
     }
+    if ($existingOrphans.Count -gt 0) {
+        if ($null -ne $existingAdoptionPid) {
+            Set-Content -Encoding ASCII -LiteralPath $PidFile -Value ([string]$existingAdoptionPid)
+        }
+        Write-Host "daemon_start: already_running_adopted_orphan count=$($existingOrphans.Count) pids=$existingOrphanPids"
+        if ($null -ne $existingAdoptionPid) {
+            Write-Host "adopted_pid=$existingAdoptionPid"
+            Write-Host "pid_file=$PidFile"
+        }
+        exit 0
+    }
+    if ($null -ne $backendBusyStatus -and $backendBusyStatus.busy) {
+        $daemonBeforeStart = Daemon-Status -PidFile $PidFile -LedgerPath $LedgerPath -ReportPath $ReportPath -RemoteChainStatusPath $RemoteChainStatusPath -ModelCacheStatusPath $ModelCacheStatusPath -LogPath $StdoutLog -ErrPath $StderrLog -RequireValidationExecution:$RequireValidationExecutionEffective
+        if ($daemonBeforeStart.adopted_orphan_process_count -eq 0) {
+            $daemonViaSelf = Get-DaemonStatusViaSelf -ScriptPath $DaemonScriptPath -PowerShellExe $PowerShellExe -PidWorkDir $WorkDirPath -LedgerPath $LedgerPath -ReportPath $ReportPath -Backend $Backend -RemoteChainStatusPath $RemoteChainStatusPath -ModelCacheStatusPath $ModelCacheStatusPath -MinRuntimeContext $ResolvedMinRuntimeContext.Value
+            if ($null -ne $daemonViaSelf) {
+                $daemonBeforeStart = $daemonViaSelf
+            }
+        }
+        if ($daemonBeforeStart.adopted_orphan_process_count -gt 0 -and $null -ne $daemonBeforeStart.pid) {
+            Set-Content -Encoding ASCII -LiteralPath $PidFile -Value ([string]$daemonBeforeStart.pid)
+            Write-Host "daemon_start: adopted_busy_orphan pid=$($daemonBeforeStart.pid) pids=$($daemonBeforeStart.adopted_orphan_pids -join ',')"
+            Write-Host "pid_file=$PidFile"
+        }
+        Write-Host "daemon_start: backend_busy active_engine_requests=$($backendBusyStatus.active_engine_requests) active_endpoints=$($backendBusyStatus.active_endpoints -join ',') active_request_ids=$($backendBusyStatus.active_request_ids -join ',')"
+        exit 0
+    }
 
-    $process = Start-Process `
-        -FilePath $PowerShellExe `
-        -ArgumentList $StartProcessArgs `
-        -WorkingDirectory $RepoRoot `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $StdoutLog `
-        -RedirectStandardError $StderrLog `
-        -PassThru
-    Set-Content -Encoding ASCII -LiteralPath $PidFile -Value ([string]$process.Id)
-    Write-Host "daemon_start: started pid=$($process.Id)"
+    $launchLines = @(
+        '$ErrorActionPreference = "Stop"',
+        "Set-Location -LiteralPath $(Quote-PowerShellLiteral $RepoRoot)",
+        "`$powershell = $(Quote-PowerShellLiteral $PowerShellExe)",
+        "`$script = $(Quote-PowerShellLiteral $StartScript)",
+        '$arguments = @('
+    )
+    for ($index = 0; $index -lt $StartScriptArgs.Count; $index++) {
+        $suffix = if ($index -lt ($StartScriptArgs.Count - 1)) { "," } else { "" }
+        $launchLines += "    $(Quote-PowerShellLiteral $StartScriptArgs[$index])$suffix"
+    }
+    $launchLines += @(
+        ')',
+        'Write-Host "daemon_launch: invoking start-evolution-loop.ps1"',
+        'try {',
+        '    & $powershell -NoProfile -ExecutionPolicy Bypass -File $script @arguments',
+        '    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }',
+        '    Write-Host "daemon_launch: completed exit_code=$exitCode"',
+        '    exit $exitCode',
+        '} catch {',
+        '    Write-Error $_',
+        '    exit 1',
+        '}'
+    )
+    Set-Content -Encoding ASCII -LiteralPath $LaunchScript -Value $launchLines
+
+    if ($staleLeaseCleanup.removed_count -gt 0) {
+        Write-Host "daemon_start: stale_pool_leases_removed count=$($staleLeaseCleanup.removed_count)"
+        foreach ($item in @($staleLeaseCleanup.removed)) {
+            Write-Host "stale_pool_lease_removed reason=$($item.reason) owner_pid=$($item.owner_pid) path=$($item.path)"
+        }
+    }
+
+    $launch = Start-DetachedDaemonProcess -PowerShellExe $PowerShellExe -LaunchScript $LaunchScript -RepoRoot $RepoRoot -StdoutLog $StdoutLog -StderrLog $StderrLog
+    $process = if ($null -ne $launch.process) { $launch.process } else { Get-Process -Id $launch.pid -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 5
+    $liveStartedProcess = Get-Process -Id $launch.pid -ErrorAction SilentlyContinue
+    if ($null -eq $liveStartedProcess -or ($null -ne $process -and $process.HasExited)) {
+        $stdoutPreview = (Read-LogTail -Path $StdoutLog -Count 20 | Out-String).Trim()
+        $stderrPreview = (Read-LogTail -Path $StderrLog -Count 20 | Out-String).Trim()
+        $exitCodeText = if ($null -ne $process) { [string]$process.ExitCode } else { "unknown" }
+        Write-Host "daemon_start: failed_early pid=$($launch.pid) launch_mode=$($launch.launch_mode) exit_code=$exitCodeText"
+        if ($launch.error.Trim().Length -gt 0) {
+            Write-Host "launch_fallback_error=$($launch.error)"
+        }
+        if ($stdoutPreview.Length -gt 0) {
+            Write-Host "stdout_tail=$stdoutPreview"
+        }
+        if ($stderrPreview.Length -gt 0) {
+            Write-Host "stderr_tail=$stderrPreview"
+        }
+        exit 1
+    }
+    Set-Content -Encoding ASCII -LiteralPath $PidFile -Value ([string]$launch.pid)
+    Write-Host "daemon_start: started pid=$($launch.pid) launch_mode=$($launch.launch_mode)"
+    if ($launch.error.Trim().Length -gt 0) {
+        Write-Host "launch_fallback_error=$($launch.error)"
+    }
     Write-Host "pid_file=$PidFile"
     Write-Host "ledger=$LedgerPath"
     Write-Host "report_json=$ReportPath"
