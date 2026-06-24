@@ -115,6 +115,30 @@ function Assert-EvolutionGoalQueue {
     }
 }
 
+function Assert-SupervisorRecoveryPlan {
+    param(
+        [object]$Plan,
+        [string]$Name,
+        [string]$ExpectedAction
+    )
+
+    if ($null -eq $Plan) {
+        throw "$Name missing supervisor_recovery_plan_v1"
+    }
+    if ($Plan.schema -ne "supervisor_recovery_plan_v1") {
+        throw "$Name supervisor recovery plan schema mismatch"
+    }
+    if ($Plan.read_only -ne $true -or $Plan.report_only -ne $true -or $Plan.side_effects -ne $false) {
+        throw "$Name supervisor recovery plan broke report-only contract"
+    }
+    if ($Plan.starts_process -ne $false -or $Plan.sends_prompt -ne $false) {
+        throw "$Name supervisor recovery plan introduced direct side effects"
+    }
+    if ($Plan.action -ne $ExpectedAction) {
+        throw "$Name supervisor recovery action expected $ExpectedAction but got $($Plan.action)"
+    }
+}
+
 function Assert-DaemonRoundTransitionConsumerFixture {
     param([string]$Path)
 
@@ -626,11 +650,13 @@ if ($status.next_round_decision.display_state -ne "blocked-operator-attention" -
 }
 Assert-NextRoundDecisionReportV1 -Report $status.next_round_decision_report_v1 -Decision $status.next_round_decision -Name "status-json"
 Assert-NextRoundDownstreamStatusConsumersV1 -Projection $status.next_round_downstream_status_consumers_v1 -Report $status.next_round_decision_report_v1 -Name "status-json"
+Assert-SupervisorRecoveryPlan -Plan $status.supervisor_recovery_plan_v1 -Name "status-json" -ExpectedAction "hold_operator_attention"
 if ($status.live_status_bundle.schema -ne "live_status_bundle_v1" -or $status.live_status_bundle.read_only -ne $true -or $status.live_status_bundle.report_only -ne $true -or $status.live_status_bundle.side_effects -ne $false) {
     throw "status did not expose read-only live status bundle contract"
 }
 Assert-NextRoundDecisionReportV1 -Report $status.live_status_bundle.next_round_decision_report_v1 -Decision $status.next_round_decision -Name "status-json-live-bundle"
 Assert-NextRoundDownstreamStatusConsumersV1 -Projection $status.live_status_bundle.next_round_downstream_status_consumers_v1 -Report $status.live_status_bundle.next_round_decision_report_v1 -Name "status-json-live-bundle"
+Assert-SupervisorRecoveryPlan -Plan $status.live_status_bundle.supervisor_recovery_plan_v1 -Name "status-json-live-bundle" -ExpectedAction "hold_operator_attention"
 
 $readyFailOnNotReadyText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -SkipBackend -SkipRemoteChain -SkipDaemon -JsonStatus -StrictLedgerHygiene -FailOnNotReady
 if ($LASTEXITCODE -ne 0) {
@@ -2382,6 +2408,36 @@ if ($daemonStaleFailHuman -notmatch "read_only=true starts_process=false sends_p
 if ($daemonStaleFailHuman -notmatch "status: ready=False failures=daemon_not_healthy") {
     throw "stale daemon human status with FailOnNotReady did not print readiness failure"
 }
+
+$restartableDaemonDir = Join-Path $testDir "daemon-restartable-stale"
+New-Item -ItemType Directory -Force -Path $restartableDaemonDir | Out-Null
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $restartableDaemonDir "evolution-loop.pid") -Value "999999"
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $restartableDaemonDir "evolution-ledger.jsonl") -Value '{"round":7,"case":"status-selftest-restartable-0007","success":true,"runtime_tokens":21,"elapsed_ms":300,"feedback_applied":3,"self_improve_passed":true}'
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $restartableDaemonDir "evolution-loop.out.log") -Value @(
+    "[round 8] case=status-selftest-restartable-0008",
+    "[round 8] stage generate:start"
+)
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $restartableDaemonDir "evolution-loop.err.log") -Value 'Running tools\evolution-loop\target\debug\evolution-loop.exe --backend 127.0.0.1:7979 --validation-command cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --require-configured-validation-run'
+$restartableText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $statusScript -RepoRoot $RepoRoot -Ledger $ledger -ReportJson $passedReport -SkipBackend -SkipRemoteChain -SkipProcess -DaemonWorkDir $restartableDaemonDir -RequireDaemonHealthy -JsonStatus -FailOnNotReady
+if ($LASTEXITCODE -eq 0) {
+    throw "restartable stale daemon with FailOnNotReady should still exit nonzero before supervisor starts it"
+}
+$restartable = ($restartableText | Out-String | ConvertFrom-Json)
+if ($restartable.daemon.daemon_round_transition_status.transition_kind -ne "restartable_stale_round") {
+    throw "restartable stale daemon did not expose restartable_stale_round transition"
+}
+if ($restartable.next_round_decision.safe_to_continue_after_current_round -ne $true) {
+    throw "restartable stale daemon did not expose safe-to-continue next-round decision"
+}
+Assert-EvolutionGoalQueue -Queue $restartable.evolution_goal_queue_v1 -Name "restartable-stale-status-top" -ExpectedKind "repair"
+Assert-SupervisorRecoveryPlan -Plan $restartable.supervisor_recovery_plan_v1 -Name "restartable-stale-status-top" -ExpectedAction "start_daemon"
+if ($restartable.supervisor_recovery_plan_v1.allowed_to_start_daemon -ne $true) {
+    throw "restartable stale daemon supervisor plan did not allow daemon start"
+}
+if ($restartable.supervisor_recovery_plan_v1.recovery_goal_releases_repair_factor -ne $true) {
+    throw "restartable stale daemon supervisor plan did not carry repair factor release"
+}
+Assert-SupervisorRecoveryPlan -Plan $restartable.live_status_bundle.supervisor_recovery_plan_v1 -Name "restartable-stale-live-bundle" -ExpectedAction "start_daemon"
 
 $idleDaemonDir = Join-Path $testDir "daemon-idle"
 New-Item -ItemType Directory -Force -Path $idleDaemonDir | Out-Null

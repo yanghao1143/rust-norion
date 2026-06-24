@@ -188,7 +188,7 @@ fn try_acquire_path_with_owner_check(
     case_name: &str,
     acquired_unix: u64,
     ttl_secs: u64,
-    owner_is_running: impl Fn(u32) -> bool,
+    owner_is_running: impl Fn(u32, Option<&str>) -> bool,
 ) -> Result<PoolLeaseGuard, LeaseAcquireFailure> {
     let token = lease_token(target, round, acquired_unix);
     let expires_unix = acquired_unix.saturating_add(ttl_secs);
@@ -217,7 +217,12 @@ fn try_acquire_path_with_owner_check(
             let cleanup_reason;
             if expires > acquired_unix {
                 let owner_pid = json_u64_field(&existing, "owner_pid");
-                if !lease_owner_is_stale(owner_pid, &owner_is_running) {
+                let owner_process_name = json_string_field(&existing, "owner_process_name");
+                if !lease_owner_is_stale(
+                    owner_pid,
+                    owner_process_name.as_deref(),
+                    &owner_is_running,
+                ) {
                     return Err(LeaseAcquireFailure::Busy {
                         path: path.to_path_buf(),
                         expires_unix: expires,
@@ -252,17 +257,21 @@ fn try_acquire_path_with_owner_check(
     }
 }
 
-fn lease_owner_is_stale(owner_pid: Option<u64>, owner_is_running: impl Fn(u32) -> bool) -> bool {
+fn lease_owner_is_stale(
+    owner_pid: Option<u64>,
+    owner_process_name: Option<&str>,
+    owner_matches_lease: impl Fn(u32, Option<&str>) -> bool,
+) -> bool {
     let Some(owner_pid) = owner_pid else {
         return false;
     };
     if owner_pid == u64::from(process::id()) || owner_pid > u64::from(u32::MAX) {
         return false;
     }
-    !owner_is_running(owner_pid as u32)
+    !owner_matches_lease(owner_pid as u32, owner_process_name)
 }
 
-fn process_is_running(pid: u32) -> bool {
+fn process_is_running(pid: u32, owner_process_name: Option<&str>) -> bool {
     if pid == process::id() {
         return true;
     }
@@ -277,24 +286,77 @@ fn process_is_running(pid: u32) -> bool {
         };
         let text = String::from_utf8_lossy(&output.stdout);
         let expected_pid = format!("\"{pid}\"");
-        return text.lines().any(|line| {
-            line.starts_with('"') && line.split(',').nth(1) == Some(expected_pid.as_str())
-        });
+        let Some(process_name) = text.lines().find_map(|line| {
+            let mut columns = line.split(',');
+            let image_name = columns.next()?.trim_matches('"').to_owned();
+            let pid_column = columns.next()?;
+            if line.starts_with('"') && pid_column == expected_pid.as_str() {
+                Some(image_name)
+            } else {
+                None
+            }
+        }) else {
+            return false;
+        };
+        return process_name_matches_lease_owner(&process_name, owner_process_name);
     }
 
     #[cfg(unix)]
     {
-        return process::Command::new("kill")
+        let running = process::Command::new("kill")
             .args(["-0", &pid.to_string()])
             .status()
             .map(|status| status.success())
             .unwrap_or(true);
+        if !running {
+            return false;
+        }
+        let comm_path = format!("/proc/{pid}/comm");
+        if let Ok(process_name) = fs::read_to_string(comm_path) {
+            return process_name_matches_lease_owner(process_name.trim(), owner_process_name);
+        }
+        return true;
     }
 
     #[cfg(not(any(windows, unix)))]
     {
         true
     }
+}
+
+fn process_name_matches_lease_owner(process_name: &str, owner_process_name: Option<&str>) -> bool {
+    let expected = owner_process_name
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.trim().to_owned())
+        .or_else(current_process_name);
+    let Some(expected) = expected else {
+        return true;
+    };
+    process_name_eq(process_name, &expected)
+}
+
+fn current_process_name() -> Option<String> {
+    std::env::current_exe().ok().and_then(|path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+    })
+}
+
+fn process_name_eq(actual: &str, expected: &str) -> bool {
+    let actual = normalize_process_name(actual);
+    let expected = normalize_process_name(expected);
+    if actual.is_empty() || expected.is_empty() {
+        return true;
+    }
+    actual == expected || strip_exe_suffix(&actual) == strip_exe_suffix(&expected)
+}
+
+fn normalize_process_name(value: &str) -> String {
+    value.trim().trim_matches('"').to_ascii_lowercase()
+}
+
+fn strip_exe_suffix(value: &str) -> &str {
+    value.strip_suffix(".exe").unwrap_or(value)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -378,9 +440,10 @@ fn lease_json(
     token: &str,
 ) -> String {
     format!(
-        "{{\"lease_token\":{},\"owner_pid\":{},\"round\":{},\"case\":{},\"selected_role\":{},\"selected_port\":{},\"selected_base_url\":{},\"context_window\":{},\"default_max_tokens\":{},\"acquired_unix\":{},\"expires_unix\":{}}}",
+        "{{\"lease_token\":{},\"owner_pid\":{},\"owner_process_name\":{},\"round\":{},\"case\":{},\"selected_role\":{},\"selected_port\":{},\"selected_base_url\":{},\"context_window\":{},\"default_max_tokens\":{},\"acquired_unix\":{},\"expires_unix\":{}}}",
         json_string(token),
         process::id(),
+        option_str_json(current_process_name().as_deref()),
         round,
         json_string(case_name),
         json_string(&target.selected_role),
@@ -581,11 +644,16 @@ mod tests {
         )
         .unwrap();
 
-        let lease =
-            try_acquire_path_with_owner_check(&path, &target, 8, "case-b", 100, 30, |_owner_pid| {
-                false
-            })
-            .unwrap();
+        let lease = try_acquire_path_with_owner_check(
+            &path,
+            &target,
+            8,
+            "case-b",
+            100,
+            30,
+            |_owner_pid, _owner_process_name| false,
+        )
+        .unwrap();
         let text = fs::read_to_string(&path).unwrap();
 
         assert!(text.contains("\"round\":8"));
@@ -607,11 +675,16 @@ mod tests {
         )
         .unwrap();
 
-        let error =
-            try_acquire_path_with_owner_check(&path, &target, 8, "case-b", 100, 30, |_owner_pid| {
-                true
-            })
-            .unwrap_err();
+        let error = try_acquire_path_with_owner_check(
+            &path,
+            &target,
+            8,
+            "case-b",
+            100,
+            30,
+            |_owner_pid, _owner_process_name| true,
+        )
+        .unwrap_err();
 
         assert_eq!(
             error,
@@ -620,6 +693,39 @@ mod tests {
                 expires_unix: 130,
             }
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn reused_pid_with_wrong_process_name_is_replaced_before_ttl() {
+        let dir = unique_temp_dir("reused-pid-wrong-name");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let target = LeaseTarget::from_decision(&decision());
+        let path = lease_path(&dir, &target);
+        fs::write(
+            &path,
+            "{\"lease_token\":\"old\",\"owner_pid\":4242,\"owner_process_name\":\"evolution-loop.exe\",\"selected_role\":\"summary\",\"expires_unix\":130}\n",
+        )
+        .unwrap();
+
+        let lease = try_acquire_path_with_owner_check(
+            &path,
+            &target,
+            8,
+            "case-b",
+            100,
+            30,
+            |_owner_pid, owner_process_name| {
+                process_name_eq("audiodg.exe", owner_process_name.unwrap_or(""))
+            },
+        )
+        .unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+
+        assert!(text.contains("\"round\":8"));
+        assert!(text.contains("\"owner_process_name\""));
+        drop(lease);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -636,11 +742,16 @@ mod tests {
         )
         .unwrap();
 
-        let error =
-            try_acquire_path_with_owner_check(&path, &target, 8, "case-b", 100, 30, |_owner_pid| {
-                false
-            })
-            .unwrap_err();
+        let error = try_acquire_path_with_owner_check(
+            &path,
+            &target,
+            8,
+            "case-b",
+            100,
+            30,
+            |_owner_pid, _owner_process_name| false,
+        )
+        .unwrap_err();
 
         assert_eq!(
             error,

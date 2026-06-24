@@ -4729,6 +4729,89 @@ function New-NextRoundDownstreamStatusConsumersV1 {
     }
 }
 
+function New-SupervisorRecoveryPlanV1 {
+    param(
+        [object]$DaemonStatus,
+        [object]$NextRoundDecisionReportV1,
+        [object]$EvolutionGoalQueue,
+        [object[]]$ReadinessFailures = @()
+    )
+
+    $daemonChecked = $null -ne $DaemonStatus -and (Has-Property $DaemonStatus "checked") -and $DaemonStatus.checked -eq $true
+    $daemonRunning = $daemonChecked -and (Has-Property $DaemonStatus "running") -and $DaemonStatus.running -eq $true
+    $stalePidFile = $daemonChecked -and (Has-Property $DaemonStatus "stale_pid_file") -and $DaemonStatus.stale_pid_file -eq $true
+    $activityState = if ($daemonChecked -and (Has-Property $DaemonStatus "activity_state")) { [string]$DaemonStatus.activity_state } else { "missing" }
+    $activeRound = if ($daemonChecked -and (Has-Property $DaemonStatus "active_round")) { $DaemonStatus.active_round } else { $null }
+    $transition = if ($daemonChecked -and (Has-Property $DaemonStatus "daemon_round_transition_status")) { $DaemonStatus.daemon_round_transition_status } else { $null }
+    $transitionKind = if ($null -ne $transition -and (Has-Property $transition "transition_kind")) { [string]$transition.transition_kind } else { "" }
+    $safeToWait = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "safe_to_wait_current_round_active")) { [bool]$NextRoundDecisionReportV1.safe_to_wait_current_round_active } else { $false }
+    $safeToContinue = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "safe_to_continue_after_current_round")) { [bool]$NextRoundDecisionReportV1.safe_to_continue_after_current_round } else { $false }
+    $operatorAttention = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "operator_attention_required")) { [bool]$NextRoundDecisionReportV1.operator_attention_required } else { $true }
+    $decisionReason = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "reason_code")) { [string]$NextRoundDecisionReportV1.reason_code } else { "next_round_decision_unavailable" }
+    $failures = @($ReadinessFailures | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $backendBlocked = @($failures | Where-Object { $_ -match "backend|engine_busy|remote_chain" }).Count -gt 0
+
+    $firstGoal = $null
+    if ($null -ne $EvolutionGoalQueue -and (Has-Property $EvolutionGoalQueue "goals")) {
+        $firstGoalItems = @($EvolutionGoalQueue.goals | Sort-Object priority -Descending | Select-Object -First 1)
+        if ($firstGoalItems.Count -gt 0) {
+            $firstGoal = $firstGoalItems[0]
+        }
+    }
+
+    $action = "hold_operator_attention"
+    $reasonCode = "operator_attention_required_until_supervisor_safe_start_evidence_present"
+    $allowedToStart = $false
+    $waitForBackend = $false
+    $waitForCurrentRound = $false
+    if ($daemonRunning -and $safeToWait) {
+        $action = "wait_current_round"
+        $reasonCode = $decisionReason
+        $waitForCurrentRound = $true
+    } elseif ((-not $daemonRunning) -and $backendBlocked) {
+        $action = "wait_backend"
+        $reasonCode = "backend_not_ready_for_safe_daemon_restart"
+        $waitForBackend = $true
+    } elseif ((-not $daemonRunning) -and ($safeToContinue -or $transitionKind -eq "restartable_stale_round" -or $stalePidFile -or $activityState -in @("not_running", "stale_pid"))) {
+        $action = "start_daemon"
+        $reasonCode = if ($safeToContinue) { $decisionReason } else { "daemon_not_running_restart_allowed_by_supervisor_guard" }
+        $allowedToStart = $true
+    } elseif ($daemonRunning) {
+        $action = "monitor_daemon"
+        $reasonCode = if ($operatorAttention) { $decisionReason } else { "daemon_running_no_supervisor_start_needed" }
+    } elseif ($operatorAttention) {
+        $action = "hold_operator_attention"
+        $reasonCode = $decisionReason
+    }
+
+    return [pscustomobject][ordered]@{
+        schema = "supervisor_recovery_plan_v1"
+        consumer_surface = "unattended_evolution_supervisor"
+        source_schema = if ($null -ne $NextRoundDecisionReportV1 -and (Has-Property $NextRoundDecisionReportV1 "schema")) { $NextRoundDecisionReportV1.schema } else { $null }
+        report_only = $true
+        read_only = $true
+        side_effects = $false
+        starts_process = $false
+        sends_prompt = $false
+        action = $action
+        reason_code = $reasonCode
+        allowed_to_start_daemon = [bool]$allowedToStart
+        wait_for_backend = [bool]$waitForBackend
+        wait_for_current_round = [bool]$waitForCurrentRound
+        operator_attention_required = [bool]($action -eq "hold_operator_attention")
+        daemon_running = [bool]$daemonRunning
+        daemon_activity_state = $activityState
+        transition_kind = $transitionKind
+        active_round = $activeRound
+        readiness_failures = @($failures)
+        recovery_goal_id = if ($null -ne $firstGoal -and (Has-Property $firstGoal "goal_id")) { $firstGoal.goal_id } else { $null }
+        recovery_goal_kind = if ($null -ne $firstGoal -and (Has-Property $firstGoal "kind")) { $firstGoal.kind } else { $null }
+        recovery_goal_action = if ($null -ne $firstGoal -and (Has-Property $firstGoal "action")) { $firstGoal.action } else { $null }
+        recovery_goal_releases_repair_factor = if ($null -ne $firstGoal -and (Has-Property $firstGoal "releases_repair_factor")) { [bool]$firstGoal.releases_repair_factor } else { $false }
+        next_round_decision_report_v1 = $NextRoundDecisionReportV1
+    }
+}
+
 function Read-DaemonSnapshot {
     param([string]$WorkDirPath)
 
@@ -5102,6 +5185,8 @@ if ($null -ne $daemonStatus) {
     $daemonStatus | Add-Member -NotePropertyName "evolution_goal_queue_v1" -NotePropertyValue $evolutionGoalQueue -Force
 }
 $liveStatusBundle | Add-Member -NotePropertyName "evolution_goal_queue_v1" -NotePropertyValue $evolutionGoalQueue -Force
+$supervisorRecoveryPlanV1 = New-SupervisorRecoveryPlanV1 -DaemonStatus $daemonStatus -NextRoundDecisionReportV1 $nextRoundDecisionReportV1 -EvolutionGoalQueue $evolutionGoalQueue -ReadinessFailures $failures
+$liveStatusBundle | Add-Member -NotePropertyName "supervisor_recovery_plan_v1" -NotePropertyValue $supervisorRecoveryPlanV1 -Force
 
 $nextStep = if ($failures.Count -gt 0) {
     "fix status failures before unattended evolution"
@@ -5144,6 +5229,7 @@ $status = [pscustomobject][ordered]@{
     next_round_decision_report_v1 = $nextRoundDecisionReportV1
     next_round_downstream_status_consumers_v1 = $nextRoundDownstreamStatusConsumersV1
     evolution_goal_queue_v1 = $evolutionGoalQueue
+    supervisor_recovery_plan_v1 = $supervisorRecoveryPlanV1
     readiness = [pscustomobject][ordered]@{
         ready = $failures.Count -eq 0
         failures = $failures
@@ -5259,5 +5345,6 @@ if ($ReportPath.Trim().Length -gt 0) {
 Write-Host "next_round_decision: schema=$($nextRoundDecision.schema) display_state=$($nextRoundDecision.display_state) safe_to_wait_current_round_active=$($nextRoundDecision.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecision.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecision.operator_attention_blocked) reason=$($nextRoundDecision.reason_code) read_only=$($nextRoundDecision.read_only) report_only=$($nextRoundDecision.report_only) side_effects=$($nextRoundDecision.side_effects)"
 Write-Host "next_round_decision_report_v1: schema=$($nextRoundDecisionReportV1.schema) display_state=$($nextRoundDecisionReportV1.display_state) safe_to_wait_current_round_active=$($nextRoundDecisionReportV1.safe_to_wait_current_round_active) safe_to_continue_after_current_round=$($nextRoundDecisionReportV1.safe_to_continue_after_current_round) operator_attention_blocked=$($nextRoundDecisionReportV1.operator_attention_blocked) reason=$($nextRoundDecisionReportV1.reason_code) read_only=$($nextRoundDecisionReportV1.read_only) report_only=$($nextRoundDecisionReportV1.report_only) side_effects=$($nextRoundDecisionReportV1.side_effects)"
 Write-Host "next_round_downstream_status_consumers_v1: schema=$($nextRoundDownstreamStatusConsumersV1.schema) effective_decision_status=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.effective_decision_status) service_cli_display_status=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.service_cli_display_status) forge_operator_display_status=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.forge_operator_display_status) agent_assignment_acceptance=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.agent_assignment_acceptance) memory_self_improve_admission_visibility=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.memory_self_improve_admission_visibility) active_round=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.active_round) ledger_round=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.ledger_latest_round) latest_done_round=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.latest_done_round) round_id_source=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.round_id_evidence.source_schema) read_only=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.read_only) report_only=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.report_only) no_side_effects=$($nextRoundDownstreamStatusConsumersV1.next_round_downstream.no_side_effects)"
+Write-Host "supervisor_recovery_plan_v1: schema=$($supervisorRecoveryPlanV1.schema) action=$($supervisorRecoveryPlanV1.action) reason=$($supervisorRecoveryPlanV1.reason_code) allowed_to_start_daemon=$($supervisorRecoveryPlanV1.allowed_to_start_daemon) wait_for_backend=$($supervisorRecoveryPlanV1.wait_for_backend) wait_for_current_round=$($supervisorRecoveryPlanV1.wait_for_current_round) recovery_goal=$($supervisorRecoveryPlanV1.recovery_goal_id) recovery_action=$($supervisorRecoveryPlanV1.recovery_goal_action) read_only=$($supervisorRecoveryPlanV1.read_only) report_only=$($supervisorRecoveryPlanV1.report_only) side_effects=$($supervisorRecoveryPlanV1.side_effects)"
 Write-Host "next_step: $($status.next_step)"
 exit $StatusExitCode

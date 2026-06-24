@@ -221,8 +221,36 @@ function Invoke-DaemonStatus {
     }
 }
 
+function Has-Property {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    return $null -ne $Object -and $Object.PSObject.Properties.Name -contains $Name
+}
+
+function Get-SupervisorRecoveryPlan {
+    param([object]$Status)
+
+    if (
+        $null -ne $Status `
+            -and (Has-Property $Status "loop") `
+            -and $null -ne $Status.loop `
+            -and (Has-Property $Status.loop "supervisor_recovery_plan_v1")
+    ) {
+        return $Status.loop.supervisor_recovery_plan_v1
+    }
+    return $null
+}
+
 function Should-StartDaemon {
     param([object]$Status)
+
+    $plan = Get-SupervisorRecoveryPlan -Status $Status
+    if ($null -ne $plan -and (Has-Property $plan "action")) {
+        return [string]$plan.action -eq "start_daemon"
+    }
 
     $daemon = $Status.loop.daemon
     if ($null -eq $daemon) {
@@ -314,15 +342,19 @@ do {
     $round = if ($null -ne $daemon) { $daemon.active_round } else { "" }
     $state = if ($null -ne $daemon) { $daemon.activity_state } else { "missing" }
     $running = if ($null -ne $daemon) { $daemon.running } else { $false }
+    $plan = Get-SupervisorRecoveryPlan -Status $loopStatus
+    $planAction = if ($null -ne $plan -and (Has-Property $plan "action")) { [string]$plan.action } else { "unknown" }
+    $planReason = if ($null -ne $plan -and (Has-Property $plan "reason_code")) { [string]$plan.reason_code } else { "missing_supervisor_recovery_plan" }
+    $planGoal = if ($null -ne $plan -and (Has-Property $plan "recovery_goal_id") -and $null -ne $plan.recovery_goal_id) { [string]$plan.recovery_goal_id } else { "none" }
 
     if (Should-StartDaemon -Status $loopStatus) {
-        Write-Host "supervisor: daemon_start_required running=$running state=$state active_round=$round"
+        Write-Host "supervisor: daemon_start_required running=$running state=$state active_round=$round plan_action=$planAction plan_reason=$planReason recovery_goal=$planGoal"
         $startOutput = Invoke-DaemonStart
         if (-not [string]::IsNullOrWhiteSpace($startOutput)) {
             Write-Host $startOutput.TrimEnd()
         }
     } else {
-        Write-Host "supervisor: daemon_ok running=$running state=$state active_round=$round readiness=$($loopStatus.loop.readiness.ready)"
+        Write-Host "supervisor: daemon_ok running=$running state=$state active_round=$round readiness=$($loopStatus.loop.readiness.ready) plan_action=$planAction plan_reason=$planReason recovery_goal=$planGoal"
     }
 
     if ($Once) {
