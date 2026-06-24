@@ -15,6 +15,7 @@ mod pool_lease;
 mod pool_request;
 mod pool_stage;
 mod pool_stage_call;
+mod profile_scoring;
 mod prompts;
 mod remote_chain;
 mod report;
