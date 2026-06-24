@@ -4006,6 +4006,7 @@ function Get-DaemonSourceFreshness {
     if ($null -ne $processStartTimeUtc -and $null -ne $binaryFreshness.latest_write_time_utc_value) {
         $daemonStartedBeforeBinaryUpdate = [bool]($processStartTimeUtc -lt $binaryFreshness.latest_write_time_utc_value)
     }
+    $daemonStartedBeforeBinaryUpdateRequiresRestart = [bool]($binaryPathsFromEnv -and $daemonStartedBeforeBinaryUpdate -eq $true)
 
     $restartRecommended = $false
     $restartReason = "daemon_source_current"
@@ -4013,13 +4014,13 @@ function Get-DaemonSourceFreshness {
         $restartReason = "daemon_not_running"
     } elseif ($null -eq $processStartTimeUtc) {
         $restartReason = "daemon_process_start_time_unavailable"
-    } elseif ($daemonStartedBeforeSourceUpdate -eq $true -and $daemonStartedBeforeBinaryUpdate -eq $true) {
+    } elseif ($daemonStartedBeforeSourceUpdate -eq $true -and $daemonStartedBeforeBinaryUpdateRequiresRestart) {
         $restartRecommended = $true
         $restartReason = "daemon_started_before_source_and_binary_update"
     } elseif ($daemonStartedBeforeSourceUpdate -eq $true) {
         $restartRecommended = $true
         $restartReason = "daemon_started_before_source_update"
-    } elseif ($daemonStartedBeforeBinaryUpdate -eq $true) {
+    } elseif ($daemonStartedBeforeBinaryUpdateRequiresRestart) {
         $restartRecommended = $true
         $restartReason = "daemon_started_before_binary_update"
     }
@@ -4049,6 +4050,7 @@ function Get-DaemonSourceFreshness {
         binary_missing_path_count = $binaryFreshness.missing_path_count
         daemon_started_before_source_update = $daemonStartedBeforeSourceUpdate
         daemon_started_before_binary_update = $daemonStartedBeforeBinaryUpdate
+        binary_restart_enforced = [bool]$binaryPathsFromEnv
         daemon_restart_recommended = [bool]$restartRecommended
         restart_reason = $restartReason
     }
