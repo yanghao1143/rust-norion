@@ -1725,4 +1725,7 @@ must remain open source under GPL-3.0-compatible terms.
 [GNU General Public License v3.0](https://github.com/yanghao1143/rust-norion/blob/main/LICENSE)
 协议开源，允许商用、部署研究和二次开发；任何派生作品或再分发修改也必须在 GPL-3.0 兼容条款下开源。
 
+## 友情链接
+
+本项目在 [LINUX DO](https://linux.do/) 公益推广，[LINUX DO](https://linux.do/) 是一个真诚、友善、团结、专业的新型综合性社区，欢迎来玩。
 
