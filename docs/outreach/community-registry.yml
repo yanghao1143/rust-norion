@@ -780,13 +780,14 @@ communities:
 
   - id: subinium-awesome-agent-frameworks
     platform: github
-    kind: opinionated_architecture_guide
+    kind: architecture_focused_agent_framework_guide
     url: https://github.com/subinium/awesome-agent-frameworks
-    audience: personal AI agent framework and Claw ecosystem readers
-    fit: low
-    status: defer
-    next_action: do_not_submit_unless_rust_norion_matches_the_personal_agent_framework_scope
-    notes: Repository is an architecture-focused guide for personal AI agent frameworks in the Claw ecosystem, not a generic project directory.
+    audience: architecture-focused personal AI agent framework and Rust-native agent readers
+    fit: high
+    status: submitted
+    proof: https://github.com/subinium/awesome-agent-frameworks/issues/2
+    next_action: wait_for_scope_feedback_then_prepare_structured_architecture_entry_if_invited
+    notes: Issue mapped rust-norion to Rust Native, Memory/Learning, and architecture trade-off sections with persistence, rollback, and evidence-gate emphasis.
 
   - id: colin-awesome-ai-developer-tools
     platform: github
@@ -3261,3 +3262,198 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_becomes_a_directly_usable_coding_assistant
     notes: Repository is an opinionated comparison of coding assistants; rust-norion is not currently a direct coding assistant.
+
+  - id: dev-architectiq-awesome-llmops
+    platform: github
+    kind: llmops_tool_list
+    url: https://github.com/dev-architectiq/awesome-llmops
+    audience: LLMOps, agent framework, observability, inference, and evaluation-tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/dev-architectiq/awesome-llmops/issues/4
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue mapped rust-norion to agent frameworks, observability/status reports, routing/model-pool policy, and evaluation gates while explicitly noting it is not a production inference kernel.
+
+  - id: mlnjsh-awesome-agentic-ai
+    platform: github
+    kind: agentic_ai_framework_resource_list
+    url: https://github.com/mlnjsh/awesome-agentic-ai
+    audience: agentic AI framework, architecture, memory, tool-use, and evaluation readers
+    fit: high
+    status: submitted
+    proof: https://github.com/mlnjsh/awesome-agentic-ai/issues/1
+    next_action: wait_for_scope_feedback_then_open_focused_pr_if_invited
+    notes: Issue suggested Frameworks/Libraries, Agent Architectures, Memory and RAG, and Evaluation sections for a Rust control-layer prototype.
+
+  - id: trionlabs-awesome-ai-memory
+    platform: github
+    kind: ai_memory_project_list
+    url: https://github.com/trionlabs/awesome-ai-memory
+    audience: practitioner-focused AI memory engine, MCP memory, framework module, and engineering guide readers
+    fit: high
+    status: submitted
+    proof: https://github.com/trionlabs/awesome-ai-memory/issues/1
+    next_action: wait_for_scope_feedback_then_follow_contributing_data_format_if_invited
+    notes: Issue framed rust-norion as an open-source Rust memory/control-layer candidate and offered to follow CONTRIBUTING.md generated-data workflow.
+
+  - id: yadavanujkumar-awesome-agentic-ai
+    platform: github
+    kind: agentic_ai_learning_and_framework_hub
+    url: https://github.com/yadavanujkumar/awesome-agentic-ai
+    audience: agentic AI learners, builders, framework users, and advanced systems readers
+    fit: high
+    status: submitted
+    proof: https://github.com/yadavanujkumar/awesome-agentic-ai/issues/21
+    next_action: wait_for_scope_feedback_then_open_small_pr_if_requested
+    notes: Issue positioned rust-norion as a Rust runtime-control building block for agentic AI systems, not as a generic chatbot or serving engine.
+
+  - id: ishandutta2007-awesome-ai-memory-extensions
+    platform: github
+    kind: ai_memory_extension_project_list
+    url: https://github.com/ishandutta2007/Awesome-AI-Memory-Extensions
+    audience: AI memory extension, plugin, persistent-agent-memory, and open-source memory project readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ishandutta2007/Awesome-AI-Memory-Extensions/issues/2
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: Issue suggested rust-norion for the Open-Source GitHub Projects section as a Rust memory/control-plane experiment for auditable AI agents.
+
+  - id: lumiere-ml-awesome-llm-application
+    platform: github
+    kind: llm_application_architecture_resource_list
+    url: https://github.com/lumiere-ml/Awesome-LLM-Application
+    audience: LLM application architecture, serving, RAG, and evaluation-system readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/lumiere-ml/Awesome-LLM-Application/issues/5
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Issue asked whether a Rust LLM application control-layer resource fits serving/infrastructure-adjacent, evaluation, or RAG architecture sections.
+
+  - id: nanogiants-awesome-ai-tools
+    platform: github
+    kind: broad_ai_tool_list
+    url: https://github.com/nanogiants/awesome-ai-tools
+    audience: AI-powered business, developer-tool, LLM observability, and open-source AI tooling readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/nanogiants/awesome-ai-tools/issues/29
+    next_action: wait_for_category_feedback_before_pr
+    notes: Issue suggested rust-norion as developer/infrastructure AI tooling and avoided consumer-product or production-kernel claims.
+
+  - id: starryrbs-awesome-ai-tools
+    platform: github
+    kind: broad_ai_tool_framework_list
+    url: https://github.com/starryrbs/awesome-ai-tools
+    audience: AI framework, agent, developer-tool, researcher, and creator-tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/starryrbs/awesome-ai-tools/issues/14
+    next_action: wait_for_category_feedback_before_pr
+    notes: Issue asked whether the list accepts developer frameworks or infrastructure projects and framed rust-norion as early-stage.
+
+  - id: staok-awesome-ai-tools
+    platform: github
+    kind: chinese_ai_tool_resource_list
+    url: https://github.com/Staok/Awesome-AI-Tools
+    audience: Chinese AI tool and open-source project readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Staok/Awesome-AI-Tools/issues/5
+    next_action: wait_for_scope_feedback_then_open_chinese_pr_if_requested
+    notes: Chinese issue described rust-norion as a Rust AI inference control-layer prototype for AI agent runtime, AI engineering, memory, and self-evolution contributors.
+
+  - id: agentspaceai-awesome-agent-framework
+    platform: github
+    kind: agent_framework_list
+    url: https://github.com/AgentSpaceAI/Awesome-Agent-Framework
+    audience: Chinese and English agent framework builders and AgentSpace community readers
+    fit: high
+    status: submitted
+    proof: https://github.com/AgentSpaceAI/Awesome-Agent-Framework/issues/6
+    next_action: wait_for_scope_feedback_or_contact_path_before_pr
+    notes: Issue submitted rust-norion as an early Rust-native agent control-plane/framework candidate and acknowledged the list may prefer mature mainstream frameworks.
+
+  - id: brisyramshere-awesome-agent-frameworks
+    platform: github
+    kind: agent_framework_list
+    url: https://github.com/brisyramshere/awesome-agent-frameworks
+    audience: AI agent framework readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/brisyramshere/awesome-agent-frameworks/issues/1
+    next_action: wait_for_maintainer_feedback_before_pr
+    notes: Issue suggested rust-norion as an early Rust control-plane project if the list accepts agent framework experiments.
+
+  - id: formyselfonly-awesome-llm-framework
+    platform: github
+    kind: llm_framework_roadmap
+    url: https://github.com/Formyselfonly/awesome-llm-framework
+    audience: LLM framework, application, AI agent, MCP, workflow, and deployment readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Formyselfonly/awesome-llm-framework/issues/1
+    next_action: wait_for_scope_feedback_then_open_small_pr_if_requested
+    notes: Issue positioned rust-norion as a Rust-native LLM framework/control-layer experiment around routing, memory, reflection, and evidence gates.
+
+  - id: shaoxiang-awesome-agent-memory
+    platform: github
+    kind: agent_memory_resource_list
+    url: https://github.com/shaoxiang/awesome-agent-memory
+    audience: agent and embodied memory framework, architecture, survey, and implementation-resource readers
+    fit: high
+    status: submitted
+    proof: https://github.com/shaoxiang/awesome-agent-memory/issues/1
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Issue suggested General AI Agent Memory Frameworks as a possible category for rust-norion memory ports, KV/gist experiments, retrieval hygiene, replay, and rollback.
+
+  - id: scarletpan-awesome-autonomous-gpt
+    platform: github
+    kind: autonomous_agent_project_list
+    url: https://github.com/ScarletPan/awesome-autonomous-gpt
+    audience: autonomous AI agent project, developer-tool, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ScarletPan/awesome-autonomous-gpt/issues/13
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue asked whether early Rust agent control-layer projects fit the Projects or Developer tools section.
+
+  - id: mattbusel-awesome-llm-infra
+    platform: github
+    kind: llm_infrastructure_list
+    url: https://github.com/Mattbusel/awesome-llm-infra
+    audience: production LLM runtime, orchestration, observability, memory, safety, and infrastructure readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Mattbusel/awesome-llm-infra/issues/2
+    next_action: wait_for_maturity_feedback_before_any_pr
+    notes: Scope question explicitly noted the production-grade bar and asked whether rust-norion should wait for stronger production evidence.
+
+  - id: chen1594-awesome-llm-agents
+    platform: github
+    kind: llm_agent_paper_list
+    url: https://github.com/CHEN1594/Awesome-LLM-Agents
+    audience: LLM-agent research paper, project, tool-use, data-generation, and evaluation readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_related_paper_or_paper_backed_artifact_exists
+    notes: README is PR-welcome but primarily paper/project-table oriented with paper metadata; a raw project suggestion would be weak without a paper-backed artifact.
+
+  - id: secret-ai-labs-awesome-local-llm
+    platform: github
+    kind: local_llm_resource_list
+    url: https://github.com/secret-ai-labs/awesome-local-llm
+    audience: local LLM model, runtime, deployment, optimization, benchmark, and use-case readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_clear_local_llm_runtime_or_deployment_artifact
+    notes: The list is focused on local model use and deployment; rust-norion is currently a control-layer prototype rather than a local LLM runtime.
+
+  - id: qhjqhj00-awesome-agentic-search
+    platform: github
+    kind: agentic_search_resource_list
+    url: https://github.com/qhjqhj00/awesome-agentic-search
+    audience: agentic search papers, tools, demos, benchmarks, and training-resource readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_specific_agentic_search_artifact_or_benchmark
+    notes: Repository focuses on agentic search methods; rust-norion has retrieval hygiene work but not a dedicated search-agent artifact.

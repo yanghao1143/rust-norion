@@ -323,6 +323,31 @@ same recruitment message everywhere.
 | Gitee DeepSeek Integration | Deferred | Submit only after concrete DeepSeek integration evidence |
 | This Week in Rust | Wait | Submit only after a notable release/article |
 
+## Recent Outreach Batch
+
+2026-06-25 UTC follow-up GitHub batch, all recorded in
+`docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| Dev ArchitectIQ Awesome LLMOps | Submitted | https://github.com/dev-architectiq/awesome-llmops/issues/4 |
+| MLNJSH Awesome Agentic AI | Submitted | https://github.com/mlnjsh/awesome-agentic-ai/issues/1 |
+| Trionlabs Awesome AI Memory | Submitted | https://github.com/trionlabs/awesome-ai-memory/issues/1 |
+| Yadav Anuj Awesome Agentic AI | Submitted | https://github.com/yadavanujkumar/awesome-agentic-ai/issues/21 |
+| Ishan Dutta AI Memory Extensions | Submitted | https://github.com/ishandutta2007/Awesome-AI-Memory-Extensions/issues/2 |
+| Lumiere LLM Application | Submitted | https://github.com/lumiere-ml/Awesome-LLM-Application/issues/5 |
+| Nanogiants AI Tools | Submitted | https://github.com/nanogiants/awesome-ai-tools/issues/29 |
+| Starryrbs AI Tools | Submitted | https://github.com/starryrbs/awesome-ai-tools/issues/14 |
+| Staok AI Tools | Submitted | https://github.com/Staok/Awesome-AI-Tools/issues/5 |
+| AgentSpace Agent Framework | Submitted | https://github.com/AgentSpaceAI/Awesome-Agent-Framework/issues/6 |
+| Brisy Ram Shere Agent Frameworks | Submitted | https://github.com/brisyramshere/awesome-agent-frameworks/issues/1 |
+| Subinium Agent Frameworks | Submitted | https://github.com/subinium/awesome-agent-frameworks/issues/2 |
+| Formyselfonly LLM Framework | Submitted | https://github.com/Formyselfonly/awesome-llm-framework/issues/1 |
+| Shaoxiang Agent Memory | Submitted | https://github.com/shaoxiang/awesome-agent-memory/issues/1 |
+| ScarletPan Autonomous GPT | Submitted | https://github.com/ScarletPan/awesome-autonomous-gpt/issues/13 |
+| Mattbusel LLM Infra | Submitted | https://github.com/Mattbusel/awesome-llm-infra/issues/2 |
+| SandBase Agent Runtime | Submitted | https://github.com/sandbaseai/awesome-agent-runtime/issues/1 |
+
 The full registry is in `docs/outreach/community-registry.yml`.
 
 ## Monthly Update Workflow
