@@ -52,6 +52,17 @@ delete_branch_on_merge = true
 GitHub is the primary issue, review, and merge surface. Gitee is a main-branch
 mirror for access and synchronization; do not retain feature branches there.
 
+## Collaborator Permissions
+
+The initial collaborator baseline is owner-only for repository write and merge
+authority. Ordinary contributors should use forks, feature branches, issues,
+and pull requests rather than repository `write`, `maintain`, or `admin`
+permission.
+
+Reviewer and module-collaborator recognition does not imply merge authority.
+Maintainer expansion requires an explicit owner decision plus matching updates
+to collaborator permissions, CODEOWNERS, and protected-branch settings.
+
 ## CODEOWNERS
 
 `.github/CODEOWNERS` assigns `@yanghao1143` as the default owner and explicitly
@@ -118,6 +129,7 @@ settings:
 gh repo view yanghao1143/rust-norion --json nameWithOwner,visibility,defaultBranchRef
 gh api repos/yanghao1143/rust-norion/branches/main/protection
 gh api repos/yanghao1143/rust-norion
+gh api repos/yanghao1143/rust-norion/collaborators
 git ls-remote --heads gitee
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md

@@ -56,6 +56,12 @@ Contributors do not merge their own changes into protected branches. Reviewer
 or module-collaborator status can help a PR reach maintainer review, but it
 does not replace owner/CODEOWNER approval or branch protection.
 
+Ordinary contributors should not receive repository `write`, `maintain`, or
+`admin` permission. Use issue discussion, fork-based PRs, review comments, and
+triage access for normal collaboration. Expanding maintainer or merge authority
+requires an explicit owner decision and a matching update to CODEOWNERS,
+collaborator permissions, and branch-protection settings.
+
 Maintainers should merge only after the protected-branch requirements pass:
 
 - PR review is approved, including CODEOWNER approval where required
