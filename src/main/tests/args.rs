@@ -669,8 +669,12 @@ fn parses_recursive_scheduler_flags() {
         "12".to_owned(),
         "--inspect-min-runtime-kv-import-device-profiles".to_owned(),
         "12".to_owned(),
+        "--inspect-min-runtime-kv-weak-import-skip-device-profiles".to_owned(),
+        "5".to_owned(),
         "--inspect-min-runtime-kv-export-device-profiles".to_owned(),
         "12".to_owned(),
+        "--inspect-min-runtime-kv-segment-device-profiles".to_owned(),
+        "6".to_owned(),
         "--inspect-min-runtime-kv-hold-device-profiles".to_owned(),
         "6".to_owned(),
         "--inspect-min-reflection-issue-experiences".to_owned(),
@@ -1959,7 +1963,12 @@ fn parses_recursive_scheduler_flags() {
         Some(12)
     );
     assert_eq!(args.inspect_min_runtime_kv_import_device_profiles, Some(12));
+    assert_eq!(
+        args.inspect_min_runtime_kv_weak_import_skip_device_profiles,
+        Some(5)
+    );
     assert_eq!(args.inspect_min_runtime_kv_export_device_profiles, Some(12));
+    assert_eq!(args.inspect_min_runtime_kv_segment_device_profiles, Some(6));
     assert_eq!(args.inspect_min_runtime_kv_hold_device_profiles, Some(6));
     assert_eq!(args.inspect_min_reflection_issue_experiences, Some(3));
     assert_eq!(
@@ -2585,8 +2594,18 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(
         args.state_inspection_matrix_gate()
+            .min_runtime_kv_weak_import_skip_device_profiles,
+        Some(5)
+    );
+    assert_eq!(
+        args.state_inspection_matrix_gate()
             .min_runtime_kv_export_device_profiles,
         Some(12)
+    );
+    assert_eq!(
+        args.state_inspection_matrix_gate()
+            .min_runtime_kv_segment_device_profiles,
+        Some(6)
     );
     assert_eq!(
         args.state_inspection_matrix_gate()

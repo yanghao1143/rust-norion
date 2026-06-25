@@ -85,7 +85,9 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
         min_runtime_layer_mode_device_profiles: Some(2),
         min_runtime_all_layer_mode_device_profiles: Some(1),
         min_runtime_kv_import_device_profiles: Some(1),
+        min_runtime_kv_weak_import_skip_device_profiles: Some(1),
         min_runtime_kv_export_device_profiles: Some(1),
+        min_runtime_kv_segment_device_profiles: Some(1),
         ..StateInspectionMatrixGate::default()
     };
 
@@ -102,6 +104,8 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
                         device_report = device_report.with_runtime_uncertainty_evidence(1, 7);
                         device_report = device_report.with_runtime_kv_precision_evidence(1);
                         device_report = device_report.with_runtime_layer_mode_evidence(1, 1);
+                        device_report = device_report.with_runtime_kv_weak_skip_evidence(1, 3);
+                        device_report = device_report.with_runtime_kv_segment_evidence(1, 2, 1, 0);
                     }
                     DeviceClass::IntegratedGpu => {
                         device_report = device_report.with_runtime_evidence(2, 1, 1, 0, 0, 1, 0, 0);
@@ -130,7 +134,9 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
     assert_eq!(report.runtime_layer_mode_device_profiles(), 2);
     assert_eq!(report.runtime_all_layer_mode_device_profiles(), 1);
     assert_eq!(report.runtime_kv_import_device_profiles(), 1);
+    assert_eq!(report.runtime_kv_weak_import_skip_device_profiles(), 1);
     assert_eq!(report.runtime_kv_export_device_profiles(), 1);
+    assert_eq!(report.runtime_kv_segment_device_profiles(), 1);
     assert!(
         report
             .summary_line()
@@ -175,6 +181,16 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
         report
             .summary_line()
             .contains("runtime_all_layer_mode_device_profiles=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_skip_device_profiles=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segment_device_profiles=1")
     );
 
     let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
@@ -236,6 +252,15 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
             .failures
             .iter()
             .any(|failure| { failure == "runtime_kv_export_device_profiles 0 below required 1" })
+    );
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "runtime_kv_weak_import_skip_device_profiles 0 below required 1"
+    }));
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| { failure == "runtime_kv_segment_device_profiles 0 below required 1" })
     );
 
     let mismatch = StateInspectionMatrixGateReport::evaluate_with_gate(
@@ -618,6 +643,40 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert_eq!(top.runtime_kv_segments_included, 2);
     assert_eq!(top.runtime_kv_segments_skipped, 1);
     assert_eq!(top.runtime_kv_segments_rejected, 1);
+
+    let device_report =
+        StateInspectionDeviceGateReport::from_report(DeviceClass::CpuOnly, &report, gate_report);
+    assert_eq!(device_report.runtime_kv_weak_import_skip_experiences, 1);
+    assert_eq!(device_report.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(device_report.runtime_kv_segment_experiences, 1);
+    assert_eq!(device_report.runtime_kv_segments_included, 2);
+    assert_eq!(device_report.runtime_kv_segments_skipped, 1);
+    assert_eq!(device_report.runtime_kv_segments_rejected, 1);
+    let matrix = StateInspectionMatrixGateReport::evaluate_with_gate(
+        vec![device_report],
+        &StateInspectionMatrixGate {
+            min_runtime_kv_weak_import_skip_device_profiles: Some(1),
+            min_runtime_kv_segment_device_profiles: Some(1),
+            ..StateInspectionMatrixGate::default()
+        },
+    );
+    assert_eq!(matrix.runtime_kv_weak_import_skip_device_profiles(), 1);
+    assert_eq!(matrix.runtime_kv_segment_device_profiles(), 1);
+    assert!(!matrix.passed());
+    assert!(!matrix.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_weak_import_skip_device_profiles")
+            || failure.contains("runtime_kv_segment_device_profiles")
+    }));
+    assert!(
+        matrix
+            .summary_line()
+            .contains("runtime_kv_weak_import_skip_device_profiles=1")
+    );
+    assert!(
+        matrix
+            .summary_line()
+            .contains("runtime_kv_segment_device_profiles=1")
+    );
 
     let failing = report.evaluate(&StateInspectionGate {
         min_runtime_kv_weak_import_skip_experiences: Some(2),

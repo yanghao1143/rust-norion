@@ -116,11 +116,33 @@ pub(in crate::state_inspect) fn runtime_kv_import_device_profiles(
     })
 }
 
+pub(in crate::state_inspect) fn runtime_kv_weak_import_skip_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_weak_import_skip_experiences > 0
+            || device_report.weak_runtime_kv_imports_skipped > 0
+    })
+}
+
 pub(in crate::state_inspect) fn runtime_kv_export_device_profiles(
     device_reports: &[StateInspectionDeviceGateReport],
 ) -> usize {
     explicit_state_inspection_evidence_devices(device_reports, |device_report| {
         device_report.runtime_kv_export_experiences > 0
+    })
+}
+
+pub(in crate::state_inspect) fn runtime_kv_segment_device_profiles(
+    device_reports: &[StateInspectionDeviceGateReport],
+) -> usize {
+    explicit_state_inspection_evidence_devices(device_reports, |device_report| {
+        device_report.runtime_kv_segment_experiences > 0
+            || device_report
+                .runtime_kv_segments_included
+                .saturating_add(device_report.runtime_kv_segments_skipped)
+                .saturating_add(device_report.runtime_kv_segments_rejected)
+                > 0
     })
 }
 

@@ -396,7 +396,11 @@ impl ParseState {
             inspect_min_runtime_layer_mode_device_profiles: self.inspect_min_runtime_layer_mode_device_profiles,
             inspect_min_runtime_all_layer_mode_device_profiles: self.inspect_min_runtime_all_layer_mode_device_profiles,
             inspect_min_runtime_kv_import_device_profiles: self.inspect_min_runtime_kv_import_device_profiles,
+            inspect_min_runtime_kv_weak_import_skip_device_profiles: self
+                .inspect_min_runtime_kv_weak_import_skip_device_profiles,
             inspect_min_runtime_kv_export_device_profiles: self.inspect_min_runtime_kv_export_device_profiles,
+            inspect_min_runtime_kv_segment_device_profiles: self
+                .inspect_min_runtime_kv_segment_device_profiles,
             inspect_min_runtime_kv_hold_device_profiles: self.inspect_min_runtime_kv_hold_device_profiles,
             inspect_min_reflection_issue_experiences: self.inspect_min_reflection_issue_experiences,
             inspect_min_critical_reflection_issue_experiences: self.inspect_min_critical_reflection_issue_experiences,
