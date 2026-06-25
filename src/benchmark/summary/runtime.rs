@@ -1,8 +1,17 @@
 use crate::drift::DriftSeverity;
-use crate::hardware::DeviceClass;
+use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 
 use super::super::{devices_csv, explicit_device_count, push_unique_device};
 use super::{BenchmarkCaseResult, BenchmarkSummary};
+
+impl BenchmarkCaseResult {
+    pub fn runtime_adapter_current_signal(&self) -> bool {
+        self.runtime_selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::parse)
+            .is_some()
+    }
+}
 
 impl BenchmarkSummary {
     pub fn total_runtime_kv_stored(&self) -> usize {
@@ -386,6 +395,13 @@ impl BenchmarkSummary {
             .iter()
             .map(|result| result.runtime_adapter_observations)
             .sum()
+    }
+
+    pub fn total_runtime_adapter_current_signals(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_adapter_current_signal())
+            .count()
     }
 
     pub fn max_runtime_adapter_score(&self) -> Option<f32> {

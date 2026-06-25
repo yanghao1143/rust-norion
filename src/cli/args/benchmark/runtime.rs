@@ -241,6 +241,12 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-runtime-adapter-current-signals" if index + 1 < raw.len() => {
+            *parser.benchmark_min_runtime_adapter_current_signals =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-min-runtime-adapter-best-score" if index + 1 < raw.len() => {
             *parser.benchmark_min_runtime_adapter_best_score =
                 Some(parse_f32(&raw[index + 1], 0.0));

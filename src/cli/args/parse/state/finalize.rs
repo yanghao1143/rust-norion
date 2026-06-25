@@ -238,6 +238,8 @@ impl ParseState {
             benchmark_min_runtime_adapter_stream_gate_summary_cases: self
                 .benchmark_min_runtime_adapter_stream_gate_summary_cases,
             benchmark_min_runtime_adapter_observations: self.benchmark_min_runtime_adapter_observations,
+            benchmark_min_runtime_adapter_current_signals: self
+                .benchmark_min_runtime_adapter_current_signals,
             benchmark_min_runtime_adapter_best_score: self.benchmark_min_runtime_adapter_best_score,
             benchmark_max_runtime_adapter_contract_violations: self.benchmark_max_runtime_adapter_contract_violations,
             benchmark_max_runtime_adapter_selection_mismatches: self.benchmark_max_runtime_adapter_selection_mismatches,

@@ -685,6 +685,59 @@ fn gate_reports_missing_runtime_adapter_observations() {
 }
 
 #[test]
+fn gate_counts_only_trusted_runtime_adapter_current_signals() {
+    let trusted = BenchmarkCaseResult {
+        name: "trusted_current_adapter".to_owned(),
+        runtime_selected_adapter: Some("portable-rust".to_owned()),
+        runtime_adapter_observations: 0,
+        ..baseline_benchmark_result(
+            "trusted_current_adapter",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )
+    };
+    let polluted = BenchmarkCaseResult {
+        name: "polluted_current_adapter".to_owned(),
+        runtime_selected_adapter: Some("unknown-adapter secret=sk-leak".to_owned()),
+        runtime_adapter_observations: 0,
+        ..baseline_benchmark_result(
+            "polluted_current_adapter",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )
+    };
+    let summary = BenchmarkSummary {
+        results: vec![trusted, polluted],
+        ..BenchmarkSummary::new()
+    };
+    let mut gate = BenchmarkGate::default();
+    gate.min_runtime_adapter_current_signals = Some(2);
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.total_runtime_adapter_current_signals(), 1);
+    assert!(summary.results[0].runtime_adapter_current_signal());
+    assert!(!summary.results[1].runtime_adapter_current_signal());
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("runtime_adapter_current_signals 1 below minimum 2"))
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_current_signals=1")
+    );
+
+    gate.min_runtime_adapter_current_signals = Some(1);
+    let passing_report = summary.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+}
+
+#[test]
 fn gate_reports_runtime_adapter_selection_mismatches() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),

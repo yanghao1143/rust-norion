@@ -507,6 +507,8 @@ fn parses_recursive_scheduler_flags() {
         "2".to_owned(),
         "--benchmark-min-runtime-adapter-observations".to_owned(),
         "2".to_owned(),
+        "--benchmark-min-runtime-adapter-current-signals".to_owned(),
+        "1".to_owned(),
         "--benchmark-min-runtime-adapter-best-score".to_owned(),
         "0.25".to_owned(),
         "--benchmark-max-runtime-adapter-contract-violations".to_owned(),
@@ -1662,6 +1664,11 @@ fn parses_recursive_scheduler_flags() {
         Some(2)
     );
     assert_eq!(args.benchmark_min_runtime_adapter_observations, Some(2));
+    assert_eq!(args.benchmark_min_runtime_adapter_current_signals, Some(1));
+    assert_eq!(
+        args.benchmark_gate().min_runtime_adapter_current_signals,
+        Some(1)
+    );
     assert_eq!(args.benchmark_min_runtime_adapter_best_score, Some(0.25));
     assert_eq!(
         args.benchmark_max_runtime_adapter_contract_violations,

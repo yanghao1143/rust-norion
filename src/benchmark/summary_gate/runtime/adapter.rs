@@ -76,6 +76,16 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_adapter_current_signals) = gate.min_runtime_adapter_current_signals {
+        let runtime_adapter_current_signals = summary.total_runtime_adapter_current_signals();
+        if runtime_adapter_current_signals < min_runtime_adapter_current_signals {
+            failures.push(format!(
+                "runtime_adapter_current_signals {} below minimum {}",
+                runtime_adapter_current_signals, min_runtime_adapter_current_signals
+            ));
+        }
+    }
+
     if let Some(min_runtime_adapter_best_score) = gate.min_runtime_adapter_best_score {
         let runtime_adapter_best_score = summary.max_runtime_adapter_score().unwrap_or(0.0);
         if runtime_adapter_best_score < min_runtime_adapter_best_score {

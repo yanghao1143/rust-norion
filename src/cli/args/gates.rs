@@ -438,6 +438,9 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_adapter_observations {
             gate.min_runtime_adapter_observations = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_adapter_current_signals {
+            gate.min_runtime_adapter_current_signals = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_adapter_best_score {
             gate.min_runtime_adapter_best_score = Some(value.clamp(0.0, 1.0));
         }

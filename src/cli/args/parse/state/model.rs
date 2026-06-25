@@ -200,6 +200,7 @@ pub(crate) struct ParseState {
     pub(crate) benchmark_min_runtime_adapter_stream_trace_cases: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_stream_gate_summary_cases: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_observations: Option<usize>,
+    pub(crate) benchmark_min_runtime_adapter_current_signals: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_best_score: Option<f32>,
     pub(crate) benchmark_max_runtime_adapter_contract_violations: Option<usize>,
     pub(crate) benchmark_max_runtime_adapter_selection_mismatches: Option<usize>,
