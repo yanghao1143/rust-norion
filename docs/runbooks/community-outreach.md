@@ -282,6 +282,11 @@ same recruitment message everywhere.
 | DBPunk AI Developer Tools | Deferred | Last observed update was 2023; prefer active lists |
 | ChenIshi Multi-Agent Systems | Submitted | Track https://github.com/chenIshi/awesome-multi-agent-systems/issues/1 |
 | Pi-ixel Agent Workflow | Deferred | Concrete workflow product, not a community directory |
+| Tejas Suthar AI Tools | Submitted | Track https://github.com/tejasrsuthar/awesome-ai-tools/issues/15 |
+| TonyChen56 AI Tools | Submitted | Track https://github.com/TonyChen56/Awesome-AI-Tools/issues/16 |
+| Rvelamen AI Tools | Submitted | Track https://github.com/Rvelamen/Awesome-AI-Tools/issues/21 |
+| LinuxSuRen Awesome AI | Submitted | Track https://github.com/LinuxSuRen/awesome-ai/issues/12 |
+| Ishan Dutta AI Tools | Submitted | Track https://github.com/ishandutta2007/awesome-ai-tools/issues/15 |
 | Eudk AI Tools | Deferred | Requires publicly usable now tools; wait for clearer release/tool surface |
 | JMcrafter AI Tools | Deferred | Self-submitted repos under 50 stars are treated as advertising |
 | AstreoX Agent Tools | Deferred | Requires 50+ GitHub stars for open-source projects |
@@ -393,6 +398,11 @@ opens a monthly GitHub issue and embeds a generated draft plus candidate
 discovery output. It deliberately does not publish to external communities.
 External submission still requires manual review, login context, category
 selection, and community-specific wording.
+
+The reminder workflow uploads the full generated draft, queue, and candidate
+discovery files as a workflow artifact, while the GitHub issue body includes
+bounded excerpts. This keeps the reminder issue under GitHub body-size limits
+as the registry grows.
 
 The validation workflow `.github/workflows/community-outreach-validation.yml`
 runs on outreach asset changes. It validates the registry, parses the

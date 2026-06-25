@@ -36,6 +36,15 @@ jobs:
           ./tools/outreach/generate-community-queue.ps1 -OutFile outreach-queue.md
           ./tools/outreach/discover-community-candidates.ps1 -LimitPerQuery 20 -MinStars 10 -IncludeGitee -OutFile outreach-candidates.md
 
+      - name: Upload generated outreach artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-outreach-${{ github.run_id }}
+          path: |
+            outreach-draft.md
+            outreach-queue.md
+            outreach-candidates.md
+
       - name: Create monthly outreach issue if missing
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,20 +89,35 @@ jobs:
           not a production LLM inference kernel.
           EOF
 
-          {
-            echo
-            echo "## Generated draft"
-            echo
-            cat outreach-draft.md
-            echo
-            echo "## Outreach queue"
-            echo
-            cat outreach-queue.md
-            echo
-            echo "## Candidate discovery"
-            echo
-            cat outreach-candidates.md
-          } >> "${body_file}"
+          append_limited_section() {
+            local title="$1"
+            local file="$2"
+            local max_bytes="$3"
+
+            {
+              echo
+              echo "## ${title}"
+              echo
+            } >> "${body_file}"
+
+            if [ ! -s "${file}" ]; then
+              echo "_No generated content._" >> "${body_file}"
+              return
+            fi
+
+            local size
+            size="$(wc -c < "${file}")"
+            head -c "${max_bytes}" "${file}" >> "${body_file}"
+            echo >> "${body_file}"
+            if [ "${size}" -gt "${max_bytes}" ]; then
+              echo >> "${body_file}"
+              echo "_Truncated in this issue; download the workflow artifact for the full generated file._" >> "${body_file}"
+            fi
+          }
+
+          append_limited_section "Generated draft" outreach-draft.md 16000
+          append_limited_section "Outreach queue" outreach-queue.md 24000
+          append_limited_section "Candidate discovery" outreach-candidates.md 16000
 
           gh issue create \
             --title "${title}" \

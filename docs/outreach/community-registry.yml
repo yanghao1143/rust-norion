@@ -2973,3 +2973,58 @@ communities:
     status: defer
     next_action: do_not_submit_project_ad_to_a_specific_workflow_product_repository
     notes: Repository is a concrete AI-agent workflow system rather than a community directory; do not submit rust-norion as a generic resource.
+
+  - id: tejasrsuthar-awesome-ai-tools
+    platform: github
+    kind: ai_resource_knowledgebase
+    url: https://github.com/tejasrsuthar/awesome-ai-tools
+    audience: AI frameworks, agent development, backend infrastructure, MCP, and developer-tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/tejasrsuthar/awesome-ai-tools/issues/15
+    next_action: wait_for_maintainer_feedback_then_open_readme_pr_if_requested
+    notes: Issue mapped rust-norion to AI frameworks, AI agent development frameworks, backend infrastructure, and validation-gated runtime-control work.
+
+  - id: tonychen56-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/TonyChen56/Awesome-AI-Tools
+    audience: Chinese AI development-tool and AI utility readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/TonyChen56/Awesome-AI-Tools/issues/16
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Chinese scope-check issue asked whether rust-norion fits the AI development tools category and clearly disclosed early prototype status.
+
+  - id: rvelamen-awesome-ai-tools
+    platform: github
+    kind: ai_tools_landscape
+    url: https://github.com/Rvelamen/Awesome-AI-Tools
+    audience: LLM, agent framework, and AI development-tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Rvelamen/Awesome-AI-Tools/issues/21
+    next_action: wait_for_category_feedback_before_pr
+    notes: Repository explicitly covers LLMs, Agent frameworks, and developer tools; issue framed rust-norion as Rust runtime-control infrastructure, not a chatbot.
+
+  - id: linuxsuren-awesome-ai
+    platform: github
+    kind: yaml_backed_ai_tools_list
+    url: https://github.com/LinuxSuRen/awesome-ai
+    audience: AI development-tool, local AI, MCP, and search/tooling readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/LinuxSuRen/awesome-ai/issues/12
+    next_action: wait_for_maintainer_feedback_then_submit_data_yaml_pr_if_invited
+    notes: README asks contributors to add YAML data files; issue asked for category guidance before sending a data PR.
+
+  - id: ishandutta2007-awesome-ai-tools
+    platform: github
+    kind: broad_ai_tools_list
+    url: https://github.com/ishandutta2007/awesome-ai-tools
+    audience: AI agents, development frameworks, RAG/memory, and evaluation/monitoring readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ishandutta2007/awesome-ai-tools/issues/15
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Issue mapped rust-norion to AI agents, development frameworks, RAG/memory, and evaluation/monitoring sections while noting its early prototype status.
