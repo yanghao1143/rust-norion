@@ -1,3 +1,4 @@
+use crate::hardware::HardwarePlan;
 use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::{RuntimeKvBlock, RuntimeKvBlockValidationError};
 use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
@@ -128,6 +129,7 @@ pub struct RustNativeAdapterRequest {
     pub profile: TaskProfile,
     pub trace_id: String,
     pub tenant_scope: TenantScope,
+    pub device_execution: RustNativeAdapterDeviceExecution,
     pub runtime_metadata: RuntimeMetadata,
     pub runtime_architecture: TransformerRuntimeArchitecture,
     pub max_tokens: usize,
@@ -135,6 +137,35 @@ pub struct RustNativeAdapterRequest {
     pub max_attention_threshold: f32,
     pub segments: Vec<ChunkedKvSegment>,
     pub gate_summaries: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RustNativeAdapterDeviceExecution {
+    pub device_profile: String,
+    pub primary_lane: String,
+    pub fallback_lane: String,
+    pub memory_mode: String,
+    pub hot_kv_precision_bits: u8,
+    pub cold_kv_precision_bits: u8,
+}
+
+impl RustNativeAdapterDeviceExecution {
+    pub fn from_hardware_plan(plan: &HardwarePlan) -> Self {
+        Self {
+            device_profile: plan.device.as_str().to_owned(),
+            primary_lane: plan.execution.primary_lane.as_str().to_owned(),
+            fallback_lane: plan.execution.fallback_lane.as_str().to_owned(),
+            memory_mode: plan.execution.memory_mode.as_str().to_owned(),
+            hot_kv_precision_bits: plan.execution.hot_kv_precision_bits,
+            cold_kv_precision_bits: plan.execution.cold_kv_precision_bits,
+        }
+    }
+}
+
+impl Default for RustNativeAdapterDeviceExecution {
+    fn default() -> Self {
+        Self::from_hardware_plan(&HardwarePlan::default())
+    }
 }
 
 impl RustNativeAdapterRequest {
@@ -154,6 +185,7 @@ impl RustNativeAdapterRequest {
             profile,
             trace_id: sanitize_id(trace_id.as_ref(), "trace"),
             tenant_scope,
+            device_execution: RustNativeAdapterDeviceExecution::default(),
             runtime_metadata,
             runtime_architecture,
             max_tokens: 128,
@@ -170,14 +202,25 @@ impl RustNativeAdapterRequest {
         tenant_scope: TenantScope,
         cache_mode: ChunkedKvCacheMode,
     ) -> Self {
+        let RuntimeRequest {
+            prompt,
+            profile,
+            runtime_metadata,
+            runtime_architecture,
+            hardware_plan,
+            max_tokens,
+            ..
+        } = request;
+        let device_execution = RustNativeAdapterDeviceExecution::from_hardware_plan(&hardware_plan);
         Self {
-            prompt: request.prompt,
-            profile: request.profile,
+            prompt,
+            profile,
             trace_id: sanitize_id(trace_id.as_ref(), "trace"),
             tenant_scope,
-            runtime_metadata: request.runtime_metadata,
-            runtime_architecture: request.runtime_architecture,
-            max_tokens: request.max_tokens.max(1),
+            device_execution,
+            runtime_metadata,
+            runtime_architecture,
+            max_tokens: max_tokens.max(1),
             cache_mode,
             max_attention_threshold: 0.72,
             segments: Vec::new(),
@@ -666,6 +709,13 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
             adapter_cache_mode: Some(request.cache_mode.as_str().to_owned()),
             adapter_stream_trace_id: Some(request.trace_id.clone()),
             adapter_stream_gate_summary_digest: Some(gate_summary_digest.clone()),
+            device_profile: Some(request.device_execution.device_profile.clone()),
+            primary_lane: Some(request.device_execution.primary_lane.clone()),
+            fallback_lane: Some(request.device_execution.fallback_lane.clone()),
+            memory_mode: Some(request.device_execution.memory_mode.clone()),
+            device_execution_source: Some(
+                RuntimeDiagnostics::runtime_reported_device_execution_source().to_owned(),
+            ),
             layer_count: self.architecture.layer_count,
             global_layers: 1,
             local_window_layers: 1,
@@ -680,8 +730,8 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
             runtime_kv_segments_included: included_segments,
             runtime_kv_segments_skipped: skipped_segments,
             runtime_kv_segments_rejected: rejected_segments,
-            hot_kv_precision_bits: Some(self.metadata.hot_kv_precision_bits),
-            cold_kv_precision_bits: Some(self.metadata.cold_kv_precision_bits),
+            hot_kv_precision_bits: Some(request.device_execution.hot_kv_precision_bits),
+            cold_kv_precision_bits: Some(request.device_execution.cold_kv_precision_bits),
             ..RuntimeDiagnostics::default()
         };
         let exported_blocks = (0..exported_kv_blocks)

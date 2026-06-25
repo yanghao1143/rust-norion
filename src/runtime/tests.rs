@@ -876,6 +876,11 @@ fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() 
     assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 0);
     assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_rejected, 0);
     assert!(draft.runtime_diagnostics.has_runtime_kv_segment_signal());
+    assert!(
+        draft
+            .runtime_diagnostics
+            .has_runtime_reported_device_execution_signal()
+    );
     assert_eq!(draft.exported_kv_blocks.len(), 1);
     assert_eq!(draft.exported_kv_blocks[0].key.len(), 8);
     assert!(draft.trace.iter().any(|step| {
