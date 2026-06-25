@@ -103,6 +103,7 @@ pub struct RuntimeBoundaryKvSummary {
     pub response_exported_kv_blocks: usize,
     pub diagnostics_imported_kv_blocks: usize,
     pub diagnostics_exported_kv_blocks: usize,
+    pub diagnostics_weak_runtime_kv_imports_skipped: usize,
     pub accepted_exported_kv_blocks: usize,
     pub exported_kv_violation_count: usize,
     pub imported_namespace_counts: KvNamespaceCounts,
@@ -1096,6 +1097,9 @@ impl RuntimeBoundaryKvSummary {
     pub fn diagnostics_kv_activity_signal_component_count(self) -> usize {
         usize::from(self.diagnostics_imported_kv_blocks > 0)
             .saturating_add(usize::from(self.diagnostics_exported_kv_blocks > 0))
+            .saturating_add(usize::from(
+                self.diagnostics_weak_runtime_kv_imports_skipped > 0,
+            ))
     }
 
     pub fn runtime_kv_capability_signal_component_count(self) -> usize {
@@ -3335,6 +3339,10 @@ impl RuntimeAcceptanceContext {
             response_exported_kv_blocks: response.exported_kv_blocks,
             diagnostics_imported_kv_blocks: response.diagnostics_imported_kv_blocks,
             diagnostics_exported_kv_blocks: response.diagnostics_exported_kv_blocks,
+            diagnostics_weak_runtime_kv_imports_skipped: outcome
+                .diagnostics
+                .runtime
+                .weak_runtime_kv_imports_skipped,
             accepted_exported_kv_blocks: exported_summary.accepted_count,
             exported_kv_violation_count: exported_summary.violation_count,
             imported_namespace_counts: KvNamespaceCounts::from_blocks(&self.imported_kv_blocks),
@@ -6003,7 +6011,8 @@ mod tests {
         );
         let runtime = RuntimeDiagnostics::empty()
             .with_selected_adapter(RuntimeAdapter::Cuda)
-            .with_kv_exchange(0, 0);
+            .with_kv_exchange(0, 0)
+            .with_weak_runtime_kv_imports_skipped(3);
         let mut outcome = InferenceOutcome::empty().with_diagnostics(
             InferenceDiagnostics::new(RouteBudget::default()).with_runtime(runtime),
         );
@@ -6028,6 +6037,7 @@ mod tests {
         assert_eq!(summary.response_imported_kv_blocks, 2);
         assert_eq!(summary.diagnostics_imported_kv_blocks, 0);
         assert_eq!(summary.diagnostics_exported_kv_blocks, 0);
+        assert_eq!(summary.diagnostics_weak_runtime_kv_imports_skipped, 3);
         assert_eq!(summary.imported_namespace_counts.gist, 1);
         assert_eq!(summary.exported_namespace_counts.gist, 1);
         assert!(summary.imported_kv_violation_count > 0);
@@ -6100,6 +6110,7 @@ mod tests {
             response_exported_kv_blocks: 3,
             diagnostics_imported_kv_blocks: 1,
             diagnostics_exported_kv_blocks: 2,
+            diagnostics_weak_runtime_kv_imports_skipped: 5,
             accepted_exported_kv_blocks: 0,
             exported_kv_violation_count: 1,
             imported_namespace_counts: KvNamespaceCounts {
@@ -6134,11 +6145,11 @@ mod tests {
         assert!(summary.has_kv_violations());
         assert_eq!(summary.imported_kv_activity_signal_component_count(), 4);
         assert_eq!(summary.exported_kv_activity_signal_component_count(), 1);
-        assert_eq!(summary.diagnostics_kv_activity_signal_component_count(), 2);
+        assert_eq!(summary.diagnostics_kv_activity_signal_component_count(), 3);
         assert_eq!(summary.runtime_kv_capability_signal_component_count(), 4);
         assert_eq!(summary.planning_kv_boundary_signal_component_count(), 2);
         assert_eq!(summary.namespace_kv_activity_signal_component_count(), 5);
-        assert_eq!(summary.kv_boundary_signal_component_count(), 18);
+        assert_eq!(summary.kv_boundary_signal_component_count(), 19);
         assert!(summary.has_kv_boundary_signals());
         assert_eq!(summary.runtime_exchange_count_drift_component_count(), 3);
         assert_eq!(summary.planning_bound_drift_component_count(), 2);
@@ -6150,6 +6161,43 @@ mod tests {
         assert!(!summary.kv_boundary_is_consistent());
         assert!(!summary.kv_boundary_shape_is_clean());
         assert!(!summary.can_use_runtime_boundary_kv());
+    }
+
+    #[test]
+    fn runtime_boundary_kv_summary_counts_weak_skip_as_activity_not_drift() {
+        let summary = RuntimeBoundaryKvSummary {
+            request_imported_kv_blocks: 0,
+            concrete_imported_kv_blocks: 0,
+            accepted_imported_kv_blocks: 0,
+            imported_kv_violation_count: 0,
+            response_imported_kv_blocks: 0,
+            response_exported_kv_blocks: 0,
+            diagnostics_imported_kv_blocks: 0,
+            diagnostics_exported_kv_blocks: 0,
+            diagnostics_weak_runtime_kv_imports_skipped: 2,
+            accepted_exported_kv_blocks: 0,
+            exported_kv_violation_count: 0,
+            imported_namespace_counts: KvNamespaceCounts::default(),
+            exported_namespace_counts: KvNamespaceCounts::default(),
+            runtime_import_enabled: false,
+            runtime_export_enabled: false,
+            runtime_max_import_blocks: 0,
+            runtime_max_export_blocks: 0,
+            planned_imported_kv_blocks: None,
+            planned_exported_kv_blocks: None,
+        };
+
+        assert_eq!(summary.imported_kv_activity_signal_component_count(), 0);
+        assert_eq!(summary.exported_kv_activity_signal_component_count(), 0);
+        assert_eq!(summary.diagnostics_kv_activity_signal_component_count(), 1);
+        assert_eq!(summary.kv_boundary_signal_component_count(), 1);
+        assert!(summary.has_kv_boundary_signals());
+        assert_eq!(summary.runtime_exchange_count_drift_component_count(), 0);
+        assert_eq!(summary.kv_boundary_problem_component_count(), 0);
+        assert!(!summary.has_kv_boundary_problem_components());
+        assert!(summary.kv_boundary_is_consistent());
+        assert!(summary.kv_boundary_shape_is_clean());
+        assert!(summary.can_use_runtime_boundary_kv());
     }
 
     #[test]
