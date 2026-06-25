@@ -10,9 +10,11 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub matched_cases: usize,
     pub runtime_kv_precision_cases: usize,
     pub runtime_kv_segment_cases: usize,
+    pub runtime_kv_weak_import_skip_cases: usize,
     pub runtime_kv_segments_included: usize,
     pub runtime_kv_segments_skipped: usize,
     pub runtime_kv_segments_rejected: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
     pub failures: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
     pub(super) kv_precision_devices: Vec<DeviceClass>,
@@ -23,6 +25,7 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let diagnostics = &outcome.runtime_diagnostics;
         self.record_runtime_kv_segment_evidence(diagnostics, outcome.hardware_plan.device);
+        self.record_weak_runtime_kv_import_skip_evidence(diagnostics);
         let has_forward_signal = diagnostics.has_forward_signal();
         let has_device_execution_signal = diagnostics.has_device_execution_signal();
         let has_runtime_reported_device_execution_signal =
@@ -135,6 +138,15 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         self.runtime_kv_segments_skipped += diagnostics.runtime_kv_segments_skipped;
         self.runtime_kv_segments_rejected += diagnostics.runtime_kv_segments_rejected;
         push_unique_device(&mut self.kv_segment_devices, device);
+    }
+
+    fn record_weak_runtime_kv_import_skip_evidence(&mut self, diagnostics: &RuntimeDiagnostics) {
+        if diagnostics.weak_runtime_kv_imports_skipped == 0 {
+            return;
+        }
+
+        self.runtime_kv_weak_import_skip_cases += 1;
+        self.weak_runtime_kv_imports_skipped += diagnostics.weak_runtime_kv_imports_skipped;
     }
 
     pub fn device_profiles(&self) -> usize {

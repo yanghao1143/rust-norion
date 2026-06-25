@@ -321,9 +321,11 @@ fn gate_reports_runtime_kv_segment_evidence() {
     let passing = BenchmarkSummary {
         runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
             runtime_kv_segment_cases: 2,
+            runtime_kv_weak_import_skip_cases: 2,
             runtime_kv_segments_included: 3,
             runtime_kv_segments_skipped: 1,
             runtime_kv_segments_rejected: 1,
+            weak_runtime_kv_imports_skipped: 5,
             kv_segment_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             ..BenchmarkRuntimeDeviceExecutionEvidence::default()
         },
@@ -350,7 +352,11 @@ fn gate_reports_runtime_kv_segment_evidence() {
     assert_eq!(passing.total_runtime_kv_segments_rejected(), 1);
     assert_eq!(passing.runtime_kv_segment_device_profiles(), 2);
     assert_eq!(passing.runtime_kv_segment_devices_csv(), "cpu+integrated");
+    assert_eq!(passing.runtime_kv_weak_import_skip_cases(), 2);
+    assert_eq!(passing.total_weak_runtime_kv_imports_skipped(), 5);
     let line = passing.summary_line();
+    assert!(line.contains("runtime_kv_weak_import_skip_cases=2"));
+    assert!(line.contains("weak_runtime_kv_imports_skipped=5"));
     assert!(line.contains("runtime_kv_segment_cases=2"));
     assert!(line.contains("runtime_kv_segments_included=3"));
     assert!(line.contains("runtime_kv_segments_skipped=1"));

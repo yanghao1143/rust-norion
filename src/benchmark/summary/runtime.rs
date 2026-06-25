@@ -159,6 +159,16 @@ impl BenchmarkSummary {
             .count()
     }
 
+    pub fn runtime_kv_weak_import_skip_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_weak_import_skip_cases
+    }
+
+    pub fn total_weak_runtime_kv_imports_skipped(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .weak_runtime_kv_imports_skipped
+    }
+
     pub fn runtime_kv_segment_cases(&self) -> usize {
         self.runtime_device_execution_evidence
             .runtime_kv_segment_cases
