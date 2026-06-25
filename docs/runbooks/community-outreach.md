@@ -80,6 +80,19 @@ same recruitment message everywhere.
 | Rust Boom | Submitted | Track https://github.com/rust-boom/rust-boom/issues/10 |
 | XMUDeepLIT Self-Evolving Agents | Submitted | Track https://github.com/XMUDeepLIT/Awesome-Self-Evolving-Agents/issues/8 |
 | EvoAgentX Self-Evolving Agents | Submitted | Track https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents/issues/66 |
+| Meirtz Context Engineering | Submitted | Track https://github.com/Meirtz/Awesome-Context-Engineering/issues/83 |
+| YZFly Context Engineering | Submitted | Track https://github.com/yzfly/awesome-context-engineering/issues/15 |
+| Jihoo Context Engineering | Submitted | Track https://github.com/jihoo-kim/awesome-context-engineering/issues/20 |
+| TeleAI Agent Memory | Submitted | Track https://github.com/TeleAI-UAGI/Awesome-Agent-Memory/issues/47 |
+| AgentMemoryWorld Agent Memory | Deferred | Paper resource; submit only after paper-backed artifact |
+| Yyyujintang Agent Memory Papers | Deferred | Papers only |
+| Richard Blythman Multi-Agent Systems | Submitted | Track https://github.com/richardblythman/awesome-multi-agent-systems/issues/11 |
+| Ottosulin Awesome AI Security | Submitted | Track https://github.com/ottosulin/awesome-ai-security/issues/296 |
+| Corca Awesome LLM Security | Candidate | Submit only if focused security PR is invited |
+| CryptoAILab LM-SSP | Deferred | Paper metadata list |
+| DeepSpaceHarbor AI Security | Candidate | Manual review; verify runtime-security code entry flow |
+| Sorrycc Code Agents | Deferred | Wait for direct coding-agent product surface |
+| EuniAI Code Agents | Deferred | Paper list; wait for paper/benchmark artifact |
 | Evilsocket Awesome Agents | Deferred | Requires production-ready specific-use-case agents |
 | Shahshrey Awesome AI Agents | Deferred | Requires a complete runnable app folder with tests |
 | Ishan Dutta Awesome AI Agents | Deferred | Cookbook of ready-to-run templates, not project links |
