@@ -139,9 +139,44 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-min-runtime-kv-weak-import-skip-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_weak_import_skip_experiences =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-weak-runtime-kv-imports-skipped" if index + 1 < raw.len() => {
+            *parser.inspect_min_weak_runtime_kv_imports_skipped =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-runtime-kv-export-experiences" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_kv_export_experiences =
                 Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-segment-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_segment_experiences =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-segments-included" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_segments_included =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-runtime-kv-segments-rejected" if index + 1 < raw.len() => {
+            *parser.inspect_max_runtime_kv_segments_rejected =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;
             Some(2)

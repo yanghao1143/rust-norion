@@ -26,7 +26,13 @@ pub(super) struct RuntimeSignalCounts {
     pub(super) runtime_local_window_layers: usize,
     pub(super) runtime_convolutional_fusion_layers: usize,
     pub(super) runtime_kv_import_experience_count: usize,
+    pub(super) runtime_kv_weak_import_skip_experience_count: usize,
+    pub(super) weak_runtime_kv_imports_skipped: usize,
     pub(super) runtime_kv_export_experience_count: usize,
+    pub(super) runtime_kv_segment_experience_count: usize,
+    pub(super) runtime_kv_segments_included: usize,
+    pub(super) runtime_kv_segments_skipped: usize,
+    pub(super) runtime_kv_segments_rejected: usize,
     pub(super) runtime_kv_hold_experience_count: usize,
     pub(super) runtime_kv_held_blocks: usize,
 }
@@ -142,6 +148,18 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         .iter()
         .filter(|record| record.runtime_diagnostics.imported_kv_blocks > 0)
         .count();
+    let runtime_kv_weak_import_skip_experience_count = engine
+        .experience
+        .records()
+        .iter()
+        .filter(|record| record.runtime_diagnostics.weak_runtime_kv_imports_skipped > 0)
+        .count();
+    let weak_runtime_kv_imports_skipped = engine
+        .experience
+        .records()
+        .iter()
+        .map(|record| record.runtime_diagnostics.weak_runtime_kv_imports_skipped)
+        .sum();
     let runtime_kv_export_experience_count = engine
         .experience
         .records()
@@ -151,6 +169,30 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
                 || !record.stored_runtime_kv_memory_ids.is_empty()
         })
         .count();
+    let runtime_kv_segment_experience_count = engine
+        .experience
+        .records()
+        .iter()
+        .filter(|record| record.runtime_diagnostics.has_runtime_kv_segment_signal())
+        .count();
+    let runtime_kv_segments_included = engine
+        .experience
+        .records()
+        .iter()
+        .map(|record| record.runtime_diagnostics.runtime_kv_segments_included)
+        .sum();
+    let runtime_kv_segments_skipped = engine
+        .experience
+        .records()
+        .iter()
+        .map(|record| record.runtime_diagnostics.runtime_kv_segments_skipped)
+        .sum();
+    let runtime_kv_segments_rejected = engine
+        .experience
+        .records()
+        .iter()
+        .map(|record| record.runtime_diagnostics.runtime_kv_segments_rejected)
+        .sum();
     let runtime_kv_hold_experience_count = engine
         .experience
         .records()
@@ -183,7 +225,13 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         runtime_local_window_layers,
         runtime_convolutional_fusion_layers,
         runtime_kv_import_experience_count,
+        runtime_kv_weak_import_skip_experience_count,
+        weak_runtime_kv_imports_skipped,
         runtime_kv_export_experience_count,
+        runtime_kv_segment_experience_count,
+        runtime_kv_segments_included,
+        runtime_kv_segments_skipped,
+        runtime_kv_segments_rejected,
         runtime_kv_hold_experience_count,
         runtime_kv_held_blocks,
     }

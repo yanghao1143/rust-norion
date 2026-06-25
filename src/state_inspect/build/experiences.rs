@@ -72,7 +72,17 @@ pub(super) fn top_experience_summaries(
                 runtime_hot_kv_precision_bits: record.runtime_diagnostics.hot_kv_precision_bits,
                 runtime_cold_kv_precision_bits: record.runtime_diagnostics.cold_kv_precision_bits,
                 runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
+                runtime_weak_kv_imports_skipped: record
+                    .runtime_diagnostics
+                    .weak_runtime_kv_imports_skipped,
                 runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
+                runtime_kv_segments_included: record
+                    .runtime_diagnostics
+                    .runtime_kv_segments_included,
+                runtime_kv_segments_skipped: record.runtime_diagnostics.runtime_kv_segments_skipped,
+                runtime_kv_segments_rejected: record
+                    .runtime_diagnostics
+                    .runtime_kv_segments_rejected,
                 recursive_runtime_calls: recursive_runtime_calls_from_notes(
                     &record.process_reward.notes,
                 ),

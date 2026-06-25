@@ -529,6 +529,136 @@ fn inspection_gate_tracks_runtime_kv_hold_evidence() {
 }
 
 #[test]
+fn inspection_gate_tracks_runtime_kv_activity_evidence() {
+    let mut engine = NoironEngine::new();
+    engine.experience.record(ExperienceInput {
+        prompt: "weak runtime kv import should remain inspectable".to_owned(),
+        profile: TaskProfile::General,
+        lesson: "weak runtime kv skips and segment filtering are activity evidence, not imports"
+            .to_owned(),
+        quality: 0.71,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: None,
+        router_threshold_after: 0.5,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 3,
+            attention_fraction: 0.25,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        used_memory_ids: Vec::new(),
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
+            weak_runtime_kv_imports_skipped: 3,
+            runtime_kv_segments_included: 2,
+            runtime_kv_segments_skipped: 1,
+            runtime_kv_segments_rejected: 1,
+            ..crate::reflection::RuntimeDiagnostics::default()
+        },
+        runtime_token_metrics: Default::default(),
+        process_reward: ProcessRewardReport::default(),
+        live_evolution: Default::default(),
+    });
+
+    let report = StateInspectionReport::from_engine(&engine, 1);
+    let gate_report = report.evaluate(&StateInspectionGate {
+        min_runtime_kv_weak_import_skip_experiences: Some(1),
+        min_weak_runtime_kv_imports_skipped: Some(3),
+        min_runtime_kv_segment_experiences: Some(1),
+        min_runtime_kv_segments_included: Some(2),
+        max_runtime_kv_segments_rejected: Some(1),
+        ..StateInspectionGate::default()
+    });
+
+    assert_eq!(report.runtime_kv_import_experience_count, 0);
+    assert_eq!(report.runtime_kv_export_experience_count, 0);
+    assert_eq!(report.runtime_kv_weak_import_skip_experience_count, 1);
+    assert_eq!(report.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(report.runtime_kv_segment_experience_count, 1);
+    assert_eq!(report.runtime_kv_segments_included, 2);
+    assert_eq!(report.runtime_kv_segments_skipped, 1);
+    assert_eq!(report.runtime_kv_segments_rejected, 1);
+    assert!(gate_report.passed(), "{:?}", gate_report.failures);
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_skip_experiences=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("weak_runtime_kv_imports_skipped=3")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segment_experiences=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segments_included=2")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segments_rejected=1")
+    );
+
+    let top = &report.top_experiences[0];
+    assert_eq!(top.runtime_imported_kv_blocks, 0);
+    assert_eq!(top.runtime_exported_kv_blocks, 0);
+    assert_eq!(top.runtime_weak_kv_imports_skipped, 3);
+    assert_eq!(top.runtime_kv_segments_included, 2);
+    assert_eq!(top.runtime_kv_segments_skipped, 1);
+    assert_eq!(top.runtime_kv_segments_rejected, 1);
+
+    let failing = report.evaluate(&StateInspectionGate {
+        min_runtime_kv_weak_import_skip_experiences: Some(2),
+        min_weak_runtime_kv_imports_skipped: Some(4),
+        min_runtime_kv_segment_experiences: Some(2),
+        min_runtime_kv_segments_included: Some(3),
+        max_runtime_kv_segments_rejected: Some(0),
+        ..StateInspectionGate::default()
+    });
+
+    assert!(!failing.passed());
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "runtime_kv_weak_import_skip_experience_count 1 below required 2"
+    }));
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| { failure == "weak_runtime_kv_imports_skipped 3 below required 4" })
+    );
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| { failure == "runtime_kv_segment_experience_count 1 below required 2" })
+    );
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| { failure == "runtime_kv_segments_included 2 below required 3" })
+    );
+    assert!(
+        failing
+            .failures
+            .iter()
+            .any(|failure| { failure == "runtime_kv_segments_rejected 1 above maximum 0" })
+    );
+}
+
+#[test]
 fn inspection_gate_rejects_experiences_without_runtime_evidence() {
     let mut engine = NoironEngine::new();
     engine.experience.record(ExperienceInput {

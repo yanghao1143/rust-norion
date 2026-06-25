@@ -629,8 +629,18 @@ fn parses_recursive_scheduler_flags() {
         "2".to_owned(),
         "--inspect-min-runtime-kv-import-experiences".to_owned(),
         "2".to_owned(),
+        "--inspect-min-runtime-kv-weak-import-skip-experiences".to_owned(),
+        "3".to_owned(),
+        "--inspect-min-weak-runtime-kv-imports-skipped".to_owned(),
+        "5".to_owned(),
         "--inspect-min-runtime-kv-export-experiences".to_owned(),
         "2".to_owned(),
+        "--inspect-min-runtime-kv-segment-experiences".to_owned(),
+        "4".to_owned(),
+        "--inspect-min-runtime-kv-segments-included".to_owned(),
+        "6".to_owned(),
+        "--inspect-max-runtime-kv-segments-rejected".to_owned(),
+        "1".to_owned(),
         "--inspect-min-runtime-kv-hold-experiences".to_owned(),
         "1".to_owned(),
         "--inspect-min-runtime-kv-held-blocks".to_owned(),
@@ -1906,7 +1916,15 @@ fn parses_recursive_scheduler_flags() {
         Some(2)
     );
     assert_eq!(args.inspect_min_runtime_kv_import_experiences, Some(2));
+    assert_eq!(
+        args.inspect_min_runtime_kv_weak_import_skip_experiences,
+        Some(3)
+    );
+    assert_eq!(args.inspect_min_weak_runtime_kv_imports_skipped, Some(5));
     assert_eq!(args.inspect_min_runtime_kv_export_experiences, Some(2));
+    assert_eq!(args.inspect_min_runtime_kv_segment_experiences, Some(4));
+    assert_eq!(args.inspect_min_runtime_kv_segments_included, Some(6));
+    assert_eq!(args.inspect_max_runtime_kv_segments_rejected, Some(1));
     assert_eq!(args.inspect_min_runtime_kv_hold_experiences, Some(1));
     assert_eq!(args.inspect_min_runtime_kv_held_blocks, Some(2));
     assert_eq!(args.inspect_min_runtime_kv_memory_device_profiles, Some(12));
@@ -2340,8 +2358,33 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(
         args.state_inspection_gate()
+            .min_runtime_kv_weak_import_skip_experiences,
+        Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_weak_runtime_kv_imports_skipped,
+        Some(5)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
             .min_runtime_kv_export_experiences,
         Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_runtime_kv_segment_experiences,
+        Some(4)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_runtime_kv_segments_included,
+        Some(6)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .max_runtime_kv_segments_rejected,
+        Some(1)
     );
     assert_eq!(
         args.state_inspection_gate().min_runtime_kv_hold_experiences,

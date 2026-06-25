@@ -57,7 +57,13 @@ impl Args {
             min_runtime_convolutional_fusion_layers: self
                 .inspect_min_runtime_convolutional_fusion_layers,
             min_runtime_kv_import_experiences: self.inspect_min_runtime_kv_import_experiences,
+            min_runtime_kv_weak_import_skip_experiences: self
+                .inspect_min_runtime_kv_weak_import_skip_experiences,
+            min_weak_runtime_kv_imports_skipped: self.inspect_min_weak_runtime_kv_imports_skipped,
             min_runtime_kv_export_experiences: self.inspect_min_runtime_kv_export_experiences,
+            min_runtime_kv_segment_experiences: self.inspect_min_runtime_kv_segment_experiences,
+            min_runtime_kv_segments_included: self.inspect_min_runtime_kv_segments_included,
+            max_runtime_kv_segments_rejected: self.inspect_max_runtime_kv_segments_rejected,
             min_runtime_kv_hold_experiences: self.inspect_min_runtime_kv_hold_experiences,
             min_runtime_kv_held_blocks: self.inspect_min_runtime_kv_held_blocks,
             min_reflection_issue_experiences: self.inspect_min_reflection_issue_experiences,
