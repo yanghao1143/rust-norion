@@ -212,6 +212,8 @@ impl ParseState {
             benchmark_min_runtime_uncertainty_device_profiles: self.benchmark_min_runtime_uncertainty_device_profiles,
             benchmark_min_runtime_uncertainty_token_device_profiles: self.benchmark_min_runtime_uncertainty_token_device_profiles,
             benchmark_min_runtime_kv_import_cases: self.benchmark_min_runtime_kv_import_cases,
+            benchmark_min_runtime_kv_weak_import_skip_cases: self.benchmark_min_runtime_kv_weak_import_skip_cases,
+            benchmark_min_weak_runtime_kv_imports_skipped: self.benchmark_min_weak_runtime_kv_imports_skipped,
             benchmark_min_runtime_kv_segment_cases: self.benchmark_min_runtime_kv_segment_cases,
             benchmark_min_runtime_kv_segments_included: self.benchmark_min_runtime_kv_segments_included,
             benchmark_max_runtime_kv_segments_rejected: self.benchmark_max_runtime_kv_segments_rejected,

@@ -243,6 +243,8 @@ impl Args {
                 benchmark_min_runtime_uncertainty_device_profiles: &mut state.benchmark_min_runtime_uncertainty_device_profiles,
                 benchmark_min_runtime_uncertainty_token_device_profiles: &mut state.benchmark_min_runtime_uncertainty_token_device_profiles,
                 benchmark_min_runtime_kv_import_cases: &mut state.benchmark_min_runtime_kv_import_cases,
+                benchmark_min_runtime_kv_weak_import_skip_cases: &mut state.benchmark_min_runtime_kv_weak_import_skip_cases,
+                benchmark_min_weak_runtime_kv_imports_skipped: &mut state.benchmark_min_weak_runtime_kv_imports_skipped,
                 benchmark_min_runtime_kv_segment_cases: &mut state.benchmark_min_runtime_kv_segment_cases,
                 benchmark_min_runtime_kv_segments_included: &mut state.benchmark_min_runtime_kv_segments_included,
                 benchmark_max_runtime_kv_segments_rejected: &mut state.benchmark_max_runtime_kv_segments_rejected,

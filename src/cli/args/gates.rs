@@ -372,6 +372,12 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_kv_import_cases {
             gate.min_runtime_kv_import_cases = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_kv_weak_import_skip_cases {
+            gate.min_runtime_kv_weak_import_skip_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_weak_runtime_kv_imports_skipped {
+            gate.min_weak_runtime_kv_imports_skipped = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_kv_segment_cases {
             gate.min_runtime_kv_segment_cases = Some(value);
         }
