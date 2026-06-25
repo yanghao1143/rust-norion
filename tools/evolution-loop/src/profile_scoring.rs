@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
 
 use crate::json::{
-    json_bool_field, json_f64_field, json_string, json_string_array, json_string_field,
-    json_u64_field,
+    json_bool_field, json_f64_field, json_object_field, json_string, json_string_array,
+    json_string_field, json_u64_field,
 };
 
 pub(crate) const SCORING_VERSION: &str = "profile-scoring.v1";
@@ -293,6 +295,278 @@ pub(crate) struct RegressionAggregate {
     pub(crate) cost: f64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OfflineReplayAggregate {
+    pub(crate) policy: String,
+    pub(crate) samples: usize,
+    pub(crate) successes: usize,
+    pub(crate) failures: usize,
+    pub(crate) quality_avg: f64,
+    pub(crate) latency_avg_ms: f64,
+    pub(crate) cost_avg: f64,
+    pub(crate) failure_rate: f64,
+    pub(crate) drift_penalty: f64,
+}
+
+impl OfflineReplayAggregate {
+    fn empty(policy: &str) -> Self {
+        Self {
+            policy: policy.to_owned(),
+            samples: 0,
+            successes: 0,
+            failures: 0,
+            quality_avg: 0.0,
+            latency_avg_ms: 0.0,
+            cost_avg: 0.0,
+            failure_rate: 1.0,
+            drift_penalty: 1.0,
+        }
+    }
+
+    fn from_records(policy: &str, records: &[ReplayOutcomeRecord]) -> Self {
+        if records.is_empty() {
+            return Self::empty(policy);
+        }
+        let samples = records.len();
+        let successes = records.iter().filter(|record| record.success).count();
+        let failures = samples.saturating_sub(successes);
+        let quality_avg = records
+            .iter()
+            .map(ReplayOutcomeRecord::quality_value)
+            .sum::<f64>()
+            / samples as f64;
+        let latency_avg_ms =
+            records.iter().map(|record| record.latency_ms).sum::<f64>() / samples as f64;
+        let cost_avg = records.iter().map(|record| record.cost).sum::<f64>() / samples as f64;
+        let failure_rate = failures as f64 / samples as f64;
+        let drift_penalty = records
+            .iter()
+            .filter(|record| record.drift_detected)
+            .count() as f64
+            / samples as f64;
+        Self {
+            policy: policy.to_owned(),
+            samples,
+            successes,
+            failures,
+            quality_avg,
+            latency_avg_ms,
+            cost_avg,
+            failure_rate,
+            drift_penalty,
+        }
+    }
+
+    pub(crate) fn json_report(&self) -> String {
+        format!(
+            "{{\"policy\":{},\"samples\":{},\"successes\":{},\"failures\":{},\"quality_avg\":{:.6},\"latency_avg_ms\":{:.3},\"cost_avg\":{:.6},\"failure_rate\":{:.6},\"drift_penalty\":{:.6}}}",
+            json_string(&self.policy),
+            self.samples,
+            self.successes,
+            self.failures,
+            self.quality_avg,
+            self.latency_avg_ms,
+            self.cost_avg,
+            self.failure_rate,
+            self.drift_penalty
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct OfflineReplayReport {
+    pub(crate) version: String,
+    pub(crate) source_path: String,
+    pub(crate) min_samples: usize,
+    pub(crate) baseline: OfflineReplayAggregate,
+    pub(crate) candidate: OfflineReplayAggregate,
+    pub(crate) quality_delta: f64,
+    pub(crate) latency_delta_ms: f64,
+    pub(crate) cost_delta: f64,
+    pub(crate) failure_rate_delta: f64,
+    pub(crate) drift_penalty_delta: f64,
+    pub(crate) allow_switch: bool,
+    pub(crate) blocked_reason: Option<String>,
+    pub(crate) rollback_hint: String,
+}
+
+impl OfflineReplayReport {
+    pub(crate) fn from_outcome_jsonl(
+        source_path: impl Into<String>,
+        outcome_jsonl: &str,
+        min_samples: usize,
+        config: &ScoringConfig,
+    ) -> Self {
+        let min_samples = min_samples.max(1);
+        let mut baseline_records = Vec::new();
+        let mut candidate_records = Vec::new();
+        for line in outcome_jsonl
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+        {
+            let Some(record) = ReplayOutcomeRecord::from_json_line(line) else {
+                continue;
+            };
+            match record.policy {
+                ReplayPolicy::Baseline => baseline_records.push(record),
+                ReplayPolicy::Candidate => candidate_records.push(record),
+            }
+        }
+        let baseline = OfflineReplayAggregate::from_records("rule-routing", &baseline_records);
+        let candidate = OfflineReplayAggregate::from_records("profile-routing", &candidate_records);
+        Self::compare(source_path, min_samples, baseline, candidate, config)
+    }
+
+    fn compare(
+        source_path: impl Into<String>,
+        min_samples: usize,
+        baseline: OfflineReplayAggregate,
+        candidate: OfflineReplayAggregate,
+        config: &ScoringConfig,
+    ) -> Self {
+        let quality_delta = candidate.quality_avg - baseline.quality_avg;
+        let latency_delta_ms = candidate.latency_avg_ms - baseline.latency_avg_ms;
+        let cost_delta = candidate.cost_avg - baseline.cost_avg;
+        let failure_rate_delta = candidate.failure_rate - baseline.failure_rate;
+        let drift_penalty_delta = candidate.drift_penalty - baseline.drift_penalty;
+        let blocked_reason = replay_blocked_reason(
+            &baseline,
+            &candidate,
+            min_samples,
+            quality_delta,
+            latency_delta_ms,
+            cost_delta,
+            failure_rate_delta,
+            drift_penalty_delta,
+            &config.rollback_hint,
+        );
+        Self {
+            version: SCORING_VERSION.to_owned(),
+            source_path: source_path.into(),
+            min_samples,
+            baseline,
+            candidate,
+            quality_delta,
+            latency_delta_ms,
+            cost_delta,
+            failure_rate_delta,
+            drift_penalty_delta,
+            allow_switch: blocked_reason.is_none(),
+            blocked_reason,
+            rollback_hint: config.rollback_hint.clone(),
+        }
+    }
+
+    pub(crate) fn json_report(&self) -> String {
+        format!(
+            "{{\"version\":{},\"source_path\":{},\"min_samples\":{},\"baseline\":{},\"candidate\":{},\"deltas\":{{\"quality_delta\":{:.6},\"latency_delta_ms\":{:.3},\"cost_delta\":{:.6},\"failure_rate_delta\":{:.6},\"drift_penalty_delta\":{:.6}}},\"allow_switch\":{},\"blocked_reason\":{},\"rollback_hint\":{}}}",
+            json_string(&self.version),
+            json_string(&self.source_path),
+            self.min_samples,
+            self.baseline.json_report(),
+            self.candidate.json_report(),
+            self.quality_delta,
+            self.latency_delta_ms,
+            self.cost_delta,
+            self.failure_rate_delta,
+            self.drift_penalty_delta,
+            self.allow_switch,
+            option_str_json(self.blocked_reason.as_deref()),
+            json_string(&self.rollback_hint)
+        )
+    }
+}
+
+pub(crate) fn load_offline_replay_report(
+    path: Option<&Path>,
+    min_samples: usize,
+    config: &ScoringConfig,
+) -> Result<Option<OfflineReplayReport>, String> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let text = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "read profile outcome log {} failed: {error}",
+            path.display()
+        )
+    })?;
+    Ok(Some(OfflineReplayReport::from_outcome_jsonl(
+        path.display().to_string(),
+        &text,
+        min_samples,
+        config,
+    )))
+}
+
+pub(crate) fn option_offline_replay_json(report: Option<&OfflineReplayReport>) -> String {
+    report
+        .map(OfflineReplayReport::json_report)
+        .unwrap_or_else(|| "{}".to_owned())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReplayPolicy {
+    Baseline,
+    Candidate,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ReplayOutcomeRecord {
+    policy: ReplayPolicy,
+    success: bool,
+    latency_ms: f64,
+    cost: f64,
+    quality_score: Option<f64>,
+    drift_detected: bool,
+}
+
+impl ReplayOutcomeRecord {
+    fn from_json_line(line: &str) -> Option<Self> {
+        let strategy = json_string_field(line, "strategy").or_else(|| {
+            json_object_field(line, "route_decision")
+                .and_then(|route| json_string_field(&route, "strategy"))
+        })?;
+        let policy = replay_policy(&strategy)?;
+        let success = json_bool_field(line, "ok")
+            .or_else(|| json_bool_field(line, "success"))
+            .unwrap_or(false);
+        let latency_ms = json_f64_field(line, "latency_ms")
+            .or_else(|| json_u64_field(line, "latency_ms").map(|value| value as f64))
+            .unwrap_or_default()
+            .max(0.0);
+        let cost = json_f64_field(line, "cost")
+            .or_else(|| json_f64_field(line, "cost_estimate_micro_usd"))
+            .or_else(|| json_u64_field(line, "cost_estimate_micro_usd").map(|value| value as f64))
+            .unwrap_or_default()
+            .max(0.0);
+        let quality_score = json_f64_field(line, "quality_score")
+            .or_else(|| json_f64_field(line, "quality_hint"))
+            .map(clamp01);
+        let drift_detected = json_bool_field(line, "drift_detected")
+            .or_else(|| json_bool_field(line, "profile_drift"))
+            .unwrap_or_else(|| {
+                text_field_mentions_drift(line, "reward_placeholder")
+                    || text_field_mentions_drift(line, "reflection_placeholder")
+                    || text_field_mentions_drift(line, "error_kind")
+            });
+        Some(Self {
+            policy,
+            success,
+            latency_ms,
+            cost,
+            quality_score,
+            drift_detected,
+        })
+    }
+
+    fn quality_value(&self) -> f64 {
+        self.quality_score
+            .unwrap_or(if self.success { 1.0 } else { 0.0 })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PolicySwitchDecision {
     pub(crate) allow_switch: bool,
@@ -507,6 +781,72 @@ fn option_str_json(value: Option<&str>) -> String {
     value.map(json_string).unwrap_or_else(|| "null".to_owned())
 }
 
+fn replay_policy(strategy: &str) -> Option<ReplayPolicy> {
+    let normalized = strategy.trim().to_ascii_lowercase();
+    if normalized.contains("profile") || normalized.contains("candidate") {
+        Some(ReplayPolicy::Candidate)
+    } else if normalized.contains("rule")
+        || normalized.contains("baseline")
+        || normalized == "single"
+        || normalized == "rule-routing"
+    {
+        Some(ReplayPolicy::Baseline)
+    } else {
+        None
+    }
+}
+
+fn replay_blocked_reason(
+    baseline: &OfflineReplayAggregate,
+    candidate: &OfflineReplayAggregate,
+    min_samples: usize,
+    quality_delta: f64,
+    latency_delta_ms: f64,
+    cost_delta: f64,
+    failure_rate_delta: f64,
+    drift_penalty_delta: f64,
+    rollback_hint: &str,
+) -> Option<String> {
+    if baseline.samples < min_samples || candidate.samples < min_samples {
+        return Some(format!(
+            "offline_replay_insufficient_samples baseline_samples={} candidate_samples={} min_samples={} rollback_hint={rollback_hint}",
+            baseline.samples, candidate.samples, min_samples
+        ));
+    }
+    if quality_delta < -0.000_001 {
+        return Some(format!(
+            "offline_replay_quality_regression quality_delta={quality_delta:.3} rollback_hint={rollback_hint}"
+        ));
+    }
+    if latency_delta_ms > 0.000_001 {
+        return Some(format!(
+            "offline_replay_latency_regression latency_delta_ms={latency_delta_ms:.1} rollback_hint={rollback_hint}"
+        ));
+    }
+    if cost_delta > 0.000_001 {
+        return Some(format!(
+            "offline_replay_cost_regression cost_delta={cost_delta:.3} rollback_hint={rollback_hint}"
+        ));
+    }
+    if failure_rate_delta > 0.000_001 {
+        return Some(format!(
+            "offline_replay_failure_regression failure_rate_delta={failure_rate_delta:.3} rollback_hint={rollback_hint}"
+        ));
+    }
+    if drift_penalty_delta > 0.000_001 {
+        return Some(format!(
+            "offline_replay_drift_regression drift_penalty_delta={drift_penalty_delta:.3} rollback_hint={rollback_hint}"
+        ));
+    }
+    None
+}
+
+fn text_field_mentions_drift(line: &str, field: &str) -> bool {
+    json_string_field(line, field)
+        .map(|value| value.to_ascii_lowercase().contains("drift"))
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -686,6 +1026,125 @@ mod tests {
     }
 
     #[test]
+    fn offline_replay_allows_profile_switch_when_candidate_preserves_quality_and_costs_less() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            &fixture_jsonl(&[
+                ("rule-baseline", true, 0.80, 1_000, 100, false),
+                ("rule-baseline", true, 0.82, 1_100, 120, false),
+                ("profile-candidate", true, 0.83, 900, 90, false),
+                ("profile-candidate", true, 0.84, 950, 95, false),
+            ]),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert!(report.allow_switch);
+        assert!(report.quality_delta > 0.0);
+        assert!(report.latency_delta_ms < 0.0);
+        assert!(report.cost_delta < 0.0);
+        assert!(report.json_report().contains("\"allow_switch\":true"));
+        assert!(report.json_report().contains("\"rollback_hint\""));
+    }
+
+    #[test]
+    fn offline_replay_blocks_quality_regression() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            &fixture_jsonl(&[
+                ("rule-baseline", true, 0.90, 1_000, 100, false),
+                ("rule-baseline", true, 0.88, 1_000, 100, false),
+                ("profile-candidate", true, 0.70, 900, 90, false),
+                ("profile-candidate", true, 0.72, 900, 90, false),
+            ]),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.allow_switch);
+        assert!(report.quality_delta < 0.0);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("quality_regression")
+        );
+    }
+
+    #[test]
+    fn offline_replay_blocks_latency_regression() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            &fixture_jsonl(&[
+                ("rule-baseline", true, 0.80, 1_000, 100, false),
+                ("rule-baseline", true, 0.80, 1_000, 100, false),
+                ("profile-candidate", true, 0.80, 1_400, 90, false),
+                ("profile-candidate", true, 0.80, 1_300, 90, false),
+            ]),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.allow_switch);
+        assert!(report.latency_delta_ms > 0.0);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("latency_regression")
+        );
+    }
+
+    #[test]
+    fn offline_replay_blocks_cost_regression() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            &fixture_jsonl(&[
+                ("rule-baseline", true, 0.80, 1_000, 100, false),
+                ("rule-baseline", true, 0.80, 1_000, 100, false),
+                ("profile-candidate", true, 0.80, 900, 140, false),
+                ("profile-candidate", true, 0.80, 900, 130, false),
+            ]),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.allow_switch);
+        assert!(report.cost_delta > 0.0);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("cost_regression")
+        );
+    }
+
+    #[test]
+    fn offline_replay_blocks_insufficient_samples() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            &fixture_jsonl(&[
+                ("rule-baseline", true, 0.80, 1_000, 100, false),
+                ("profile-candidate", true, 0.90, 800, 80, false),
+            ]),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.allow_switch);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("insufficient_samples")
+        );
+    }
+
+    #[test]
     fn explanation_json_contains_version_and_candidate_reasons() {
         let mut scorer = OnlineScorer::new(ScoringConfig::default());
         scorer.update(sample("quality", "code", true));
@@ -697,5 +1156,18 @@ mod tests {
         assert!(explanation.contains(SCORING_VERSION));
         assert!(explanation.contains("candidate_reasons"));
         assert!(explanation.contains("profile_route_best"));
+    }
+
+    fn fixture_jsonl(records: &[(&str, bool, f64, u64, u64, bool)]) -> String {
+        records
+            .iter()
+            .enumerate()
+            .map(|(index, (strategy, ok, quality, latency, cost, drift))| {
+                format!(
+                    "{{\"schema\":\"norion.request_outcome.v1\",\"trace_id\":\"trace-{index}\",\"request_id\":\"request-{index}\",\"task_kind\":\"review\",\"skill_tags\":[\"review\"],\"strategy\":\"{strategy}\",\"route_decision\":{{\"strategy\":\"{strategy}\",\"chosen_model\":\"model-{index}\",\"candidate_count\":2,\"reason\":\"fixture\"}},\"ok\":{ok},\"latency_ms\":{latency},\"cost_estimate_micro_usd\":{cost},\"quality_score\":{quality},\"drift_detected\":{drift}}}"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
