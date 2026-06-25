@@ -214,6 +214,18 @@ same recruitment message everywhere.
 | Joypaul Shubhamsaboo LLM Apps | Deferred | Duplicate app-template surface; track upstream first |
 | 0xSweet LLM Security Alignment | Deferred | Wait for focused security/alignment article, tool, or paper |
 | Liuyaojia LLM Security Paper | Deferred | Paper list; wait for security paper metadata |
+| Jordimas Agentic Engineering | Submitted | Track https://github.com/jordimas/awesome-agentic-engineering/issues/7 |
+| GGJY Agent Engineering Harness Survey | Submitted | Track https://github.com/ggjy/Awesome-Agent-Engineering/issues/1 |
+| LAS-WG Agent Infrastructure | Submitted | Track https://github.com/las-wg/awesome-agent-infrastructure/issues/7 |
+| SandBase Agent Runtime | Submitted | Track https://github.com/sandbaseai/awesome-agent-runtime/issues/1 |
+| Backblaze Agent Infrastructure | Submitted | Track https://github.com/backblaze-labs/awesome-agent-infrastructure/issues/10 |
+| EthicalML Agentic Engineering Resources | Deferred | Resource list rejects pure tool links; wait for a substantive article or playbook |
+| EthicalML Production Agentic Systems | Deferred | Requires at least 500 GitHub stars or maintainer invitation |
+| Ischca Agents.md | Deferred | Wait for a root AGENTS.md or dedicated AGENTS.md article |
+| Tairov Agents.md | Deferred | Archived repository |
+| PandaStack AI Agent Runtimes | Deferred | Wait for a packaged runtime environment or sandbox artifact |
+| DZ3AI Agent Runtimes | Deferred | Production-grade runtime list; wait for runtime packaging and docs |
+| Mrtnrocks Agent Infrastructure | Deferred | Needs a clearer infrastructure product or service category fit |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | Gitee Awesome MCP Servers | Candidate | Login-check contribution flow; use only if control-layer tooling fits |

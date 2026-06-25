@@ -2099,6 +2099,131 @@ communities:
     next_action: submit_only_after_related_llm_security_paper_or_paper_metadata_exists
     notes: Paper library rather than a project directory; wait for a rust-norion security paper, peer-reviewed artifact, or accepted technical report.
 
+  - id: jordimas-awesome-agentic-engineering
+    platform: github
+    kind: awesome_list
+    url: https://github.com/jordimas/awesome-agentic-engineering
+    audience: agentic engineering, AI coding, developer-tooling, and multi-agent workflow readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/jordimas/awesome-agentic-engineering/issues/7
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: README welcomes practical team-applicable resources; scope-check asks whether an early Rust control-layer prototype fits before any PR.
+
+  - id: ggjy-awesome-agent-engineering
+    platform: github
+    kind: agent_harness_survey_resource_list
+    url: https://github.com/ggjy/Awesome-Agent-Engineering
+    audience: LLM agent system, harness design, runtime, memory, verification, and governance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ggjy/Awesome-Agent-Engineering/issues/1
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: README invites missing work and PRs; scope-check is framed around harness control-loop, state governance, rollback, and audit trace fit.
+
+  - id: las-wg-awesome-agent-infrastructure
+    platform: github
+    kind: agent_infrastructure_resource_list
+    url: https://github.com/las-wg/awesome-agent-infrastructure
+    audience: agent infrastructure, runtime governance, protocol, monitoring, and safety readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/las-wg/awesome-agent-infrastructure/issues/7
+    next_action: wait_for_scope_feedback_before_any_open_source_project_pr
+    notes: Topic fit is real but the list is small and slower-moving; issue asks whether runtime governance and evidence gates fit before a PR.
+
+  - id: sandbaseai-awesome-agent-runtime
+    platform: github
+    kind: agent_runtime_landscape
+    url: https://github.com/sandbaseai/awesome-agent-runtime
+    audience: production AI agent runtime, sandbox, memory, model gateway, observability, and infrastructure builders
+    fit: high
+    status: submitted
+    proof: https://github.com/sandbaseai/awesome-agent-runtime/issues/1
+    next_action: wait_for_project_suggestion_feedback_then_open_data_projects_pr_if_requested
+    notes: Repository has a project submission issue template and categories for agent runtime, memory/context, safety/evals, model gateway, and observability; submission uses early-prototype language.
+
+  - id: backblaze-labs-awesome-agent-infrastructure
+    platform: github
+    kind: agent_infrastructure_catalogue
+    url: https://github.com/backblaze-labs/awesome-agent-infrastructure
+    audience: agent framework, memory, state, protocol, sandbox, observability, RAG, and template readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/backblaze-labs/awesome-agent-infrastructure/issues/10
+    next_action: wait_for_category_feedback_then_open_entries_yaml_pr_if_invited
+    notes: CONTRIBUTING asks for one PR editing entries.yaml only; scope-check asks whether the early project belongs under agent-frameworks, memory-and-state, or templates-and-example-projects.
+
+  - id: ethicalml-awesome-agentic-engineering-resources
+    platform: github
+    kind: resource_matrix
+    url: https://github.com/EthicalML/awesome-agentic-engineering-resources
+    audience: agentic engineering article, paper, cookbook, playbook, benchmark, and reference-implementation readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_substantive_article_playbook_or_reference_implementation_exists
+    notes: CONTRIBUTING states the list is not for pure tools and routes open-source tools to sibling lists; do not submit a raw project link here.
+
+  - id: ethicalml-awesome-production-agentic-systems
+    platform: github
+    kind: production_agentic_systems_tool_list
+    url: https://github.com/EthicalML/awesome-production-agentic-systems
+    audience: production agentic system, observability, protocol, memory, security, prompt, and interface readers
+    fit: high
+    status: defer
+    next_action: revisit_after_rust_norion_reaches_500_github_stars_or_maintainer_invitation
+    notes: CONTRIBUTING requires notable tools with at least 500 GitHub stars; current rust-norion public signal is below that bar.
+
+  - id: ischca-awesome-agents-md
+    platform: github
+    kind: agents_md_resource_list
+    url: https://github.com/Ischca/awesome-agents-md
+    audience: AGENTS.md examples, templates, guides, and Codex-agent tooling readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_root_agents_md_or_dedicated_agents_md_article
+    notes: Repository is for AGENTS.md files and templates; rust-norion does not currently have a root AGENTS.md artifact to submit.
+
+  - id: tairov-awesome-agents-md
+    platform: github
+    kind: agents_md_resource_list
+    url: https://github.com/tairov/awesome-agents.md
+    audience: AGENTS.md resource readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_archived_repository
+    notes: Repository is archived; keep only as a discovery reference.
+
+  - id: pandastack-awesome-ai-agent-runtimes
+    platform: github
+    kind: ai_agent_runtime_list
+    url: https://github.com/pandastack-io/awesome-ai-agent-runtimes
+    audience: secure execution, browser automation, development environment, container, VM, and specialized runtime readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_clear_runtime_environment_or_sandbox_artifact
+    notes: Topic is close but the README focuses on execution environments and sandbox/runtime platforms; rust-norion is currently a control-layer prototype, not a packaged runtime environment.
+
+  - id: dz3ai-awesome-agent-runtimes
+    platform: github
+    kind: agent_runtime_landscape
+    url: https://github.com/dz3ai/awesome-agent-runtimes
+    audience: production-grade agent runtime, sandboxing, observability, orchestration, and deployment readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_runtime_packaging_and_production_grade_docs_exist
+    notes: README focuses on production-grade runtime environments; no clear contribution flow was found and rust-norion should not be presented as production-ready.
+
+  - id: mrtnrocks-awesome-agent-infrastructure
+    platform: github
+    kind: agent_infrastructure_list
+    url: https://github.com/mrtnrocks/awesome-agent-infrastructure
+    audience: agent-era compute, runtime, memory, security, search, wallet, and communication infrastructure readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_clear_infrastructure_product_or_service_category_fit_exists
+    notes: List is oriented toward agent-facing infrastructure services and tools; rust-norion is too early and lacks a clear category in the current README.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list
