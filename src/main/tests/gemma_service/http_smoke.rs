@@ -170,6 +170,128 @@ fn model_service_health_responds_while_generate_is_running() {
 }
 
 #[test]
+fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
+    let asset_dir = target_asset_dir("model-service-request-cancel");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "5".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service request cancel prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let first_health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&first_health).contains("\"ok\":true"));
+
+    let generate_bind = bind.clone();
+    let generate_handle = thread::spawn(move || {
+        service_http_request(
+            &generate_bind,
+            "POST",
+            "/v1/generate",
+            Some("{\"prompt\":\"hold generate for repair\",\"profile\":\"coding\"}"),
+        )
+    });
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        started.load(Ordering::SeqCst),
+        "generate request should enter the blocking backend"
+    );
+
+    let cancel = service_http_request(
+        &bind,
+        "POST",
+        "/v1/requests/cancel",
+        Some(
+            "{\"request_id\":2,\"reason\":\"operator_runtime_splice\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+        ),
+    );
+    let cancel_body = http_body(&cancel);
+    assert!(
+        cancel_body.contains("\"target_request_id\":2"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"target_active\":true"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"repair_factor_released\":true"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"repair_factor\":\"runtime_request_splice\""),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"retag_applied\":true"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"persistent_writes\":false"),
+        "{cancel_body}"
+    );
+
+    let health_after_cancel = service_http_request(&bind, "GET", "/health", None);
+    let health_after_cancel_body = http_body(&health_after_cancel);
+    assert!(
+        health_after_cancel_body.contains("\"cancel_requested\":true"),
+        "{health_after_cancel_body}"
+    );
+    assert!(
+        health_after_cancel_body.contains("\"retag_label\":\"repair_factor:runtime_splice\""),
+        "{health_after_cancel_body}"
+    );
+
+    release.store(true, Ordering::SeqCst);
+    let generate = generate_handle.join().unwrap();
+    let generate_body = http_body(&generate);
+    assert!(
+        generate_body.contains("request cancelled by runtime_request_splice"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"persistent_writes\":false"),
+        "{generate_body}"
+    );
+
+    let final_health = service_http_request(&bind, "GET", "/health", None);
+    let final_health_body = http_body(&final_health);
+    assert!(
+        final_health_body.contains("\"active_engine_requests\":0"),
+        "{final_health_body}"
+    );
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_experience_hygiene_quarantine_is_explicit_apply_only() {
     let asset_dir = target_asset_dir("model-service-experience-hygiene");
     fs::create_dir_all(&asset_dir).unwrap();

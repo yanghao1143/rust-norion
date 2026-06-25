@@ -4983,6 +4983,11 @@ impl MemoryServiceDryRun {
             self.plan.read_only.rebuild.clean_gist_repair_summary_line(),
             self.plan.read_only.quality_gate.summary_line(),
             self.plan.read_only.repair.summary_line(),
+            self.plan
+                .read_only
+                .repair
+                .genome_repair_factor_plan()
+                .summary_line(),
             self.plan.read_only.index.summary_line(),
             self.plan.read_only.context.summary_line(),
             context_rot_risk_summary_line(&self.summary),
@@ -8257,6 +8262,7 @@ mod tests {
         assert!(evidence.has_line_prefix("memory_hygiene_work_queue "));
         assert!(evidence.has_line_prefix("memory_hygiene_dispatch_pressure "));
         assert!(evidence.has_line_prefix("context_rot_risk "));
+        assert!(evidence.has_line_prefix("genome_repair_factor_plan "));
         assert_eq!(evidence.memory_hygiene_dispatch_pressure_rank(), 0);
         assert_eq!(
             evidence.memory_hygiene_dispatch_pressure_priority_codes(),
@@ -8285,7 +8291,7 @@ mod tests {
         assert_eq!(evidence.detail_codes(), Vec::<String>::new());
         assert_eq!(
             evidence.summary_line(),
-            "memory_startup_evidence complete=true review=false approved_phases=2 lines=66 missing_required=0 projection_contracts=1 projection_contract_manifests=1 projection_contract_manifest_gap=0 missing_prefixes=none missing_codes=none context_rot_risks=0 context_rot_risk_reason_codes=none context_rot_blocker_reason_codes=none context_rot_risk_detail_codes=none migration_guard_codes=none migration_detail_codes=none kvswap_boundary_issues=0 kvswap_boundary_reason_codes=none kvswap_boundary_detail_codes=none status_codes=complete|phases_approved|review_clear detail_codes=none"
+            "memory_startup_evidence complete=true review=false approved_phases=2 lines=67 missing_required=0 projection_contracts=1 projection_contract_manifests=1 projection_contract_manifest_gap=0 missing_prefixes=none missing_codes=none context_rot_risks=0 context_rot_risk_reason_codes=none context_rot_blocker_reason_codes=none context_rot_risk_detail_codes=none migration_guard_codes=none migration_detail_codes=none kvswap_boundary_issues=0 kvswap_boundary_reason_codes=none kvswap_boundary_detail_codes=none status_codes=complete|phases_approved|review_clear detail_codes=none"
         );
     }
 

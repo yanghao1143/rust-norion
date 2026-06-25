@@ -119,6 +119,42 @@ pub struct TaskAwareHierarchyAdjustmentReport {
     pub reason_codes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HierarchyMutationKind {
+    IncreaseGlobal,
+    IncreaseLocal,
+    IncreaseFusion,
+    Stabilize,
+    RepairRequired,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskAwareHierarchyMutationRecord {
+    pub sequence: u64,
+    pub profile: TaskProfile,
+    pub kind: HierarchyMutationKind,
+    pub previous: HierarchyWeights,
+    pub target: HierarchyWeights,
+    pub adjusted: HierarchyWeights,
+    pub observations_before: u64,
+    pub observations_after: u64,
+    pub can_commit: bool,
+    pub requires_repair_first: bool,
+    pub committed: bool,
+    pub reason_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TaskAwareHierarchyMutationPlan {
+    pub records: Vec<TaskAwareHierarchyMutationRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskAwareHierarchyMutationHistory {
+    pub records: Vec<TaskAwareHierarchyMutationRecord>,
+    next_sequence: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TaskAwareHierarchyAdjustmentPolicy {
     weights: ProfileHierarchyWeights,
@@ -589,6 +625,277 @@ impl TaskAwareHierarchyAdjustmentReport {
     pub fn adjustment_shape_is_clean(&self) -> bool {
         self.adjustment_problem_component_count() == 0 && self.adjustment_accounting_is_consistent()
     }
+
+    pub fn mutation_kind(&self) -> HierarchyMutationKind {
+        if self.requires_repair_first {
+            return HierarchyMutationKind::RepairRequired;
+        }
+        if hierarchy_weights_close(self.previous, self.adjusted) {
+            return HierarchyMutationKind::Stabilize;
+        }
+
+        let global_delta = self.adjusted.global - self.previous.global;
+        let local_delta = self.adjusted.local - self.previous.local;
+        let fusion_delta = self.adjusted.fusion - self.previous.fusion;
+        let max_delta = global_delta.max(local_delta).max(fusion_delta);
+
+        if max_delta <= 0.0001 {
+            HierarchyMutationKind::Stabilize
+        } else if float_close(global_delta, max_delta) {
+            HierarchyMutationKind::IncreaseGlobal
+        } else if float_close(local_delta, max_delta) {
+            HierarchyMutationKind::IncreaseLocal
+        } else {
+            HierarchyMutationKind::IncreaseFusion
+        }
+    }
+}
+
+impl HierarchyMutationKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::IncreaseGlobal => "increase_global",
+            Self::IncreaseLocal => "increase_local",
+            Self::IncreaseFusion => "increase_fusion",
+            Self::Stabilize => "stabilize",
+            Self::RepairRequired => "repair_required",
+        }
+    }
+}
+
+impl TaskAwareHierarchyMutationRecord {
+    pub fn from_report(
+        sequence: u64,
+        report: &TaskAwareHierarchyAdjustmentReport,
+        committed: bool,
+    ) -> Self {
+        Self {
+            sequence,
+            profile: report.profile,
+            kind: report.mutation_kind(),
+            previous: report.previous,
+            target: report.target,
+            adjusted: report.adjusted,
+            observations_before: report.observations_before,
+            observations_after: report.observations_after,
+            can_commit: report.can_commit,
+            requires_repair_first: report.requires_repair_first,
+            committed: committed && report.can_commit,
+            reason_codes: report.reason_codes.clone(),
+        }
+    }
+
+    pub fn detail_code(&self) -> String {
+        format!(
+            "{}:{}:{}:{}",
+            self.sequence,
+            self.profile.as_str(),
+            self.kind.as_str(),
+            if self.committed {
+                "committed"
+            } else {
+                "preview"
+            }
+        )
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "task_aware_hierarchy_mutation sequence={} profile={} kind={} can_commit={} repair_first={} committed={} observations_before={} observations_after={} reason_codes={} detail_code={}",
+            self.sequence,
+            self.profile.as_str(),
+            self.kind.as_str(),
+            self.can_commit,
+            self.requires_repair_first,
+            self.committed,
+            self.observations_before,
+            self.observations_after,
+            join_codes(self.reason_codes.clone()),
+            self.detail_code(),
+        )
+    }
+}
+
+impl TaskAwareHierarchyMutationPlan {
+    pub fn from_reports(reports: &[TaskAwareHierarchyAdjustmentReport]) -> Self {
+        let records = reports
+            .iter()
+            .enumerate()
+            .map(|(index, report)| {
+                TaskAwareHierarchyMutationRecord::from_report(
+                    index.saturating_add(1) as u64,
+                    report,
+                    false,
+                )
+            })
+            .collect();
+        Self { records }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+
+    pub fn persistent_writes_allowed(&self) -> bool {
+        false
+    }
+
+    pub fn commit_ready_count(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.can_commit && !record.requires_repair_first)
+            .count()
+    }
+
+    pub fn repair_required_count(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.requires_repair_first)
+            .count()
+    }
+
+    pub fn profile_codes(&self) -> Vec<String> {
+        self.records
+            .iter()
+            .map(|record| record.profile.as_str().to_owned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn mutation_kind_codes(&self) -> Vec<String> {
+        self.records
+            .iter()
+            .map(|record| record.kind.as_str().to_owned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        self.records
+            .iter()
+            .flat_map(|record| record.reason_codes.iter().cloned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn detail_codes(&self) -> Vec<String> {
+        self.records
+            .iter()
+            .map(TaskAwareHierarchyMutationRecord::detail_code)
+            .collect()
+    }
+
+    pub fn next_commit_candidate(&self) -> Option<&TaskAwareHierarchyMutationRecord> {
+        self.records
+            .iter()
+            .find(|record| record.can_commit && !record.requires_repair_first)
+    }
+
+    pub fn requires_operator_review(&self) -> bool {
+        !self.is_empty()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "task_aware_hierarchy_mutation_plan empty={} records={} commit_ready={} repair_required={} operator_review_required={} persistent_writes_allowed={} profiles={} mutation_kinds={} reason_codes={} detail_codes={} next_commit={}",
+            self.is_empty(),
+            self.records.len(),
+            self.commit_ready_count(),
+            self.repair_required_count(),
+            self.requires_operator_review(),
+            self.persistent_writes_allowed(),
+            join_codes(self.profile_codes()),
+            join_codes(self.mutation_kind_codes()),
+            join_codes(self.reason_codes()),
+            join_codes(self.detail_codes()),
+            self.next_commit_candidate()
+                .map(TaskAwareHierarchyMutationRecord::detail_code)
+                .unwrap_or_else(|| "none".to_owned()),
+        )
+    }
+}
+
+impl TaskAwareHierarchyMutationHistory {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn record_preview(
+        &mut self,
+        report: &TaskAwareHierarchyAdjustmentReport,
+    ) -> TaskAwareHierarchyMutationRecord {
+        self.record_report(report, false)
+    }
+
+    pub fn record_committed(
+        &mut self,
+        report: &TaskAwareHierarchyAdjustmentReport,
+    ) -> TaskAwareHierarchyMutationRecord {
+        self.record_report(report, true)
+    }
+
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+
+    pub fn committed_count(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.committed)
+            .count()
+    }
+
+    pub fn repair_required_count(&self) -> usize {
+        self.records
+            .iter()
+            .filter(|record| record.requires_repair_first)
+            .count()
+    }
+
+    pub fn detail_codes(&self) -> Vec<String> {
+        self.records
+            .iter()
+            .map(TaskAwareHierarchyMutationRecord::detail_code)
+            .collect()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "task_aware_hierarchy_mutation_history records={} committed={} repair_required={} persistent_writes_allowed=false detail_codes={}",
+            self.records.len(),
+            self.committed_count(),
+            self.repair_required_count(),
+            join_codes(self.detail_codes()),
+        )
+    }
+
+    fn record_report(
+        &mut self,
+        report: &TaskAwareHierarchyAdjustmentReport,
+        committed: bool,
+    ) -> TaskAwareHierarchyMutationRecord {
+        let record =
+            TaskAwareHierarchyMutationRecord::from_report(self.next_sequence, report, committed);
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        self.records.push(record.clone());
+        record
+    }
+}
+
+impl Default for TaskAwareHierarchyMutationHistory {
+    fn default() -> Self {
+        Self {
+            records: Vec::new(),
+            next_sequence: 1,
+        }
+    }
 }
 
 impl TaskAwareHierarchyAdjustmentPolicy {
@@ -618,6 +925,18 @@ impl TaskAwareHierarchyAdjustmentPolicy {
         feedback: HierarchyAdjustmentFeedback,
     ) -> TaskAwareHierarchyAdjustmentReport {
         self.plan_adjustment(feedback)
+    }
+
+    pub fn preview_mutation_plan(
+        &self,
+        feedback: &[HierarchyAdjustmentFeedback],
+    ) -> TaskAwareHierarchyMutationPlan {
+        let reports = feedback
+            .iter()
+            .copied()
+            .map(|feedback| self.plan_adjustment(feedback))
+            .collect::<Vec<_>>();
+        TaskAwareHierarchyMutationPlan::from_reports(&reports)
     }
 
     pub fn observe(
@@ -874,6 +1193,14 @@ fn hierarchy_weights_close(left: HierarchyWeights, right: HierarchyWeights) -> b
     float_close(left.global, right.global)
         && float_close(left.local, right.local)
         && float_close(left.fusion, right.fusion)
+}
+
+fn join_codes(codes: Vec<String>) -> String {
+    if codes.is_empty() {
+        "none".to_owned()
+    } else {
+        codes.join("|")
+    }
 }
 
 #[cfg(test)]
@@ -1231,5 +1558,118 @@ mod tests {
         assert_eq!(report.adjustment_problem_component_count(), 1);
         assert!(report.adjustment_accounting_is_consistent());
         assert!(!report.adjustment_shape_is_clean());
+    }
+
+    #[test]
+    fn mutation_plan_prioritizes_task_aware_hierarchy_candidates_without_writes() {
+        let policy = TaskAwareHierarchyAdjustmentPolicy::new();
+        let plan = policy.preview_mutation_plan(&[
+            HierarchyAdjustmentFeedback::new(TaskProfile::Coding, 0.31, 18.0, 0),
+            HierarchyAdjustmentFeedback::new(TaskProfile::LongDocument, 0.70, 8.0, 3),
+            HierarchyAdjustmentFeedback {
+                profile: TaskProfile::Writing,
+                quality: f32::NAN,
+                perplexity: 4.0,
+                contradiction_count: 0,
+            },
+        ]);
+
+        assert_eq!(plan.records.len(), 3);
+        assert_eq!(plan.commit_ready_count(), 2);
+        assert_eq!(plan.repair_required_count(), 1);
+        assert!(!plan.persistent_writes_allowed());
+        assert!(plan.requires_operator_review());
+        assert_eq!(plan.records[0].kind, HierarchyMutationKind::IncreaseLocal);
+        assert_eq!(plan.records[1].kind, HierarchyMutationKind::IncreaseFusion);
+        assert_eq!(plan.records[2].kind, HierarchyMutationKind::RepairRequired);
+        assert_eq!(
+            plan.profile_codes(),
+            vec![
+                "coding".to_owned(),
+                "long_document".to_owned(),
+                "writing".to_owned()
+            ]
+        );
+        assert_eq!(
+            plan.mutation_kind_codes(),
+            vec![
+                "increase_fusion".to_owned(),
+                "increase_local".to_owned(),
+                "repair_required".to_owned()
+            ]
+        );
+        assert_eq!(
+            plan.next_commit_candidate()
+                .map(TaskAwareHierarchyMutationRecord::detail_code),
+            Some("1:coding:increase_local:preview".to_owned())
+        );
+        assert!(plan.reason_codes().contains(&"quality_low".to_owned()));
+        assert!(
+            plan.reason_codes()
+                .contains(&"contradiction_pressure".to_owned())
+        );
+        assert!(plan.reason_codes().contains(&"feedback_invalid".to_owned()));
+        assert_eq!(
+            plan.summary_line(),
+            "task_aware_hierarchy_mutation_plan empty=false records=3 commit_ready=2 repair_required=1 operator_review_required=true persistent_writes_allowed=false profiles=coding|long_document|writing mutation_kinds=increase_fusion|increase_local|repair_required reason_codes=contradiction_pressure|feedback_invalid|profile:coding|profile:long_document|profile:writing|quality_low|quality_neutral|repair_first detail_codes=1:coding:increase_local:preview|2:long_document:increase_fusion:preview|3:writing:repair_required:preview next_commit=1:coding:increase_local:preview"
+        );
+    }
+
+    #[test]
+    fn mutation_history_records_preview_and_committed_reports() {
+        let mut policy = TaskAwareHierarchyAdjustmentPolicy::new();
+        let preview = policy.preview_adjustment(HierarchyAdjustmentFeedback::new(
+            TaskProfile::Coding,
+            0.30,
+            20.0,
+            0,
+        ));
+        let committed = policy.observe(HierarchyAdjustmentFeedback::new(
+            TaskProfile::LongDocument,
+            0.72,
+            7.0,
+            2,
+        ));
+        let repair = policy.preview_adjustment(HierarchyAdjustmentFeedback {
+            profile: TaskProfile::Writing,
+            quality: 0.4,
+            perplexity: f32::NEG_INFINITY,
+            contradiction_count: 0,
+        });
+        let mut history = TaskAwareHierarchyMutationHistory::new();
+
+        let preview_record = history.record_preview(&preview);
+        let committed_record = history.record_committed(&committed);
+        let repair_record = history.record_committed(&repair);
+
+        assert_eq!(preview_record.sequence, 1);
+        assert_eq!(preview_record.kind, HierarchyMutationKind::IncreaseLocal);
+        assert!(!preview_record.committed);
+        assert_eq!(committed_record.sequence, 2);
+        assert_eq!(committed_record.kind, HierarchyMutationKind::IncreaseFusion);
+        assert!(committed_record.committed);
+        assert_eq!(repair_record.sequence, 3);
+        assert_eq!(repair_record.kind, HierarchyMutationKind::RepairRequired);
+        assert!(!repair_record.committed);
+        assert_eq!(history.len(), 3);
+        assert_eq!(history.committed_count(), 1);
+        assert_eq!(history.repair_required_count(), 1);
+        assert_eq!(
+            history.detail_codes(),
+            vec![
+                "1:coding:increase_local:preview".to_owned(),
+                "2:long_document:increase_fusion:committed".to_owned(),
+                "3:writing:repair_required:preview".to_owned(),
+            ]
+        );
+        assert_eq!(
+            history.summary_line(),
+            "task_aware_hierarchy_mutation_history records=3 committed=1 repair_required=1 persistent_writes_allowed=false detail_codes=1:coding:increase_local:preview|2:long_document:increase_fusion:committed|3:writing:repair_required:preview"
+        );
+        assert!(
+            committed_record
+                .summary_line()
+                .contains("profile=long_document kind=increase_fusion")
+        );
     }
 }

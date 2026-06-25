@@ -90,11 +90,15 @@ fn active_requests_json(active_requests: &[ModelServiceActiveRequestTelemetry]) 
         .iter()
         .map(|request| {
             format!(
-                "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"prompt_preview\":{}}}",
+                "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"prompt_preview\":{},\"cancel_requested\":{},\"repair_factor\":{},\"retag_label\":{},\"cancel_reason\":{}}}",
                 request.request_id,
                 service_json_string(&request.endpoint),
                 request.elapsed_ms(),
-                service_json_string(&request.prompt_preview)
+                service_json_string(&request.prompt_preview),
+                request.cancel_requested,
+                option_str_service_json(request.repair_factor.as_deref()),
+                option_str_service_json(request.retag_label.as_deref()),
+                option_str_service_json(request.cancel_reason.as_deref())
             )
         })
         .collect::<Vec<_>>()
@@ -204,6 +208,29 @@ mod tests {
         assert!(body.contains("\"request_id\":42"));
         assert!(body.contains("\"endpoint\":\"chat-stream\""));
         assert!(body.contains("\"prompt_preview\":\"帮我用 Rust 写一个 for 循环\""));
+        assert!(body.contains("\"cancel_requested\":false"));
+        assert!(body.contains("\"repair_factor\":null"));
+    }
+
+    #[test]
+    fn health_json_reports_cancel_repair_factor_and_retag() {
+        let args = Args::parse(vec![]);
+        let state = ModelServiceServerState::default();
+        let _active = state.begin_engine_request(42, "business-cycle-stream", "stalled round");
+        state.request_cancel(
+            42,
+            "operator_runtime_splice",
+            "repair_factor:runtime_splice",
+        );
+
+        let body = model_service_health_json(43, &state, &args);
+
+        assert!(body.contains("\"active_engine_requests\":1"));
+        assert!(body.contains("\"request_id\":42"));
+        assert!(body.contains("\"cancel_requested\":true"));
+        assert!(body.contains("\"repair_factor\":\"runtime_request_splice\""));
+        assert!(body.contains("\"retag_label\":\"repair_factor:runtime_splice\""));
+        assert!(body.contains("\"cancel_reason\":\"operator_runtime_splice\""));
     }
 
     #[test]

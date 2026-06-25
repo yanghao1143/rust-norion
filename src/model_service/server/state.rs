@@ -8,6 +8,7 @@ use crate::model_service::types::TimedOutcome;
 pub(super) struct ModelServiceServerState {
     active_engine_requests: AtomicUsize,
     active_requests: Mutex<Vec<ModelServiceActiveRequestTelemetry>>,
+    cancellation_intents: Mutex<Vec<ModelServiceRequestCancellation>>,
     last_inference: Mutex<Option<ModelServiceLastInferenceTelemetry>>,
 }
 
@@ -16,6 +17,10 @@ pub(super) struct ModelServiceActiveRequestTelemetry {
     pub(super) request_id: usize,
     pub(super) endpoint: String,
     pub(super) prompt_preview: String,
+    pub(super) cancel_requested: bool,
+    pub(super) cancel_reason: Option<String>,
+    pub(super) repair_factor: Option<String>,
+    pub(super) retag_label: Option<String>,
     started: Instant,
 }
 
@@ -25,6 +30,10 @@ impl ModelServiceActiveRequestTelemetry {
             request_id,
             endpoint: endpoint.into(),
             prompt_preview: prompt_preview(prompt, 160),
+            cancel_requested: false,
+            cancel_reason: None,
+            repair_factor: None,
+            retag_label: None,
             started: Instant::now(),
         }
     }
@@ -85,6 +94,35 @@ impl ModelServiceLastInferenceTelemetry {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ModelServiceRequestCancellation {
+    pub(super) request_id: usize,
+    pub(super) endpoint: Option<String>,
+    pub(super) reason: String,
+    pub(super) repair_factor: String,
+    pub(super) retag_label: String,
+    pub(super) target_active: bool,
+}
+
+impl ModelServiceRequestCancellation {
+    fn new(
+        request_id: usize,
+        endpoint: Option<String>,
+        reason: impl Into<String>,
+        retag_label: impl Into<String>,
+        target_active: bool,
+    ) -> Self {
+        Self {
+            request_id,
+            endpoint,
+            reason: reason.into(),
+            repair_factor: "runtime_request_splice".to_owned(),
+            retag_label: retag_label.into(),
+            target_active,
+        }
+    }
+}
+
 impl ModelServiceServerState {
     pub(super) fn begin_engine_request(
         &self,
@@ -119,6 +157,59 @@ impl ModelServiceServerState {
             .unwrap_or_default()
     }
 
+    pub(super) fn request_cancel(
+        &self,
+        request_id: usize,
+        reason: impl Into<String>,
+        retag_label: impl Into<String>,
+    ) -> ModelServiceRequestCancellation {
+        let reason = reason.into();
+        let retag_label = retag_label.into();
+        let mut endpoint = None;
+        let mut target_active = false;
+        if let Ok(mut active_requests) = self.active_requests.lock()
+            && let Some(request) = active_requests
+                .iter_mut()
+                .find(|request| request.request_id == request_id)
+        {
+            endpoint = Some(request.endpoint.clone());
+            target_active = true;
+            request.cancel_requested = true;
+            request.cancel_reason = Some(reason.clone());
+            request.repair_factor = Some("runtime_request_splice".to_owned());
+            request.retag_label = Some(retag_label.clone());
+        }
+
+        let cancellation = ModelServiceRequestCancellation::new(
+            request_id,
+            endpoint,
+            reason,
+            retag_label,
+            target_active,
+        );
+        if target_active && let Ok(mut cancellation_intents) = self.cancellation_intents.lock() {
+            cancellation_intents.retain(|intent| intent.request_id != request_id);
+            cancellation_intents.push(cancellation.clone());
+        }
+        cancellation
+    }
+
+    pub(super) fn cancellation_intent(
+        &self,
+        request_id: usize,
+    ) -> Option<ModelServiceRequestCancellation> {
+        self.cancellation_intents.lock().ok().and_then(|intents| {
+            intents
+                .iter()
+                .find(|intent| intent.request_id == request_id)
+                .cloned()
+        })
+    }
+
+    pub(super) fn is_cancel_requested(&self, request_id: usize) -> bool {
+        self.cancellation_intent(request_id).is_some()
+    }
+
     pub(super) fn record_inference(&self, telemetry: ModelServiceLastInferenceTelemetry) {
         if let Ok(mut last_inference) = self.last_inference.lock() {
             *last_inference = Some(telemetry);
@@ -140,6 +231,9 @@ impl ModelServiceServerState {
             })
         {
             active_requests.remove(index);
+        }
+        if let Ok(mut cancellation_intents) = self.cancellation_intents.lock() {
+            cancellation_intents.retain(|intent| intent.request_id != request_id);
         }
     }
 }
@@ -176,4 +270,52 @@ fn prompt_preview(prompt: &str, max_chars: usize) -> String {
     let mut preview = text.chars().take(keep_chars).collect::<String>();
     preview.push_str("...");
     preview
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancellation_retags_active_request_until_guard_drops() {
+        let state = ModelServiceServerState::default();
+        let active = state.begin_engine_request(42, "business-cycle-stream", "repair me");
+
+        let cancellation =
+            state.request_cancel(42, "stalled_generation", "repair_factor:runtime_splice");
+
+        assert!(cancellation.target_active);
+        assert_eq!(
+            cancellation.endpoint.as_deref(),
+            Some("business-cycle-stream")
+        );
+        assert_eq!(cancellation.repair_factor, "runtime_request_splice");
+        assert!(state.is_cancel_requested(42));
+        let active_requests = state.active_requests();
+        assert_eq!(active_requests.len(), 1);
+        assert!(active_requests[0].cancel_requested);
+        assert_eq!(
+            active_requests[0].cancel_reason.as_deref(),
+            Some("stalled_generation")
+        );
+        assert_eq!(
+            active_requests[0].retag_label.as_deref(),
+            Some("repair_factor:runtime_splice")
+        );
+
+        drop(active);
+
+        assert!(!state.is_cancel_requested(42));
+        assert!(state.active_requests().is_empty());
+    }
+
+    #[test]
+    fn cancellation_for_inactive_request_is_not_held_for_future_id_reuse() {
+        let state = ModelServiceServerState::default();
+
+        let cancellation = state.request_cancel(7, "already_done", "repair_requested");
+
+        assert!(!cancellation.target_active);
+        assert!(!state.is_cancel_requested(7));
+    }
 }

@@ -12,6 +12,7 @@ mod model_pool;
 mod output;
 mod pool_dispatch;
 mod replay;
+mod request_control;
 mod rust_check;
 
 pub(crate) use business_cycle::ModelServiceBusinessCycleRequest;
@@ -33,4 +34,5 @@ pub(crate) use pool_dispatch::{
 };
 pub(crate) use replay::ModelServiceReplayRequest;
 pub(crate) use replay::ModelServiceSelfImproveRequest;
+pub(crate) use request_control::ModelServiceRequestCancelRequest;
 pub(crate) use rust_check::ModelServiceRustCheckRequest;

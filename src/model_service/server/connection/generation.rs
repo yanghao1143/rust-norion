@@ -104,6 +104,14 @@ pub(super) fn handle_generate<B: InferenceBackend>(
             return Err(error);
         }
     };
+    if state.is_cancel_requested(request_id) {
+        let message = cancellation_message(state, request_id);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id, endpoint, message,
+        ));
+        let body = "{\"ok\":false,\"error\":\"request cancelled by runtime_request_splice\",\"persistent_writes\":false}";
+        return write_http_json(stream, 409, "Conflict", body);
+    }
     annotate_model_service_business_case_for_timed(
         engine,
         &mut timed,
@@ -162,8 +170,16 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
 
     let mut token_count = 0_usize;
     let mut token_write_error = None;
+    let mut cancel_requested = false;
     let timed_result = {
         let mut on_token = |token: &DraftToken| {
+            if cancel_requested {
+                return;
+            }
+            if state.is_cancel_requested(request_id) {
+                cancel_requested = true;
+                return;
+            }
             token_count += 1;
             if token_write_error.is_none()
                 && let Err(error) = write_sse_event(stream, "delta", &token.text)
@@ -184,6 +200,17 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
     };
     if let Some(error) = token_write_error {
         return Err(error);
+    }
+    if cancel_requested || state.is_cancel_requested(request_id) {
+        let message = cancellation_message(state, request_id);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id,
+            endpoint,
+            message.clone(),
+        ));
+        write_sse_event(stream, "error", &message)?;
+        write_sse_event(stream, "done", "[DONE]")?;
+        return Ok(());
     }
 
     let mut timed = match timed_result {
@@ -258,4 +285,19 @@ fn option_usize_for_sse(value: Option<usize>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "backend-default".to_owned())
+}
+
+fn cancellation_message(state: &ModelServiceServerState, request_id: usize) -> String {
+    state
+        .cancellation_intent(request_id)
+        .map(|cancellation| {
+            format!(
+                "request cancelled by {}; repair_factor={} retag_label={} reason={}",
+                cancellation.repair_factor,
+                cancellation.repair_factor,
+                cancellation.retag_label,
+                cancellation.reason
+            )
+        })
+        .unwrap_or_else(|| "request cancelled by runtime_request_splice".to_owned())
 }
