@@ -122,6 +122,13 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-runtime-kv-weak-import-skip-device-profiles" if index + 1 < raw.len() => {
+            *parser.benchmark_min_runtime_kv_weak_import_skip_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
         "--benchmark-min-runtime-kv-segment-cases" if index + 1 < raw.len() => {
             *parser.benchmark_min_runtime_kv_segment_cases = Some(parse_usize(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;

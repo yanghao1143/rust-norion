@@ -18,6 +18,7 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub failures: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
     pub(super) kv_precision_devices: Vec<DeviceClass>,
+    pub(super) kv_weak_import_skip_devices: Vec<DeviceClass>,
     pub(super) kv_segment_devices: Vec<DeviceClass>,
 }
 
@@ -25,7 +26,7 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let diagnostics = &outcome.runtime_diagnostics;
         self.record_runtime_kv_segment_evidence(diagnostics, outcome.hardware_plan.device);
-        self.record_weak_runtime_kv_import_skip_evidence(diagnostics);
+        self.record_weak_runtime_kv_import_skip_evidence(diagnostics, outcome.hardware_plan.device);
         let has_forward_signal = diagnostics.has_forward_signal();
         let has_device_execution_signal = diagnostics.has_device_execution_signal();
         let has_runtime_reported_device_execution_signal =
@@ -140,13 +141,18 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         push_unique_device(&mut self.kv_segment_devices, device);
     }
 
-    fn record_weak_runtime_kv_import_skip_evidence(&mut self, diagnostics: &RuntimeDiagnostics) {
+    fn record_weak_runtime_kv_import_skip_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
         if diagnostics.weak_runtime_kv_imports_skipped == 0 {
             return;
         }
 
         self.runtime_kv_weak_import_skip_cases += 1;
         self.weak_runtime_kv_imports_skipped += diagnostics.weak_runtime_kv_imports_skipped;
+        push_unique_device(&mut self.kv_weak_import_skip_devices, device);
     }
 
     pub fn device_profiles(&self) -> usize {
@@ -171,6 +177,14 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
 
     pub fn runtime_kv_precision_devices_csv(&self) -> String {
         devices_csv(self.kv_precision_devices.clone())
+    }
+
+    pub fn runtime_kv_weak_import_skip_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_weak_import_skip_devices)
+    }
+
+    pub fn runtime_kv_weak_import_skip_devices_csv(&self) -> String {
+        devices_csv(self.kv_weak_import_skip_devices.clone())
     }
 
     pub fn runtime_kv_segment_device_profiles(&self) -> usize {

@@ -174,6 +174,7 @@ impl ParseState {
             benchmark_min_runtime_kv_import_cases: None,
             benchmark_min_runtime_kv_weak_import_skip_cases: None,
             benchmark_min_weak_runtime_kv_imports_skipped: None,
+            benchmark_min_runtime_kv_weak_import_skip_device_profiles: None,
             benchmark_min_runtime_kv_segment_cases: None,
             benchmark_min_runtime_kv_segments_included: None,
             benchmark_max_runtime_kv_segments_rejected: None,

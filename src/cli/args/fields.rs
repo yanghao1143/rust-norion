@@ -174,6 +174,7 @@ pub(crate) struct Args {
     pub(crate) benchmark_min_runtime_kv_import_cases: Option<usize>,
     pub(crate) benchmark_min_runtime_kv_weak_import_skip_cases: Option<usize>,
     pub(crate) benchmark_min_weak_runtime_kv_imports_skipped: Option<usize>,
+    pub(crate) benchmark_min_runtime_kv_weak_import_skip_device_profiles: Option<usize>,
     pub(crate) benchmark_min_runtime_kv_segment_cases: Option<usize>,
     pub(crate) benchmark_min_runtime_kv_segments_included: Option<usize>,
     pub(crate) benchmark_max_runtime_kv_segments_rejected: Option<usize>,

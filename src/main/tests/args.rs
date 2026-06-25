@@ -467,6 +467,8 @@ fn parses_recursive_scheduler_flags() {
         "2".to_owned(),
         "--benchmark-min-weak-runtime-kv-imports-skipped".to_owned(),
         "5".to_owned(),
+        "--benchmark-min-runtime-kv-weak-import-skip-device-profiles".to_owned(),
+        "6".to_owned(),
         "--benchmark-min-runtime-kv-segment-cases".to_owned(),
         "4".to_owned(),
         "--benchmark-min-runtime-kv-segments-included".to_owned(),
@@ -1609,6 +1611,10 @@ fn parses_recursive_scheduler_flags() {
         Some(2)
     );
     assert_eq!(args.benchmark_min_weak_runtime_kv_imports_skipped, Some(5));
+    assert_eq!(
+        args.benchmark_min_runtime_kv_weak_import_skip_device_profiles,
+        Some(6)
+    );
     assert_eq!(args.benchmark_min_runtime_kv_segment_cases, Some(4));
     assert_eq!(args.benchmark_min_runtime_kv_segments_included, Some(4));
     assert_eq!(args.benchmark_max_runtime_kv_segments_rejected, Some(0));
@@ -1741,6 +1747,11 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_gate().min_weak_runtime_kv_imports_skipped,
         Some(5)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_runtime_kv_weak_import_skip_device_profiles,
+        Some(6)
     );
     assert_eq!(args.benchmark_gate().min_runtime_kv_segment_cases, Some(4));
     assert_eq!(

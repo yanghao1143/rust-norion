@@ -284,6 +284,7 @@ fn gate_reports_runtime_kv_segment_evidence() {
     gate.min_runtime_kv_segment_cases = Some(2);
     gate.min_runtime_kv_weak_import_skip_cases = Some(1);
     gate.min_weak_runtime_kv_imports_skipped = Some(1);
+    gate.min_runtime_kv_weak_import_skip_device_profiles = Some(2);
     gate.min_runtime_kv_segments_included = Some(1);
     gate.max_runtime_kv_segments_rejected = Some(1);
     gate.min_runtime_kv_segment_device_profiles = Some(2);
@@ -327,6 +328,10 @@ fn gate_reports_runtime_kv_segment_evidence() {
             failure.contains("weak_runtime_kv_imports_skipped 0 below minimum 1")
         })
     );
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_weak_import_skip_device_profiles 0 below minimum 2")
+            && failure.contains("devices=none")
+    }));
 
     let passing = BenchmarkSummary {
         runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
@@ -336,6 +341,7 @@ fn gate_reports_runtime_kv_segment_evidence() {
             runtime_kv_segments_skipped: 1,
             runtime_kv_segments_rejected: 1,
             weak_runtime_kv_imports_skipped: 5,
+            kv_weak_import_skip_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             kv_segment_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             ..BenchmarkRuntimeDeviceExecutionEvidence::default()
         },
@@ -364,9 +370,16 @@ fn gate_reports_runtime_kv_segment_evidence() {
     assert_eq!(passing.runtime_kv_segment_devices_csv(), "cpu+integrated");
     assert_eq!(passing.runtime_kv_weak_import_skip_cases(), 2);
     assert_eq!(passing.total_weak_runtime_kv_imports_skipped(), 5);
+    assert_eq!(passing.runtime_kv_weak_import_skip_device_profiles(), 2);
+    assert_eq!(
+        passing.runtime_kv_weak_import_skip_devices_csv(),
+        "cpu+integrated"
+    );
     let line = passing.summary_line();
     assert!(line.contains("runtime_kv_weak_import_skip_cases=2"));
     assert!(line.contains("weak_runtime_kv_imports_skipped=5"));
+    assert!(line.contains("runtime_kv_weak_import_skip_device_profiles=2"));
+    assert!(line.contains("runtime_kv_weak_import_skip_devices=cpu+integrated"));
     assert!(line.contains("runtime_kv_segment_cases=2"));
     assert!(line.contains("runtime_kv_segments_included=3"));
     assert!(line.contains("runtime_kv_segments_skipped=1"));

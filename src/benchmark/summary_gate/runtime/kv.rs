@@ -38,6 +38,23 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_kv_weak_import_skip_device_profiles) =
+        gate.min_runtime_kv_weak_import_skip_device_profiles
+    {
+        let runtime_kv_weak_import_skip_device_profiles =
+            summary.runtime_kv_weak_import_skip_device_profiles();
+        if runtime_kv_weak_import_skip_device_profiles
+            < min_runtime_kv_weak_import_skip_device_profiles
+        {
+            failures.push(format!(
+                "runtime_kv_weak_import_skip_device_profiles {} below minimum {} devices={}",
+                runtime_kv_weak_import_skip_device_profiles,
+                min_runtime_kv_weak_import_skip_device_profiles,
+                summary.runtime_kv_weak_import_skip_devices_csv()
+            ));
+        }
+    }
+
     if let Some(min_runtime_kv_segment_cases) = gate.min_runtime_kv_segment_cases {
         let runtime_kv_segment_cases = summary.runtime_kv_segment_cases();
         if runtime_kv_segment_cases < min_runtime_kv_segment_cases {
