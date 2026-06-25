@@ -32,6 +32,11 @@ same recruitment message everywhere.
 | Awesome AI Agent Governance | Submitted | Track https://github.com/agentrust-io/awesome-ai-governance/issues/28 |
 | Awesome AI Agents Security | Submitted | Track https://github.com/ProjectRecon/awesome-ai-agents-security/pull/61 |
 | Awesome Agentic AI Security | Submitted | Track https://github.com/natnew/Awesome-Agentic-AI-Security/issues/12 |
+| InftyAI Awesome LLMOps | Submitted | Track https://github.com/InftyAI/Awesome-LLMOps/issues/469 |
+| Slava Awesome AI Agents | Submitted | Track https://github.com/slavakurilyak/awesome-ai-agents/issues/319 |
+| Jim Awesome AI Agents | Submitted | Track https://github.com/jim-schwoebel/awesome_ai_agents/issues/359 |
+| Junhua Awesome LLM Agents | Submitted | Track https://github.com/junhua/awesome-llm-agents/issues/11 |
+| Awesome Agentic Patterns | Deferred | Only submit a neutral reusable pattern, not a project ad |
 | Awesome Rust AI Tools | Submitted | Track https://github.com/KatanoShingo/awesome-rust-ai-tools/issues/1 |
 | Awesome Rust AI | Submitted | Track https://github.com/dhilipsiva/awesome-rust-ai/issues/1 |
 | Awesome LLM Agents | Submitted | Track https://github.com/kaushikb11/awesome-llm-agents/issues/266 |

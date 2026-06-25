@@ -142,6 +142,60 @@ communities:
     next_action: wait_for_maintainer_feedback_then_open_metadata_pr_if_requested
     notes: Structured resource suggestion opened because the repository favours evidence-led entries over direct link-list PRs.
 
+  - id: inftyai-awesome-llmops
+    platform: github
+    kind: project_request
+    url: https://github.com/InftyAI/Awesome-LLMOps
+    audience: LLMOps tool, runtime, orchestration, and evolutionary framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/InftyAI/Awesome-LLMOps/issues/469
+    next_action: wait_for_project_request_workflow_or_maintainer_feedback
+    notes: Project Request opened for Orchestration / Evolutionary Framework because the repository recommends issue-based project requests.
+
+  - id: slavakurilyak-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/slavakurilyak/awesome-ai-agents
+    audience: AI agent project and framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/slavakurilyak/awesome-ai-agents/issues/319
+    next_action: wait_for_category_feedback_then_open_yaml_pr_if_requested
+    notes: Issue asked about fit for Safety Guardrails, Development Frameworks, Local Inference, or runtime-control categories before editing generated data files.
+
+  - id: jim-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/jim-schwoebel/awesome_ai_agents
+    audience: broad AI agent builders, tools, resources, and workflow readers
+    fit: high
+    status: submitted
+    proof: https://github.com/jim-schwoebel/awesome_ai_agents/issues/359
+    next_action: wait_for_maintainer_feedback_then_open_focused_pr_if_requested
+    notes: Contribution section allows issues for new resources; suggestion framed around Building Agents / Frameworks, Security, Tools, or Workflows.
+
+  - id: junhua-awesome-llm-agents
+    platform: github
+    kind: curated_research_project_list
+    url: https://github.com/junhua/awesome-llm-agents
+    audience: LLM agent researchers and open-source project readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/junhua/awesome-llm-agents/issues/11
+    next_action: wait_for_scope_feedback_then_open_small_pr_if_requested
+    notes: Issue opened cautiously because the list is paper-heavy; possible fit is Production Operations / LLMOps, Monitoring, Agent Core / Memory, or future Dev Tools.
+
+  - id: awesome-agentic-patterns
+    platform: github
+    kind: pattern_catalogue
+    url: https://github.com/nibzard/awesome-agentic-patterns
+    audience: agentic AI architecture and pattern readers
+    fit: high
+    status: defer
+    next_action: only_submit_a_non_promotional_reusable_pattern_with_neutral_references
+    notes: CONTRIBUTING is pattern-first and rejects product announcements; do not submit rust-norion as a project listing.
+
   - id: awesome-llm-agents
     platform: github
     kind: awesome_list

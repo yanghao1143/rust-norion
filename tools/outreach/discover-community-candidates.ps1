@@ -9,6 +9,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
+if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 } catch {
@@ -83,9 +86,16 @@ function Search-GitHubRepos {
 
     $rows = @()
     foreach ($query in $Queries) {
-        $json = gh search repos $query --limit $Limit --json fullName,description,stargazersCount,url,updatedAt 2>$null
+        $json = ""
+        try {
+            $json = gh search repos $query --limit $Limit --json fullName,description,stargazersCount,url,updatedAt 2>$null
+        } catch {
+            $global:LASTEXITCODE = 0
+            continue
+        }
         if ($LASTEXITCODE -ne 0) {
             $global:LASTEXITCODE = 0
+            continue
         }
         if ([string]::IsNullOrWhiteSpace($json)) {
             continue
