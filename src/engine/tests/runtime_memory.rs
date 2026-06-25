@@ -175,6 +175,63 @@ impl InferenceBackend for RuntimeKvMemoryFeedbackBackend {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct RuntimeKvImportFeedbackRuntime {
+    request_import_counts: Vec<usize>,
+}
+
+impl crate::runtime::ModelRuntime for RuntimeKvImportFeedbackRuntime {
+    fn metadata(&self) -> crate::runtime::RuntimeMetadata {
+        crate::runtime::RuntimeMetadata::new("runtime-kv-import-feedback", "test-bpe", 512, 3)
+            .with_kv_exchange(true, false)
+            .with_kv_limits(1, 0)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(4, 3, 1, 1, 512)
+    }
+
+    fn embed_text(&self, _text: &str) -> Result<crate::runtime::RuntimeEmbedding, RuntimeError> {
+        Ok(crate::runtime::RuntimeEmbedding::new(vec![1.0, 0.0, 0.0]))
+    }
+
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        Ok(blocks.len())
+    }
+
+    fn generate(
+        &mut self,
+        request: crate::runtime::RuntimeRequest,
+    ) -> Result<crate::runtime::RuntimeResponse, RuntimeError> {
+        let imported = request.imported_kv_blocks.len();
+        self.request_import_counts.push(imported);
+
+        let mut diagnostics = RuntimeDiagnostics {
+            model_id: Some("runtime-kv-import-feedback".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.34),
+            kv_influence: Some(0.62),
+            imported_kv_blocks: imported,
+            ..RuntimeDiagnostics::default()
+        };
+        if imported > 0 {
+            diagnostics.runtime_kv_segments_skipped = 3;
+            diagnostics.runtime_kv_segments_rejected = 2;
+        }
+
+        let mut response = crate::runtime::RuntimeResponse::new(
+            "Rust runtime KV reuse memory is certain but maybe unknown.",
+        )
+        .with_diagnostics(diagnostics);
+        response.tokens = vec![RuntimeToken {
+            text: "runtime".to_owned(),
+            logprob: Some(-0.1),
+            entropy: Some(0.2),
+        }];
+        Ok(response)
+    }
+}
+
 #[test]
 fn live_feedback_penalizes_low_yield_runtime_kv_memory() {
     let mut engine = NoironEngine::new();
@@ -200,6 +257,53 @@ fn live_feedback_penalizes_low_yield_runtime_kv_memory() {
     assert_eq!(outcome.memory_feedback.reinforced, 0);
     assert!(after < before);
     assert!(outcome.memory_feedback.penalty_amount >= 0.80);
+}
+
+#[test]
+fn low_yield_runtime_kv_feedback_prevents_next_runtime_import() {
+    let mut engine = NoironEngine::new();
+    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: reusable runtime kv",
+        vec![1.0, 0.0, 0.0],
+        0.62,
+    );
+    let before = memory_strength(&engine, runtime_kv_memory_id);
+    let mut backend = RuntimeBackend::new(RuntimeKvImportFeedbackRuntime::default());
+
+    let first = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+    let after_first = memory_strength(&engine, runtime_kv_memory_id);
+    let second = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+
+    assert_eq!(backend.runtime().request_import_counts, vec![1, 0]);
+    assert_eq!(first.runtime_diagnostics.imported_kv_blocks, 1);
+    assert_eq!(
+        first.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(0.0)
+    );
+    assert_eq!(first.memory_feedback.penalized, 1);
+    assert!(first.stored_memory_id.is_none());
+    assert!(after_first < before);
+    assert!(after_first < 0.45);
+    assert!(
+        second
+            .infini_memory_plan
+            .local_window()
+            .iter()
+            .any(|item| item.id == runtime_kv_memory_id)
+    );
+    assert_eq!(second.runtime_diagnostics.imported_kv_blocks, 0);
+    assert!(
+        second
+            .runtime_diagnostics
+            .runtime_kv_segment_yield()
+            .is_none()
+    );
 }
 
 #[test]
