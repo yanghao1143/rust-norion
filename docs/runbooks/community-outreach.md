@@ -254,6 +254,34 @@ same recruitment message everywhere.
 | Pingan AI Tools | Submitted | Track https://github.com/pingan8787/awesome-ai-tools/issues/161 |
 | MachineLearningZuu LLM Projects | Submitted | Track https://github.com/machinelearningzuu/awesome-llm-projects/issues/3 |
 | 0voice AI Tools | Submitted | Track https://github.com/0voice/awesome-ai-tools/issues/56 |
+| Awesome LLM Routing | Submitted | Track https://github.com/dstripelis/Awesome-LLM-Routing/issues/4 |
+| Awesome Claude Code | Submitted | Track https://github.com/hesreallyhim/awesome-claude-code/issues/2130 |
+| AI Agent Directory | Needs manual verification | Web/API submission appears to require access key; do not count without proof |
+| Awesome Agent Evaluator Skill | Deferred | Skill-specific surface; wait for concrete rust-norion evaluator skill |
+| Awesome Agentic Evaluation | Deferred | Wait for standalone eval artifact or benchmark resource |
+| Awesome Agent Evals | Deferred | Wait for concrete evaluation resource |
+| Toolkitly Awesome AI Tools | Submitted | Track https://github.com/ToolkitlyAI/awesome-ai-tools/issues/50 |
+| Anandesh Agentic Memory | Submitted | Track https://github.com/Anandesh-Sharma/awesome-agentic-memory/issues/1 |
+| Snseam Agent Memory | Submitted | Track https://github.com/Snseam/awesome-agent-memory/issues/9 |
+| Awesome Agent Observability | Submitted | Track https://github.com/danielt69/awesome-agent-observability/issues/5 |
+| Aliammari Awesome AI Tools | Submitted | Track https://github.com/aliammari1/awesome-ai-tools/issues/110 |
+| Tankvn Awesome AI Tools | Deferred | Requires 128+ GitHub stars before submission |
+| Tyson Awesome Vibe Coding | Deferred | Wait for direct user-facing coding tool or guide |
+| AI Boost AI for Science | Deferred | Wait for science-specific artifact |
+| OpenDataBox Agent Memory | Deferred | Paper-list surface; wait for paper or benchmark-backed artifact |
+| Tfatykhov Agent Memory | Deferred | Research-list surface; wait for article, paper, or benchmark |
+| Self-Evolving Agent Security | Deferred | Wait for security paper, benchmark, or focused defense artifact |
+| Wuchulan Awesome AI Tools | Submitted | Track https://github.com/wuchulan47/awesome-ai-tools/issues/10 |
+| Sajadh Awesome AI Tools | Submitted | Track https://github.com/sajadh76/awesome-AI-tools/issues/32 |
+| Ayush AI Developer Tools | Submitted | Track https://github.com/ayushrajdev9-cmyk/awesome-ai-developer-tools/issues/5 |
+| AI-Tools-Inc Awesome AI Tools | Deferred | Wait for recent maintenance or clearer developer-tool fit |
+| Jiji AIGC Tools | Deferred | Last observed update was 2023; wait for active maintenance |
+| Minou Awesome AI Tools | Deferred | Issues disabled and broad product-directory fit is weak |
+| Correia Awesome AI Tools | Deferred | Broad Altern-style product directory; do not force PR |
+| Cporter Awesome AI Tools | Deferred | Personal list; submit only by maintainer request |
+| DBPunk AI Developer Tools | Deferred | Last observed update was 2023; prefer active lists |
+| ChenIshi Multi-Agent Systems | Submitted | Track https://github.com/chenIshi/awesome-multi-agent-systems/issues/1 |
+| Pi-ixel Agent Workflow | Deferred | Concrete workflow product, not a community directory |
 | Eudk AI Tools | Deferred | Requires publicly usable now tools; wait for clearer release/tool surface |
 | JMcrafter AI Tools | Deferred | Self-submitted repos under 50 stars are treated as advertising |
 | AstreoX Agent Tools | Deferred | Requires 50+ GitHub stars for open-source projects |

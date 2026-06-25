@@ -2682,3 +2682,294 @@ communities:
     status: needs_manual_verification
     next_action: search Rust AI and Rust weekly communities manually because API timed out
     notes: Do not assume eligibility until community rules are inspected.
+
+  - id: dstripelis-awesome-llm-routing
+    platform: github
+    kind: awesome_list
+    url: https://github.com/dstripelis/Awesome-LLM-Routing
+    audience: LLM routing, model selection, and inference-control readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/dstripelis/Awesome-LLM-Routing/issues/4
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Scope-check issue opened for rust-norion's model-pool routing and runtime-control layer; not framed as a production LLM router.
+
+  - id: hesreallyhim-awesome-claude-code
+    platform: github
+    kind: resource_list
+    url: https://github.com/hesreallyhim/awesome-claude-code
+    audience: Claude Code workflow, resource, and adjacent agent-tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/hesreallyhim/awesome-claude-code/issues/2130
+    next_action: wait_for_scope_feedback_and_close_if_out_of_scope
+    notes: Resource issue explicitly disclosed that rust-norion is not Claude Code-specific and should be closed if the list only accepts direct Claude Code resources.
+
+  - id: ai-agent-hub-ai-agent-directory
+    platform: github
+    kind: agent_directory
+    url: https://github.com/AI-Agent-Hub/AI-Agent-Directory
+    audience: AI agent directory and discovery readers
+    fit: medium
+    status: needs_manual_verification
+    next_action: use_only_after_valid_web_or_api_submission_proof_exists
+    notes: Directory appears to use web/API submission with a DeepNLP access key; do not count a GitHub submission unless a valid issue, PR, web receipt, or API proof is available.
+
+  - id: beibeicsy-awesome-agent-evaluator-skill
+    platform: github
+    kind: skill_catalogue
+    url: https://github.com/BEIBEICSY/awesome-agent-evaluator-skill
+    audience: agent evaluator skill readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_rust_norion_ships_a_specific_evaluator_skill
+    notes: Repository focuses on a specific evaluator-skill surface; rust-norion is a broader runtime control-layer prototype.
+
+  - id: pauldebdeep9-awesome-agentic-evaluation
+    platform: github
+    kind: evaluation_resource_list
+    url: https://github.com/pauldebdeep9/awesome-agentic-evaluation
+    audience: agentic evaluation, benchmark, tracing, and regression workflow readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_standalone_eval_artifact_or_benchmark_resource_exists
+    notes: CONTRIBUTING scope is agentic evaluation; current rust-norion evidence is not yet a standalone evaluation tool or benchmark package.
+
+  - id: genai-io-awesome-agent-evals
+    platform: github
+    kind: evaluation_resource_list
+    url: https://github.com/genai-io/awesome-agent-evals
+    audience: agent evaluation framework and benchmark readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_concrete_eval_resource
+    notes: Contribution guidance excludes generic agent frameworks and marketing pages; wait for a concrete evaluation artifact.
+
+  - id: toolkitly-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/ToolkitlyAI/awesome-ai-tools
+    audience: AI tools, open-source AI agent runtime, infrastructure, and developer-tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ToolkitlyAI/awesome-ai-tools/issues/50
+    next_action: wait_for_maintainer_feedback_then_open_category_pr_if_requested
+    notes: Issue suggested the existing Open Source AI Agent Runtime Environment category and used the repository's short table format; framed as early Rust runtime-control work.
+
+  - id: anandesh-awesome-agentic-memory
+    platform: github
+    kind: memory_framework_catalogue
+    url: https://github.com/Anandesh-Sharma/awesome-agentic-memory
+    audience: LLM agent memory framework, benchmark, taxonomy, and deep-dive readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Anandesh-Sharma/awesome-agentic-memory/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check issue asked whether rust-norion's memory admission, recall gates, and evidence surfaces fit framework-native or portable memory categories.
+
+  - id: snseam-awesome-agent-memory
+    platform: github
+    kind: evidence_base
+    url: https://github.com/Snseam/awesome-agent-memory
+    audience: long-term agent memory evidence, products, benchmarks, and architecture readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Snseam/awesome-agent-memory/issues/9
+    next_action: wait_for_scope_feedback_and_do_not_open_product_note_unless_invited
+    notes: Repository is evidence/product-note oriented; issue explicitly asked whether rust-norion is too broad and avoided claiming benchmark-backed memory-product status.
+
+  - id: danielt69-awesome-agent-observability
+    platform: github
+    kind: observability_resource_list
+    url: https://github.com/danielt69/awesome-agent-observability
+    audience: LLM agent observability, evaluation, tracing, guardrail, and runtime-safety readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/danielt69/awesome-agent-observability/issues/5
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: CONTRIBUTING excludes generic agent frameworks, so the issue framed only runtime evidence gates, audit/status surfaces, rollback, and model-pool policy checks.
+
+  - id: aliammari-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/aliammari1/awesome-ai-tools
+    audience: AI tools, infrastructure, MLOps, and AI-agent automation readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/aliammari1/awesome-ai-tools/issues/110
+    next_action: wait_for_category_feedback_before_any_readme_pr
+    notes: Issue suggested AI Infrastructure and MLOps or AI Agents and Automation categories with explicit early-prototype and non-end-user-SaaS caveats.
+
+  - id: tankvn-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/tankvn/awesome-ai-tools
+    audience: broad AI tools readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_rust_norion_meets_the_128_star_gate_or_maintainer_invites_it
+    notes: CONTRIBUTING requires over 128 GitHub stars and rejects low-effort self-promotion; current project should not be submitted there yet.
+
+  - id: tysoncung-awesome-vibe-coding
+    platform: github
+    kind: coding_tools_list
+    url: https://github.com/tysoncung/awesome-vibe-coding
+    audience: AI-assisted coding tool and autonomous coding agent readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_direct_user_facing_coding_tool_or_guide
+    notes: CONTRIBUTING accepts AI coding tools and resources; rust-norion is not currently a user-facing coding assistant or vibe-coding product.
+
+  - id: ai-boost-awesome-ai-for-science
+    platform: github
+    kind: science_resource_list
+    url: https://github.com/ai-boost/awesome-ai-for-science
+    audience: AI for scientific research workflow readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_science_specific_artifact_or_research_workflow_evidence_exists
+    notes: High-star and active list, but scope is AI for scientific research; rust-norion lacks science-domain evidence.
+
+  - id: opendatabox-awesome-agent-memory
+    platform: github
+    kind: memory_paper_list
+    url: https://github.com/OpenDataBox/awesome-agent-memory
+    audience: agent memory paper readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_paper_or_benchmark_backed_memory_artifact_exists
+    notes: Repository describes itself as a paper list along memory-system axes; avoid submitting a raw project link.
+
+  - id: tfatykhov-awesome-agent-memory
+    platform: github
+    kind: memory_research_list
+    url: https://github.com/tfatykhov/awesome-agent-memory
+    audience: LLM agent memory research readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_memory_research_article_paper_or_benchmark_exists
+    notes: Research-focused memory list; current rust-norion evidence is a project prototype rather than a research entry.
+
+  - id: xinhao-self-evolving-agent-security
+    platform: github
+    kind: security_paper_list
+    url: https://github.com/Xinhao-Deng/awesome-self-evolving-agent-security
+    audience: self-evolving agent security, privacy, defense, and benchmark readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_security_paper_benchmark_or_focused_defense_artifact_exists
+    notes: Scope is security, privacy, evaluation, and defense research on self-evolving agents; wait for a concrete security artifact instead of posting a project ad.
+
+  - id: wuchulan47-awesome-ai-tools
+    platform: github
+    kind: chinese_ai_tools_directory
+    url: https://github.com/wuchulan47/awesome-ai-tools
+    audience: Chinese open-source AI tools, agents, LLM apps, and developer-framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/wuchulan47/awesome-ai-tools/issues/10
+    next_action: wait_for_maintainer_feedback_before_any_readme_pr
+    notes: Chinese issue mapped rust-norion to AI frameworks/multi-agent platforms, memory-enabled LLM apps, and developer framework categories with explicit prototype caveats.
+
+  - id: sajadh76-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/sajadh76/awesome-AI-tools
+    audience: AI tools, automation, programming, research, and workflow readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/sajadh76/awesome-AI-tools/issues/32
+    next_action: wait_for_category_feedback_before_pr
+    notes: Issue used the repository's requested tool-name, URL, description, and category format; suggested Programming, Automation, or AI Agent Runtime / AI Infrastructure.
+
+  - id: ayushrajdev9-awesome-ai-developer-tools
+    platform: github
+    kind: developer_tools_list
+    url: https://github.com/ayushrajdev9-cmyk/awesome-ai-developer-tools
+    audience: AI developer tools, agent frameworks, observability, local AI, and RAG readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ayushrajdev9-cmyk/awesome-ai-developer-tools/issues/5
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue asked about AI Agents and Frameworks, Monitoring and Observability, or Local AI Tools categories and disclosed early prototype status.
+
+  - id: aitoolsinc-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/AI-Tools-Inc/awesome-ai-tools
+    audience: broad AI workflow tool readers
+    fit: low
+    status: defer
+    next_action: wait_for_recent_maintenance_or_clearer_developer_tool_fit
+    notes: Last observed push was 2024-08-25 and the list is broad workflow/productivity oriented; do not prioritize without clearer contribution activity.
+
+  - id: jiji262-awesome-aigc-tools
+    platform: github
+    kind: aigc_tools_directory
+    url: https://github.com/jiji262/awesome-AIGC-tools
+    audience: AIGC tool readers
+    fit: low
+    status: defer
+    next_action: wait_for_recent_maintenance_or_specific_aigc_artifact
+    notes: Last observed push was 2023-11-03 and the topic is AIGC tooling rather than Rust AI runtime control.
+
+  - id: minouou-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/minouou/awesome-ai-tools
+    audience: broad AI tool and Altern directory readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_without_issue_access_or_direct_pr_plan
+    notes: Issues are disabled and the repository points contributors toward PRs and Altern listing; avoid forcing a broad product-directory PR.
+
+  - id: correia-awesome-ai-tools
+    platform: github
+    kind: ai_tools_directory
+    url: https://github.com/Correia-jpv/fucking-awesome-ai-tools
+    audience: broad AI tool and Altern directory readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_without_clear_maintainer_interest_or_product_directory_fit
+    notes: Appears derived from the Altern-style broad AI tools list with PR-oriented contribution text; rust-norion is not an end-user AI product listing.
+
+  - id: cporter-awesome-ai-tools
+    platform: github
+    kind: personal_tools_list
+    url: https://github.com/cporter202/awesome-ai-tools
+    audience: personal AI tools for building, automation, monetization, and workflows
+    fit: low
+    status: defer
+    next_action: submit_only_if_maintainer_requests_runtime_control_or_developer_infrastructure_tools
+    notes: README says it is a personal list of tools the maintainer uses; a self-submitted runtime-control prototype would be a weak fit.
+
+  - id: dbpunk-awesome-ai-developer-tools
+    platform: github
+    kind: developer_tools_list
+    url: https://github.com/dbpunk-labs/awesome-ai-developer-tools
+    audience: AI developer tool readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_recent_maintenance_resumes
+    notes: Last observed push was 2023-10-19; prefer active developer-tool lists.
+
+  - id: chenishi-awesome-multi-agent-systems
+    platform: github
+    kind: multi_agent_systems_list
+    url: https://github.com/chenIshi/awesome-multi-agent-systems
+    audience: multi-agent systems, coordination, topology, observability, and system-level behavior readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/chenIshi/awesome-multi-agent-systems/issues/1
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Scope-check issue framed rust-norion's agent team planning, handoff aggregation, cross-window evidence exchange, and trust-state checks as a possible MAS architecture contribution.
+
+  - id: pi-ixel-awesome-agent-workflow
+    platform: github
+    kind: workflow_product
+    url: https://github.com/pi-ixel/Awesome-Agent-Workflow
+    audience: Chinese AI-agent software development workflow users
+    fit: low
+    status: defer
+    next_action: do_not_submit_project_ad_to_a_specific_workflow_product_repository
+    notes: Repository is a concrete AI-agent workflow system rather than a community directory; do not submit rust-norion as a generic resource.
