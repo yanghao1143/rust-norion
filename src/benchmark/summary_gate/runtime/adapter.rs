@@ -39,6 +39,33 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_adapter_stream_trace_cases) =
+        gate.min_runtime_adapter_stream_trace_cases
+    {
+        let runtime_adapter_stream_trace_cases = summary.runtime_adapter_stream_trace_cases();
+        if runtime_adapter_stream_trace_cases < min_runtime_adapter_stream_trace_cases {
+            failures.push(format!(
+                "runtime_adapter_stream_trace_cases {} below minimum {}",
+                runtime_adapter_stream_trace_cases, min_runtime_adapter_stream_trace_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_adapter_stream_gate_summary_cases) =
+        gate.min_runtime_adapter_stream_gate_summary_cases
+    {
+        let runtime_adapter_stream_gate_summary_cases =
+            summary.runtime_adapter_stream_gate_summary_cases();
+        if runtime_adapter_stream_gate_summary_cases < min_runtime_adapter_stream_gate_summary_cases
+        {
+            failures.push(format!(
+                "runtime_adapter_stream_gate_summary_cases {} below minimum {}",
+                runtime_adapter_stream_gate_summary_cases,
+                min_runtime_adapter_stream_gate_summary_cases
+            ));
+        }
+    }
+
     if let Some(min_runtime_adapter_observations) = gate.min_runtime_adapter_observations {
         let runtime_adapter_observations = summary.total_runtime_adapter_observations();
         if runtime_adapter_observations < min_runtime_adapter_observations {

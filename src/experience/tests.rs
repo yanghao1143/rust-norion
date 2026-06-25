@@ -3131,6 +3131,8 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
         .with_device_execution("cpu", "cpu-vector", "cpu-portable", "tiered-disk")
         .with_kv_precision(8, 4);
     diagnostics.adapter_cache_mode = Some("genome_filtered".to_owned());
+    diagnostics.adapter_stream_trace_id = Some("trace-runtime-38".to_owned());
+    diagnostics.adapter_stream_gate_summary_digest = Some("fnv64:0123456789abcdef".to_owned());
     diagnostics.runtime_kv_segments_included = 2;
     diagnostics.runtime_kv_segments_skipped = 1;
     diagnostics.runtime_kv_segments_rejected = 1;
@@ -3148,6 +3150,16 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
         decoded.adapter_cache_mode.as_deref(),
         Some("genome_filtered")
     );
+    assert_eq!(
+        decoded.adapter_stream_trace_id.as_deref(),
+        Some("trace-runtime-38")
+    );
+    assert_eq!(
+        decoded.adapter_stream_gate_summary_digest.as_deref(),
+        Some("fnv64:0123456789abcdef")
+    );
+    assert!(decoded.has_adapter_stream_trace_signal());
+    assert!(decoded.has_adapter_stream_gate_summary_signal());
     assert_eq!(decoded.runtime_kv_segments_included, 2);
     assert_eq!(decoded.runtime_kv_segments_skipped, 1);
     assert_eq!(decoded.runtime_kv_segments_rejected, 1);

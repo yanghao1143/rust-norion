@@ -262,6 +262,8 @@ impl Args {
                 benchmark_min_runtime_adapter_contract_cases: &mut state.benchmark_min_runtime_adapter_contract_cases,
                 benchmark_min_runtime_adapter_kinds: &mut state.benchmark_min_runtime_adapter_kinds,
                 benchmark_min_runtime_adapter_cache_modes: &mut state.benchmark_min_runtime_adapter_cache_modes,
+                benchmark_min_runtime_adapter_stream_trace_cases: &mut state.benchmark_min_runtime_adapter_stream_trace_cases,
+                benchmark_min_runtime_adapter_stream_gate_summary_cases: &mut state.benchmark_min_runtime_adapter_stream_gate_summary_cases,
                 benchmark_min_runtime_adapter_observations: &mut state.benchmark_min_runtime_adapter_observations,
                 benchmark_min_runtime_adapter_best_score: &mut state.benchmark_min_runtime_adapter_best_score,
                 benchmark_max_runtime_adapter_contract_violations: &mut state.benchmark_max_runtime_adapter_contract_violations,

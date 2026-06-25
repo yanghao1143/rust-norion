@@ -114,6 +114,13 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         selected_adapter: extract_json_string_field(payload, "selected_adapter"),
         adapter_cache_mode: extract_json_string_field(payload, "adapter_cache_mode")
             .and_then(RuntimeDiagnostics::normalize_adapter_cache_mode),
+        adapter_stream_trace_id: extract_json_string_field(payload, "adapter_stream_trace_id")
+            .and_then(RuntimeDiagnostics::normalize_adapter_stream_trace_id),
+        adapter_stream_gate_summary_digest: extract_json_string_field(
+            payload,
+            "adapter_stream_gate_summary_digest",
+        )
+        .and_then(RuntimeDiagnostics::normalize_adapter_stream_gate_summary_digest),
         device_profile: extract_json_string_field(payload, "device_profile"),
         primary_lane: extract_json_string_field(payload, "primary_lane"),
         fallback_lane: extract_json_string_field(payload, "fallback_lane"),

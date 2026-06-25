@@ -16,6 +16,8 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub runtime_kv_segments_rejected: usize,
     pub weak_runtime_kv_imports_skipped: usize,
     pub runtime_adapter_cache_mode_cases: usize,
+    pub runtime_adapter_stream_trace_cases: usize,
+    pub runtime_adapter_stream_gate_summary_cases: usize,
     pub failures: Vec<String>,
     pub(super) adapter_cache_modes: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
@@ -28,6 +30,7 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let diagnostics = &outcome.runtime_diagnostics;
         self.record_runtime_adapter_cache_mode_evidence(diagnostics);
+        self.record_runtime_adapter_stream_evidence(diagnostics);
         self.record_runtime_kv_segment_evidence(diagnostics, outcome.hardware_plan.device);
         self.record_weak_runtime_kv_import_skip_evidence(diagnostics, outcome.hardware_plan.device);
         let has_forward_signal = diagnostics.has_forward_signal();
@@ -152,6 +155,15 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
             "none".to_owned()
         } else {
             self.adapter_cache_modes.join("+")
+        }
+    }
+
+    fn record_runtime_adapter_stream_evidence(&mut self, diagnostics: &RuntimeDiagnostics) {
+        if diagnostics.has_adapter_stream_trace_signal() {
+            self.runtime_adapter_stream_trace_cases += 1;
+        }
+        if diagnostics.has_adapter_stream_gate_summary_signal() {
+            self.runtime_adapter_stream_gate_summary_cases += 1;
         }
     }
 

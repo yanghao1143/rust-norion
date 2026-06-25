@@ -480,6 +480,68 @@ fn gate_reports_runtime_adapter_cache_mode_coverage() {
 }
 
 #[test]
+fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
+    let summary = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_stream_trace_cases: 1,
+            runtime_adapter_stream_gate_summary_cases: 0,
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![baseline_benchmark_result(
+            "stream_trace_only",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )],
+        ..BenchmarkSummary::new()
+    };
+    let gate = BenchmarkGate {
+        min_runtime_adapter_stream_trace_cases: Some(2),
+        min_runtime_adapter_stream_gate_summary_cases: Some(1),
+        ..BenchmarkGate::default()
+    };
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.runtime_adapter_stream_trace_cases(), 1);
+    assert_eq!(summary.runtime_adapter_stream_gate_summary_cases(), 0);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_trace_cases 1 below minimum 2")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_gate_summary_cases 0 below minimum 1")
+    }));
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_trace_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_gate_summary_cases=0")
+    );
+
+    let passing = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_stream_trace_cases: 2,
+            runtime_adapter_stream_gate_summary_cases: 2,
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result("stream_a", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("stream_b", TaskProfile::Coding, DeviceClass::CpuOnly),
+        ],
+        ..BenchmarkSummary::new()
+    };
+    let passing_report = passing.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+    assert_eq!(passing.runtime_adapter_stream_trace_cases(), 2);
+    assert_eq!(passing.runtime_adapter_stream_gate_summary_cases(), 2);
+}
+
+#[test]
 fn gate_reports_missing_runtime_adapter_observations() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),

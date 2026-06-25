@@ -659,10 +659,13 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
             on_token(token)?;
         }
 
+        let gate_summary_digest = gate_summary_digest(&request.gate_summaries);
         let diagnostics = RuntimeDiagnostics {
             model_id: Some(self.metadata.model_id.clone()),
             selected_adapter: Some("portable-rust".to_owned()),
             adapter_cache_mode: Some(request.cache_mode.as_str().to_owned()),
+            adapter_stream_trace_id: Some(request.trace_id.clone()),
+            adapter_stream_gate_summary_digest: Some(gate_summary_digest.clone()),
             layer_count: self.architecture.layer_count,
             global_layers: 1,
             local_window_layers: 1,
@@ -705,7 +708,7 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
                     "trace_id={} mode={} gate_summary={}",
                     request.trace_id,
                     request.cache_mode.as_str(),
-                    gate_summary_digest(&request.gate_summaries)
+                    gate_summary_digest
                 ),
                 0.88,
             ),
@@ -727,7 +730,7 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
             stream_tokens,
             imported_kv_blocks,
             exported_kv_blocks,
-            gate_summary_digest: gate_summary_digest(&request.gate_summaries),
+            gate_summary_digest,
             read_only: true,
             write_allowed: false,
             applied: false,

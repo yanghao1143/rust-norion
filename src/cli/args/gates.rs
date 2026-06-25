@@ -429,6 +429,12 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_adapter_cache_modes {
             gate.min_runtime_adapter_cache_modes = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_trace_cases {
+            gate.min_runtime_adapter_stream_trace_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_gate_summary_cases {
+            gate.min_runtime_adapter_stream_gate_summary_cases = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_adapter_observations {
             gate.min_runtime_adapter_observations = Some(value);
         }

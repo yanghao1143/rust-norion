@@ -404,10 +404,12 @@ impl BenchmarkSummary {
             self.drift_rollbacks()
         );
         format!(
-            "{base} runtime_adapter_cache_mode_cases={} runtime_adapter_cache_modes={} runtime_adapter_cache_mode_values={}",
+            "{base} runtime_adapter_cache_mode_cases={} runtime_adapter_cache_modes={} runtime_adapter_cache_mode_values={} runtime_adapter_stream_trace_cases={} runtime_adapter_stream_gate_summary_cases={}",
             self.runtime_adapter_cache_mode_cases(),
             self.runtime_adapter_cache_modes(),
-            self.runtime_adapter_cache_modes_csv()
+            self.runtime_adapter_cache_modes_csv(),
+            self.runtime_adapter_stream_trace_cases(),
+            self.runtime_adapter_stream_gate_summary_cases()
         )
     }
 }

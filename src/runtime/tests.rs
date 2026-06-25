@@ -1771,6 +1771,8 @@ fn runtime_response_json_parses_tokens_and_trace() {
                 "model_id": "json-self-runtime",
                 "selected_adapter": "portable-rust",
                 "adapter_cache_mode": "chunked_cache",
+                "adapter_stream_trace_id": "trace-runtime-38",
+                "adapter_stream_gate_summary_digest": "fnv64:0123456789abcdef",
                 "layer_count": 24,
                 "hidden_size": 256,
                 "local_window_tokens": 4096,
@@ -1806,6 +1808,23 @@ fn runtime_response_json_parses_tokens_and_trace() {
     assert_eq!(
         response.diagnostics.adapter_cache_mode.as_deref(),
         Some("chunked_cache")
+    );
+    assert_eq!(
+        response.diagnostics.adapter_stream_trace_id.as_deref(),
+        Some("trace-runtime-38")
+    );
+    assert_eq!(
+        response
+            .diagnostics
+            .adapter_stream_gate_summary_digest
+            .as_deref(),
+        Some("fnv64:0123456789abcdef")
+    );
+    assert!(response.diagnostics.has_adapter_stream_trace_signal());
+    assert!(
+        response
+            .diagnostics
+            .has_adapter_stream_gate_summary_signal()
     );
     assert_eq!(response.diagnostics.layer_count, 24);
     assert_eq!(response.diagnostics.hidden_size, 256);

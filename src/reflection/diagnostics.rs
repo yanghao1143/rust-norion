@@ -3,6 +3,8 @@ pub struct RuntimeDiagnostics {
     pub model_id: Option<String>,
     pub selected_adapter: Option<String>,
     pub adapter_cache_mode: Option<String>,
+    pub adapter_stream_trace_id: Option<String>,
+    pub adapter_stream_gate_summary_digest: Option<String>,
     pub device_profile: Option<String>,
     pub primary_lane: Option<String>,
     pub fallback_lane: Option<String>,
@@ -43,6 +45,29 @@ impl RuntimeDiagnostics {
     pub fn normalize_adapter_cache_mode(value: impl AsRef<str>) -> Option<String> {
         let value = value.as_ref().trim();
         matches!(value, "no_cache" | "chunked_cache" | "genome_filtered").then(|| value.to_owned())
+    }
+
+    pub fn normalize_adapter_stream_trace_id(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        if value.is_empty()
+            || value.len() > 96
+            || !value
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '-' | '_' | '.'))
+        {
+            return None;
+        }
+        Some(value.to_owned())
+    }
+
+    pub fn normalize_adapter_stream_gate_summary_digest(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        let digest = value.strip_prefix("fnv64:")?;
+        if digest.len() == 16 && digest.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            Some(value.to_owned())
+        } else {
+            None
+        }
     }
 
     pub fn empty() -> Self {
@@ -96,6 +121,20 @@ impl RuntimeDiagnostics {
         self.has_device_execution_signal()
             && self.device_execution_source.as_deref()
                 == Some(Self::runtime_reported_device_execution_source())
+    }
+
+    pub fn has_adapter_stream_trace_signal(&self) -> bool {
+        self.adapter_cache_mode.is_some() && has_text(self.adapter_stream_trace_id.as_deref())
+    }
+
+    pub fn has_adapter_stream_gate_summary_signal(&self) -> bool {
+        self.adapter_cache_mode.is_some()
+            && self
+                .adapter_stream_gate_summary_digest
+                .as_deref()
+                .is_some_and(|value| {
+                    Self::normalize_adapter_stream_gate_summary_digest(value).is_some()
+                })
     }
 
     pub fn has_control_plane_filled_device_execution_signal(&self) -> bool {

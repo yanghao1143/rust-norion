@@ -301,6 +301,16 @@ impl BenchmarkSummary {
             .runtime_adapter_cache_modes_csv()
     }
 
+    pub fn runtime_adapter_stream_trace_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_trace_cases
+    }
+
+    pub fn runtime_adapter_stream_gate_summary_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_gate_summary_cases
+    }
+
     pub fn total_runtime_adapter_contract_violations(&self) -> usize {
         self.results
             .iter()

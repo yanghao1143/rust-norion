@@ -191,6 +191,8 @@ impl ParseState {
             benchmark_min_runtime_adapter_contract_cases: None,
             benchmark_min_runtime_adapter_kinds: None,
             benchmark_min_runtime_adapter_cache_modes: None,
+            benchmark_min_runtime_adapter_stream_trace_cases: None,
+            benchmark_min_runtime_adapter_stream_gate_summary_cases: None,
             benchmark_min_runtime_adapter_observations: None,
             benchmark_min_runtime_adapter_best_score: None,
             benchmark_max_runtime_adapter_contract_violations: None,

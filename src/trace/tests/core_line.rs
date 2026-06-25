@@ -54,6 +54,8 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"uncertainty_perplexity\":"));
     assert!(line.contains("\"runtime_diagnostics\":"));
     assert!(line.contains("\"adapter_cache_mode\":"));
+    assert!(line.contains("\"adapter_stream_trace_id\":"));
+    assert!(line.contains("\"adapter_stream_gate_summary_digest\":"));
     assert!(line.contains("\"hot_kv_precision_bits\":"));
     assert!(line.contains("\"cold_kv_precision_bits\":"));
     assert!(line.contains("\"has_kv_precision_signal\":"));

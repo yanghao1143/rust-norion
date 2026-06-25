@@ -501,6 +501,10 @@ fn parses_recursive_scheduler_flags() {
         "3".to_owned(),
         "--benchmark-min-runtime-adapter-cache-modes".to_owned(),
         "3".to_owned(),
+        "--benchmark-min-runtime-adapter-stream-trace-cases".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-runtime-adapter-stream-gate-summary-cases".to_owned(),
+        "2".to_owned(),
         "--benchmark-min-runtime-adapter-observations".to_owned(),
         "2".to_owned(),
         "--benchmark-min-runtime-adapter-best-score".to_owned(),
@@ -1649,6 +1653,14 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(args.benchmark_min_runtime_adapter_contract_cases, Some(4));
     assert_eq!(args.benchmark_min_runtime_adapter_kinds, Some(3));
     assert_eq!(args.benchmark_min_runtime_adapter_cache_modes, Some(3));
+    assert_eq!(
+        args.benchmark_min_runtime_adapter_stream_trace_cases,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_runtime_adapter_stream_gate_summary_cases,
+        Some(2)
+    );
     assert_eq!(args.benchmark_min_runtime_adapter_observations, Some(2));
     assert_eq!(args.benchmark_min_runtime_adapter_best_score, Some(0.25));
     assert_eq!(
@@ -1794,6 +1806,15 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_gate().min_runtime_adapter_cache_modes,
         Some(3)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_runtime_adapter_stream_trace_cases,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_runtime_adapter_stream_gate_summary_cases,
+        Some(2)
     );
     assert_eq!(
         args.benchmark_gate().min_runtime_adapter_observations,
