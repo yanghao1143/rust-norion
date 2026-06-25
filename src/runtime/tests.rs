@@ -1270,6 +1270,7 @@ fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
     assert_eq!(backend.runtime().imported_keys.len(), 1);
     assert_eq!(&backend.runtime().imported_keys[0][..3], &[0.7, 0.8, 0.9]);
     assert_eq!(backend.runtime().imported_keys[0].len(), 256);
+    assert_eq!(draft.runtime_diagnostics.weak_runtime_kv_imports_skipped, 1);
     assert!(draft.trace.iter().any(|step| {
         step.label == "runtime_kv_import_selection"
             && step
@@ -1775,6 +1776,7 @@ fn runtime_response_json_parses_tokens_and_trace() {
                 "forward_energy": 0.42,
                 "kv_influence": 0.18,
                 "imported_kv_blocks": 2,
+                "weak_runtime_kv_imports_skipped": 1,
                 "exported_kv_blocks": 3,
                 "runtime_kv_segments_included": 2,
                 "runtime_kv_segments_skipped": 1,
@@ -1806,6 +1808,7 @@ fn runtime_response_json_parses_tokens_and_trace() {
     assert_eq!(response.diagnostics.forward_energy, Some(0.42));
     assert_eq!(response.diagnostics.kv_influence, Some(0.18));
     assert_eq!(response.diagnostics.imported_kv_blocks, 2);
+    assert_eq!(response.diagnostics.weak_runtime_kv_imports_skipped, 1);
     assert_eq!(response.diagnostics.exported_kv_blocks, 3);
     assert_eq!(response.diagnostics.runtime_kv_segments_included, 2);
     assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 1);

@@ -115,6 +115,7 @@ pub struct ProcessRewardInput {
     pub stored_memory: bool,
     pub stored_gist_memories: usize,
     pub stored_runtime_kv_memories: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
     pub runtime_kv_segments_included: usize,
     pub runtime_kv_segments_skipped: usize,
     pub runtime_kv_segments_rejected: usize,

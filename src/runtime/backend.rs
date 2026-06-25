@@ -347,6 +347,7 @@ impl<R> RuntimeBackend<R> {
             diagnostics = diagnostics.clear_kv_precision();
         }
         diagnostics.imported_kv_blocks = imported_kv_blocks;
+        diagnostics.weak_runtime_kv_imports_skipped = weak_runtime_kv_skipped;
         diagnostics.exported_kv_blocks = exported_kv_blocks.len();
         if runtime_contract_violations.is_empty() {
             populate_runtime_kv_precision(&mut diagnostics, &runtime_metadata);

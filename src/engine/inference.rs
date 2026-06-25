@@ -315,6 +315,7 @@ impl NoironEngine {
             stored_memory: stored_memory_id.is_some(),
             stored_gist_memories: stored_gist_memory_ids.len(),
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            weak_runtime_kv_imports_skipped: runtime_diagnostics.weak_runtime_kv_imports_skipped,
             runtime_kv_segments_included: runtime_diagnostics.runtime_kv_segments_included,
             runtime_kv_segments_skipped: runtime_diagnostics.runtime_kv_segments_skipped,
             runtime_kv_segments_rejected: runtime_diagnostics.runtime_kv_segments_rejected,

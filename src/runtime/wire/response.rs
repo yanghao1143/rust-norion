@@ -131,6 +131,11 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         forward_energy: extract_json_finite_number_field(payload, "forward_energy"),
         kv_influence: extract_json_finite_number_field(payload, "kv_influence"),
         imported_kv_blocks: extract_json_usize_field(payload, "imported_kv_blocks").unwrap_or(0),
+        weak_runtime_kv_imports_skipped: extract_json_usize_field(
+            payload,
+            "weak_runtime_kv_imports_skipped",
+        )
+        .unwrap_or(0),
         exported_kv_blocks: extract_json_usize_field(payload, "exported_kv_blocks").unwrap_or(0),
         runtime_kv_segments_included: extract_json_usize_field(
             payload,

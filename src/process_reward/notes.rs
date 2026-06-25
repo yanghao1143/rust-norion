@@ -58,6 +58,12 @@ pub(super) fn reward_notes(
             input.stored_runtime_kv_memories
         ));
     }
+    if input.weak_runtime_kv_imports_skipped > 0 {
+        notes.push(format!(
+            "runtime_kv_import:weak_skipped={}",
+            input.weak_runtime_kv_imports_skipped
+        ));
+    }
     if input.runtime_kv_segment_count() > 0 {
         notes.push(format!(
             "runtime_kv_segments:included={}:skipped={}:rejected={}:total={}:yield={:.3}",
