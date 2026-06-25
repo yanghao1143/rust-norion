@@ -6,6 +6,8 @@ use crate::tiered_cache::MemoryTier;
 
 use super::types::RuntimeMetadata;
 
+const MIN_RUNTIME_KV_IMPORT_STRENGTH: f32 = 0.45;
+
 pub(super) fn runtime_kv_blocks_from_context(
     context: &GenerationContext<'_>,
     metadata: &RuntimeMetadata,
@@ -35,6 +37,7 @@ pub(super) fn runtime_kv_blocks_from_context(
     runtime_kv_import_candidates(context)
         .into_iter()
         .filter(|candidate| !candidate.vector.is_empty())
+        .filter(runtime_kv_candidate_has_import_signal)
         .filter(|memory| {
             context
                 .tier_plan
@@ -70,8 +73,10 @@ pub(super) fn runtime_kv_blocks_from_context(
 #[derive(Debug, Clone, Copy)]
 struct RuntimeKvImportCandidate<'a> {
     id: u64,
+    key: &'a str,
     vector: &'a [f32],
     weight: f32,
+    source_strength: Option<f32>,
 }
 
 fn runtime_kv_import_candidates<'a>(
@@ -87,7 +92,7 @@ fn runtime_kv_import_candidates<'a>(
             .local_window()
             .iter()
             .chain(context.infini_memory_plan.global_memory())
-            .map(candidate_from_infini_item)
+            .map(|item| candidate_from_infini_item(item, active_memory_strength(context, item.id)))
             .collect();
     }
 
@@ -96,18 +101,42 @@ fn runtime_kv_import_candidates<'a>(
         .iter()
         .map(|memory| RuntimeKvImportCandidate {
             id: memory.id,
+            key: &memory.key,
             vector: &memory.vector,
             weight: memory.strength,
+            source_strength: Some(memory.strength),
         })
         .collect()
 }
 
-fn candidate_from_infini_item(item: &InfiniMemoryItem) -> RuntimeKvImportCandidate<'_> {
+fn candidate_from_infini_item(
+    item: &InfiniMemoryItem,
+    source_strength: Option<f32>,
+) -> RuntimeKvImportCandidate<'_> {
     RuntimeKvImportCandidate {
         id: item.id,
+        key: &item.key,
         vector: &item.vector,
         weight: item.score.max(0.05),
+        source_strength,
     }
+}
+
+fn active_memory_strength(context: &GenerationContext<'_>, id: u64) -> Option<f32> {
+    context
+        .memories
+        .iter()
+        .find(|memory| memory.id == id)
+        .map(|memory| memory.strength)
+}
+
+fn runtime_kv_candidate_has_import_signal(candidate: &RuntimeKvImportCandidate<'_>) -> bool {
+    if !candidate.key.starts_with("runtime_kv:") {
+        return true;
+    }
+
+    let strength = candidate.source_strength.unwrap_or(candidate.weight);
+    strength.is_finite() && strength >= MIN_RUNTIME_KV_IMPORT_STRENGTH
 }
 
 fn fit_runtime_vector(vector: &[f32], dimensions: Option<usize>) -> Vec<f32> {

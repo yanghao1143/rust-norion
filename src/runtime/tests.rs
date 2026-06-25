@@ -489,6 +489,7 @@ fn runtime_request_filters_adapter_observations_to_device_execution_contract() {
 struct SelfDevelopedRuntime {
     imported_blocks: usize,
     imported_heads: Vec<usize>,
+    imported_keys: Vec<Vec<f32>>,
 }
 
 impl ModelRuntime for SelfDevelopedRuntime {
@@ -517,6 +518,8 @@ impl ModelRuntime for SelfDevelopedRuntime {
         self.imported_blocks += blocks.len();
         self.imported_heads
             .extend(blocks.iter().map(|block| block.head));
+        self.imported_keys
+            .extend(blocks.iter().map(|block| block.key.clone()));
         Ok(blocks.len())
     }
 
@@ -1190,6 +1193,83 @@ fn runtime_kv_import_uses_infini_sparse_plan_before_active_memories() {
 
     assert_eq!(backend.runtime().imported_blocks, 2);
     assert_eq!(backend.runtime().imported_heads, vec![0, 1]);
+}
+
+#[test]
+fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
+    let memories = vec![
+        MemoryMatch {
+            id: 7,
+            key: "runtime_kv:l0h0:0-1 :: low yield".to_owned(),
+            similarity: 0.99,
+            strength: 0.30,
+            vector: vec![0.1, 0.2, 0.3],
+        },
+        MemoryMatch {
+            id: 8,
+            key: "semantic runtime fallback evidence".to_owned(),
+            similarity: 0.88,
+            strength: 0.82,
+            vector: vec![0.7, 0.8, 0.9],
+        },
+    ];
+    let infini_memory_plan = InfiniMemoryPlan::new(
+        vec![
+            InfiniMemoryItem {
+                id: 7,
+                key: "runtime_kv:l0h0:0-1 :: low yield".to_owned(),
+                vector: vec![0.1, 0.2, 0.3],
+                scope: InfiniMemoryScope::LocalWindow,
+                score: 0.99,
+                estimated_tokens: 4,
+                reason: "local_window:test".to_owned(),
+            },
+            InfiniMemoryItem {
+                id: 8,
+                key: "semantic runtime fallback evidence".to_owned(),
+                vector: vec![0.7, 0.8, 0.9],
+                scope: InfiniMemoryScope::LocalWindow,
+                score: 0.72,
+                estimated_tokens: 4,
+                reason: "local_window:test".to_owned(),
+            },
+        ],
+        Vec::new(),
+        Vec::new(),
+    );
+    let tier_plan = TieredCachePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let mut hardware_plan = HardwarePlan::default();
+    hardware_plan.execution.kv_prefetch_blocks = 1;
+    let context = GenerationContext {
+        prompt: "skip weak runtime kv import",
+        profile: TaskProfile::Coding,
+        memories: &memories,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        tier_plan: &tier_plan,
+        infini_memory_plan: &infini_memory_plan,
+        recursive_schedule: &recursive_schedule,
+        hardware_plan: &hardware_plan,
+        experiences: &[],
+        toolsmith_plan: default_toolsmith_plan(),
+        agent_team_plan: default_agent_team_plan(),
+        transformer_plan: &transformer_plan,
+    };
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let _draft = backend.generate(context);
+
+    assert_eq!(backend.runtime().imported_blocks, 1);
+    assert_eq!(backend.runtime().imported_keys.len(), 1);
+    assert_eq!(&backend.runtime().imported_keys[0][..3], &[0.7, 0.8, 0.9]);
+    assert_eq!(backend.runtime().imported_keys[0].len(), 256);
 }
 
 #[test]
