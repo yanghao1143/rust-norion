@@ -54,6 +54,7 @@ pub struct RuntimeDiagnostics {
     pub kv_influence: Option<f32>,
     pub imported_kv_blocks: usize,
     pub exported_kv_blocks: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
     pub hot_kv_precision_bits: Option<u8>,
     pub cold_kv_precision_bits: Option<u8>,
 }
@@ -72,6 +73,7 @@ pub struct RuntimeDiagnosticsSummary {
     pub has_kv_influence: bool,
     pub imported_kv_blocks: usize,
     pub exported_kv_blocks: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
     pub has_valid_kv_precision: bool,
     pub has_forward_signal: bool,
 }
@@ -178,8 +180,17 @@ impl RuntimeDiagnosticsSummary {
         self.kv_exchange_total() > 0
     }
 
+    pub fn runtime_kv_activity_total(self) -> usize {
+        self.kv_exchange_total()
+            .saturating_add(self.weak_runtime_kv_imports_skipped)
+    }
+
+    pub fn has_runtime_kv_activity(self) -> bool {
+        self.runtime_kv_activity_total() > 0
+    }
+
     pub fn has_runtime_forward_or_kv_signal(self) -> bool {
-        self.has_forward_signal || self.has_runtime_kv_exchange()
+        self.has_forward_signal || self.has_runtime_kv_activity()
     }
 
     pub fn missing_runtime_architecture(self) -> bool {
@@ -218,7 +229,9 @@ impl RuntimeDiagnosticsSummary {
     }
 
     pub fn runtime_kv_activity_signal_component_count(self) -> usize {
-        usize::from(self.imported_kv_blocks > 0) + usize::from(self.exported_kv_blocks > 0)
+        usize::from(self.imported_kv_blocks > 0)
+            + usize::from(self.exported_kv_blocks > 0)
+            + usize::from(self.weak_runtime_kv_imports_skipped > 0)
     }
 
     pub fn runtime_precision_signal_component_count(self) -> usize {
@@ -1261,6 +1274,11 @@ impl RuntimeDiagnostics {
         self
     }
 
+    pub fn with_weak_runtime_kv_imports_skipped(mut self, skipped: usize) -> Self {
+        self.weak_runtime_kv_imports_skipped = skipped;
+        self
+    }
+
     pub fn with_kv_precision(mut self, hot_bits: u8, cold_bits: u8) -> Self {
         if valid_kv_precision(hot_bits, cold_bits) {
             self.hot_kv_precision_bits = Some(hot_bits);
@@ -1332,6 +1350,7 @@ impl RuntimeDiagnostics {
             || self.kv_influence.is_some()
             || self.imported_kv_blocks > 0
             || self.exported_kv_blocks > 0
+            || self.weak_runtime_kv_imports_skipped > 0
     }
 
     pub fn contract_summary(
@@ -1663,6 +1682,7 @@ impl RuntimeDiagnostics {
             has_kv_influence: self.kv_influence.is_some(),
             imported_kv_blocks: self.imported_kv_blocks,
             exported_kv_blocks: self.exported_kv_blocks,
+            weak_runtime_kv_imports_skipped: self.weak_runtime_kv_imports_skipped,
             has_valid_kv_precision: self.has_valid_kv_precision_signal(),
             has_forward_signal: self.has_forward_signal(),
         }
@@ -1930,6 +1950,7 @@ pub struct InferenceDiagnosticsSummary {
     pub route_attention_tokens: usize,
     pub route_fast_tokens: usize,
     pub runtime_kv_exchange_total: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
     pub has_runtime_execution_signal: bool,
     pub runtime_embedding_available: bool,
     pub fallback_embedding_used: bool,
@@ -1958,6 +1979,10 @@ impl InferenceDiagnosticsSummary {
 
     pub fn has_runtime_kv_exchange(self) -> bool {
         self.runtime_kv_exchange_total > 0
+    }
+
+    pub fn has_weak_runtime_kv_import_skips(self) -> bool {
+        self.weak_runtime_kv_imports_skipped > 0
     }
 
     pub fn used_any_embedding_fallback(self) -> bool {
@@ -2242,6 +2267,7 @@ impl InferenceDiagnostics {
             route_attention_tokens: self.route_budget.attention_tokens,
             route_fast_tokens: self.route_budget.fast_tokens,
             runtime_kv_exchange_total: self.kv_exchange_total(),
+            weak_runtime_kv_imports_skipped: self.runtime.weak_runtime_kv_imports_skipped,
             has_runtime_execution_signal: self.has_runtime_execution_signal(),
             runtime_embedding_available: self.embeddings.runtime_embedding_available(),
             fallback_embedding_used: self.embeddings.fallback_embedding_used(),
@@ -2353,8 +2379,11 @@ mod tests {
         assert!(!summary.has_kv_influence);
         assert_eq!(summary.imported_kv_blocks, 2);
         assert_eq!(summary.exported_kv_blocks, 3);
+        assert_eq!(summary.weak_runtime_kv_imports_skipped, 0);
         assert_eq!(summary.kv_exchange_total(), 5);
         assert!(summary.has_runtime_kv_exchange());
+        assert_eq!(summary.runtime_kv_activity_total(), 5);
+        assert!(summary.has_runtime_kv_activity());
         assert!(summary.has_valid_kv_precision);
         assert!(summary.has_forward_signal);
         assert!(summary.has_runtime_forward_or_kv_signal());
@@ -2413,6 +2442,31 @@ mod tests {
         assert!(!summary.has_runtime_diagnostics_problem_components());
         assert!(summary.runtime_diagnostics_accounting_is_consistent());
         assert!(summary.runtime_diagnostics_shape_is_clean());
+        assert!(summary.can_use_runtime_diagnostics());
+    }
+
+    #[test]
+    fn runtime_diagnostics_summary_counts_weak_runtime_kv_skip_as_activity_not_exchange() {
+        let summary = RuntimeDiagnostics::empty()
+            .with_model_id("model")
+            .with_selected_adapter(RuntimeAdapter::CpuSimd)
+            .with_architecture(24, 4096, 2048)
+            .with_weak_runtime_kv_imports_skipped(2)
+            .with_kv_precision(8, 4)
+            .diagnostics_summary();
+
+        assert_eq!(summary.imported_kv_blocks, 0);
+        assert_eq!(summary.exported_kv_blocks, 0);
+        assert_eq!(summary.weak_runtime_kv_imports_skipped, 2);
+        assert_eq!(summary.kv_exchange_total(), 0);
+        assert!(!summary.has_runtime_kv_exchange());
+        assert_eq!(summary.runtime_kv_activity_total(), 2);
+        assert!(summary.has_runtime_kv_activity());
+        assert!(summary.has_runtime_forward_or_kv_signal());
+        assert!(summary.has_forward_signal);
+        assert_eq!(summary.runtime_kv_activity_signal_component_count(), 1);
+        assert_eq!(summary.runtime_activity_problem_component_count(), 0);
+        assert!(summary.runtime_diagnostics_accounting_is_consistent());
         assert!(summary.can_use_runtime_diagnostics());
     }
 
@@ -3670,6 +3724,7 @@ mod tests {
             has_kv_influence: false,
             imported_kv_blocks: 0,
             exported_kv_blocks: 0,
+            weak_runtime_kv_imports_skipped: 0,
             has_valid_kv_precision: true,
             has_forward_signal: true,
         };
@@ -3857,7 +3912,9 @@ mod tests {
         assert_eq!(summary.route_token_total(), 4);
         assert!(summary.has_route_activity());
         assert_eq!(summary.runtime_kv_exchange_total, 3);
+        assert_eq!(summary.weak_runtime_kv_imports_skipped, 0);
         assert!(summary.has_runtime_kv_exchange());
+        assert!(!summary.has_weak_runtime_kv_import_skips());
         assert!(summary.has_runtime_execution_signal);
         assert!(summary.has_runtime_or_embedding_execution());
         assert!(!summary.runtime_embedding_available);
@@ -3872,6 +3929,29 @@ mod tests {
         assert!(summary.has_recursive_runtime());
         assert_eq!(summary.note_count, 1);
         assert!(summary.has_notes());
+        assert!(summary.has_complete_diagnostics_signal());
+    }
+
+    #[test]
+    fn inference_diagnostics_preserves_weak_runtime_kv_skip_without_exchange_count() {
+        let generation_budget =
+            RuntimeMetadata::new("model", "tok", 1024, 2048).generation_budget(900, 200);
+        let runtime = RuntimeDiagnostics::empty().with_weak_runtime_kv_imports_skipped(2);
+        let diagnostics = InferenceDiagnostics::new(RouteBudget::default())
+            .with_runtime(runtime)
+            .with_generation_budget(generation_budget);
+
+        assert_eq!(diagnostics.kv_exchange_total(), 0);
+        assert!(diagnostics.has_runtime_execution_signal());
+
+        let summary = diagnostics.diagnostics_summary();
+
+        assert_eq!(summary.runtime_kv_exchange_total, 0);
+        assert_eq!(summary.weak_runtime_kv_imports_skipped, 2);
+        assert!(!summary.has_runtime_kv_exchange());
+        assert!(summary.has_weak_runtime_kv_import_skips());
+        assert!(summary.has_runtime_execution_signal);
+        assert!(summary.has_runtime_or_embedding_execution());
         assert!(summary.has_complete_diagnostics_signal());
     }
 
