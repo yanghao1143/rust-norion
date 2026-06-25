@@ -84,6 +84,9 @@ function Search-GitHubRepos {
     $rows = @()
     foreach ($query in $Queries) {
         $json = gh search repos $query --limit $Limit --json fullName,description,stargazersCount,url,updatedAt 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            $global:LASTEXITCODE = 0
+        }
         if ([string]::IsNullOrWhiteSpace($json)) {
             continue
         }
@@ -248,3 +251,5 @@ if (-not [string]::IsNullOrWhiteSpace($OutFile)) {
 } else {
     Write-Output $output
 }
+
+$global:LASTEXITCODE = 0
