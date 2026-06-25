@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::model_service::response::{
     ModelPoolMetricsSnapshotView, ModelPoolMetricsView, ModelPoolWorkerMetricsView,
 };
+
+const MAX_LATENCY_SAMPLES: usize = 256;
 
 static MODEL_POOL_METRICS: OnceLock<Mutex<ModelPoolMetricsState>> = OnceLock::new();
 
@@ -24,6 +26,7 @@ struct ModelPoolMetricCounters {
     failure_count: u64,
     latency_total_ms: u128,
     latency_sample_count: u64,
+    latency_samples_ms: VecDeque<u64>,
 }
 
 pub(super) struct ModelPoolCallMetricsGuard {
@@ -110,9 +113,14 @@ impl ModelPoolMetricCounters {
             selected_count: self.selected_count,
             blocked_count: self.blocked_count,
             in_flight: self.in_flight,
+            queued_count: 0,
+            lease_wait_ms: Some(0),
+            lease_wait_p95_ms: Some(0),
             success_count: self.success_count,
             failure_count: self.failure_count,
             avg_latency_ms: average_latency_ms(self.latency_total_ms, self.latency_sample_count),
+            latency_p50_ms: percentile_latency_ms(&self.latency_samples_ms, 50),
+            latency_p95_ms: percentile_latency_ms(&self.latency_samples_ms, 95),
         }
     }
 }
@@ -148,6 +156,7 @@ fn record_call_finish_on_counters(
         .latency_total_ms
         .saturating_add(latency.as_millis());
     counters.latency_sample_count = counters.latency_sample_count.saturating_add(1);
+    record_latency_sample(counters, latency);
 }
 
 fn average_latency_ms(total_ms: u128, samples: u64) -> Option<u64> {
@@ -156,6 +165,28 @@ fn average_latency_ms(total_ms: u128, samples: u64) -> Option<u64> {
     }
     let average = total_ms / u128::from(samples);
     Some(average.min(u128::from(u64::MAX)) as u64)
+}
+
+fn record_latency_sample(counters: &mut ModelPoolMetricCounters, latency: Duration) {
+    let latency_ms = latency.as_millis().min(u128::from(u64::MAX)) as u64;
+    if counters.latency_samples_ms.len() == MAX_LATENCY_SAMPLES {
+        counters.latency_samples_ms.pop_front();
+    }
+    counters.latency_samples_ms.push_back(latency_ms);
+}
+
+fn percentile_latency_ms(samples: &VecDeque<u64>, percentile: usize) -> Option<u64> {
+    if samples.is_empty() {
+        return None;
+    }
+    let mut sorted = samples.iter().copied().collect::<Vec<_>>();
+    sorted.sort_unstable();
+    let rank = percentile
+        .saturating_mul(sorted.len())
+        .div_ceil(100)
+        .saturating_sub(1)
+        .min(sorted.len().saturating_sub(1));
+    sorted.get(rank).copied()
 }
 
 fn with_metrics_state<R>(action: impl FnOnce(&mut ModelPoolMetricsState) -> R) -> R {
@@ -198,6 +229,11 @@ mod tests {
         assert_eq!(snapshot.route_metrics.selected_count, 1);
         assert_eq!(snapshot.route_metrics.success_count, 1);
         assert_eq!(snapshot.route_metrics.in_flight, 0);
+        assert_eq!(snapshot.route_metrics.queued_count, 0);
+        assert_eq!(snapshot.route_metrics.lease_wait_ms, Some(0));
+        assert_eq!(snapshot.route_metrics.lease_wait_p95_ms, Some(0));
+        assert!(snapshot.route_metrics.latency_p50_ms.is_some());
+        assert!(snapshot.route_metrics.latency_p95_ms.is_some());
         let review = snapshot
             .worker_metrics
             .iter()
@@ -206,6 +242,11 @@ mod tests {
         assert_eq!(review.metrics.route_count, 1);
         assert_eq!(review.metrics.selected_count, 1);
         assert_eq!(review.metrics.success_count, 1);
+        assert_eq!(review.metrics.queued_count, 0);
+        assert_eq!(review.metrics.lease_wait_ms, Some(0));
+        assert_eq!(review.metrics.lease_wait_p95_ms, Some(0));
+        assert!(review.metrics.latency_p50_ms.is_some());
+        assert!(review.metrics.latency_p95_ms.is_some());
     }
 
     #[test]
@@ -220,5 +261,23 @@ mod tests {
         assert_eq!(snapshot.route_metrics.route_count, 1);
         assert_eq!(snapshot.route_metrics.blocked_count, 1);
         assert!(snapshot.worker_metrics.is_empty());
+    }
+
+    #[test]
+    fn computes_latency_percentiles_from_bounded_samples() {
+        let mut counters = ModelPoolMetricCounters::default();
+        for latency_ms in [10, 20, 100] {
+            record_call_finish_on_counters(&mut counters, true, Duration::from_millis(latency_ms));
+        }
+
+        let view = counters.view();
+
+        assert_eq!(view.success_count, 3);
+        assert_eq!(view.avg_latency_ms, Some(43));
+        assert_eq!(view.latency_p50_ms, Some(20));
+        assert_eq!(view.latency_p95_ms, Some(100));
+        assert_eq!(view.queued_count, 0);
+        assert_eq!(view.lease_wait_ms, Some(0));
+        assert_eq!(view.lease_wait_p95_ms, Some(0));
     }
 }

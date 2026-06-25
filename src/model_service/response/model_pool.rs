@@ -57,9 +57,14 @@ pub(crate) struct ModelPoolMetricsView {
     pub(crate) selected_count: u64,
     pub(crate) blocked_count: u64,
     pub(crate) in_flight: u64,
+    pub(crate) queued_count: u64,
+    pub(crate) lease_wait_ms: Option<u64>,
+    pub(crate) lease_wait_p95_ms: Option<u64>,
     pub(crate) success_count: u64,
     pub(crate) failure_count: u64,
     pub(crate) avg_latency_ms: Option<u64>,
+    pub(crate) latency_p50_ms: Option<u64>,
+    pub(crate) latency_p95_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1067,14 +1072,19 @@ fn metric_object_fields_json(metrics: &ModelPoolMetricsView) -> String {
 
 fn metric_object_body_json(metrics: &ModelPoolMetricsView) -> String {
     format!(
-        "\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"success_count\":{},\"failure_count\":{},\"avg_latency_ms\":{}",
+        "\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"queued_count\":{},\"lease_wait_ms\":{},\"lease_wait_p95_ms\":{},\"success_count\":{},\"failure_count\":{},\"avg_latency_ms\":{},\"latency_p50_ms\":{},\"latency_p95_ms\":{}",
         metrics.route_count,
         metrics.selected_count,
         metrics.blocked_count,
         metrics.in_flight,
+        metrics.queued_count,
+        option_u64_json(metrics.lease_wait_ms),
+        option_u64_json(metrics.lease_wait_p95_ms),
         metrics.success_count,
         metrics.failure_count,
-        option_u64_json(metrics.avg_latency_ms)
+        option_u64_json(metrics.avg_latency_ms),
+        option_u64_json(metrics.latency_p50_ms),
+        option_u64_json(metrics.latency_p95_ms)
     )
 }
 
@@ -1662,9 +1672,14 @@ mod tests {
                 selected_count: 2,
                 blocked_count: 1,
                 in_flight: 1,
+                queued_count: 0,
+                lease_wait_ms: Some(0),
+                lease_wait_p95_ms: Some(0),
                 success_count: 4,
                 failure_count: 1,
                 avg_latency_ms: Some(250),
+                latency_p50_ms: Some(240),
+                latency_p95_ms: Some(310),
             },
             worker_metrics: vec![ModelPoolWorkerMetricsView {
                 role: "quality".to_owned(),
@@ -1673,9 +1688,14 @@ mod tests {
                     selected_count: 2,
                     blocked_count: 0,
                     in_flight: 1,
+                    queued_count: 0,
+                    lease_wait_ms: Some(0),
+                    lease_wait_p95_ms: Some(0),
                     success_count: 4,
                     failure_count: 0,
                     avg_latency_ms: Some(220),
+                    latency_p50_ms: Some(200),
+                    latency_p95_ms: Some(300),
                 },
             }],
         };
@@ -1690,7 +1710,11 @@ mod tests {
         assert!(json.contains("\"worker_metrics\""));
         assert!(json.contains("\"role\":\"quality\",\"route_count\":2"));
         assert!(json.contains("\"success_count\":4"));
+        assert!(json.contains("\"queued_count\":0"));
+        assert!(json.contains("\"lease_wait_p95_ms\":0"));
         assert!(json.contains("\"avg_latency_ms\":220"));
+        assert!(json.contains("\"latency_p50_ms\":200"));
+        assert!(json.contains("\"latency_p95_ms\":300"));
     }
 
     #[test]
