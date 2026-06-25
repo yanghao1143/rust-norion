@@ -1,13 +1,13 @@
 # Branch Protection Checklist
 
-Status: repository governance checklist for `codex-runtime-device-abi` and any
-future protected default branch.
+Status: repository governance checklist for `main` and any future protected
+default branch.
 
 Refs: #11, #27, #31, #41, #77.
 
 ## Current Protected Branch
 
-As of 2026-06-22, the default branch is `codex-runtime-device-abi`.
+As of 2026-06-25, the default branch is `main`.
 
 GitHub branch protection for this branch should require:
 
@@ -18,9 +18,13 @@ GitHub branch protection for this branch should require:
 - required status check `focused Rust crates`
 - strict status checks against the latest branch state
 - conversation resolution before merge
+- required linear history
 - admin enforcement
 - force pushes disabled
 - branch deletion disabled
+- repository-level squash merge only
+- automatic head-branch deletion after merge
+- PR branch update enabled when the head branch is behind `main`
 
 The current repository setting reported by GitHub API matches this policy:
 
@@ -31,9 +35,15 @@ required_pull_request_reviews.required_approving_review_count = 1
 required_pull_request_reviews.require_code_owner_reviews = true
 required_pull_request_reviews.require_last_push_approval = true
 required_conversation_resolution.enabled = true
+required_linear_history.enabled = true
 enforce_admins.enabled = true
 allow_force_pushes.enabled = false
 allow_deletions.enabled = false
+allow_squash_merge = true
+allow_merge_commit = false
+allow_rebase_merge = false
+delete_branch_on_merge = true
+allow_update_branch = true
 ```
 
 ## CODEOWNERS
@@ -83,7 +93,8 @@ before merge.
 ## Maintainer Review Rule
 
 External contributors may propose changes, but merge control stays with the
-maintainer. A PR is not merge-ready until:
+maintainer. Protected-branch merges use squash merge; merge commits and rebase
+merges are disabled. A PR is not merge-ready until:
 
 - the linked issue is clear
 - the requested state is preview-only or has a satisfied graduation checklist
@@ -100,7 +111,8 @@ settings:
 
 ```powershell
 gh repo view yanghao1143/rust-norion --json nameWithOwner,visibility,defaultBranchRef
-gh api repos/yanghao1143/rust-norion/branches/codex-runtime-device-abi/protection
+gh api repos/yanghao1143/rust-norion/branches/main/protection
+gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch}'
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md
 git ls-files .github/ISSUE_TEMPLATE
