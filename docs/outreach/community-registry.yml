@@ -1061,6 +1061,17 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: High-star active AI security list with Agent Runtime Security & Sandboxing and guardrails sections; scope-check issue keeps claims limited to runtime-boundary contracts, writer gates, evidence checks, and audit traces.
 
+  - id: bureado-awesome-agent-runtime-security
+    platform: github
+    kind: awesome_list
+    url: https://github.com/bureado/awesome-agent-runtime-security
+    audience: agent runtime security, sandboxing, provenance, instrumentation, observability, and identity readers
+    fit: high
+    status: submitted
+    proof: https://github.com/bureado/awesome-agent-runtime-security/issues/9
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Focused agent-runtime-security list with provenance, instrumentation, and observability sections; scope-check issue explicitly avoids claiming sandbox or credential-injection capability.
+
   - id: corca-ai-awesome-llm-security
     platform: github
     kind: awesome_list

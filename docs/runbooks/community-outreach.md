@@ -88,6 +88,7 @@ same recruitment message everywhere.
 | Yyyujintang Agent Memory Papers | Deferred | Papers only |
 | Richard Blythman Multi-Agent Systems | Submitted | Track https://github.com/richardblythman/awesome-multi-agent-systems/issues/11 |
 | Ottosulin Awesome AI Security | Submitted | Track https://github.com/ottosulin/awesome-ai-security/issues/296 |
+| Bureado Agent Runtime Security | Submitted | Track https://github.com/bureado/awesome-agent-runtime-security/issues/9 |
 | Corca Awesome LLM Security | Candidate | Submit only if focused security PR is invited |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
 | DeepSpaceHarbor AI Security | Candidate | Manual review; verify runtime-security code entry flow |
