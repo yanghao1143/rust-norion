@@ -270,6 +270,93 @@ impl RustNativeAdapterReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustNativeAdapterModeComparison {
+    pub cache_mode: ChunkedKvCacheMode,
+    pub included_segments: usize,
+    pub skipped_segments: usize,
+    pub rejected_segments: usize,
+    pub imported_kv_blocks: usize,
+    pub exported_kv_blocks: usize,
+    pub stream_tokens: usize,
+    pub gate_summary_digest: String,
+}
+
+impl RustNativeAdapterModeComparison {
+    pub fn from_report(report: &RustNativeAdapterReport) -> Self {
+        Self {
+            cache_mode: report.cache_mode,
+            included_segments: report.included_segments(),
+            skipped_segments: report.skipped_segments(),
+            rejected_segments: report.rejected_segments(),
+            imported_kv_blocks: report.imported_kv_blocks,
+            exported_kv_blocks: report.exported_kv_blocks,
+            stream_tokens: report.stream_tokens.len(),
+            gate_summary_digest: report.gate_summary_digest.clone(),
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "mode={} included={} skipped={} rejected={} imported_kv_blocks={} exported_kv_blocks={} stream_tokens={} gate_summary={}",
+            self.cache_mode.as_str(),
+            self.included_segments,
+            self.skipped_segments,
+            self.rejected_segments,
+            self.imported_kv_blocks,
+            self.exported_kv_blocks,
+            self.stream_tokens,
+            self.gate_summary_digest
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustNativeAdapterComparisonReport {
+    pub trace_id: String,
+    pub modes: Vec<RustNativeAdapterModeComparison>,
+}
+
+impl RustNativeAdapterComparisonReport {
+    pub fn mode(&self, mode: ChunkedKvCacheMode) -> Option<&RustNativeAdapterModeComparison> {
+        self.modes
+            .iter()
+            .find(|comparison| comparison.cache_mode == mode)
+    }
+
+    pub fn has_required_cache_modes(&self) -> bool {
+        [
+            ChunkedKvCacheMode::NoCache,
+            ChunkedKvCacheMode::ChunkedCache,
+            ChunkedKvCacheMode::GenomeFiltered,
+        ]
+        .into_iter()
+        .all(|mode| self.mode(mode).is_some())
+    }
+
+    pub fn imported_delta_vs_no_cache(&self, mode: ChunkedKvCacheMode) -> Option<isize> {
+        let no_cache = self.mode(ChunkedKvCacheMode::NoCache)?;
+        let candidate = self.mode(mode)?;
+        Some(candidate.imported_kv_blocks as isize - no_cache.imported_kv_blocks as isize)
+    }
+
+    pub fn summary_line(&self) -> String {
+        let modes = self
+            .modes
+            .iter()
+            .map(RustNativeAdapterModeComparison::summary_line)
+            .collect::<Vec<_>>()
+            .join(" | ");
+        format!(
+            "rust_native_adapter_benchmark trace_id={} cache_modes={} has_required_cache_modes={} {}",
+            self.trace_id,
+            self.modes.len(),
+            self.has_required_cache_modes(),
+            modes
+        )
+    }
+}
+
 pub trait RustNativeInferenceAdapter {
     fn metadata(&self) -> RuntimeMetadata;
 
@@ -290,6 +377,32 @@ pub trait RustNativeInferenceAdapter {
         request: RustNativeAdapterRequest,
         on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
     ) -> Result<RustNativeAdapterReport, RuntimeError>;
+
+    fn compare_cache_modes(
+        &mut self,
+        request: RustNativeAdapterRequest,
+        modes: &[ChunkedKvCacheMode],
+    ) -> Result<RustNativeAdapterComparisonReport, RuntimeError> {
+        let trace_id = request.trace_id.clone();
+        let modes = if modes.is_empty() {
+            vec![
+                ChunkedKvCacheMode::NoCache,
+                ChunkedKvCacheMode::ChunkedCache,
+                ChunkedKvCacheMode::GenomeFiltered,
+            ]
+        } else {
+            modes.to_vec()
+        };
+        let mut comparisons = Vec::with_capacity(modes.len());
+        for mode in modes {
+            let report = self.generate(request.clone().with_cache_mode(mode))?;
+            comparisons.push(RustNativeAdapterModeComparison::from_report(&report));
+        }
+        Ok(RustNativeAdapterComparisonReport {
+            trace_id,
+            modes: comparisons,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -735,6 +848,67 @@ mod tests {
                 .hook_summaries()
                 .iter()
                 .any(|summary| summary.contains("reason=cache_mode_no_cache"))
+        );
+    }
+
+    #[test]
+    fn cache_mode_comparison_reports_no_cache_chunked_and_genome_filtered_paths() {
+        let scope = scope();
+        let request = RustNativeAdapterRequest::new(
+            "compare cache modes",
+            TaskProfile::Coding,
+            "trace-compare",
+            scope.clone(),
+        )
+        .with_segments(vec![
+            segment(&scope, "seg-pass", 0.20, true),
+            segment(&scope, "seg-filter", 0.20, false),
+        ])
+        .with_gate_summary("writer_gate=preview_only");
+        let mut adapter = MockRustNativeAdapter::new();
+
+        let report = adapter.compare_cache_modes(request, &[]).unwrap();
+
+        assert!(report.has_required_cache_modes());
+        assert_eq!(
+            report
+                .mode(ChunkedKvCacheMode::NoCache)
+                .unwrap()
+                .imported_kv_blocks,
+            0
+        );
+        assert_eq!(
+            report
+                .mode(ChunkedKvCacheMode::ChunkedCache)
+                .unwrap()
+                .imported_kv_blocks,
+            2
+        );
+        assert_eq!(
+            report
+                .mode(ChunkedKvCacheMode::GenomeFiltered)
+                .unwrap()
+                .imported_kv_blocks,
+            1
+        );
+        assert_eq!(
+            report.imported_delta_vs_no_cache(ChunkedKvCacheMode::ChunkedCache),
+            Some(2)
+        );
+        assert_eq!(
+            report.imported_delta_vs_no_cache(ChunkedKvCacheMode::GenomeFiltered),
+            Some(1)
+        );
+        assert!(report.summary_line().contains("cache_modes=3"));
+        assert!(report.summary_line().contains("mode=no_cache"));
+        assert!(report.summary_line().contains("mode=chunked_cache"));
+        assert!(report.summary_line().contains("mode=genome_filtered"));
+        assert!(
+            report
+                .mode(ChunkedKvCacheMode::GenomeFiltered)
+                .unwrap()
+                .skipped_segments
+                > 0
         );
     }
 }
