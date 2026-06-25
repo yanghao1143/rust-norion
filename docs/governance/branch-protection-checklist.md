@@ -7,7 +7,7 @@ Refs: #11, #27, #31, #41, #77.
 
 ## Current Protected Branch
 
-As of 2026-06-25, the default branch is `main`.
+As of 2026-06-26, the default branch is `main`.
 
 GitHub branch protection for this branch should require:
 
@@ -112,10 +112,11 @@ merges are disabled. A PR is not merge-ready until:
 
 ## Permission Audit
 
-As of 2026-06-25, the intended repository permission baseline is:
+As of 2026-06-26, the intended repository permission baseline is:
 
 - public contributors use fork or topic branch PRs into `main`
 - no routine contributor needs direct repository write access
+- direct-collaborator audit reports only `@yanghao1143` with admin permission
 - reviewer and module-collaborator status does not imply merge authority
 - maintainer expansion requires an explicit owner decision
 - Gitee is a mirror-only surface for `main`, not a place to publish topic

@@ -116,7 +116,11 @@ pass.
 
 ## Branch Protection Audit
 
-As of 2026-06-25, GitHub reports the default branch as `main`. Branch
+As of 2026-06-26, GitHub reports the default branch as `main`. Branch
 protection is enabled for `main` with required status checks, code-owner review,
 last-push approval, admin enforcement, required conversation resolution,
 required linear history, and force-push/deletion blocks.
+
+As of 2026-06-26, the direct-collaborator audit reports only `@yanghao1143`
+with admin permission. Routine public contributors do not need direct
+repository access; they should contribute through issues and pull requests.
