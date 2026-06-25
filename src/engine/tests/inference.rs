@@ -83,6 +83,36 @@ impl InferenceBackend for TimeoutErrorBackend {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeKvSegmentDiagnosticsBackend;
+
+impl InferenceBackend for RuntimeKvSegmentDiagnosticsBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        let diagnostics = RuntimeDiagnostics {
+            model_id: Some("native-kv-segment-test".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.41),
+            kv_influence: Some(0.50),
+            imported_kv_blocks: 2,
+            exported_kv_blocks: 1,
+            runtime_kv_segments_included: 2,
+            runtime_kv_segments_skipped: 1,
+            runtime_kv_segments_rejected: 0,
+            ..RuntimeDiagnostics::default()
+        };
+
+        InferenceDraft::new(
+            "Runtime KV segment diagnostics should become process reward evidence.",
+            vec![ReasoningStep::new(
+                "runtime_kv_segments",
+                "included=2 skipped=1 rejected=0",
+                0.91,
+            )],
+        )
+        .with_runtime_diagnostics(diagnostics)
+    }
+}
+
+#[derive(Debug, Clone)]
 struct OrchestrationTraceBackend;
 
 impl InferenceBackend for OrchestrationTraceBackend {
@@ -152,6 +182,32 @@ fn inference_records_runtime_error_notes_for_inspection() {
             .notes
             .iter()
             .any(|note| note.starts_with("runtime_error:"))
+    );
+}
+
+#[test]
+fn inference_records_runtime_kv_segment_reward_notes() {
+    let mut engine = NoironEngine::new();
+    let mut backend = RuntimeKvSegmentDiagnosticsBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new("audit native kv segment hooks", TaskProfile::Coding),
+        &mut backend,
+    );
+
+    assert!(
+        outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| { note == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3" })
+    );
+    assert!(
+        engine.experience.records()[0]
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| note == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3")
     );
 }
 

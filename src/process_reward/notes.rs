@@ -58,6 +58,15 @@ pub(super) fn reward_notes(
             input.stored_runtime_kv_memories
         ));
     }
+    if input.runtime_kv_segment_count() > 0 {
+        notes.push(format!(
+            "runtime_kv_segments:included={}:skipped={}:rejected={}:total={}",
+            input.runtime_kv_segments_included,
+            input.runtime_kv_segments_skipped,
+            input.runtime_kv_segments_rejected,
+            input.runtime_kv_segment_count()
+        ));
+    }
     notes.extend(input.toolsmith_plan.reward_notes());
     notes.extend(input.agent_team_plan.reward_notes());
 

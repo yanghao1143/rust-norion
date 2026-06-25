@@ -283,6 +283,47 @@ fn replay_experience_scales_reinforcement_from_runtime_and_recursive_cost() {
 }
 
 #[test]
+fn replay_experience_uses_runtime_kv_segment_quality_for_reinforcement() {
+    let mut engine = NoironEngine::new();
+    let included_memory_id =
+        engine
+            .cache
+            .store_or_fuse("included kv segment replay", vec![1.0, 0.0, 0.0], 0.8);
+    let rejected_memory_id =
+        engine
+            .cache
+            .store_or_fuse("rejected kv segment replay", vec![0.0, 1.0, 0.0], 0.8);
+
+    engine.experience.record(replay_memory_input(
+        "included runtime kv segment path",
+        "reinforce memory with accepted runtime kv segments",
+        0.80,
+        included_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_segment_diagnostics(0.80, 3, 0, 0),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "rejected runtime kv segment path",
+        "dampen memory when runtime kv segments are rejected",
+        0.80,
+        rejected_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_segment_diagnostics(0.80, 0, 0, 3),
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.memory_reinforcements, 2);
+    assert!(
+        memory_strength(&engine, included_memory_id) > memory_strength(&engine, rejected_memory_id)
+    );
+}
+
+#[test]
 fn replay_experience_consumes_structured_live_evolution_for_update_strength() {
     let mut engine = NoironEngine::new();
     let plain_reinforce_id =

@@ -58,6 +58,23 @@ fn recursive_runtime_calls_reduce_latency_reward() {
 }
 
 #[test]
+fn runtime_kv_segments_add_audit_note() {
+    let mut input = input(0.82, 0, 0.20, false);
+    input.runtime_kv_segments_included = 2;
+    input.runtime_kv_segments_skipped = 1;
+    input.runtime_kv_segments_rejected = 1;
+
+    let report = ProcessRewarder::new().score(input);
+
+    assert!(
+        report
+            .notes
+            .iter()
+            .any(|note| { note == "runtime_kv_segments:included=2:skipped=1:rejected=1:total=4" })
+    );
+}
+
+#[test]
 fn critical_reflection_issues_reduce_reward() {
     let mut input = input(0.70, 1, 0.45, false);
     input.reflection_issue_count = 3;
@@ -118,6 +135,9 @@ fn input(
         stored_memory: quality > 0.45,
         stored_gist_memories: if quality > 0.45 { 1 } else { 0 },
         stored_runtime_kv_memories: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
         gist_records: if quality > 0.45 { 3 } else { 0 },
         toolsmith_plan: ToolsmithPlan::default(),
         agent_team_plan: AgentTeamPlan::default(),

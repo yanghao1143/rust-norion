@@ -115,7 +115,18 @@ pub struct ProcessRewardInput {
     pub stored_memory: bool,
     pub stored_gist_memories: usize,
     pub stored_runtime_kv_memories: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub gist_records: usize,
     pub toolsmith_plan: ToolsmithPlan,
     pub agent_team_plan: AgentTeamPlan,
+}
+
+impl ProcessRewardInput {
+    pub fn runtime_kv_segment_count(&self) -> usize {
+        self.runtime_kv_segments_included
+            .saturating_add(self.runtime_kv_segments_skipped)
+            .saturating_add(self.runtime_kv_segments_rejected)
+    }
 }
