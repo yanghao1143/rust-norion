@@ -1264,12 +1264,18 @@ fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
     };
     let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
 
-    let _draft = backend.generate(context);
+    let draft = backend.generate(context);
 
     assert_eq!(backend.runtime().imported_blocks, 1);
     assert_eq!(backend.runtime().imported_keys.len(), 1);
     assert_eq!(&backend.runtime().imported_keys[0][..3], &[0.7, 0.8, 0.9]);
     assert_eq!(backend.runtime().imported_keys[0].len(), 256);
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "runtime_kv_import_selection"
+            && step
+                .content
+                .contains("skipped 1 weak runtime KV candidates")
+    }));
 }
 
 #[test]

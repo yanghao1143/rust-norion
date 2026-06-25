@@ -5,7 +5,7 @@ use super::contract::{
     populate_runtime_device_execution, populate_runtime_kv_precision,
     validate_runtime_response_contract,
 };
-use super::kv_import::runtime_kv_blocks_from_context;
+use super::kv_import::runtime_kv_import_selection_from_context;
 use super::kv_safety::{RuntimeKvSafetyReport, sanitize_runtime_kv_blocks};
 use super::types::{ModelRuntime, RuntimeError, RuntimeRequest, RuntimeResponse, RuntimeToken};
 
@@ -141,8 +141,13 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
         let runtime = override_runtime.as_mut().unwrap_or(&mut self.runtime);
         let runtime_metadata = runtime.metadata();
         let runtime_architecture = runtime.architecture();
+        let import_selection = runtime_kv_import_selection_from_context(
+            &context,
+            &runtime_metadata,
+            runtime_architecture,
+        );
         let import_report = sanitize_runtime_kv_blocks(
-            runtime_kv_blocks_from_context(&context, &runtime_metadata, runtime_architecture),
+            import_selection.blocks,
             &runtime_metadata,
             runtime_architecture,
             true,
@@ -196,6 +201,7 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
                 runtime_architecture,
                 imported_kv_blocks,
                 import_report,
+                import_selection.weak_runtime_kv_skipped,
                 forwarded_endpoint.as_deref(),
             ),
             Err(error) => {
@@ -232,6 +238,7 @@ impl<R> RuntimeBackend<R> {
         runtime_architecture: crate::runtime_manifest::TransformerRuntimeArchitecture,
         imported_kv_blocks: usize,
         import_report: RuntimeKvSafetyReport,
+        weak_runtime_kv_skipped: usize,
         forwarded_endpoint: Option<&str>,
     ) -> InferenceDraft
     where
@@ -266,6 +273,15 @@ impl<R> RuntimeBackend<R> {
                 "runtime_kv_import",
                 format!("imported {imported_kv_blocks} KV blocks"),
                 0.78,
+            ));
+        }
+        if weak_runtime_kv_skipped > 0 {
+            trace.push(ReasoningStep::new(
+                "runtime_kv_import_selection",
+                format!(
+                    "skipped {weak_runtime_kv_skipped} weak runtime KV candidates before import"
+                ),
+                0.70,
             ));
         }
         push_kv_safety_trace(&mut trace, "runtime_kv_import_safety", &import_report);

@@ -8,13 +8,19 @@ use super::types::RuntimeMetadata;
 
 const MIN_RUNTIME_KV_IMPORT_STRENGTH: f32 = 0.45;
 
-pub(super) fn runtime_kv_blocks_from_context(
+#[derive(Debug, Default)]
+pub(super) struct RuntimeKvImportSelection {
+    pub(super) blocks: Vec<RuntimeKvBlock>,
+    pub(super) weak_runtime_kv_skipped: usize,
+}
+
+pub(super) fn runtime_kv_import_selection_from_context(
     context: &GenerationContext<'_>,
     metadata: &RuntimeMetadata,
     architecture: TransformerRuntimeArchitecture,
-) -> Vec<RuntimeKvBlock> {
+) -> RuntimeKvImportSelection {
     if !metadata.supports_kv_import {
-        return Vec::new();
+        return RuntimeKvImportSelection::default();
     }
 
     let dimensions = if metadata.embedding_dimensions > 0 {
@@ -34,10 +40,17 @@ pub(super) fn runtime_kv_blocks_from_context(
         .min(manifest_limit)
         .max(1);
 
-    runtime_kv_import_candidates(context)
+    let mut weak_runtime_kv_skipped = 0;
+    let blocks = runtime_kv_import_candidates(context)
         .into_iter()
         .filter(|candidate| !candidate.vector.is_empty())
-        .filter(runtime_kv_candidate_has_import_signal)
+        .filter(|candidate| {
+            let has_signal = runtime_kv_candidate_has_import_signal(candidate);
+            if !has_signal && candidate.key.starts_with("runtime_kv:") {
+                weak_runtime_kv_skipped += 1;
+            }
+            has_signal
+        })
         .filter(|memory| {
             context
                 .tier_plan
@@ -67,7 +80,12 @@ pub(super) fn runtime_kv_blocks_from_context(
                 value,
             )
         })
-        .collect()
+        .collect();
+
+    RuntimeKvImportSelection {
+        blocks,
+        weak_runtime_kv_skipped,
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
