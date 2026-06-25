@@ -24,7 +24,8 @@ local deployment policy.
 ## Merge Control
 
 Public issues and pull requests are welcome, but contributors do not merge
-directly. The default branch is protected and requires:
+directly. The default branch is protected. The current default branch is
+`main`, and it requires:
 
 - a pull request before merge
 - at least one approving review
@@ -32,7 +33,13 @@ directly. The default branch is protected and requires:
 - approval of the latest reviewable push
 - required status check `focused Rust crates`
 - conversation resolution before merge
+- required linear history
 - no force pushes or branch deletion
+
+Protected-branch merges use squash merge only. Merge commits and rebase merges
+are disabled, and GitHub deletes the head branch after merge. Contributors
+submit pull requests; the owner or maintainer performs the merge after all gates
+pass.
 
 The branch protection checklist lives at
 `docs/governance/branch-protection-checklist.md`.
@@ -91,7 +98,7 @@ pass.
 
 ## Branch Protection Audit
 
-As of 2026-06-21, GitHub reports the default branch as
-`codex-runtime-device-abi`. Branch protection is enabled for that branch with
-required status checks, code-owner review, last-push approval, admin
-enforcement, required conversation resolution, and force-push/deletion blocks.
+As of 2026-06-25, GitHub reports the default branch as `main`. Branch
+protection is enabled for `main` with required status checks, code-owner review,
+last-push approval, admin enforcement, required conversation resolution,
+required linear history, and force-push/deletion blocks.

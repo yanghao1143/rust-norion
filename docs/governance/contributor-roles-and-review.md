@@ -75,6 +75,10 @@ For protected branches:
 - Latest reviewable push must be approved.
 - Conversations must be resolved.
 - License/provenance notes must be acceptable.
+- PRs into `main` use squash merge only; merge commits and rebase merges are
+  disabled.
+- Contributors can author PRs, but an owner or maintainer performs the merge
+  after all required gates pass.
 
 Reviewer approval is a strong signal, not a merge substitute.
 

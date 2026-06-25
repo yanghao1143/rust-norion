@@ -14,6 +14,10 @@ must remain open source under GPL-3.0-compatible terms.
 - Protected branches require a pull request, CODEOWNER approval from
   `@yanghao1143`, and approval of the latest reviewable push.
 - Do not push directly to protected branches.
+- Base normal work on `main`, create a topic branch or fork, and open a pull
+  request back to `main`.
+- Protected-branch merges use the repository's configured squash merge path.
+  Merge commits and rebase merges are disabled.
 - Keep contributions compatible with the repository license: GPL-3.0.
 - Pull requests do not bypass maintainer review, branch protection, validation
   gates, attribution requirements, or third-party license obligations.
@@ -67,6 +71,15 @@ Reviewer status is earned, scoped, and reversible. It does not replace
 CODEOWNER or repository-owner approval on protected branches.
 
 ## Pull Requests
+
+### Contribution Flow
+
+1. Sync from `main`.
+2. Create a topic branch or fork.
+3. Open a pull request into `main`.
+4. Let CI, CODEOWNER review, latest-push approval, and conversation resolution
+   finish.
+5. The owner or maintainer merges by squash merge after all gates pass.
 
 Every pull request should include:
 
