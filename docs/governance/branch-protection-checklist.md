@@ -1,13 +1,13 @@
 # Branch Protection Checklist
 
-Status: repository governance checklist for `codex-runtime-device-abi` and any
-future protected default branch.
+Status: repository governance checklist for `main` and any future protected
+default branch.
 
 Refs: #11, #27, #31, #41, #77.
 
 ## Current Protected Branch
 
-As of 2026-06-22, the default branch is `codex-runtime-device-abi`.
+As of 2026-06-26, the default branch is `main`.
 
 GitHub branch protection for this branch should require:
 
@@ -19,6 +19,7 @@ GitHub branch protection for this branch should require:
 - strict status checks against the latest branch state
 - conversation resolution before merge
 - admin enforcement
+- linear history
 - force pushes disabled
 - branch deletion disabled
 
@@ -32,9 +33,24 @@ required_pull_request_reviews.require_code_owner_reviews = true
 required_pull_request_reviews.require_last_push_approval = true
 required_conversation_resolution.enabled = true
 enforce_admins.enabled = true
+required_linear_history.enabled = true
 allow_force_pushes.enabled = false
 allow_deletions.enabled = false
 ```
+
+Repository merge settings should keep the protected-branch path reviewable:
+
+```text
+default_branch = "main"
+allow_squash_merge = true
+allow_merge_commit = false
+allow_rebase_merge = false
+allow_auto_merge = false
+delete_branch_on_merge = true
+```
+
+GitHub is the primary issue, review, and merge surface. Gitee is a main-branch
+mirror for access and synchronization; do not retain feature branches there.
 
 ## CODEOWNERS
 
@@ -100,7 +116,9 @@ settings:
 
 ```powershell
 gh repo view yanghao1143/rust-norion --json nameWithOwner,visibility,defaultBranchRef
-gh api repos/yanghao1143/rust-norion/branches/codex-runtime-device-abi/protection
+gh api repos/yanghao1143/rust-norion/branches/main/protection
+gh api repos/yanghao1143/rust-norion
+git ls-remote --heads gitee
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md
 git ls-files .github/ISSUE_TEMPLATE

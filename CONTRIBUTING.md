@@ -38,6 +38,37 @@ Small typo or documentation fixes can go straight to a pull request, but the
 maintainer may still ask for an issue when the change affects project policy or
 architecture.
 
+## Contribution and Merge Flow
+
+Use GitHub as the primary review and merge surface. Gitee is a main-branch
+mirror for access and synchronization, not a place to keep feature branches.
+
+External contributors should:
+
+- fork the repository or create a feature branch outside the protected branch
+- open a pull request against `main`
+- link the issue or roadmap item, unless the change is a small typo fix
+- fill in the validation, safety, and provenance checklist in the PR template
+- wait for CI, maintainer review, CODEOWNER approval, and conversation
+  resolution
+
+Contributors do not merge their own changes into protected branches. Reviewer
+or module-collaborator status can help a PR reach maintainer review, but it
+does not replace owner/CODEOWNER approval or branch protection.
+
+Maintainers should merge only after the protected-branch requirements pass:
+
+- PR review is approved, including CODEOWNER approval where required
+- the latest reviewable push has approval
+- required checks pass against the latest branch state
+- required conversations are resolved
+- license, clean-room, and safety gates are satisfied
+
+The repository policy is squash merge only for protected-branch PRs. Merge
+commits and rebase merges are disabled, auto-merge is disabled, and source
+branches are deleted after merge. Accidental Gitee feature branches should be
+deleted after verification so the mirror remains `main`-only.
+
 ## Contributor Recognition
 
 Contributors are encouraged to make their work visible. A pull request may

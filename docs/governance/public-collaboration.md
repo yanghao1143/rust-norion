@@ -32,7 +32,12 @@ directly. The default branch is protected and requires:
 - approval of the latest reviewable push
 - required status check `focused Rust crates`
 - conversation resolution before merge
+- admin enforcement
 - no force pushes or branch deletion
+
+GitHub is the primary issue, review, and merge surface. Gitee is a main-branch
+mirror for access and synchronization; feature branches should not be retained
+there after verification.
 
 The branch protection checklist lives at
 `docs/governance/branch-protection-checklist.md`.
@@ -91,7 +96,7 @@ pass.
 
 ## Branch Protection Audit
 
-As of 2026-06-21, GitHub reports the default branch as
-`codex-runtime-device-abi`. Branch protection is enabled for that branch with
-required status checks, code-owner review, last-push approval, admin
-enforcement, required conversation resolution, and force-push/deletion blocks.
+As of 2026-06-26, GitHub reports the default branch as `main`. Branch protection
+is enabled for `main` with required status checks, code-owner review,
+last-push approval, admin enforcement, required conversation resolution,
+linear history, and force-push/deletion blocks.
