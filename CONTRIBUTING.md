@@ -13,6 +13,8 @@ must remain open source under GPL-3.0-compatible terms.
   maintainer before merge.
 - Protected branches require a pull request, CODEOWNER approval from
   `@yanghao1143`, and approval of the latest reviewable push.
+- The default branch also has an active repository ruleset with no bypass
+  actors, so protected-branch changes must go through the pull request gates.
 - Do not push directly to protected branches.
 - Base normal work on `main`, create a topic branch or fork, and open a pull
   request back to `main`.

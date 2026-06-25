@@ -23,6 +23,7 @@ GitHub branch protection for this branch should require:
 - admin enforcement
 - force pushes disabled
 - branch deletion disabled
+- active repository ruleset for the default branch with no bypass actors
 - repository-level squash merge only
 - repository-level auto-merge disabled
 - automatic head-branch deletion after merge
@@ -50,6 +51,15 @@ delete_branch_on_merge = true
 allow_update_branch = true
 allow_auto_merge = false
 MIRRORED_BRANCHES = main
+ruleset.name = "main contributor merge gate"
+ruleset.enforcement = active
+ruleset.conditions.ref_name.include = ["~DEFAULT_BRANCH"]
+ruleset.bypass_actors = []
+ruleset.pull_request.allowed_merge_methods = ["squash"]
+ruleset.pull_request.required_approving_review_count = 1
+ruleset.pull_request.require_code_owner_review = true
+ruleset.pull_request.require_last_push_approval = true
+ruleset.required_status_checks = ["focused Rust crates"]
 ```
 
 ## CODEOWNERS
@@ -139,6 +149,8 @@ settings:
 ```powershell
 gh repo view yanghao1143/rust-norion --json nameWithOwner,visibility,defaultBranchRef
 gh api repos/yanghao1143/rust-norion/branches/main/protection
+gh api repos/yanghao1143/rust-norion/rulesets
+gh api repos/yanghao1143/rust-norion/rules/branches/main
 gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch,allow_auto_merge}'
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md
