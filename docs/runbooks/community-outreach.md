@@ -469,6 +469,75 @@ orchestration follow-up batch, all recorded in
 | Yichao Agent Benchmarks | Submitted | https://github.com/yichao-liang/awesome-agent-benchmarks/issues/2 |
 | Erson Coding Agent Orchestration | Submitted | https://github.com/erson/awesome-coding-agent-orchestration/issues/1 |
 
+2026-06-25 UTC agent workflow, harness, memory, coding-agent, and Chinese
+agent-resource follow-up batch, all recorded in
+`docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| WangHrYii Agentic Workflow | Submitted | https://github.com/WangHrYii/Awesome-Agentic-Workflow/issues/1 |
+| Vinkius AI Coding Agents | Submitted | https://github.com/vinkius-labs/awesome-ai-coding-agents/issues/6 |
+| DeanSher AI Software Engineering | Submitted | https://github.com/deansher/awesome-ai-software-engineering/issues/1 |
+| Aviskaar Agentic Memory | Submitted | https://github.com/aviskaar/awesome-agentic-memory/issues/1 |
+| Anandesh Agent Harnesses | Submitted | https://github.com/Anandesh-Sharma/awesome-agent-harnesses/issues/1 |
+| Ttxs Coding Agent Eval | Submitted | https://github.com/ttxs69/awesome-coding-agent-eval/issues/1 |
+| P81 Multi-Agent Orchestration | Submitted | https://github.com/p81sunshine/Awesome-Multi-Agent-Orchestration/issues/1 |
+| Yanshengjia ML Road | Submitted | https://github.com/yanshengjia/ml-road/issues/11 |
+| Datawhale Hello Generic Agent | Submitted | https://github.com/datawhalechina/hello-generic-agent/issues/24 |
+| Improbable Studios AI Resources | Submitted | https://github.com/ImprobableStudios/AI-Resources/issues/1 |
+
+2026-06-25 UTC general AI agent directory and agentic-resource follow-up batch,
+all recorded in `docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| HA Autonomus AI Agents | Submitted | https://github.com/HA2345567/awesome-autonomus-ai-agents/issues/2 |
+| Eltociear AI Agent | Submitted | https://github.com/eltociear/awesome-ai-agent/issues/1 |
+| Agent Almanac | Submitted | https://github.com/jonradoff/awesome-agent-almanac/issues/2 |
+| DevTalha AI Agents | Submitted | https://github.com/devtalhailyas/list-of-AI-Agents/issues/1 |
+| Nasimahmmed Best AI Agents | Submitted | https://github.com/nasimahmmed/best-ai-agents/issues/1 |
+| SquirrelCyber AI Agents Amazing | Submitted | https://github.com/SquirrelCyber001/AI-Agents-amazing/issues/1 |
+| Dominik Agentic AI Resources | Submitted | https://github.com/dominik1001/agentic-ai-resources/issues/1 |
+| Asjad Agentic AI Resources | Submitted | https://github.com/asjad99/Agentic-AI-Resources/issues/1 |
+
+2026-06-25 UTC coding-agent systems, tooling, harness, and evaluation follow-up
+batch, all recorded in `docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| Namphuong AI Coding Agent Tools | Submitted | https://github.com/namphuongtran/awesome-ai-coding-agent-tools/issues/24 |
+| Kzhou Coding Agent Systems | Submitted | https://github.com/kzhou003/awesome-coding-agent-systems/issues/2 |
+| ClosedLoop Coding Agents | Submitted | https://github.com/closedloop-technologies/awesome-coding-agents/issues/6 |
+| Caldalis Coding Agents | Submitted | https://github.com/Caldalis/awesome-coding-agents/issues/2 |
+| Hhkaos Coding Agents Resources | Submitted | https://github.com/hhkaos/ai-codings-agents-resources/issues/2 |
+| Wdzhwsh Coding Agents | Submitted | https://github.com/wdzhwsh4067/awesome-coding-agents/issues/7 |
+| Outer Joined Coding Agents | Submitted | https://github.com/outer-joined/awesome-coding-agents/issues/2 |
+| Tiennm Coding Agents | Submitted | https://github.com/tiennm99/awesome-coding-agents/issues/3 |
+
+2026-06-25 UTC harness, context-engineering, LLM/agent memory, and evaluation
+completion batch, all recorded in `docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| East196 Harness Engineering | Submitted | https://github.com/East196/awesome-harness-engineering/issues/2 |
+| Nongjun Harness Engineering | Submitted | https://github.com/nongjun/awesome-harness-engineering/issues/1 |
+| AI for Enterprises Context Engineering | Submitted | https://github.com/ai-for-enterprises/awesome-context-engineering-enterprise/issues/1 |
+| Daniel Rosehill Context Engineering | Submitted | https://github.com/danielrosehill/Context-Engineering-Resources/issues/1 |
+| Chenhuiyu LLM Memory | Submitted | https://github.com/chenhuiyu/awesome-llm-memory/issues/1 |
+| Ranjith Context Engineering | Submitted | https://github.com/ranjithrajv/awesome-context-engineering/issues/1 |
+| Harness Engineer | Submitted | https://github.com/harness-engineer/awesome-harness-engineering/issues/2 |
+| Jinuk Harness Engineering | Submitted | https://github.com/jinuk0211/awesome-harness-engineering/issues/1 |
+| Zhouyuming Harness Engineering | Submitted | https://github.com/zhouyuming/awesome-harness-engineering/issues/2 |
+| Claudier Context Engineering | Submitted | https://github.com/ClaudierOrlandi/Awesome-Context-Engineering/issues/1 |
+| Liuestc Harness Engineering | Submitted | https://github.com/liuestc/awesome-harness-engineering/issues/2 |
+| Anuar Context Engineering | Submitted | https://github.com/Anuar-boop/awesome-context-engineering/issues/1 |
+| Ishan AI Memory Assistants | Submitted | https://github.com/ishandutta2007/Awesome-AI-Memory-Assistants/issues/3 |
+| Ksuchoi Harness Engineering | Submitted | https://github.com/ksuchoi216/awesome_harness_engineering/issues/1 |
+| Marcelo Context Engineering | Submitted | https://github.com/MarceloFossRJ/context-engineering-resources/issues/1 |
+| Revectores LLM Memory | Submitted | https://github.com/revectores/awesome-llm-memory/issues/1 |
+| Ausboss Agent Harness Resources | Submitted | https://github.com/ausboss/agent-harness-resources/issues/1 |
+| Vnageshwaran LLM Agent Evaluation | Submitted | https://github.com/vnageshwaran-de/Awesome-LLM-Agent-Evaluation/issues/1 |
+
 The full registry is in `docs/outreach/community-registry.yml`.
 
 ## Monthly Update Workflow
