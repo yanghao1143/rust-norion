@@ -20,3 +20,13 @@ Linked issue:
 
 Repository owner or maintainer approval is required before merge.
 CODEOWNER approval from `@yanghao1143` is required for protected branches.
+
+## Contributor Card optional
+
+- Name:
+- GitHub / Gitee:
+- Lane:
+- Impact:
+- Validation:
+- Related issue / doc / demo:
+- Showcase request: README | Hall of Fame | release notes | module docs | none
