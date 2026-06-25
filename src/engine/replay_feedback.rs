@@ -152,8 +152,41 @@ pub(super) fn memory_feedback_note(report: &MemoryFeedbackReport) -> Option<Stri
     })
 }
 
-pub(super) fn used_memory_reinforcement_amount(report: &ReflectionReport) -> f32 {
-    (report.quality - report.revision_actions.len() as f32 * 0.02).clamp(0.05, 1.0)
+pub(super) fn used_memory_reinforcement_amount(
+    memory_key: &str,
+    report: &ReflectionReport,
+    runtime_kv_segment_yield: Option<f32>,
+) -> f32 {
+    let base = (report.quality - report.revision_actions.len() as f32 * 0.02).clamp(0.05, 1.0);
+    if !is_runtime_kv_memory_key(memory_key) {
+        return base;
+    }
+
+    runtime_kv_segment_yield
+        .map(|segment_yield| base * (0.35 + segment_yield.clamp(0.0, 1.0) * 0.65))
+        .unwrap_or(base)
+        .clamp(0.05, 1.0)
+}
+
+pub(super) fn used_memory_runtime_kv_segment_penalty_amount(
+    memory_key: &str,
+    runtime_kv_segment_yield: Option<f32>,
+) -> Option<f32> {
+    if !is_runtime_kv_memory_key(memory_key) {
+        return None;
+    }
+
+    let segment_yield = runtime_kv_segment_yield?;
+    if segment_yield >= 0.45 {
+        return None;
+    }
+
+    let waste = 1.0 - segment_yield.clamp(0.0, 1.0);
+    Some((0.20 + waste * 0.70).clamp(0.20, 0.90))
+}
+
+fn is_runtime_kv_memory_key(memory_key: &str) -> bool {
+    memory_key.starts_with("runtime_kv:")
 }
 
 pub(super) fn used_memory_penalty_amount(

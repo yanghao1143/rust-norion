@@ -248,10 +248,20 @@ impl NoironEngine {
             Vec::new()
         };
 
+        let runtime_kv_segment_yield = runtime_diagnostics.runtime_kv_segment_yield();
         let mut memory_feedback = MemoryFeedbackReport::default();
         for memory in &used_memories {
-            if admit_memory && !drift_report.penalize_used_memory {
-                let amount = used_memory_reinforcement_amount(&report);
+            if let Some(amount) =
+                used_memory_runtime_kv_segment_penalty_amount(&memory.key, runtime_kv_segment_yield)
+            {
+                let update = self.cache.penalize(memory.id, amount);
+                memory_feedback.record_penalty(amount, update);
+            } else if admit_memory && !drift_report.penalize_used_memory {
+                let amount = used_memory_reinforcement_amount(
+                    &memory.key,
+                    &report,
+                    runtime_kv_segment_yield,
+                );
                 let update = self.cache.reinforce(memory.id, amount);
                 memory_feedback.record_reinforcement(amount, update);
             } else {
@@ -433,7 +443,7 @@ impl NoironEngine {
                 &reasoning_genome,
                 &reasoning_genome_splice,
                 process_reward.total,
-                runtime_diagnostics.runtime_kv_segment_yield(),
+                runtime_kv_segment_yield,
             );
 
         let router_threshold_after = self.router.threshold();

@@ -130,6 +130,104 @@ fn fast_path_watch_holds_exported_runtime_kv_admission() {
     );
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeKvMemoryFeedbackBackend {
+    included: usize,
+    skipped: usize,
+    rejected: usize,
+}
+
+impl RuntimeKvMemoryFeedbackBackend {
+    fn new(included: usize, skipped: usize, rejected: usize) -> Self {
+        Self {
+            included,
+            skipped,
+            rejected,
+        }
+    }
+}
+
+impl InferenceBackend for RuntimeKvMemoryFeedbackBackend {
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        Some(vec![1.0, 0.0, 0.0])
+    }
+
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "Rust runtime KV reuse memory keeps Noiron adaptive routing grounded with useful local cache evidence.",
+            vec![ReasoningStep::new(
+                "runtime_kv_feedback",
+                "runtime kv memory feedback should update cache strength",
+                0.92,
+            )],
+        )
+        .with_runtime_diagnostics(RuntimeDiagnostics {
+            model_id: Some("runtime-kv-feedback-test".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.34),
+            kv_influence: Some(0.62),
+            imported_kv_blocks: self.included + self.skipped + self.rejected,
+            runtime_kv_segments_included: self.included,
+            runtime_kv_segments_skipped: self.skipped,
+            runtime_kv_segments_rejected: self.rejected,
+            ..RuntimeDiagnostics::default()
+        })
+    }
+}
+
+#[test]
+fn live_feedback_penalizes_low_yield_runtime_kv_memory() {
+    let mut engine = NoironEngine::new();
+    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: reusable runtime kv",
+        vec![1.0, 0.0, 0.0],
+        0.90,
+    );
+    let before = memory_strength(&engine, runtime_kv_memory_id);
+    let mut backend = RuntimeKvMemoryFeedbackBackend::new(0, 3, 2);
+
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+    let after = memory_strength(&engine, runtime_kv_memory_id);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(0.0)
+    );
+    assert_eq!(outcome.memory_feedback.penalized, 1);
+    assert_eq!(outcome.memory_feedback.reinforced, 0);
+    assert!(after < before);
+    assert!(outcome.memory_feedback.penalty_amount >= 0.80);
+}
+
+#[test]
+fn live_feedback_reinforces_high_yield_runtime_kv_memory() {
+    let mut engine = NoironEngine::new();
+    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: reusable runtime kv",
+        vec![1.0, 0.0, 0.0],
+        0.90,
+    );
+    let before = memory_strength(&engine, runtime_kv_memory_id);
+    let mut backend = RuntimeKvMemoryFeedbackBackend::new(3, 0, 0);
+
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+    let after = memory_strength(&engine, runtime_kv_memory_id);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(1.0)
+    );
+    assert_eq!(outcome.memory_feedback.reinforced, 1);
+    assert_eq!(outcome.memory_feedback.penalized, 0);
+    assert!(after > before);
+}
+
 #[test]
 fn production_runtime_kernel_flows_through_engine_feedback_and_runtime_kv() {
     let (asset_dir, weights, tokenizer) = create_runtime_assets("engine-production-kernel");
