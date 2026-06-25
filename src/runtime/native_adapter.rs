@@ -602,6 +602,11 @@ impl<A: RustNativeInferenceAdapter> ModelRuntime for RustNativeModelRuntime<A> {
     }
 
     fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        if self.cache_mode == ChunkedKvCacheMode::NoCache {
+            self.pending_imported_kv_blocks.clear();
+            return Ok(0);
+        }
+
         self.pending_imported_kv_blocks = blocks.to_vec();
         Ok(blocks.len())
     }

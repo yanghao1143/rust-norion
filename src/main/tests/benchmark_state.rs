@@ -126,6 +126,79 @@ fn benchmark_records_rust_native_adapter_stream_evidence_from_real_run() {
 }
 
 #[test]
+fn benchmark_compares_rust_native_adapter_cache_modes_from_real_runs() {
+    let asset_dir = temp_asset_dir("rust-native-adapter-cache-mode-benchmark");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let case_count = default_benchmark_cases().len();
+    let modes = [
+        (rust_norion::ChunkedKvCacheMode::NoCache, "no_cache"),
+        (
+            rust_norion::ChunkedKvCacheMode::ChunkedCache,
+            "chunked_cache",
+        ),
+        (
+            rust_norion::ChunkedKvCacheMode::GenomeFiltered,
+            "genome_filtered",
+        ),
+    ];
+    let mut observed = Vec::new();
+
+    for (mode, label) in modes {
+        let trace_path = asset_dir.join(format!("{label}.jsonl"));
+        let mut engine = NoironEngine::new();
+        let runtime =
+            rust_norion::RustNativeModelRuntime::new(rust_norion::MockRustNativeAdapter::new())
+                .with_cache_mode(mode);
+        let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+        let summary = run_benchmark(&mut engine, &mut backend, &trace_path).unwrap();
+        let gate_report = summary.evaluate(&rust_norion::BenchmarkGate {
+            min_average_quality: 0.0,
+            min_average_reward: 0.0,
+            min_runtime_adapter_cache_modes: Some(1),
+            min_runtime_adapter_stream_trace_cases: Some(case_count),
+            min_runtime_adapter_stream_gate_summary_cases: Some(case_count),
+            max_runtime_adapter_contract_violations: Some(0),
+            max_runtime_device_execution_violations: Some(0),
+            ..rust_norion::BenchmarkGate::default()
+        });
+        let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+        assert_eq!(summary.len(), case_count);
+        assert_eq!(summary.runtime_adapter_cache_modes_csv(), label);
+        assert_eq!(summary.runtime_adapter_cache_mode_cases(), case_count);
+        assert!(gate_report.passed, "{:?}", gate_report.failures);
+        assert!(trace_report.passed, "{:?}", trace_report.failures);
+        assert_eq!(trace_report.checked_lines, case_count);
+        observed.push((
+            label,
+            summary.total_runtime_kv_imported(),
+            summary.total_runtime_kv_exported(),
+            summary.total_runtime_kv_segments_included(),
+        ));
+    }
+
+    assert_eq!(
+        observed
+            .iter()
+            .map(|(mode, _, _, _)| *mode)
+            .collect::<Vec<_>>(),
+        vec!["no_cache", "chunked_cache", "genome_filtered"]
+    );
+    assert_eq!(observed[0].1, 0);
+    assert_eq!(observed[0].2, 0);
+    assert_eq!(observed[0].3, 0);
+    assert!(observed[1].1 > observed[0].1);
+    assert!(observed[1].2 > observed[0].2);
+    assert!(observed[1].3 > observed[0].3);
+    assert!(observed[2].1 > observed[0].1);
+    assert!(observed[2].2 > observed[0].2);
+    assert!(observed[2].3 > observed[0].3);
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn benchmark_dispatch_appends_self_evolution_admission_trace_packet() {
     let asset_dir = temp_asset_dir("benchmark-dispatch-admission-trace");
     fs::create_dir_all(&asset_dir).unwrap();
