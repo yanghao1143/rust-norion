@@ -294,6 +294,21 @@ same recruitment message everywhere.
 | Nluninja AgenticAI Repo | Submitted | Track https://github.com/nluninja/awesome-agenticAI-repo/issues/3 |
 | Sam Blackfly LLM Tools | Submitted | Track https://github.com/sam-blackfly/awesome-llm-tools/issues/3 |
 | Vincent Wei Agent Frameworks | Submitted | Track https://github.com/Vincentwei1021/awesome-ai-agent-frameworks/issues/1 |
+| Aloth AI Agents | Submitted | Track https://github.com/aloth/awesome-ai-agents/issues/6 |
+| Frangelbarrera AI Agents | Submitted | Track https://github.com/frangelbarrera/awesome-ai-agents/issues/4 |
+| Thulas AI Agents | Submitted | Track https://github.com/thulas42/awesome-ai-agents/issues/1 |
+| Pauldest AI Agent | Submitted | Track https://github.com/Pauldest/awesome-ai-agent/issues/1 |
+| Libulibas Agentic AI | Submitted | Track https://github.com/libulibas/awesome-agentic-ai/issues/1 |
+| YvMohsin LLM Agents | Submitted | Track https://github.com/YvMohsin/awesome-llm-agents/issues/1 |
+| Sumanth LLM Toolkit | Submitted | Track https://github.com/sumanth-dhanya/llm-toolkit/issues/3 |
+| Vitaliy AI Engineering | Submitted | Track https://github.com/vitaliy-hnatyk/awesome-ai-engineering/issues/1 |
+| Gen Academy Agentic AI Resources | Deferred | Course resource pack; wait for tutorial-quality artifact |
+| JamieBeach Agentic AI | Deferred | Paper-oriented and stale; wait for article or paper-backed artifact |
+| Jerry Agentic AI | Deferred | README/content unavailable through API; wait for clear contribution flow |
+| Spinov LLM Tools | Deferred | Production-ready tool list; wait for production-ready evidence |
+| Clumsyquest Vibe Coding | Deferred | Wait for a direct user-facing coding-agent or vibe-coding surface |
+| Sahiti AI Coding Agents | Deferred | Coding-agent-specific list; wait for user-facing coding agent |
+| Brethof AI Coding Agents | Deferred | Coding assistant comparison; wait for direct coding assistant surface |
 | Eudk AI Tools | Deferred | Requires publicly usable now tools; wait for clearer release/tool surface |
 | JMcrafter AI Tools | Deferred | Self-submitted repos under 50 stars are treated as advertising |
 | AstreoX Agent Tools | Deferred | Requires 50+ GitHub stars for open-source projects |

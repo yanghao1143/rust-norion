@@ -3103,3 +3103,161 @@ communities:
     proof: https://github.com/Vincentwei1021/awesome-ai-agent-frameworks/issues/1
     next_action: wait_for_scope_feedback_then_prepare_small_framework_profile_pr_if_invited
     notes: Chinese scope-check issue positioned rust-norion as a Rust runtime-control and self-evolution control-layer prototype, not a production-ready framework.
+
+  - id: aloth-awesome-ai-agents
+    platform: github
+    kind: ai_agent_resource_list
+    url: https://github.com/aloth/awesome-ai-agents
+    audience: AI agent framework, infrastructure, evaluation, safety, memory, and governance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/aloth/awesome-ai-agents/issues/6
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: Issue mapped rust-norion to Frameworks and Libraries, Agent Infrastructure, Evaluation and Testing, Safety and Governance, and Memory/Persistence sections.
+
+  - id: frangelbarrera-awesome-ai-agents
+    platform: github
+    kind: ai_agent_index
+    url: https://github.com/frangelbarrera/awesome-ai-agents
+    audience: AI agent framework, protocol, observability, local/self-hosted, memory, and safety readers
+    fit: high
+    status: submitted
+    proof: https://github.com/frangelbarrera/awesome-ai-agents/issues/4
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue referenced the repository's own categories and disclosed early prototype status before any PR.
+
+  - id: thulas42-awesome-ai-agents
+    platform: github
+    kind: ai_agent_framework_resource_list
+    url: https://github.com/thulas42/awesome-ai-agents
+    audience: AI agent framework, multi-agent, RAG/memory, deployment, and community readers
+    fit: high
+    status: submitted
+    proof: https://github.com/thulas42/awesome-ai-agents/issues/1
+    next_action: wait_for_scope_feedback_before_readme_pr
+    notes: Issue positioned rust-norion as a research-engineering prototype around runtime boundaries, routing, model-pool policy, memory hygiene, and self-evolution evidence gates.
+
+  - id: pauldest-awesome-ai-agent
+    platform: github
+    kind: chinese_ai_agent_landscape
+    url: https://github.com/Pauldest/awesome-ai-agent
+    audience: Chinese AI agent overview, framework, memory, planning, and action readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Pauldest/awesome-ai-agent/issues/1
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Chinese issue framed rust-norion as a Rust AI control-layer prototype with routing, memory, reflection, runtime boundary, evidence gate, rollback, and self-evolution surfaces.
+
+  - id: libulibas-awesome-agentic-ai
+    platform: github
+    kind: agentic_ai_tools_frameworks_list
+    url: https://github.com/libulibas/awesome-agentic-ai
+    audience: agentic AI frameworks, memory, tools, multi-agent, observability, and eval readers
+    fit: high
+    status: submitted
+    proof: https://github.com/libulibas/awesome-agentic-ai/issues/1
+    next_action: wait_for_scope_feedback_then_follow_pr_format_if_invited
+    notes: Issue mapped rust-norion to Frameworks, Memory, Multi-Agent, and Observability/Eval sections.
+
+  - id: yvmohsin-awesome-llm-agents
+    platform: github
+    kind: llm_agent_paper_and_project_list
+    url: https://github.com/YvMohsin/awesome-llm-agents
+    audience: LLM-agent papers, open-source projects, planning, memory, tool-use, and workflow readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/YvMohsin/awesome-llm-agents/issues/1
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Scope-check issue asked whether implementation-focused LLM-agent control surfaces fit a paper and open-source project list.
+
+  - id: sumanth-dhanya-llm-toolkit
+    platform: github
+    kind: llm_engineering_toolkit
+    url: https://github.com/sumanth-dhanya/llm-toolkit
+    audience: LLM agents, monitoring, evaluation harness, MCP, and engineering-tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/sumanth-dhanya/llm-toolkit/issues/3
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue suggested LLM Agents, LLM Monitoring, LLM Evaluation Harness, LLM MCP, or related engineering-tool sections.
+
+  - id: vitaliy-hnatyk-awesome-ai-engineering
+    platform: github
+    kind: ai_engineering_resource_list
+    url: https://github.com/vitaliy-hnatyk/awesome-ai-engineering
+    audience: AI engineering framework, orchestration, agents, eval, inference, safety, and developer-tooling readers
+    fit: high
+    status: submitted
+    proof: https://github.com/vitaliy-hnatyk/awesome-ai-engineering/issues/1
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Issue mapped rust-norion to Frameworks and Orchestration, Agents and Tool Use, Evaluation and Observability, Inference and Serving, Safety/Security, and Developer Tooling.
+
+  - id: the-gen-academy-agentic-ai-resources
+    platform: github
+    kind: course_resource_pack
+    url: https://github.com/The-Gen-Academy/awesome-agentic-ai-resources
+    audience: Mastering Agentic AI course learners
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_polished_tutorial_or_course_resource_exists
+    notes: Repository is a course resource pack organized by weekly readings; a raw project link would be promotional without a tutorial-quality artifact.
+
+  - id: jamiebeach-awesome-agentic-ai
+    platform: github
+    kind: paper_list
+    url: https://github.com/jamiebeach/Awesome-Agentic-AI
+    audience: agentic AI research paper readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_substantial_article_or_paper_backed_artifact_exists
+    notes: README is currently research-paper oriented and last observed push was 2024-06-14; do not submit the project as a generic resource.
+
+  - id: jerry196-awesome-agentic-ai
+    platform: github
+    kind: agentic_ai_resource_candidate
+    url: https://github.com/Jerry196-byte/awesome-agentic-ai
+    audience: agentic AI principles and technology readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_repository_content_and_contribution_flow_are_clear
+    notes: GitHub API did not return a README; defer until the repository exposes a clear resource structure and contribution path.
+
+  - id: spinov001-awesome-llm-tools
+    platform: github
+    kind: llm_tools_list
+    url: https://github.com/spinov001-art/awesome-llm-tools
+    audience: production-ready LLM inference, RAG, monitoring, deployment, and testing tool readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_production_ready_tool_evidence
+    notes: README says the list focuses on practical production-ready tools, while rust-norion remains an early research-engineering prototype.
+
+  - id: clumsyquest-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_tool_list
+    url: https://github.com/clumsyquest/awesome-vibe-coding
+    audience: AI-assisted software engineering tool, framework, and agent readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_direct_user_facing_coding_agent_or_vibe_coding_tool
+    notes: Repository is focused on AI-assisted software engineering tools; rust-norion is currently a runtime-control prototype rather than a direct coding agent.
+
+  - id: sahitimulagada-awesome-ai-coding-agents
+    platform: github
+    kind: coding_agent_list
+    url: https://github.com/SahitiMulagada/awesome-ai-coding-agents
+    audience: AI coding agent, IDE, CLI, orchestrator, and developer-tooling readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_exposes_a_user_facing_coding_agent_surface
+    notes: The list targets coding agents and AI coding tools; rust-norion should wait until it has a concrete coding-agent interface or plugin.
+
+  - id: brethofai-awesome-ai-coding-agents
+    platform: github
+    kind: coding_agent_review_list
+    url: https://github.com/BrethofAI/awesome-ai-coding-agents
+    audience: AI coding assistant comparison readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_becomes_a_directly_usable_coding_assistant
+    notes: Repository is an opinionated comparison of coding assistants; rust-norion is not currently a direct coding assistant.
