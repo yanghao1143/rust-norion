@@ -111,12 +111,30 @@ same recruitment message everywhere.
 | AI Boost Harness Engineering | Submitted | Track https://github.com/ai-boost/awesome-harness-engineering/issues/86 |
 | Vectara Agent Failures | Submitted | Track https://github.com/vectara/awesome-agent-failures/issues/42 |
 | Gloria Meng Agent Harness Survey | Submitted | Track https://github.com/Gloriaameng/Awesome-Agent-Harness/issues/6 |
+| OneJune Awesome LLM Eval | Submitted | Track https://github.com/onejune2018/Awesome-LLM-Eval/issues/63 |
+| Vivy Agent Orchestration | Submitted | Track https://github.com/vivy-yi/awesome-agent-orchestration/issues/8 |
+| Samkhur LLM Planning Reasoning | Submitted | Track https://github.com/samkhur006/awesome-llm-planning-reasoning/issues/6 |
+| CodeSentryAI Rust Neural Network | Submitted | Track https://github.com/CodeSentryAI/Awesome-Rust-Neural-Network/issues/2 |
+| Picrew Agent Harness | Submitted | Track https://github.com/Picrew/awesome-agent-harness/issues/30 |
+| AutoJunjie Agent Harness | Submitted | Track https://github.com/AutoJunjie/awesome-agent-harness/issues/31 |
+| Mahonzhan Agent Harness | Submitted | Track https://github.com/mahonzhan/awesome-agent-harness/issues/9 |
+| RUCAIBox Agent Harness | Submitted | Track https://github.com/RUCAIBox/awesome-agent-harness/issues/4 |
+| HKUST KnowComp Agent Harness | Submitted | Track https://github.com/HKUST-KnowComp/Awesome-Agent-Harness/issues/4 |
+| Jiji Harness Engineering | Submitted | Track https://github.com/jiji262/awesome-harness-engineering/issues/5 |
+| Jiaaqiliu Harness Engineering | Submitted | Track https://github.com/Jiaaqiliu/Awesome-Harness-Engineering/issues/4 |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
 | DeepSpaceHarbor AI Security | Submitted | Track https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44 |
 | Giskard AI Safety | Deferred | Paper/article list; wait for safety-focused technical article |
 | Zhou-Zi7 AI Security BIG4 | Deferred | Top-conference paper list; wait for related paper |
+| TJUNLP LLM Evaluation Papers | Deferred | Survey paper list; wait for related evaluation paper/dataset/platform |
 | AmanPriyanshu AI For Security | Deferred | AI-for-security list; wait for concrete security tool or agent artifact |
 | Xu-Xiang Security Vul LLM | Deferred | Vulnerability/POC aggregation; rust-norion is not a vulnerability resource |
+| WG Wang LLM Benchmarks | Deferred | Benchmark list; wait for reusable benchmark artifact |
+| Karminski LLM Benchmark Prompts | Deferred | Prompt benchmark list; submit only if rust-norion contributes a reusable prompt |
+| Quester LLM Planning | Deferred | Survey/paper/benchmark list; wait for paper or benchmark-backed artifact |
+| BIGAI AI Memory | Deferred | TMLR survey/paper taxonomy; wait for paper-backed memory evidence |
+| AIM AI Agents Medicine | Deferred | Healthcare-specific list; wait for healthcare artifact |
+| Chengjl Agent Harness Notes | Deferred | Needs a deep-dive/source-analysis note, not a raw project link |
 | Qianlima Lifelong LLM Agent | Deferred | Survey/paper/benchmark list; wait for related paper or benchmark artifact |
 | YXF Efficient Agents | Deferred | Paper list; wait for efficiency paper or benchmark-backed artifact |
 | Shiyao Agent Evolution | Submitted | Track https://github.com/Shiyao-Huang/awesome-agent-evolution/issues/17 |
@@ -156,6 +174,8 @@ same recruitment message everywhere.
 | AIP Engineer Reads | Deferred | Reading list; submit only after a technical article exists |
 | Dontriskit AI Software Engineering | Deferred | Needs direct AI software-engineering tool fit and stronger community signals |
 | Flatlogic Software Development Agents | Deferred | Directory is for coding agents, not control-layer prototypes |
+| Shubhamsaboo LLM Apps | Deferred | Cookbook of runnable templates; wait for self-contained app template |
+| Joypaul Shubhamsaboo LLM Apps | Deferred | Duplicate app-template surface; track upstream first |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | Gitee Awesome MCP Servers | Candidate | Login-check contribution flow; use only if control-layer tooling fits |
