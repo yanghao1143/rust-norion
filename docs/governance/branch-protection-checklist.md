@@ -26,6 +26,7 @@ GitHub branch protection for this branch should require:
 - repository-level auto-merge disabled
 - automatic head-branch deletion after merge
 - PR branch update enabled when the head branch is behind `main`
+- Gitee mirror synchronization limited to `main`
 
 The current repository setting reported by GitHub API matches this policy:
 
@@ -46,6 +47,7 @@ allow_rebase_merge = false
 delete_branch_on_merge = true
 allow_update_branch = true
 allow_auto_merge = false
+MIRRORED_BRANCHES = main
 ```
 
 ## CODEOWNERS
@@ -114,6 +116,8 @@ As of 2026-06-25, the intended repository permission baseline is:
 - no routine contributor needs direct repository write access
 - reviewer and module-collaborator status does not imply merge authority
 - maintainer expansion requires an explicit owner decision
+- Gitee is a mirror-only surface for `main`, not a place to publish topic
+  branches
 - protected-branch merge remains gated by CODEOWNER review, latest-push
   approval, required checks, conversation resolution, and explicit maintainer
   action

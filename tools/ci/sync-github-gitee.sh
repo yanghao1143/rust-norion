@@ -16,7 +16,8 @@ require_env GITHUB_REPOSITORY
 require_env GH_TOKEN
 
 SYNC_PREFIX="${SYNC_PREFIX:-sync/gitee}"
-PROTECTED_BRANCHES="${PROTECTED_BRANCHES:-main codex-runtime-device-abi}"
+MIRRORED_BRANCHES="${MIRRORED_BRANCHES:-main}"
+PROTECTED_BRANCHES="${PROTECTED_BRANCHES:-main}"
 SYNC_RETRY_ATTEMPTS="${SYNC_RETRY_ATTEMPTS:-3}"
 SYNC_RETRY_DELAY_SECS="${SYNC_RETRY_DELAY_SECS:-10}"
 SYNC_GIT_TIMEOUT_SECS="${SYNC_GIT_TIMEOUT_SECS:-120}"
@@ -83,6 +84,16 @@ is_protected_branch() {
   return 1
 }
 
+is_mirrored_branch() {
+  local branch="$1"
+  for mirrored in ${MIRRORED_BRANCHES}; do
+    if [[ "${branch}" == "${mirrored}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 skip_branch() {
   local branch="$1"
   [[ "${branch}" == "HEAD" || "${branch}" == "${SYNC_PREFIX}/"* ]]
@@ -124,6 +135,10 @@ sync_gitee_branches_into_github() {
   while IFS= read -r ref; do
     local branch="${ref#gitee/}"
     if skip_branch "${branch}"; then
+      continue
+    fi
+    if ! is_mirrored_branch "${branch}"; then
+      echo "Skipping non-mirrored Gitee branch ${branch}."
       continue
     fi
 
@@ -176,6 +191,10 @@ sync_github_branches_into_gitee() {
   while IFS= read -r ref; do
     local branch="${ref#origin/}"
     if skip_branch "${branch}"; then
+      continue
+    fi
+    if ! is_mirrored_branch "${branch}"; then
+      echo "Skipping non-mirrored GitHub branch ${branch}."
       continue
     fi
 

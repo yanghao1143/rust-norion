@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/pr-validation.yml"
+      - ".github/workflows/mirror-gitee.yml"
       - ".github/CODEOWNERS"
       - ".github/pull_request_template.md"
       - "Cargo.lock"
@@ -19,10 +20,12 @@ on:
       - "crates/norion-eval/**"
       - "crates/norion-memory/**"
       - "crates/norion-test/**"
+      - "tools/ci/**"
       - "tools/evolution-loop/**"
   push:
     paths:
       - ".github/workflows/pr-validation.yml"
+      - ".github/workflows/mirror-gitee.yml"
       - ".github/CODEOWNERS"
       - ".github/pull_request_template.md"
       - "Cargo.lock"
@@ -38,6 +41,7 @@ on:
       - "crates/norion-eval/**"
       - "crates/norion-memory/**"
       - "crates/norion-test/**"
+      - "tools/ci/**"
       - "tools/evolution-loop/**"
   workflow_dispatch:
 
@@ -124,3 +128,5 @@ jobs:
           grep -Fq "Change remains compatible with the GPL-3.0 license" .github/pull_request_template.md
           grep -Fq "External code was not copied from AGPL/proprietary/commercial-restricted/private sources" .github/pull_request_template.md
           grep -Fxq "* @yanghao1143" .github/CODEOWNERS
+          grep -Fq "MIRRORED_BRANCHES: main" .github/workflows/mirror-gitee.yml
+          grep -Fq 'MIRRORED_BRANCHES="${MIRRORED_BRANCHES:-main}"' tools/ci/sync-github-gitee.sh
