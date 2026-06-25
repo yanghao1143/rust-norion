@@ -35,8 +35,12 @@ same recruitment message everywhere.
 | InftyAI Awesome LLMOps | Submitted | Track https://github.com/InftyAI/Awesome-LLMOps/issues/469 |
 | Slava Awesome AI Agents | Submitted | Track https://github.com/slavakurilyak/awesome-ai-agents/issues/319 |
 | Jim Awesome AI Agents | Submitted | Track https://github.com/jim-schwoebel/awesome_ai_agents/issues/359 |
+| Jenqyang Awesome AI Agents | Submitted | Track https://github.com/Jenqyang/Awesome-AI-Agents/pull/333 |
+| Awesome AI Agents 2026 | Submitted | Track https://github.com/caramaschiHG/awesome-ai-agents-2026/pull/376 |
 | Junhua Awesome LLM Agents | Submitted | Track https://github.com/junhua/awesome-llm-agents/issues/11 |
 | Awesome Agentic Patterns | Deferred | Only submit a neutral reusable pattern, not a project ad |
+| Awesome CLAWS | Deferred | OpenClaw-inspired projects only; do not submit rust-norion as-is |
+| Awesome AI Apps | Deferred | Submit only if rust-norion has a complete app/demo example |
 | Awesome Rust AI Tools | Submitted | Track https://github.com/KatanoShingo/awesome-rust-ai-tools/issues/1 |
 | Awesome Rust AI | Submitted | Track https://github.com/dhilipsiva/awesome-rust-ai/issues/1 |
 | Awesome LLM Agents | Submitted | Track https://github.com/kaushikb11/awesome-llm-agents/issues/266 |
@@ -44,6 +48,8 @@ same recruitment message everywhere.
 | Awesome Agentic AI ZH | Submitted | Track https://github.com/WenyuChiou/awesome-agentic-ai-zh/issues/44 |
 | E2B Awesome AI SDKs | Submitted | Track https://github.com/e2b-dev/awesome-ai-sdks/pull/257 |
 | TensorChord Awesome LLMOps | Submitted | Track https://github.com/tensorchord/Awesome-LLMOps/pull/603 |
+| Brandon Himpfen Awesome LLMOps | Submitted | Track https://github.com/brandonhimpfen/awesome-llmops/pull/29 |
+| Kenneth Awesome LLMOps | Submitted | Track https://github.com/KennethanCeyer/awesome-llmops/pull/21 |
 | Gitee Rust Boom | Candidate | Verify contribution flow after Gitee login |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | This Week in Rust | Wait | Submit only after a notable release/article |

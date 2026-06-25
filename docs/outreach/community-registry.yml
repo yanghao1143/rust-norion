@@ -33,7 +33,7 @@ communities:
     status: submitted
     proof: https://github.com/rustcn-org/rust-weekly/issues/11
     next_action: wait_for_maintainer_response
-    notes: RustCn weekly accepts issue/PR tips; first project recommendation submitted.
+    notes: RustCn weekly accepts issue/PR tips; first project recommendation submitted. Other rustcn-org repos inspected were project-specific, so do not duplicate contributor posts across the org.
 
   - id: users-rust-lang
     platform: forum
@@ -175,6 +175,28 @@ communities:
     next_action: wait_for_maintainer_feedback_then_open_focused_pr_if_requested
     notes: Contribution section allows issues for new resources; suggestion framed around Building Agents / Frameworks, Security, Tools, or Workflows.
 
+  - id: jenqyang-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/Jenqyang/Awesome-AI-Agents
+    audience: AI agent builders, framework users, and tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Jenqyang/Awesome-AI-Agents/pull/333
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING prefers OSS-first PRs with neutral one-line descriptions; focused Tools entry added with runtime-control prototype wording.
+
+  - id: caramaschi-awesome-ai-agents-2026
+    platform: github
+    kind: awesome_list
+    url: https://github.com/caramaschiHG/awesome-ai-agents-2026
+    audience: AI agent builders and current agent tooling readers
+    fit: high
+    status: submitted
+    proof: https://github.com/caramaschiHG/awesome-ai-agents-2026/pull/376
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING asks for fork/PR and factual table entries; focused AI Safety and Guardrails row added without promotional language.
+
   - id: junhua-awesome-llm-agents
     platform: github
     kind: curated_research_project_list
@@ -195,6 +217,26 @@ communities:
     status: defer
     next_action: only_submit_a_non_promotional_reusable_pattern_with_neutral_references
     notes: CONTRIBUTING is pattern-first and rejects product announcements; do not submit rust-norion as a project listing.
+
+  - id: machinae-awesome-claws
+    platform: github
+    kind: awesome_list
+    url: https://github.com/machinae/awesome-claws
+    audience: OpenClaw-inspired agent and tooling readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_rust_norion_gains_a_real_openclaw_inspired_artifact
+    notes: CONTRIBUTING scope is independent projects inspired by OpenClaw; rust-norion is not OpenClaw-inspired, so submitting would be off-topic.
+
+  - id: rohitg00-awesome-ai-apps
+    platform: github
+    kind: app_examples
+    url: https://github.com/rohitg00/awesome-ai-apps
+    audience: builders looking for complete AI app examples
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_there_is_a_specific_app_example_or_demo
+    notes: Repository appears focused on complete AI app examples, not general projects or infrastructure resources; rust-norion should not be submitted as a generic listing.
 
   - id: awesome-llm-agents
     platform: github
@@ -272,6 +314,28 @@ communities:
     proof: https://github.com/tensorchord/Awesome-LLMOps/pull/603
     next_action: wait_for_maintainer_review
     notes: CONTRIBUTING asks for individual pull requests per suggestion; focused README PR added rust-norion near routing, memory runtime, and agent control-plane tools with prototype wording.
+
+  - id: brandonhimpfen-awesome-llmops
+    platform: github
+    kind: awesome_list
+    url: https://github.com/brandonhimpfen/awesome-llmops
+    audience: LLMOps tool, safety, and operational workflow readers
+    fit: high
+    status: submitted
+    proof: https://github.com/brandonhimpfen/awesome-llmops/pull/29
+    next_action: wait_for_maintainer_review
+    notes: Focused PR added rust-norion under Security and Safety with factual runtime-control boundary wording and prototype scope caveat.
+
+  - id: kenneth-awesome-llmops
+    platform: github
+    kind: awesome_list
+    url: https://github.com/KennethanCeyer/awesome-llmops
+    audience: LLMOps tool and infrastructure readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/KennethanCeyer/awesome-llmops/pull/21
+    next_action: wait_for_maintainer_review
+    notes: README contribution section welcomes relevant fork/PR additions; focused Tools GitHub entry added with prototype wording and concrete LLMOps relevance.
 
   - id: rust-unofficial-awesome-rust
     platform: github
