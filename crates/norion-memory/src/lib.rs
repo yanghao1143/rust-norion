@@ -22,6 +22,7 @@ pub mod replay;
 pub mod retention;
 pub mod reuse;
 pub mod runtime_projection;
+pub mod self_evolving;
 pub mod service;
 pub mod short_term;
 pub mod skills;
@@ -93,7 +94,8 @@ pub use placement::{
     TieredMemoryPlanner,
 };
 pub use repair::{
-    DefaultMemoryRepairPlanner, MemoryRepairAction, MemoryRepairItem, MemoryRepairPlan,
+    DefaultMemoryRepairPlanner, GenomeRepairFactor, GenomeRepairFactorKind, GenomeRepairFactorPlan,
+    GenomeRepairSkippedFactor, MemoryRepairAction, MemoryRepairItem, MemoryRepairPlan,
     MemoryRepairPlanner, MemoryRepairSkippedItem,
 };
 pub use replay::{
@@ -113,6 +115,12 @@ pub use reuse::{
 pub use runtime_projection::{
     AdaptiveStateMemoryProjection, DefaultRuntimeStateProjector, MemoryProjectionAudit,
     MemoryProjectionMismatch, StateInspectionMemoryProjection,
+};
+pub use self_evolving::{
+    AdaptiveHeuristic, AdaptiveHeuristicInput, CaseOutcome, EpisodeInput, EpisodeMatch,
+    EpisodeQuery, HeuristicMatch, HeuristicQuery, InMemorySelfEvolvingMemory, RetrospectiveEpisode,
+    SelfEvolvingCaseReflection, SelfEvolvingMemory, SelfEvolvingMemorySnapshot,
+    SelfEvolvingReflectionReport, ToolReliabilityRecord, ToolReliabilityUpdate,
 };
 pub use service::{
     MemoryAdapterStatus, MemoryCapabilityCoverage, MemoryConsumerProfile, MemoryReadinessReport,
