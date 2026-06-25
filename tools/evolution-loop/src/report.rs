@@ -29,6 +29,7 @@ use crate::pool_artifacts::{
     self, PoolBudgetFairnessSummary, PoolManifestSummary, PoolRouteSummary, PoolStatusSummary,
 };
 use crate::pool_stage;
+use crate::profile_scoring::{self, OfflineReplayReport, ScoringConfig};
 use crate::remote_chain::{self, RemoteChainStatusSummary};
 use crate::self_improve_proposal_artifact::{self, SelfImproveProposalArtifact};
 use crate::validation;
@@ -299,6 +300,11 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             .agent_clean_room_replacement_plan_json_path
             .as_deref(),
     )?;
+    let profile_outcome_replay_report = profile_scoring::load_offline_replay_report(
+        config.profile_outcome_log_path.as_deref(),
+        config.profile_outcome_min_samples,
+        &ScoringConfig::default(),
+    )?;
     print_report(
         &config,
         &summary,
@@ -312,6 +318,15 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
         clean_room_handoff.as_ref(),
         &self_improve_proposal_artifact,
     );
+    if let Some(report) = &profile_outcome_replay_report {
+        println!(
+            "profile_routing_offline_replay: allow_switch={} baseline_samples={} candidate_samples={} rollback_hint={}",
+            report.allow_switch,
+            report.baseline.samples,
+            report.candidate.samples,
+            report.rollback_hint
+        );
+    }
     let gate_requested = config.report_gate || config.report_continuation_gate;
     let ledger_gate_failures = if gate_requested {
         report_gate_threshold_failures(&summary, &config)
@@ -358,6 +373,7 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             clean_room_batch_status.as_ref(),
             clean_room_handoff.as_ref(),
             &self_improve_proposal_artifact,
+            profile_outcome_replay_report.as_ref(),
             &config.required_latest_helper_stage_roles,
             &ledger_gate_failures,
             &strict_gate_failures,
@@ -420,6 +436,11 @@ pub(crate) fn write_run_report_json(
             .agent_clean_room_replacement_plan_json_path
             .as_deref(),
     )?;
+    let profile_outcome_replay_report = profile_scoring::load_offline_replay_report(
+        config.profile_outcome_log_path.as_deref(),
+        config.profile_outcome_min_samples,
+        &ScoringConfig::default(),
+    )?;
 
     let gate_requested = report_gate || report_continuation_gate;
     let ledger_gate_failures = if gate_requested {
@@ -467,6 +488,7 @@ pub(crate) fn write_run_report_json(
         clean_room_batch_status.as_ref(),
         clean_room_handoff.as_ref(),
         &self_improve_proposal_artifact,
+        profile_outcome_replay_report.as_ref(),
         &config.required_latest_helper_stage_roles,
         &ledger_gate_failures,
         &strict_gate_failures,
@@ -5852,6 +5874,7 @@ fn write_report_json(
     clean_room_batch_status: Option<&CleanRoomBatchStatusSummary>,
     clean_room_handoff: Option<&CleanRoomHandoffSummary>,
     self_improve_proposal_artifact: &SelfImproveProposalArtifact,
+    profile_outcome_replay_report: Option<&OfflineReplayReport>,
     required_latest_helper_stage_roles: &[String],
     ledger_gate_failures: &[String],
     strict_gate_failures: &[String],
@@ -5879,6 +5902,7 @@ fn write_report_json(
             clean_room_batch_status,
             clean_room_handoff,
             Some(self_improve_proposal_artifact),
+            profile_outcome_replay_report,
             required_latest_helper_stage_roles,
             ledger_gate_failures,
             strict_gate_failures,
@@ -5931,6 +5955,7 @@ fn report_json_with_required_latest_helper_stage_roles(
         None,
         None,
         None,
+        None,
         required_latest_helper_stage_roles,
         &[],
         &[],
@@ -5967,6 +5992,7 @@ fn report_json_with_remote_chain(
         clean_room_batch_status,
         clean_room_handoff,
         self_improve_proposal_artifact,
+        None,
         &[],
         ledger_gate_failures,
         strict_gate_failures,
@@ -5986,6 +6012,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
     clean_room_batch_status: Option<&CleanRoomBatchStatusSummary>,
     clean_room_handoff: Option<&CleanRoomHandoffSummary>,
     self_improve_proposal_artifact: Option<&SelfImproveProposalArtifact>,
+    profile_outcome_replay_report: Option<&OfflineReplayReport>,
     required_latest_helper_stage_roles: &[String],
     ledger_gate_failures: &[String],
     strict_gate_failures: &[String],
@@ -5994,7 +6021,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
 ) -> String {
     let pool_alignment = pool_alignment_summary(pool_manifest, pool_status, pool_route);
     format!(
-        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
+        "{{\"rounds\":{},\"ledger_hygiene\":{{\"unique_rounds\":{},\"duplicate_rounds\":{},\"non_monotonic_rounds\":{},\"missing_rounds\":{},\"round_gaps\":{}}},\"success\":{},\"failures\":{},\"stream_failures\":{{\"truncated\":{},\"missing_final\":{}}},\"runtime_response_failures\":{},\"recent_repeated_successful_answer\":{},\"completed_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"invalid_change_requests\":{{\"items\":{},\"blocked_topics\":{}}},\"success_rate\":{:.3},\"runtime_tokens\":{{\"total\":{},\"avg\":{}}},\"elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"round_wall_elapsed_ms\":{{\"total\":{},\"avg\":{}}},\"feedback_applied\":{{\"total\":{},\"avg\":{}}},\"rust_check\":{{\"passed\":{},\"checked\":{},\"feedback_applied\":{{\"total\":{},\"avg\":{}}}}},\"validation\":{{\"passed\":{},\"checked\":{}}},\"validation_command_coverage_report_v1\":{},\"self_improve\":{{\"passed\":{},\"checked\":{}}},\"self_improve_proposal_artifact_v1\":{},\"self_improve_proposal_acceptance_summary_v1\":{},\"self_improve_proposal_action_assignment_v1\":{},\"self_improve_proposal_action_closure_report_v1\":{},\"self_improve_proposal_memory_admission_readiness_report_v1\":{},\"self_improve_proposal_memory_admission_request_report_v1\":{},\"self_improve_proposal_memory_admission_decision_report_v1\":{},\"self_improve_proposal_memory_admission_writer_plan_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_report_v1\":{},\"self_improve_proposal_memory_admission_writer_dry_run_receipt_report_v1\":{},\"self_improve_proposal_memory_admission_commit_record_stage_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_request_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_decision_report_v1\":{},\"self_improve_proposal_memory_admission_commit_approval_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_usefulness_report_v1\":{},\"self_improve_proposal_memory_reflection_dedupe_cluster_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_plan_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_preflight_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_intake_decision_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_preview_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_request_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_report_v1\":{},\"self_improve_proposal_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview_report_v1\":{},\"self_improve_proposal_memory_admission_operator_approval_token_intake_preview_report_v1\":{},\"state_gate\":{{\"passed\":{},\"checked\":{}}},\"trace_gate\":{{\"passed\":{},\"checked\":{}}},\"eval\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_hygiene_by_role\":{},\"helper_stage_contract_by_role\":{},\"helper_stage_repair_status_report_v1\":{},\"test_gate\":{},\"remote_chain\":{},\"model_pool_manifest\":{},\"model_pool\":{},\"model_pool_route\":{},\"model_pool_alignment\":{},\"model_pool_budget_fairness_report_v1\":{},\"profile_routing_offline_replay_report_v1\":{},\"worker_window_replacement_report_v1\":{},\"clean_room_batch_status_report_v1\":{},\"clean_room_handoff_report_v1\":{},\"strict_report_gate\":{},\"continuation_gate_report_v1\":{},\"ledger_gate_report_v1\":{},\"adapter_closure_bundle_report_v1\":{},\"last\":{},\"recent_failures\":{},\"report_gate\":{{\"passed\":{},\"failures\":{}}}}}",
         summary.total,
         summary.unique_rounds,
         summary.duplicate_rounds,
@@ -6140,6 +6167,7 @@ fn report_json_with_remote_chain_and_required_latest_roles(
         pool_artifacts::option_route_json(pool_route),
         pool_artifacts::option_alignment_json(pool_alignment.as_ref()),
         pool_artifacts::option_budget_fairness_json(pool_budget_fairness),
+        profile_scoring::option_offline_replay_json(profile_outcome_replay_report),
         worker_window_status::option_status_json(worker_window_status),
         clean_room_batch_status::option_status_json(clean_room_batch_status),
         clean_room_handoff::option_status_json(clean_room_handoff),
@@ -10568,6 +10596,56 @@ mod tests {
         assert!(json.contains("\"report_gate\":{\"passed\":true"));
 
         let _ = fs::remove_file(ledger_path);
+        let _ = fs::remove_file(report_path);
+    }
+
+    #[test]
+    fn run_report_json_refresh_includes_profile_outcome_replay() {
+        let dir = std::env::temp_dir();
+        let unique = format!(
+            "smartsteam-profile-outcome-replay-{}",
+            std::process::id()
+        );
+        let ledger_path = dir.join(format!("{unique}.jsonl"));
+        let outcome_path = dir.join(format!("{unique}-outcomes.jsonl"));
+        let report_path = dir.join(format!("{unique}.json"));
+        let _ = fs::remove_file(&ledger_path);
+        let _ = fs::remove_file(&outcome_path);
+        let _ = fs::remove_file(&report_path);
+        fs::write(
+            &ledger_path,
+            "{\"round\":1,\"case\":\"ok\",\"success\":true,\"feedback_applied\":2}\n",
+        )
+        .unwrap();
+        fs::write(
+            &outcome_path,
+            concat!(
+                "{\"strategy\":\"rule-baseline\",\"ok\":true,\"latency_ms\":1000,\"cost_estimate_micro_usd\":100,\"quality_score\":0.80,\"drift_detected\":false}\n",
+                "{\"strategy\":\"rule-baseline\",\"ok\":true,\"latency_ms\":1100,\"cost_estimate_micro_usd\":120,\"quality_score\":0.82,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"ok\":true,\"latency_ms\":900,\"cost_estimate_micro_usd\":90,\"quality_score\":0.83,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"ok\":true,\"latency_ms\":950,\"cost_estimate_micro_usd\":95,\"quality_score\":0.84,\"drift_detected\":false}\n",
+            ),
+        )
+        .unwrap();
+        let config = Config {
+            ledger_path: ledger_path.clone(),
+            profile_outcome_log_path: Some(outcome_path.clone()),
+            profile_outcome_min_samples: 2,
+            ..Config::default()
+        };
+
+        let refresh = write_run_report_json(&config, &report_path, false, false).unwrap();
+        let json = fs::read_to_string(&report_path).unwrap();
+
+        assert_eq!(refresh.rounds, 1);
+        assert!(json.contains("\"profile_routing_offline_replay_report_v1\""));
+        assert!(json.contains("\"baseline\":{\"policy\":\"rule-routing\""));
+        assert!(json.contains("\"candidate\":{\"policy\":\"profile-routing\""));
+        assert!(json.contains("\"allow_switch\":true"));
+        assert!(json.contains("\"rollback_hint\""));
+
+        let _ = fs::remove_file(ledger_path);
+        let _ = fs::remove_file(outcome_path);
         let _ = fs::remove_file(report_path);
     }
 
