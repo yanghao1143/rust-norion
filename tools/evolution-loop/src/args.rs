@@ -64,6 +64,8 @@ pub(crate) struct Config {
     pub(crate) prompt: Option<String>,
     pub(crate) prompt_file: Option<PathBuf>,
     pub(crate) report_context: bool,
+    pub(crate) profile_outcome_log_path: Option<PathBuf>,
+    pub(crate) profile_outcome_min_samples: usize,
     pub(crate) rust_check_code: Option<String>,
     pub(crate) rust_check_file: Option<PathBuf>,
     pub(crate) rust_check_edition: String,
@@ -433,6 +435,17 @@ where
                 config.prompt_file = Some(PathBuf::from(value(&mut args, "--prompt-file")?))
             }
             "--no-report-context" => config.report_context = false,
+            "--profile-outcome-log" => {
+                config.profile_outcome_log_path =
+                    Some(PathBuf::from(value(&mut args, "--profile-outcome-log")?));
+            }
+            "--profile-outcome-min-samples" => {
+                config.profile_outcome_min_samples = parse_usize(
+                    &value(&mut args, "--profile-outcome-min-samples")?,
+                    "--profile-outcome-min-samples",
+                )?
+                .max(1);
+            }
             "--rust-check-code" => {
                 let code = value(&mut args, "--rust-check-code")?;
                 if code.trim().is_empty() {
@@ -638,6 +651,8 @@ impl Default for Config {
             prompt: None,
             prompt_file: None,
             report_context: true,
+            profile_outcome_log_path: None,
+            profile_outcome_min_samples: 2,
             rust_check_code: None,
             rust_check_file: None,
             rust_check_edition: "2021".to_owned(),
@@ -778,6 +793,8 @@ Options:\n\
   --run-report-json PATH           refresh machine-readable report JSON after each run-mode round\n\
   --run-report-gate                apply report gate to --run-report-json refreshes\n\
   --run-report-continuation-gate   apply continuation gate to --run-report-json refreshes\n\
+  --profile-outcome-log PATH       replay request outcome JSONL into profile-routing regression report\n\
+  --profile-outcome-min-samples N  minimum baseline/candidate replay samples (default 2)\n\
   --report-gate                    fail when ledger or supplied model-pool evidence does not meet gate\n\
   --report-continuation-gate       with --report-gate, fail only when latest/current continuation evidence blocks unattended evolution\n\
   --min-report-rounds N            report gate minimum rounds (default 1)\n\
@@ -1736,6 +1753,28 @@ mod tests {
         assert!(!config.report);
         assert!(!config.report_gate);
         assert!(!config.report_continuation_gate);
+    }
+
+    #[test]
+    fn parses_profile_outcome_replay_options_without_forcing_report_mode() {
+        let parsed = parse_args([
+            "--profile-outcome-log",
+            "target/evolution/request-outcomes.jsonl",
+            "--profile-outcome-min-samples",
+            "5",
+        ])
+        .unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert_eq!(
+            config.profile_outcome_log_path,
+            Some(PathBuf::from("target/evolution/request-outcomes.jsonl"))
+        );
+        assert_eq!(config.profile_outcome_min_samples, 5);
+        assert!(!config.report);
+        assert!(!config.report_gate);
     }
 
     #[test]
