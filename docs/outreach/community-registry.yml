@@ -230,6 +230,39 @@ communities:
     next_action: wait_for_maintainer_review
     notes: CONTRIBUTING welcomes new open-source AI-agent projects in AGENTS.md; focused project entry added with concise runtime-control wording.
 
+  - id: deep-insight-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/Deep-Insight-Labs/awesome-ai-agents
+    audience: practical AI agent framework, observability, and platform readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Deep-Insight-Labs/awesome-ai-agents/pull/33
+    next_action: wait_for_maintainer_review
+    notes: README welcomes framework, platform, and tool recommendations; focused Observability and Tracing entry added with runtime-control and audit-trace wording.
+
+  - id: nipuna-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/NipunaRanasinghe/awesome-ai-agents
+    audience: AI agent builders, operations, security, and governance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/NipunaRanasinghe/awesome-ai-agents/pull/132
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING accepts actively maintained AI-agent frameworks, tools, and resources by PR; focused Security and Governance table row added.
+
+  - id: brandonhimpfen-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/brandonhimpfen/awesome-ai-agents
+    audience: AI agent framework, tool, platform, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/brandonhimpfen/awesome-ai-agents/pull/22
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING welcomes scoped PRs but rejects low-quality promotion; focused Frameworks entry added with modest prototype wording.
+
   - id: zijian-awesome-ai-agents-2026
     platform: github
     kind: awesome_list
@@ -269,6 +302,66 @@ communities:
     status: defer
     next_action: do_not_submit_project_only_submit_a_public_directory_if_one_exists
     notes: Repository collects AI agent directories and marketplaces, not individual AI infrastructure projects; rust-norion should not be submitted as a direct project entry.
+
+  - id: korchasa-awesome-ai-agents
+    platform: github
+    kind: generated_awesome_list
+    url: https://github.com/korchasa/awesome-ai-agents
+    audience: AI agent framework, tooling, and resource readers
+    fit: medium
+    status: defer
+    next_action: do_not_submit_until_a_clear_data_source_or_generation_workflow_exists
+    notes: README says pull requests are welcome, but the list appears automatically compiled and no obvious editable data source was found; avoid direct generated README edits.
+
+  - id: axioma-awesome-ai-agent-frameworks
+    platform: github
+    kind: opinionated_framework_review
+    url: https://github.com/axioma-ai-labs/awesome-ai-agent-frameworks
+    audience: AI agent framework comparison readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_maintainer_invites_external_framework_nominations
+    notes: Repository frames entries as battle-tested or reviewed through production client work; rust-norion is an external prototype and does not fit that editorial basis.
+
+  - id: smithakolan-awesome-ai-agents
+    platform: github
+    kind: project_collection
+    url: https://github.com/smithakolan/awesome-ai-agents
+    audience: AI agent example readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_the_repository_has_a_clear_contribution_structure
+    notes: Repository currently has a minimal README and example folders without a clear contribution format; do not push a generic listing.
+
+  - id: rust-ml-book
+    platform: github
+    kind: book
+    url: https://github.com/rust-ml/book
+    audience: Rust machine learning learners
+    fit: medium
+    status: defer
+    next_action: do_not_submit_project_listing_consider_technical_chapter_or_example_only_if_invited
+    notes: The Rust Machine Learning Book is not a project directory; rust-norion should not be submitted as a generic resource listing.
+
+  - id: zjlrock-awesome-llm-agents-scientific-discovery
+    platform: github
+    kind: domain_specific_research_list
+    url: https://github.com/zjlrock777/Awesome-LLM-Agents-Scientific-Discovery
+    audience: biomedical and scientific discovery LLM-agent researchers
+    fit: low
+    status: defer
+    next_action: only_submit_if_rust_norion_has_scientific_discovery_evidence_or_paper
+    notes: Domain-specific scientific discovery list; current rust-norion scope is general runtime control, not biomedical or scientific discovery.
+
+  - id: dharminjoshi-agentic-ai-learning-resource
+    platform: github
+    kind: learning_roadmap
+    url: https://github.com/DharminJoshi/Awesome-Agentic-AI-Learning-Resource-By-DevKay
+    audience: agentic AI learners following a staged roadmap
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_resource_sections_and_submit_only_if_project_resource_entries_are_allowed
+    notes: Discovery found a learning roadmap rather than a pure project directory; needs manual fit check before any submission.
 
   - id: junhua-awesome-llm-agents
     platform: github

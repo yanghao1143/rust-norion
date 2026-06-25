@@ -40,10 +40,19 @@ same recruitment message everywhere.
 | ARUN Awesome AI Agents 2026 | Submitted | Track https://github.com/ARUNAGIRINATHAN-K/awesome-ai-agents-2026/pull/123 |
 | Alternbits Awesome AI Agents | Submitted | Track https://github.com/alternbits/awesome-ai-agents/pull/57 |
 | ChatTeach Awesome AI Agents | Submitted | Track https://github.com/ChatTeach/Awesome-AI-Agents/pull/25 |
+| Deep Insight Awesome AI Agents | Submitted | Track https://github.com/Deep-Insight-Labs/awesome-ai-agents/pull/33 |
+| Nipuna Awesome AI Agents | Submitted | Track https://github.com/NipunaRanasinghe/awesome-ai-agents/pull/132 |
+| Brandon Awesome AI Agents | Submitted | Track https://github.com/brandonhimpfen/awesome-ai-agents/pull/22 |
 | Zijian Awesome AI Agents 2026 | Deferred | Avoid current self-promotional blast guard; revisit after traction |
 | E2B Awesome AI Agents | Deferred | Main list points frameworks/tools to Awesome AI SDKs; PR already filed there |
 | AgenticHealthAI Healthcare Agents | Deferred | Healthcare-specific; submit only with healthcare evidence |
 | DirectorySurf AI Agent Directories | Deferred | Directory-of-directories, not individual project listing |
+| Korchasa Awesome AI Agents | Deferred | Generated list without clear editable source; avoid direct README edits |
+| Axioma AI Agent Frameworks | Deferred | Opinionated production-tested list; not a general submission surface |
+| Smithakolan Awesome AI Agents | Deferred | Minimal structure; no clear contribution format |
+| Rust ML Book | Deferred | Book, not project directory |
+| Scientific Discovery LLM Agents | Deferred | Domain-specific scientific/biomedical list |
+| Agentic AI Learning Resource | Candidate | Review whether project resource entries are accepted |
 | Junhua Awesome LLM Agents | Submitted | Track https://github.com/junhua/awesome-llm-agents/issues/11 |
 | Awesome Agentic Patterns | Deferred | Only submit a neutral reusable pattern, not a project ad |
 | Awesome CLAWS | Deferred | OpenClaw-inspired projects only; do not submit rust-norion as-is |
