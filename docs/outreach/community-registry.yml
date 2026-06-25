@@ -939,9 +939,9 @@ communities:
     url: https://github.com/rustcc/awesome-rust
     audience: Chinese Rust developers
     fit: medium
-    status: candidate_manual_review
-    next_action: verify_repo_activity_and_section_before_submission
-    notes: Useful Chinese Rust resource list, but activity appears limited; do not spam issues.
+    status: defer
+    next_action: revisit_after_clear_project_maturity_or_maintainer_invitation
+    notes: Useful Chinese Rust resource list, but current external state shows last push on 2023-12-05 and the list is for stable useful Rust resources; do not submit an early prototype now.
 
   - id: rust-boom
     platform: github
@@ -1064,6 +1064,17 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: README explicitly welcomes issues or PRs with notable projects; scope-check issue keeps the maturity caveat and asks before a PR.
 
+  - id: rossbuckley1990-awesome-agent-memory
+    platform: github
+    kind: agent_memory_resource_list
+    url: https://github.com/rossbuckley1990-hash/awesome-agent-memory
+    audience: agent memory, procedural memory, memory governance, and AI-agent systems readers
+    fit: high
+    status: submitted
+    proof: https://github.com/rossbuckley1990-hash/awesome-agent-memory/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Resource list has systems, standards, and procedural-memory sections; scope-check framed rust-norion around memory governance, evidence gates, replay, and rollback rather than generic agent marketing.
+
   - id: agentmemoryworld-awesome-agent-memory
     platform: github
     kind: paper_list
@@ -1123,9 +1134,9 @@ communities:
     url: https://github.com/corca-ai/awesome-llm-security
     audience: LLM security tools, papers, and projects readers
     fit: medium
-    status: candidate_manual_review
-    next_action: submit_only_if_a_focused_security_entry_or_pr_is_invited
-    notes: High-star active list accepts tools and projects, but contribution guidance asks for PRs and current open issues already include many tool-add requests; avoid posting unless rust-norion security scope is sharpened.
+    status: defer
+    next_action: submit_only_after_a_focused_security_artifact_or_maintainer_invitation
+    notes: High-star list accepts security tools and projects, but rust-norion should not be framed as an LLM security tool until it has a focused security artifact, article, or maintainer invitation.
 
   - id: beyefendi-awesome-llm-security
     platform: github
@@ -1944,9 +1955,10 @@ communities:
     url: https://github.com/acvnace/awesome-vibe-coding-resources
     audience: vibe coding resource readers
     fit: medium
-    status: candidate_manual_review
-    next_action: inspect_category_structure_before_scope_check_or_pr
-    notes: Curated resource list with active issues; leave for a later focused pass after category fit is clear.
+    status: submitted
+    proof: https://github.com/acvnace/awesome-vibe-coding-resources/issues/33
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check asks whether rust-norion fits as a Rust control layer for coding-agent loops before any resource-list PR.
 
   - id: yuyaoge-awesome-vibe-coding
     platform: github
@@ -1954,9 +1966,10 @@ communities:
     url: https://github.com/YuyaoGe/Awesome-Vibe-Coding
     audience: vibe coding resource readers
     fit: medium
-    status: candidate_manual_review
-    next_action: inspect_readme_structure_and_contribution_flow_before_submission
-    notes: Public description is sparse; verify category and contribution flow before any outreach.
+    status: submitted
+    proof: https://github.com/YuyaoGe/Awesome-Vibe-Coding/issues/9
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check asks whether runtime/control-loop/memory/replay governance belongs before any direct PR.
 
   - id: jiji262-awesome-vibe-coding-tools
     platform: github
@@ -2045,9 +2058,9 @@ communities:
     url: https://github.com/tobixd/awesome-agent-orchestration
     audience: AI agent orchestration and multi-agent system tool, framework, and resource readers
     fit: medium
-    status: candidate_manual_review
-    next_action: inspect_pr_only_flow_and_submit_only_if_runtime_control_layer_category_fit_is_clear
-    notes: Issues are disabled; do not force a PR unless the README structure has a clear runtime/control-layer slot for early projects.
+    status: defer
+    next_action: do_not_submit_until_a_clear_contribution_flow_and_category_fit_exist
+    notes: Issues are disabled and the repo has minimal public traction; do not force a PR for an early control-layer prototype.
 
   - id: shubhamsaboo-awesome-llm-apps
     platform: github
@@ -2224,15 +2237,47 @@ communities:
     next_action: submit_only_after_a_clear_infrastructure_product_or_service_category_fit_exists
     notes: List is oriented toward agent-facing infrastructure services and tools; rust-norion is too early and lacks a clear category in the current README.
 
+  - id: alvinreal-awesome-opensource-ai
+    platform: github
+    kind: open_source_ai_project_list
+    url: https://github.com/alvinreal/awesome-opensource-ai
+    audience: open-source AI project, infrastructure, model, tooling, and agentic AI readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/alvinreal/awesome-opensource-ai/issues/539
+    next_action: wait_for_scope_feedback_before_pr
+    notes: CONTRIBUTING allows questions via issue and has no minimum star requirement; scope-check asks whether an early Rust AI-agent control-layer prototype fits before any PR.
+
+  - id: kennethlaw325-awesome-llm-knowledge-systems
+    platform: github
+    kind: knowledge_engineering_synthesis
+    url: https://github.com/kennethlaw325/awesome-llm-knowledge-systems
+    audience: LLM knowledge engineering, context engineering, harness, skill-system, agent-memory, MCP, and local-model readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_substantive_article_case_study_or_new_primitive_evidence_exists
+    notes: CONTRIBUTING states the repo is not an awesome list and rejects plain entry additions; wait for a strong rust-norion article, case study, or primitive-level evidence.
+
+  - id: chaoyue0307-awesome-loop-engineering
+    platform: github
+    kind: loop_engineering_resource_list
+    url: https://github.com/ChaoYue0307/awesome-loop-engineering
+    audience: loop engineering, coding-agent loop, verification gate, state persistence, orchestration, and agent-runtime readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ChaoYue0307/awesome-loop-engineering/issues/6
+    next_action: wait_for_scope_feedback_then_open_resource_pr_if_invited
+    notes: CONTRIBUTING invites resource suggestion issues with category, type, and evidence quality; scope-check frames rust-norion as early Rust loop-control infrastructure with maturity caveat.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list
     url: https://gitee.com/awesome-lib/awesome-rust
     audience: Chinese Rust developers
     fit: medium
-    status: candidate_manual_review
+    status: needs_manual_verification
     next_action: inspect_contribution_flow_after_gitee_login
-    notes: Gitee resource list found through web search; verify whether it is an active maintained list or a mirror before submitting.
+    notes: Gitee resource list found through web search; current unauthenticated HTTP returned 405 and API returned 403, so verify active maintenance and issue/PR flow after login before submitting.
 
   - id: gitee-rust-boom
     platform: gitee
@@ -2250,9 +2295,9 @@ communities:
     url: https://gitee.com/familyfan/Awesome-LLM
     audience: Chinese LLM resource readers
     fit: medium
-    status: candidate_manual_review
+    status: needs_manual_verification
     next_action: inspect whether Rust AI control-plane tools fit the deployment/tools categories before issue or PR
-    notes: Generic LLM resource list, not Rust-specific; use only a tailored submission if the list accepts framework/tool suggestions.
+    notes: Generic LLM resource list, not Rust-specific; unauthenticated HTTP returned 405 and API returned 403, so use only after login confirms framework/tool suggestions are accepted.
 
   - id: gitee-boomer-awesome-mcp-servers
     platform: gitee
@@ -2260,9 +2305,9 @@ communities:
     url: https://gitee.com/boomer001/awesome-mcp-servers
     audience: Chinese MCP, coding-agent, and agent-infrastructure readers
     fit: medium
-    status: candidate_manual_review
+    status: needs_manual_verification
     next_action: inspect_contribution_flow_after_gitee_login_and_submit_only_if_control_layer_tools_fit
-    notes: Public search shows coding-agent and MCP server sections; verify whether the Gitee repo is maintained or mirrored before any submission.
+    notes: Public search shows coding-agent and MCP server sections, but current unauthenticated HTTP returned 405 and API returned 403; verify maintenance and contribution path after login before any submission.
 
   - id: gitee-awesome-lib-awesome-datascience
     platform: gitee
@@ -2270,9 +2315,9 @@ communities:
     url: https://gitee.com/awesome-lib/awesome-datascience
     audience: Chinese data science and AI workflow readers
     fit: medium
-    status: candidate_manual_review
+    status: needs_manual_verification
     next_action: inspect_contribution_flow_after_gitee_login_and_agent_framework_section_fit
-    notes: Public search shows an Agents section with Rust agent frameworks; submit only if the repo accepts external project entries and rust-norion fits the agent workflow scope.
+    notes: Public search shows an Agents section with Rust agent frameworks, but current unauthenticated HTTP returned 405 and API returned 403; submit only after login confirms external project entries are accepted.
 
   - id: gitee-shenbingfeng-awesome-deepseek-integration
     platform: gitee

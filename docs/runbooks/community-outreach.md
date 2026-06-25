@@ -80,6 +80,7 @@ same recruitment message everywhere.
 | AI Agents Simplified | Submitted | Track https://github.com/ai-agents-simplified/Awesome-AI-Agents/pull/9 |
 | Lemooljiang Awesome AI | Submitted | Track https://github.com/lemooljiang/Awesome-AI/pull/4 |
 | Groovy Web Awesome AI Agents | Submitted | Track https://github.com/groovy-web/awesome-ai-agents/issues/11 |
+| RustCC Awesome Rust | Deferred | Last push 2023-12-05; wait for clearer maturity or maintainer invitation |
 | Rust Boom | Submitted | Track https://github.com/rust-boom/rust-boom/issues/10 |
 | XMUDeepLIT Self-Evolving Agents | Submitted | Track https://github.com/XMUDeepLIT/Awesome-Self-Evolving-Agents/issues/8 |
 | EvoAgentX Self-Evolving Agents | Submitted | Track https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents/issues/66 |
@@ -91,6 +92,7 @@ same recruitment message everywhere.
 | WFNUser Agent Memory | Submitted | Track https://github.com/wfnuser/Awesome-Agent-Memory/issues/8 |
 | CXXZ Agent Memory | Submitted | Track https://github.com/cxxz/awesome-agent-memory/issues/11 |
 | ZFancy Agent Memory | Submitted | Track https://github.com/ZFancy/awesome-agent-memory/issues/2 |
+| Ross Buckley Agent Memory | Submitted | Track https://github.com/rossbuckley1990-hash/awesome-agent-memory/issues/1 |
 | XiaomingX AI Memory | Submitted | Track https://github.com/XiaomingX/awesome-ai-memory/issues/11 |
 | Topoteretes AI Memory | Submitted | Track https://github.com/topoteretes/awesome-ai-memory/issues/47 |
 | IAAR Shanghai AI Memory | Deferred | Paper-entry workflow; wait for paper metadata |
@@ -101,7 +103,7 @@ same recruitment message everywhere.
 | Ottosulin Awesome AI Security | Submitted | Track https://github.com/ottosulin/awesome-ai-security/issues/296 |
 | Bureado Agent Runtime Security | Submitted | Track https://github.com/bureado/awesome-agent-runtime-security/issues/9 |
 | Wearetyomsmnv LLM Agent Security | Submitted | Track https://github.com/wearetyomsmnv/Awesome-LLM-agent-Security/issues/16 |
-| Corca Awesome LLM Security | Candidate | Submit only if focused security PR is invited |
+| Corca Awesome LLM Security | Deferred | Wait for focused security artifact, article, or maintainer invitation |
 | Beyefendi Awesome LLM Security | Submitted | Track https://github.com/beyefendi/awesome-llm-security/issues/18 |
 | Christian Scott LLM Security | Submitted | Track https://github.com/christiancscott/awesome-LLM-security/issues/10 |
 | TalEliyahu AI Security | Submitted | Track https://github.com/TalEliyahu/Awesome-AI-Security/issues/102 |
@@ -198,8 +200,8 @@ same recruitment message everywhere.
 | BlueGalaxy Vibe Coding | Submitted | Track https://github.com/bluegalaxy111/awesome-vibe-coding/issues/20 |
 | Adrianno Vibe Coding | Submitted | Track https://github.com/adriannoes/awesome-vibe-coding/issues/7 |
 | AnalyticalRohit Vibe Coding Guide | Deferred | Guide/best-practice repo; wait for article or lesson-style resource |
-| Acvnace Vibe Coding Resources | Candidate | Inspect category structure before scope-check or PR |
-| YuyaoGe Vibe Coding | Candidate | Sparse description; inspect README/contribution flow first |
+| Acvnace Vibe Coding Resources | Submitted | Track https://github.com/acvnace/awesome-vibe-coding-resources/issues/33 |
+| YuyaoGe Vibe Coding | Submitted | Track https://github.com/YuyaoGe/Awesome-Vibe-Coding/issues/9 |
 | Jiji Vibe Coding Tools | Deferred | Tool/plugin list; wait for user-facing vibe-coding tool |
 | No Fluff Vibe Coding | Deferred | Tool list; wait for user-facing tool surface |
 | Techiediaries Vibe Coding | Deferred | Assistant/tool/reference list; wait for user-facing coding/design tool |
@@ -208,7 +210,7 @@ same recruitment message everywhere.
 | QAInsights AI Tools | Deferred | AI coding tools list; wait for user-facing coding tool/platform surface |
 | Eachlabs AI Workflows | Deferred | Ready-made workflow template list; wait for packaged workflow template |
 | Ishan AI Automation Frameworks | Submitted | Track https://github.com/ishandutta2007/Awesome-AI-Automation-Frameworks/issues/5 |
-| Tobi Agent Orchestration | Candidate | Issues disabled; PR only if runtime/control-layer category fit is clear |
+| Tobi Agent Orchestration | Deferred | Issues disabled and minimal traction; do not force PR |
 | Shubhamsaboo LLM Apps | Deferred | Cookbook of runnable templates; wait for self-contained app template |
 | TulioPSilva Shubhamsaboo LLM Apps | Deferred | Mirror-like app-template surface; track upstream first |
 | Joypaul Shubhamsaboo LLM Apps | Deferred | Duplicate app-template surface; track upstream first |
@@ -226,10 +228,14 @@ same recruitment message everywhere.
 | PandaStack AI Agent Runtimes | Deferred | Wait for a packaged runtime environment or sandbox artifact |
 | DZ3AI Agent Runtimes | Deferred | Production-grade runtime list; wait for runtime packaging and docs |
 | Mrtnrocks Agent Infrastructure | Deferred | Needs a clearer infrastructure product or service category fit |
+| Alvinreal Open Source AI | Submitted | Track https://github.com/alvinreal/awesome-opensource-ai/issues/539 |
+| Kenneth Law LLM Knowledge Systems | Deferred | Not an awesome list; wait for article, case study, or primitive-level evidence |
+| ChaoYue Loop Engineering | Submitted | Track https://github.com/ChaoYue0307/awesome-loop-engineering/issues/6 |
+| Gitee Awesome Rust | Manual verification | Unauthenticated HTTP 405/API 403; verify active contribution flow after login |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
-| Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
-| Gitee Awesome MCP Servers | Candidate | Login-check contribution flow; use only if control-layer tooling fits |
-| Gitee Awesome Datascience | Candidate | Login-check agent framework section before posting |
+| Gitee Awesome LLM | Manual verification | Unauthenticated HTTP 405/API 403; verify tool/deployment category fit after login |
+| Gitee Awesome MCP Servers | Manual verification | Unauthenticated HTTP 405/API 403; verify contribution flow after login |
+| Gitee Awesome Datascience | Manual verification | Unauthenticated HTTP 405/API 403; verify agent framework section after login |
 | Gitee DeepSeek Integration | Deferred | Submit only after concrete DeepSeek integration evidence |
 | This Week in Rust | Wait | Submit only after a notable release/article |
 
@@ -255,6 +261,10 @@ The full registry is in `docs/outreach/community-registry.yml`.
    ```powershell
    ./tools/outreach/generate-community-update.ps1 -SinceDays 30
    ```
+
+   The generated draft includes a `Submitted Channels Eligible For Iteration Updates`
+   section. Use it to select update-friendly submitted channels, then rewrite the
+   message for each community before sending.
 
 5. Generate the next outreach queue:
 

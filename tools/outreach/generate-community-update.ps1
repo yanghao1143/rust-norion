@@ -66,6 +66,16 @@ $ready = @(
         Select-Object -First 8
 )
 $submitted = @($communities | Where-Object { $_.status -eq "submitted" })
+$iterationUpdates = @(
+    $communities |
+        Where-Object {
+            ($_.status -eq 'submitted' -or $_.status -eq 'wait_for_major_update') -and (
+                $_.kind -match 'weekly|forum_topic|article|project_request|weekly_project_list' -or
+                $_.status -eq 'wait_for_major_update' -or
+                $_.next_action -match 'update|release|article'
+            )
+        }
+)
 
 $shortEn = Read-Template -Path (Join-Path $TemplateDir "rust-ai-project-short-en.md")
 $shortZh = Read-Template -Path (Join-Path $TemplateDir "rust-ai-project-short-zh.md")
@@ -102,6 +112,22 @@ if ($ready.Count -eq 0) {
     foreach ($item in $ready) {
         $lines.Add("- $($item.id) [$($item.platform) / $($item.kind)] status=$($item.status)")
         $lines.Add("  - URL: $($item.url)")
+        $lines.Add("  - Next action: $($item.next_action)")
+    }
+}
+$lines.Add("")
+$lines.Add("## Submitted Channels Eligible For Iteration Updates")
+$lines.Add("")
+if ($iterationUpdates.Count -eq 0) {
+    $lines.Add("- No iteration-update channels found. Review `$RegistryPath`.")
+} else {
+    foreach ($item in $iterationUpdates) {
+        $proof = if ($item.PSObject.Properties.Name -contains "proof") { $item.proof } else { "" }
+        $lines.Add("- $($item.id) [$($item.platform) / $($item.kind)] status=$($item.status)")
+        $lines.Add("  - URL: $($item.url)")
+        if (-not [string]::IsNullOrWhiteSpace($proof)) {
+            $lines.Add("  - Prior proof: $proof")
+        }
         $lines.Add("  - Next action: $($item.next_action)")
     }
 }
