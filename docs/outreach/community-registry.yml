@@ -3028,3 +3028,78 @@ communities:
     proof: https://github.com/ishandutta2007/awesome-ai-tools/issues/15
     next_action: wait_for_scope_feedback_before_any_pr
     notes: Issue mapped rust-norion to AI agents, development frameworks, RAG/memory, and evaluation/monitoring sections while noting its early prototype status.
+
+  - id: danielclough-awesome-candle
+    platform: github
+    kind: rust_ml_candle_list
+    url: https://github.com/danielclough/awesome-candle
+    audience: Rust machine learning and Candle ecosystem readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_real_candle_backend_or_dependency
+    notes: README says anyone may include a project only if it uses huggingface/candle; current rust-norion only references Candle in clean-room/backlog docs, not as an implemented dependency.
+
+  - id: yashwant-awesome-agentic-ai
+    platform: github
+    kind: agentic_ai_resource_guide
+    url: https://github.com/yashwant/awesome-agentic-ai
+    audience: agentic AI architecture, framework, memory, planning, and learning readers
+    fit: high
+    status: submitted
+    proof: https://github.com/yashwant/awesome-agentic-ai/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue mapped rust-norion to agentic architecture, memory/learning, reflection, validation loops, and Rust-native control-layer implementation.
+
+  - id: sudabg-awesome-agent-evolution
+    platform: github
+    kind: agent_evolution_resource_list
+    url: https://github.com/sudabg/awesome-agent-evolution
+    audience: autonomous AI agent self-improvement, evolution-loop, tool, pattern, and case-study readers
+    fit: high
+    status: submitted
+    proof: https://github.com/sudabg/awesome-agent-evolution/issues/1
+    next_action: wait_for_scope_feedback_before_any_readme_pr
+    notes: Scope-check issue framed rust-norion as an early Rust experiment around auditable evolution loops, evidence gates, rollback, and memory hygiene.
+
+  - id: sudabg-awesome-agent-tools
+    platform: github
+    kind: hands_on_agent_tools_list
+    url: https://github.com/sudabg/awesome-agent-tools
+    audience: Chinese practical agent runtime, memory, MCP, security, automation, and deployment readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_practical_use_evidence_or_maintainer_invitation
+    notes: README says it only includes tools the maintainer has used in practice; do not self-submit an early research prototype without practical-use evidence.
+
+  - id: nluninja-awesome-agenticai-repo
+    platform: github
+    kind: agentic_ai_resource_list
+    url: https://github.com/nluninja/awesome-agenticAI-repo
+    audience: agentic AI papers, frameworks, tools, use cases, legal, and community readers
+    fit: high
+    status: submitted
+    proof: https://github.com/nluninja/awesome-agenticAI-repo/issues/3
+    next_action: wait_for_maintainer_feedback_then_follow_entry_format
+    notes: Issue suggested Frameworks and Tools, LLM Orchestration, Development Tools, and memory-oriented agent architecture sections.
+
+  - id: sam-blackfly-awesome-llm-tools
+    platform: github
+    kind: llm_tools_stack_directory
+    url: https://github.com/sam-blackfly/awesome-llm-tools
+    audience: local agents, LLM frameworks, Rust, memory, RAG, inference, and LLM tooling readers
+    fit: high
+    status: submitted
+    proof: https://github.com/sam-blackfly/awesome-llm-tools/issues/3
+    next_action: wait_for_scope_feedback_before_readme_pr
+    notes: Issue mapped rust-norion to the Rust/agent/LLM control-layer stack and explicitly avoided claiming Candle support or production LLM-inference maturity.
+
+  - id: vincentwei1021-awesome-ai-agent-frameworks
+    platform: github
+    kind: chinese_agent_framework_guide
+    url: https://github.com/Vincentwei1021/awesome-ai-agent-frameworks
+    audience: Chinese AI agent framework selection, orchestration, and architecture readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Vincentwei1021/awesome-ai-agent-frameworks/issues/1
+    next_action: wait_for_scope_feedback_then_prepare_small_framework_profile_pr_if_invited
+    notes: Chinese scope-check issue positioned rust-norion as a Rust runtime-control and self-evolution control-layer prototype, not a production-ready framework.

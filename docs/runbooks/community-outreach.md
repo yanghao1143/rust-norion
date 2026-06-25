@@ -287,6 +287,13 @@ same recruitment message everywhere.
 | Rvelamen AI Tools | Submitted | Track https://github.com/Rvelamen/Awesome-AI-Tools/issues/21 |
 | LinuxSuRen Awesome AI | Submitted | Track https://github.com/LinuxSuRen/awesome-ai/issues/12 |
 | Ishan Dutta AI Tools | Submitted | Track https://github.com/ishandutta2007/awesome-ai-tools/issues/15 |
+| Awesome Candle | Deferred | Requires real Candle usage; current rust-norion only has clean-room/backlog references |
+| Yashwant Agentic AI | Submitted | Track https://github.com/yashwant/awesome-agentic-ai/issues/1 |
+| Awesome Agent Evolution | Submitted | Track https://github.com/sudabg/awesome-agent-evolution/issues/1 |
+| Sudabg Agent Tools | Deferred | Maintainer says only tools used in practice; wait for practical-use evidence |
+| Nluninja AgenticAI Repo | Submitted | Track https://github.com/nluninja/awesome-agenticAI-repo/issues/3 |
+| Sam Blackfly LLM Tools | Submitted | Track https://github.com/sam-blackfly/awesome-llm-tools/issues/3 |
+| Vincent Wei Agent Frameworks | Submitted | Track https://github.com/Vincentwei1021/awesome-ai-agent-frameworks/issues/1 |
 | Eudk AI Tools | Deferred | Requires publicly usable now tools; wait for clearer release/tool surface |
 | JMcrafter AI Tools | Deferred | Self-submitted repos under 50 stars are treated as advertising |
 | AstreoX Agent Tools | Deferred | Requires 50+ GitHub stars for open-source projects |
