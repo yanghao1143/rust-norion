@@ -225,6 +225,10 @@ fn production_runtime_can_generate_through_attached_forward_kernel() {
     );
     assert_eq!(response.diagnostics.imported_kv_blocks, 1);
     assert_eq!(response.diagnostics.exported_kv_blocks, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(exported.len(), 1);
     assert_eq!(runtime.exported_kv_blocks().len(), 1);
 
@@ -309,6 +313,10 @@ fn reference_production_kernel_generates_diagnostics_and_kv() {
     assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
     assert!(response.diagnostics.has_valid_kv_precision_signal());
     assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert!(!exported.is_empty());
     assert!(exported.iter().all(|block| block.layer < 6));
     assert!(exported.iter().all(|block| block.head < 2));
@@ -418,6 +426,10 @@ fn model_runtime_forward_kernel_wraps_local_runtime_for_production_boundary() {
     assert_eq!(response.diagnostics.layer_count, 6);
     assert_eq!(response.diagnostics.hidden_size, 64);
     assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
     assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
     assert!(response.diagnostics.has_valid_kv_precision_signal());

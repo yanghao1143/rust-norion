@@ -110,6 +110,30 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-runtime-kv-segment-cases" if index + 1 < raw.len() => {
+            *parser.benchmark_min_runtime_kv_segment_cases = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-runtime-kv-segments-included" if index + 1 < raw.len() => {
+            *parser.benchmark_min_runtime_kv_segments_included =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-runtime-kv-segments-rejected" if index + 1 < raw.len() => {
+            *parser.benchmark_max_runtime_kv_segments_rejected =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-runtime-kv-segment-device-profiles" if index + 1 < raw.len() => {
+            *parser.benchmark_min_runtime_kv_segment_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
         "--benchmark-min-runtime-kv-imported" if index + 1 < raw.len() => {
             *parser.benchmark_min_runtime_kv_imported = Some(parse_usize(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;

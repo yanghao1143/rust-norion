@@ -463,6 +463,14 @@ fn parses_recursive_scheduler_flags() {
         "12".to_owned(),
         "--benchmark-min-runtime-kv-import-cases".to_owned(),
         "4".to_owned(),
+        "--benchmark-min-runtime-kv-segment-cases".to_owned(),
+        "4".to_owned(),
+        "--benchmark-min-runtime-kv-segments-included".to_owned(),
+        "4".to_owned(),
+        "--benchmark-max-runtime-kv-segments-rejected".to_owned(),
+        "0".to_owned(),
+        "--benchmark-min-runtime-kv-segment-device-profiles".to_owned(),
+        "6".to_owned(),
         "--benchmark-min-runtime-kv-imported".to_owned(),
         "4".to_owned(),
         "--benchmark-min-runtime-kv-import-device-profiles".to_owned(),
@@ -1578,6 +1586,13 @@ fn parses_recursive_scheduler_flags() {
         Some(12)
     );
     assert_eq!(args.benchmark_min_runtime_kv_import_cases, Some(4));
+    assert_eq!(args.benchmark_min_runtime_kv_segment_cases, Some(4));
+    assert_eq!(args.benchmark_min_runtime_kv_segments_included, Some(4));
+    assert_eq!(args.benchmark_max_runtime_kv_segments_rejected, Some(0));
+    assert_eq!(
+        args.benchmark_min_runtime_kv_segment_device_profiles,
+        Some(6)
+    );
     assert_eq!(args.benchmark_min_runtime_kv_imported, Some(4));
     assert_eq!(
         args.benchmark_min_runtime_kv_import_device_profiles,
@@ -1696,6 +1711,19 @@ fn parses_recursive_scheduler_flags() {
         Some(12)
     );
     assert_eq!(args.benchmark_gate().min_runtime_kv_import_cases, Some(4));
+    assert_eq!(args.benchmark_gate().min_runtime_kv_segment_cases, Some(4));
+    assert_eq!(
+        args.benchmark_gate().min_runtime_kv_segments_included,
+        Some(4)
+    );
+    assert_eq!(
+        args.benchmark_gate().max_runtime_kv_segments_rejected,
+        Some(0)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_runtime_kv_segment_device_profiles,
+        Some(6)
+    );
     assert_eq!(args.benchmark_gate().min_runtime_kv_imported, Some(4));
     assert_eq!(
         args.benchmark_gate().min_runtime_kv_import_device_profiles,

@@ -372,6 +372,18 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_kv_import_cases {
             gate.min_runtime_kv_import_cases = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_kv_segment_cases {
+            gate.min_runtime_kv_segment_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_segments_included {
+            gate.min_runtime_kv_segments_included = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_runtime_kv_segments_rejected {
+            gate.max_runtime_kv_segments_rejected = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_segment_device_profiles {
+            gate.min_runtime_kv_segment_device_profiles = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_kv_imported {
             gate.min_runtime_kv_imported = Some(value);
         }
