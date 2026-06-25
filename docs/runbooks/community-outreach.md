@@ -239,6 +239,16 @@ same recruitment message everywhere.
 | Brandon AI Coding Agents | Deferred | Wait for user-facing coding agent or clear framework surface |
 | Enterprise AI Atlas Coding Agents | Deferred | Wait for direct coding-agent tool/framework fit |
 | Bloo Mind Multi-Agent Systems | Deferred | Wait for demonstrated adoption or peer-reviewed MAS artifact |
+| Scott Awesome Agents | Submitted | Track https://github.com/Scottcjn/awesome-agents/pull/28 |
+| Agent Analytics Multi-Agent Orchestrators | Submitted | Track https://github.com/Agent-Analytics/awesome-multi-agent-orchestrators/issues/6#issuecomment-4802386239 |
+| NotPBShaw AI Governance | Submitted | Track https://github.com/NotPBShaw/awesome-ai-governance/pull/6 |
+| AltEngineer AI Repositories | Submitted | Track https://github.com/altengineer/awesome-ai-repositories/issues/24 |
+| AFunLS AI Agent Tools | Submitted | Track https://github.com/AFunLS/awesome-ai-agent-tools/issues/7 |
+| AgenTool Rank AI Agent Tools | Submitted | Track https://github.com/agent-gigmole/awesome-ai-agent-tools/issues/5 |
+| BenchFlow Agent Evals | Deferred | Wait for substantial eval article, benchmark, or reusable evidence artifact |
+| Aperintel AI Governance | Deferred | Excludes early-stage non-production tools; wait for stronger governance artifact |
+| Eric LLMs AI Engineering | Deferred | Playbook surface; submit only after a tutorial/article resource exists |
+| Lobstercare MCP Hub | Deferred | MCP server directory; submit only after rust-norion exposes a real MCP artifact |
 | Gitee Awesome Rust | Manual verification | Unauthenticated HTTP 405/API 403; verify active contribution flow after login |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Manual verification | Unauthenticated HTTP 405/API 403; verify tool/deployment category fit after login |

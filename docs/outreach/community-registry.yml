@@ -2352,6 +2352,112 @@ communities:
     next_action: submit_only_after_demonstrated_adoption_or_peer_reviewed_multi_agent_artifact
     notes: CONTRIBUTING says self-promotional entries without demonstrated adoption or peer review are declined; keep as future candidate after stronger evidence.
 
+  - id: scottcjn-awesome-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/Scottcjn/awesome-agents
+    audience: AI agent platform, framework, protocol, tool, observability, and research readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Scottcjn/awesome-agents/pull/28
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING asks for one PR per suggestion; focused Frameworks PR adds rust-norion with factual early-stage Rust runtime-control wording.
+
+  - id: agent-analytics-awesome-multi-agent-orchestrators
+    platform: github
+    kind: multi_agent_orchestration_directory
+    url: https://github.com/Agent-Analytics/awesome-multi-agent-orchestrators
+    audience: multi-agent orchestration, coding-agent workspaces, runtime governance, and agent-friendly tooling readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Agent-Analytics/awesome-multi-agent-orchestrators/issues/6#issuecomment-4802386239
+    next_action: wait_for_scope_feedback_before_data_pr
+    notes: Scope is intentionally narrow; submitted as a comment on the existing Suggest an entry issue rather than opening a direct data PR.
+
+  - id: notpbshaw-awesome-ai-governance
+    platform: github
+    kind: ai_governance_resource_list
+    url: https://github.com/NotPBShaw/awesome-ai-governance
+    audience: policy-as-code, audit, AI observability, workflow orchestration, agent framework, and LLM safety readers
+    fit: high
+    status: submitted
+    proof: https://github.com/NotPBShaw/awesome-ai-governance/pull/6
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING accepts active governance and AI-infra projects; PR adds a one-line Agent frameworks entry with maintainer disclosure.
+
+  - id: altengineer-awesome-ai-repositories
+    platform: github
+    kind: ai_infra_repository_list
+    url: https://github.com/altengineer/awesome-ai-repositories
+    audience: AI infrastructure, agent framework, guardrail, observability, model serving, and local inference readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/altengineer/awesome-ai-repositories/issues/24
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: README asks for PRs, but category fit is uncertain; issue asks whether an early Rust agent runtime control-layer project belongs before editing the table.
+
+  - id: afunls-awesome-ai-agent-tools
+    platform: github
+    kind: ai_agent_tool_list
+    url: https://github.com/AFunLS/awesome-ai-agent-tools
+    audience: AI agent framework, development tool, memory, multi-agent, and learning-resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/AFunLS/awesome-ai-agent-tools/issues/7
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository has no explicit contribution section despite the table of contents; opened a neutral issue suggestion instead of forcing a README PR.
+
+  - id: agent-gigmole-awesome-ai-agent-tools
+    platform: github
+    kind: ai_agent_tool_dataset
+    url: https://github.com/agent-gigmole/awesome-ai-agent-tools
+    audience: data-driven AI agent tool ranking, agent framework, memory, observability, evaluation, and tool-integration readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/agent-gigmole/awesome-ai-agent-tools/issues/5
+    next_action: wait_for_dataset_maintainer_feedback
+    notes: Existing issues use Add project to category format; submission asks whether rust-norion fits before any generated dataset change.
+
+  - id: benchflow-awesome-evals
+    platform: github
+    kind: agent_eval_resource_list
+    url: https://github.com/benchflow-ai/awesome-evals
+    audience: AI agent evaluation, benchmark, observability, verifier, safety-eval, and eval-infrastructure readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_substantial_eval_article_or_reusable_benchmark_artifact_exists
+    notes: CONTRIBUTING requires real data, code, war stories, or a genuinely novel framework; a raw early project link would be too weak right now.
+
+  - id: aperintel-awesome-ai-governance
+    platform: github
+    kind: regulated_ai_governance_resource_list
+    url: https://github.com/Aperintel/awesome-ai-governance
+    audience: regulated AI governance, audit, compliance, open-source primitives, security, and observability readers
+    fit: medium
+    status: defer
+    next_action: revisit_after_rust_norion_has_production_usable_governance_artifact_or_regulated_ai_case_study
+    notes: CONTRIBUTING excludes early-stage tools that are not yet production usable; defer until rust-norion has a stronger governance artifact.
+
+  - id: eric-llms-awesome-ai-engineering
+    platform: github
+    kind: ai_engineering_playbook
+    url: https://github.com/Eric-LLMs/Awesome-AI-Engineering
+    audience: AI engineering playbook, agent memory, MCP, evaluation, and production LLM readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_rust_norion_article_tutorial_or_playbook_section_exists
+    notes: Repository is a learning/playbook surface with authored summaries and examples; do not submit a raw project link.
+
+  - id: lobstercare-mcp-hub
+    platform: github
+    kind: mcp_server_directory
+    url: https://github.com/lobstercare/mcp-hub
+    audience: MCP server and tool users
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_exposes_a_real_mcp_server_or_tool
+    notes: The directory is for MCP servers; rust-norion should not be submitted as a generic control-layer project without an MCP artifact.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list
