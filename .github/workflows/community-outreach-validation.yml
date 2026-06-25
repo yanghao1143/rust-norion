@@ -1,0 +1,60 @@
+name: Community Outreach Validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/community-outreach-*.yml"
+      - "docs/outreach/**"
+      - "docs/runbooks/community-outreach.md"
+      - "tools/outreach/**"
+  push:
+    paths:
+      - ".github/workflows/community-outreach-*.yml"
+      - "docs/outreach/**"
+      - "docs/runbooks/community-outreach.md"
+      - "tools/outreach/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate outreach assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate outreach registry
+        shell: pwsh
+        run: |
+          ./tools/outreach/validate-community-registry.ps1
+
+      - name: Parse outreach PowerShell scripts
+        shell: pwsh
+        run: |
+          $scripts = Get-ChildItem -Path tools/outreach -Filter *.ps1 -File
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$($script.FullName): $($_.Message)" }
+              exit 1
+            }
+            Write-Host "$($script.FullName) parse=ok"
+          }
+
+      - name: Generate sample outreach update
+        shell: pwsh
+        run: |
+          ./tools/outreach/generate-community-update.ps1 -SinceDays 7 -MaxCommits 5
+          ./tools/outreach/generate-community-queue.ps1
+
+      - name: Discover sample community candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          ./tools/outreach/discover-community-candidates.ps1 -LimitPerQuery 10 -MinStars 50

@@ -1,0 +1,101 @@
+name: Community Outreach Reminder
+
+on:
+  schedule:
+    - cron: "0 2 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  reminder:
+    name: Open monthly outreach checklist
+    runs-on: ubuntu-latest
+    if: github.repository == 'yanghao1143/rust-norion'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create or refresh outreach label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create community-outreach --color 0E8A16 --description "Community outreach and contributor recruitment" || true
+
+      - name: Validate outreach registry
+        shell: pwsh
+        run: |
+          ./tools/outreach/validate-community-registry.ps1
+
+      - name: Generate outreach draft
+        shell: pwsh
+        run: |
+          ./tools/outreach/generate-community-update.ps1 -SinceDays 30 -MaxCommits 20 -OutFile outreach-draft.md
+          ./tools/outreach/generate-community-queue.ps1 -OutFile outreach-queue.md
+          ./tools/outreach/discover-community-candidates.ps1 -LimitPerQuery 10 -MinStars 50 -OutFile outreach-candidates.md
+
+      - name: Create monthly outreach issue if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          month="$(date -u +'%Y-%m')"
+          title="Community outreach checklist ${month}"
+          existing="$(gh issue list --state open --label community-outreach --search "${title} in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "${existing}" ]; then
+            echo "Outreach issue already exists: #${existing}"
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          cat > "${body_file}" <<'EOF'
+          This scheduled issue tracks the next manual rust-norion outreach cycle.
+
+          Runbook: `docs/runbooks/community-outreach.md`
+          Registry: `docs/outreach/community-registry.yml`
+          Templates: `docs/outreach/templates/`
+
+          Checklist:
+
+          - [ ] Summarize concrete changes since the last outreach cycle.
+          - [ ] Pick 3-5 relevant communities from the registry.
+          - [ ] Use a tailored Chinese or English template.
+          - [ ] Submit only where self-submission or project updates are allowed.
+          - [ ] Record proof URLs and dates in the registry.
+          - [ ] Do not bulk-post identical recruitment text.
+
+          Candidate channels:
+
+          - RustCn weekly
+          - users.rust-lang.org
+          - RustCC forum
+          - CSDN
+          - awesome-rust-llm
+          - Awesome Rust Machine Learning
+          - This Week in Rust, only after a notable release/article
+
+          Keep claims modest: rust-norion is a research-engineering prototype,
+          not a production LLM inference kernel.
+          EOF
+
+          {
+            echo
+            echo "## Generated draft"
+            echo
+            cat outreach-draft.md
+            echo
+            echo "## Outreach queue"
+            echo
+            cat outreach-queue.md
+            echo
+            echo "## Candidate discovery"
+            echo
+            cat outreach-candidates.md
+          } >> "${body_file}"
+
+          gh issue create \
+            --title "${title}" \
+            --label community-outreach \
+            --body-file "${body_file}"

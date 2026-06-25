@@ -1,0 +1,318 @@
+version: 1
+owner: yanghao1143
+project:
+  name: rust-norion
+  github: https://github.com/yanghao1143/rust-norion
+  gitee: https://gitee.com/babalibaba/rust-norion
+policy:
+  anti_spam:
+    - Do not bulk-post identical recruitment text.
+    - Post only where project self-submission, weekly/news tips, discussions, or resource-list PRs are allowed.
+    - Prefer one tailored submission per community, then wait for maintainer response.
+    - Do not post to unrelated project issue trackers.
+    - Record every external post or PR before repeating outreach.
+  update_cadence:
+    normal: monthly
+    major_release: within_72_hours
+    minor_iteration: batch_into_next_monthly_update
+  manual_review_required: true
+
+templates:
+  short_zh: docs/outreach/templates/rust-ai-project-short-zh.md
+  short_en: docs/outreach/templates/rust-ai-project-short-en.md
+  update_zh: docs/outreach/templates/iteration-update-zh.md
+  update_en: docs/outreach/templates/iteration-update-en.md
+
+communities:
+  - id: rustcn-weekly
+    platform: github
+    kind: weekly
+    url: https://github.com/rustcn-org/rust-weekly
+    audience: Chinese Rust developers
+    fit: high
+    status: submitted
+    proof: https://github.com/rustcn-org/rust-weekly/issues/11
+    next_action: wait_for_maintainer_response
+    notes: RustCn weekly accepts issue/PR tips; first project recommendation submitted.
+
+  - id: users-rust-lang
+    platform: forum
+    kind: forum_topic
+    url: https://users.rust-lang.org/
+    audience: English Rust users
+    fit: high
+    status: draft_ready_manual_login_required
+    next_action: post_to_code_review_or_announcements_after_account_ready
+    notes: New users have embedded-media limits; keep at most one image.
+
+  - id: rustcc-forum
+    platform: forum
+    kind: forum_topic
+    url: https://rustcc.cn/
+    audience: Chinese Rust developers
+    fit: high
+    status: draft_ready_github_oauth_required
+    next_action: post_to_everyones_projects_or_ai_section_after_login
+    notes: Account page uses GitHub OAuth; unauthenticated post creation returns need login.
+
+  - id: csdn-rust-ai-article
+    platform: blog
+    kind: article
+    url: https://www.csdn.net/
+    audience: Chinese AI and Rust readers
+    fit: medium
+    status: draft_ready_manual_publish
+    next_action: publish_long_chinese_contributor_article
+    notes: Better for long-form contributor recruitment and SEO, not for repeated short updates.
+
+  - id: awesome-rust-llm
+    platform: github
+    kind: awesome_list
+    url: https://github.com/jondot/awesome-rust-llm
+    audience: Rust LLM library/tool users
+    fit: high
+    status: submitted
+    proof: https://github.com/jondot/awesome-rust-llm/issues/17
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: README says PRs are welcome; an issue was opened first to ask about category and maturity fit.
+
+  - id: awesome-rust-machine-learning
+    platform: github
+    kind: awesome_list
+    url: https://github.com/vaaaaanquish/Awesome-Rust-MachineLearning
+    audience: Rust ML ecosystem
+    fit: medium
+    status: submitted
+    proof: https://github.com/vaaaaanquish/Awesome-Rust-MachineLearning/issues/30
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: Issue opened first because rust-norion is a nearby AI control-layer project, not a core ML library; possible categories include Interface/Pipeline/AutoML, Workflow, or Nearby Projects.
+
+  - id: awesome-rust-ai-libraries
+    platform: github
+    kind: awesome_list
+    url: https://github.com/ever-works/awesome-rust-ai-libraries
+    audience: Rust AI library directory
+    fit: high
+    status: submitted
+    proof: https://github.com/ever-works/awesome-rust-ai-libraries/issues/3
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: Directly relevant Rust AI directory; issue opened first because the exact category and maturity bar need maintainer feedback.
+
+  - id: awesome-rust-ai-governance
+    platform: github
+    kind: awesome_list
+    url: https://github.com/mindfulcto-labs/awesome-rust-ai-governance
+    audience: Rust AI governance, runtime safety, audit, and observability readers
+    fit: high
+    status: submitted
+    proof: https://github.com/mindfulcto-labs/awesome-rust-ai-governance/issues/1
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: Issue framed around runtime safety, writer gates, evidence checks, rollback, auditability, and early-stage maturity.
+
+  - id: awesome-ai-agent-governance
+    platform: github
+    kind: awesome_list
+    url: https://github.com/agentrust-io/awesome-ai-governance
+    audience: AI agent governance, safety, trust, observability, and compliance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/agentrust-io/awesome-ai-governance/issues/28
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: Issue opened first because the list prefers PRs but rust-norion is an early Rust control-layer prototype; possible categories include Governance Frameworks, Agent Frameworks with Governance Features, and Observability.
+
+  - id: awesome-llm-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/kaushikb11/awesome-llm-agents
+    audience: LLM agent framework and tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/kaushikb11/awesome-llm-agents/issues/266
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: README explicitly allows issues or PRs; issue framed around Rust control-layer, memory, runtime adapters, rollback, and self-evolution.
+
+  - id: awesome-rust-ai-tools
+    platform: github
+    kind: awesome_list
+    url: https://github.com/KatanoShingo/awesome-rust-ai-tools
+    audience: Rust-first local AI tool users
+    fit: high
+    status: submitted
+    proof: https://github.com/KatanoShingo/awesome-rust-ai-tools/issues/1
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: Issue framed for Rust AI control-layer tooling, agent/autonomy frameworks, and local-first inference orchestration.
+
+  - id: awesome-rust-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/dhilipsiva/awesome-rust-ai
+    audience: Rust AI tools and framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/dhilipsiva/awesome-rust-ai/issues/1
+    next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
+    notes: Issue framed as a Rust AI inference-control-layer prototype and disclosed research-engineering maturity.
+
+  - id: best-of-ml-rust
+    platform: github
+    kind: best_of_list
+    url: https://github.com/e-tornike/best-of-ml-rust
+    audience: Rust machine learning library and tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/e-tornike/best-of-ml-rust/issues/143
+    next_action: wait_for_maintainer_feedback_then_open_projects_yaml_pr_if_requested
+    notes: CONTRIBUTING explicitly supports project suggestion issues; issue disclosed that rust-norion is a nearby inference-control project, not a direct ML algorithm crate.
+
+  - id: awesome-agentic-ai-zh
+    platform: github
+    kind: learning_roadmap
+    url: https://github.com/WenyuChiou/awesome-agentic-ai-zh
+    audience: Chinese and English agentic AI learners
+    fit: high
+    status: submitted
+    proof: https://github.com/WenyuChiou/awesome-agentic-ai-zh/issues/44
+    next_action: wait_for_maintainer_feedback_then_open_focused_pr_if_requested
+    notes: CONTRIBUTING asks new projects to open an issue first; issue used Traditional Chinese and suggested Stage 6, Stage 7, Stage 8, or RESOURCES.md placement.
+
+  - id: e2b-awesome-ai-sdks
+    platform: github
+    kind: awesome_list
+    url: https://github.com/e2b-dev/awesome-ai-sdks
+    audience: AI agent SDK, framework, monitoring, debugging, and deployment tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/e2b-dev/awesome-ai-sdks/pull/257
+    next_action: wait_for_maintainer_review
+    notes: Correct companion list for SDKs, frameworks, libraries, and tools; e2b-dev/awesome-ai-agents redirects tool submissions here. Focused README PR opened because the project asks additions to use pull requests.
+
+  - id: awesome-llmops
+    platform: github
+    kind: awesome_list
+    url: https://github.com/tensorchord/Awesome-LLMOps
+    audience: LLMOps tool and platform readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/tensorchord/Awesome-LLMOps/pull/603
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING asks for individual pull requests per suggestion; focused README PR added rust-norion near routing, memory runtime, and agent control-plane tools with prototype wording.
+
+  - id: rust-unofficial-awesome-rust
+    platform: github
+    kind: awesome_list
+    url: https://github.com/rust-unofficial/awesome-rust
+    audience: broad Rust developers
+    fit: high
+    status: defer
+    next_action: wait_until_project_has_50_stars_or_equivalent_metric
+    notes: CONTRIBUTING requires 50 GitHub stars, 2000 crates.io downloads, or equivalent popularity metrics; current GitHub stars were below threshold when checked.
+
+  - id: awesome-rust-com
+    platform: github
+    kind: awesome_list
+    url: https://github.com/awesome-rust-com/awesome-rust
+    audience: broad Rust developers
+    fit: medium
+    status: defer
+    next_action: wait_for_more_stability_and_usage_metrics
+    notes: Contribution guide prefers stable projects useful to many users.
+
+  - id: rustcc-awesome-rust
+    platform: github
+    kind: awesome_list
+    url: https://github.com/rustcc/awesome-rust
+    audience: Chinese Rust developers
+    fit: medium
+    status: candidate_manual_review
+    next_action: verify_repo_activity_and_section_before_submission
+    notes: Useful Chinese Rust resource list, but activity appears limited; do not spam issues.
+
+  - id: rust-boom
+    platform: github
+    kind: awesome_list
+    url: https://github.com/rust-boom/rust-boom
+    audience: Chinese Rust learners
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_readme_structure_before_pr
+    notes: Chinese Rust resource collection; submit only if repository format clearly supports project entries.
+
+  - id: gitee-awesome-lib-awesome-rust
+    platform: gitee
+    kind: awesome_list
+    url: https://gitee.com/awesome-lib/awesome-rust
+    audience: Chinese Rust developers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_contribution_flow_after_gitee_login
+    notes: Gitee resource list found through web search; verify whether it is an active maintained list or a mirror before submitting.
+
+  - id: gitee-rust-boom
+    platform: gitee
+    kind: awesome_list
+    url: https://gitee.com/thinkinpg/rust-boom
+    audience: Chinese Rust learners and Rust resource readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect contribution flow after Gitee login and only submit if Rust AI projects fit the resource structure
+    notes: Chinese Rust resource collection with categories such as machine learning and community links; avoid submitting if it is not accepting external project entries.
+
+  - id: gitee-awesome-llm
+    platform: gitee
+    kind: awesome_list
+    url: https://gitee.com/familyfan/Awesome-LLM
+    audience: Chinese LLM resource readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect whether Rust AI control-plane tools fit the deployment/tools categories before issue or PR
+    notes: Generic LLM resource list, not Rust-specific; use only a tailored submission if the list accepts framework/tool suggestions.
+
+  - id: gitee-awesome-rust-mirror-hixuym
+    platform: gitee
+    kind: mirror
+    url: https://gitee.com/hixuym/awesome-rust
+    audience: Chinese Rust resource readers
+    fit: low
+    status: defer
+    next_action: do not submit to the mirror; submit upstream rust-unofficial/awesome-rust only after maturity metrics are met
+    notes: Appears to mirror rust-unofficial/awesome-rust; avoid duplicate submissions to mirrors.
+
+  - id: gitee-awesome-machine-learning-mirror
+    platform: gitee
+    kind: mirror
+    url: https://gitee.com/mirrors_dirkliu/awesome-machine-learning
+    audience: machine learning resource readers
+    fit: low
+    status: defer
+    next_action: do not submit to the mirror unless an active maintainer contribution path is verified
+    notes: Generic awesome-machine-learning mirror; rust-norion is not a direct ML library and should not be pushed here without a clear active contribution path.
+
+  - id: gitee-rust-ai-explore
+    platform: gitee
+    kind: discovery
+    url: https://gitee.com/explore/Artificial-Intelligence?lang=Rust
+    audience: Chinese Rust and AI developers
+    fit: medium
+    status: needs_manual_verification
+    next_action: inspect listed Rust AI projects for legitimate community or list submission surfaces
+    notes: Gitee Explore appears to expose a Rust artificial-intelligence category; HTTP probing returned 405 in this environment, so use browser/login for discovery only, not direct mass posting.
+
+  - id: this-week-in-rust
+    platform: github
+    kind: weekly
+    url: https://github.com/rust-lang/this-week-in-rust
+    audience: global Rust developers
+    fit: medium
+    status: wait_for_major_update
+    next_action: submit_after_release_article_or_notable_technical_post
+    notes: Better for concrete release notes or technical articles than broad contributor recruitment.
+
+  - id: gitee-rust-ai-search
+    platform: gitee
+    kind: discovery
+    url: https://gitee.com/search
+    audience: Chinese Rust and AI developers
+    fit: unknown
+    status: needs_manual_verification
+    next_action: search Rust AI and Rust weekly communities manually because API timed out
+    notes: Do not assume eligibility until community rules are inspected.
