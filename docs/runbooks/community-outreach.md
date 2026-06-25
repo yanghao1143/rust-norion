@@ -55,7 +55,7 @@ same recruitment message everywhere.
 | Smithakolan Awesome AI Agents | Deferred | Minimal structure; no clear contribution format |
 | Rust ML Book | Deferred | Book, not project directory |
 | Scientific Discovery LLM Agents | Deferred | Domain-specific scientific/biomedical list |
-| Agentic AI Learning Resource | Candidate | Review whether project resource entries are accepted |
+| Agentic AI Learning Resource | Submitted | Track https://github.com/DharminJoshi/Awesome-Agentic-AI-Learning-Resource-By-DevKay/issues/4 |
 | Jondoe Awesome AI Agents | Deferred | Requires complete app directory example, not a project link |
 | Buntys Awesome AI Agents | Deferred | Requires 500+ stars or organizational backing |
 | OneDuckyBoy CrewAI Hub | Deferred | CrewAI app-example hub; submit only with a CrewAI example |
@@ -83,15 +83,21 @@ same recruitment message everywhere.
 | Meirtz Context Engineering | Submitted | Track https://github.com/Meirtz/Awesome-Context-Engineering/issues/83 |
 | YZFly Context Engineering | Submitted | Track https://github.com/yzfly/awesome-context-engineering/issues/15 |
 | Jihoo Context Engineering | Submitted | Track https://github.com/jihoo-kim/awesome-context-engineering/issues/20 |
+| Rerewang Context Engineering | Submitted | Track https://github.com/rerewang/awesome-context-engineering/issues/4 |
 | TeleAI Agent Memory | Submitted | Track https://github.com/TeleAI-UAGI/Awesome-Agent-Memory/issues/47 |
+| WFNUser Agent Memory | Submitted | Track https://github.com/wfnuser/Awesome-Agent-Memory/issues/8 |
+| CXXZ Agent Memory | Submitted | Track https://github.com/cxxz/awesome-agent-memory/issues/11 |
+| ZFancy Agent Memory | Submitted | Track https://github.com/ZFancy/awesome-agent-memory/issues/2 |
 | AgentMemoryWorld Agent Memory | Deferred | Paper resource; submit only after paper-backed artifact |
 | Yyyujintang Agent Memory Papers | Deferred | Papers only |
 | Richard Blythman Multi-Agent Systems | Submitted | Track https://github.com/richardblythman/awesome-multi-agent-systems/issues/11 |
 | Ottosulin Awesome AI Security | Submitted | Track https://github.com/ottosulin/awesome-ai-security/issues/296 |
 | Bureado Agent Runtime Security | Submitted | Track https://github.com/bureado/awesome-agent-runtime-security/issues/9 |
 | Corca Awesome LLM Security | Candidate | Submit only if focused security PR is invited |
+| Beyefendi Awesome LLM Security | Submitted | Track https://github.com/beyefendi/awesome-llm-security/issues/18 |
+| Christian Scott LLM Security | Submitted | Track https://github.com/christiancscott/awesome-LLM-security/issues/10 |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
-| DeepSpaceHarbor AI Security | Candidate | Manual review; verify runtime-security code entry flow |
+| DeepSpaceHarbor AI Security | Submitted | Track https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44 |
 | Sorrycc Code Agents | Deferred | Wait for direct coding-agent product surface |
 | EuniAI Code Agents | Deferred | Paper list; wait for paper/benchmark artifact |
 | Evilsocket Awesome Agents | Deferred | Requires production-ready specific-use-case agents |

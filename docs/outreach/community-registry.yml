@@ -392,9 +392,10 @@ communities:
     url: https://github.com/DharminJoshi/Awesome-Agentic-AI-Learning-Resource-By-DevKay
     audience: agentic AI learners following a staged roadmap
     fit: medium
-    status: candidate_manual_review
-    next_action: inspect_resource_sections_and_submit_only_if_project_resource_entries_are_allowed
-    notes: Discovery found a learning roadmap rather than a pure project directory; needs manual fit check before any submission.
+    status: submitted
+    proof: https://github.com/DharminJoshi/Awesome-Agentic-AI-Learning-Resource-By-DevKay/issues/4
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Learning roadmap includes open-source project lanes and PRs are welcome; scope-check issue asks whether an early Rust agent control-layer resource fits before opening a PR.
 
   - id: jondoescoding-awesome-ai-agents
     platform: github
@@ -1008,6 +1009,17 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: Smaller but directly relevant context-engineering list with Long-term memory, MCP, and Multi-Agent sections; scope-check issue asks where a Rust control-layer prototype fits.
 
+  - id: rerewang-awesome-context-engineering
+    platform: github
+    kind: awesome_list
+    url: https://github.com/rerewang/awesome-context-engineering
+    audience: context engineering framework, tool, and production AI system readers
+    fit: high
+    status: submitted
+    proof: https://github.com/rerewang/awesome-context-engineering/issues/4
+    next_action: wait_for_scope_feedback_before_pr
+    notes: CONTRIBUTING welcomes context-engineering frameworks and tools; scope-check issue asks whether an early Rust context/memory control-layer prototype is mature enough before a PR.
+
   - id: teleai-awesome-agent-memory
     platform: github
     kind: survey_resource_list
@@ -1018,6 +1030,39 @@ communities:
     proof: https://github.com/TeleAI-UAGI/Awesome-Agent-Memory/issues/47
     next_action: wait_for_scope_feedback_before_pr
     notes: Contribution guide is memory-focused and excludes generic agent frameworks when memory is minor; scope-check issue focused on rust-norion memory control, replay gates, and governance surfaces.
+
+  - id: wfnuser-awesome-agent-memory
+    platform: github
+    kind: project_and_paper_list
+    url: https://github.com/wfnuser/Awesome-Agent-Memory
+    audience: agent memory project, framework, benchmark, and paper readers
+    fit: high
+    status: submitted
+    proof: https://github.com/wfnuser/Awesome-Agent-Memory/issues/8
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README has an Open-Source Projects & Frameworks section and asks for honest descriptions; scope-check issue avoids forcing a low-maturity project into the table before maintainer feedback.
+
+  - id: cxxz-awesome-agent-memory
+    platform: github
+    kind: project_list
+    url: https://github.com/cxxz/awesome-agent-memory
+    audience: agent memory system, library, framework, and design readers
+    fit: high
+    status: submitted
+    proof: https://github.com/cxxz/awesome-agent-memory/issues/11
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Project list accepts issues or PRs for memory systems; scope-check issue framed rust-norion around memory admission, replay governance, and Rust control-layer boundaries.
+
+  - id: zfancy-awesome-agent-memory
+    platform: github
+    kind: resource_list
+    url: https://github.com/ZFancy/awesome-agent-memory
+    audience: agent memory pattern, implementation, security, and privacy readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ZFancy/awesome-agent-memory/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README explicitly welcomes issues or PRs with notable projects; scope-check issue keeps the maturity caveat and asks before a PR.
 
   - id: agentmemoryworld-awesome-agent-memory
     platform: github
@@ -1082,6 +1127,28 @@ communities:
     next_action: submit_only_if_a_focused_security_entry_or_pr_is_invited
     notes: High-star active list accepts tools and projects, but contribution guidance asks for PRs and current open issues already include many tool-add requests; avoid posting unless rust-norion security scope is sharpened.
 
+  - id: beyefendi-awesome-llm-security
+    platform: github
+    kind: awesome_list
+    url: https://github.com/beyefendi/awesome-llm-security
+    audience: LLM security, agent scanner, defensive guardrail, and runtime governance readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/beyefendi/awesome-llm-security/issues/18
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Active LLM security list has agent scanner and defensive guardrail sections; scope-check issue asks before listing rust-norion because it is not a security scanner.
+
+  - id: christiancscott-awesome-llm-security
+    platform: github
+    kind: resource_list
+    url: https://github.com/christiancscott/awesome-LLM-security
+    audience: LLM and GenAI security testing, defensive resource, and threat-model readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/christiancscott/awesome-LLM-security/issues/10
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Resource list covers LLM agents, control/data-plane concerns, defensive tools, and testing resources; scope-check issue asks whether runtime-boundary/evidence-gate work is in scope.
+
   - id: cryptoailab-awesome-lm-ssp
     platform: github
     kind: paper_list
@@ -1098,9 +1165,10 @@ communities:
     url: https://github.com/DeepSpaceHarbor/Awesome-AI-Security
     audience: AI security research and code resource readers
     fit: medium
-    status: candidate_manual_review
-    next_action: inspect_contribution_flow_and_submit_only_if_runtime_security_code_entries_are_accepted
-    notes: Contains code entries for AI agent runtime security, but the list is broader and older in style; keep for manual review rather than opening another broad project issue.
+    status: submitted
+    proof: https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Contains code entries for AI agent runtime security, but the list is broader and older in style; scope-check issue asks about fit before any PR.
 
   - id: sorrycc-awesome-code-agents
     platform: github
