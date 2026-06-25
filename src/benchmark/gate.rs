@@ -444,4 +444,15 @@ impl BenchmarkGateReport {
             self.failures.len()
         )
     }
+
+    pub fn summary_lines(&self) -> Vec<String> {
+        let mut lines = Vec::with_capacity(self.failures.len() + 1);
+        lines.push(self.summary_line());
+        lines.extend(
+            self.failures
+                .iter()
+                .map(|failure| format!("benchmark_gate_failure: {failure}")),
+        );
+        lines
+    }
 }

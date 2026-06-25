@@ -429,9 +429,8 @@ pub(crate) fn print_benchmark_summary(
     }
 
     if let Some(report) = gate_report {
-        println!("{}", report.summary_line());
-        for failure in &report.failures {
-            println!("benchmark_gate_failure: {failure}");
+        for line in report.summary_lines() {
+            println!("{line}");
         }
     }
 

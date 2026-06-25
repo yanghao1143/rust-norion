@@ -877,3 +877,24 @@ fn gate_reports_missing_runtime_kv_hold_device_profile_coverage() {
     assert_eq!(passing.runtime_kv_hold_device_profiles(), 2);
     assert_eq!(passing.runtime_kv_hold_devices_csv(), "cpu+integrated");
 }
+
+#[test]
+fn gate_summary_lines_include_weak_runtime_kv_import_failures() {
+    let report = BenchmarkGateReport {
+        passed: false,
+        failures: vec![
+            "runtime_kv_weak_import_skip_cases 0 below minimum 1".to_owned(),
+            "weak_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
+        ],
+    };
+
+    assert_eq!(
+        report.summary_lines(),
+        vec![
+            "benchmark_gate: passed=false failures=2".to_owned(),
+            "benchmark_gate_failure: runtime_kv_weak_import_skip_cases 0 below minimum 1"
+                .to_owned(),
+            "benchmark_gate_failure: weak_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
+        ]
+    );
+}
