@@ -92,6 +92,7 @@ same recruitment message everywhere.
 | CXXZ Agent Memory | Submitted | Track https://github.com/cxxz/awesome-agent-memory/issues/11 |
 | ZFancy Agent Memory | Submitted | Track https://github.com/ZFancy/awesome-agent-memory/issues/2 |
 | XiaomingX AI Memory | Submitted | Track https://github.com/XiaomingX/awesome-ai-memory/issues/11 |
+| Topoteretes AI Memory | Submitted | Track https://github.com/topoteretes/awesome-ai-memory/issues/47 |
 | IAAR Shanghai AI Memory | Deferred | Paper-entry workflow; wait for paper metadata |
 | TsinghuaC3I Memory for Agents | Deferred | Paper list; wait for paper-backed artifact |
 | AgentMemoryWorld Agent Memory | Deferred | Paper resource; submit only after paper-backed artifact |
@@ -106,9 +107,18 @@ same recruitment message everywhere.
 | TalEliyahu AI Security | Submitted | Track https://github.com/TalEliyahu/Awesome-AI-Security/issues/102 |
 | Wearetyomsmnv LLMSecOps | Submitted | Track https://github.com/wearetyomsmnv/Awesome-LLMSecOps/issues/37 |
 | Raphabot Cybersecurity Agentic AI | Submitted | Track https://github.com/raphabot/awesome-cybersecurity-agentic-ai/issues/46 |
+| WalkingLabs Harness Engineering | Submitted | Track https://github.com/walkinglabs/awesome-harness-engineering/issues/46 |
+| AI Boost Harness Engineering | Submitted | Track https://github.com/ai-boost/awesome-harness-engineering/issues/86 |
+| Vectara Agent Failures | Submitted | Track https://github.com/vectara/awesome-agent-failures/issues/42 |
+| Gloria Meng Agent Harness Survey | Submitted | Track https://github.com/Gloriaameng/Awesome-Agent-Harness/issues/6 |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
 | DeepSpaceHarbor AI Security | Submitted | Track https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44 |
 | Giskard AI Safety | Deferred | Paper/article list; wait for safety-focused technical article |
+| Zhou-Zi7 AI Security BIG4 | Deferred | Top-conference paper list; wait for related paper |
+| AmanPriyanshu AI For Security | Deferred | AI-for-security list; wait for concrete security tool or agent artifact |
+| Xu-Xiang Security Vul LLM | Deferred | Vulnerability/POC aggregation; rust-norion is not a vulnerability resource |
+| Qianlima Lifelong LLM Agent | Deferred | Survey/paper/benchmark list; wait for related paper or benchmark artifact |
+| YXF Efficient Agents | Deferred | Paper list; wait for efficiency paper or benchmark-backed artifact |
 | Shiyao Agent Evolution | Submitted | Track https://github.com/Shiyao-Huang/awesome-agent-evolution/issues/17 |
 | EvoMap Agent Evolution | Submitted | Track https://github.com/EvoMap/awesome-agent-evolution/issues/32 |
 | Sorrycc Code Agents | Deferred | Wait for direct coding-agent product surface |
@@ -144,7 +154,9 @@ same recruitment message everywhere.
 | Romit LLM Systems | Deferred | Learning resource list; submit a substantial systems article, not a raw project |
 | Aishwarya Generative AI Guide | Deferred | Learning/interview/notebook guide; avoid project-ad submission |
 | AIP Engineer Reads | Deferred | Reading list; submit only after a technical article exists |
-| Gitee Rust Boom | Candidate | Verify contribution flow after Gitee login |
+| Dontriskit AI Software Engineering | Deferred | Needs direct AI software-engineering tool fit and stronger community signals |
+| Flatlogic Software Development Agents | Deferred | Directory is for coding agents, not control-layer prototypes |
+| Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | Gitee Awesome MCP Servers | Candidate | Login-check contribution flow; use only if control-layer tooling fits |
 | Gitee Awesome Datascience | Candidate | Login-check agent framework section before posting |

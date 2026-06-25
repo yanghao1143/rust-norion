@@ -1297,6 +1297,17 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: AI memory project list; Chinese scope-check frames rust-norion around memory governance, admission, replay, and Rust control-plane implementation.
 
+  - id: topoteretes-awesome-ai-memory
+    platform: github
+    kind: memory_project_list
+    url: https://github.com/topoteretes/awesome-ai-memory
+    audience: AI memory tool, framework, optimizer, storage, benchmark, and agent-memory readers
+    fit: high
+    status: submitted
+    proof: https://github.com/topoteretes/awesome-ai-memory/issues/47
+    next_action: wait_for_scope_feedback_then_open_table_pr_if_invited
+    notes: README asks for PRs with name, URL, source model, GitHub URL, category, and storage model; scope-check frames rust-norion as memory/replay governance rather than a standalone vector DB or hosted memory API.
+
   - id: wearetyomsmnv-awesome-llmsecops
     platform: github
     kind: awesome_list
@@ -1318,6 +1329,50 @@ communities:
     proof: https://github.com/raphabot/awesome-cybersecurity-agentic-ai/issues/46
     next_action: wait_for_scope_feedback_before_pr
     notes: Cybersecurity-agentic-AI list accepts projects, tools, research, and resources by PR; scope-check explicitly says rust-norion is not a cybersecurity agent or scanner.
+
+  - id: walkinglabs-awesome-harness-engineering
+    platform: github
+    kind: awesome_list
+    url: https://github.com/walkinglabs/awesome-harness-engineering
+    audience: agent harness engineering, context management, runtime control, and long-running agent reliability readers
+    fit: high
+    status: submitted
+    proof: https://github.com/walkinglabs/awesome-harness-engineering/issues/46
+    next_action: wait_for_scope_feedback_then_open_focused_pr_if_invited
+    notes: CONTRIBUTING welcomes reference implementations and concrete harness-level resources; scope-check frames rust-norion around runtime control, evidence gates, memory/replay governance, audit traces, and early-stage maturity.
+
+  - id: ai-boost-awesome-harness-engineering
+    platform: github
+    kind: awesome_list
+    url: https://github.com/ai-boost/awesome-harness-engineering
+    audience: agent harness engineering, permissions, verification, memory, sandboxing, and agent-loop readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ai-boost/awesome-harness-engineering/issues/86
+    next_action: wait_for_scope_feedback_then_open_readme_pr_if_invited
+    notes: CONTRIBUTING explicitly lists context delivery, permissions, memory, verification, sandboxing, and loop structure; issue asks for fit before adding an early Rust prototype.
+
+  - id: vectara-awesome-agent-failures
+    platform: github
+    kind: failure_modes_and_mitigations
+    url: https://github.com/vectara/awesome-agent-failures
+    audience: AI agent failure-mode, mitigation, monitoring, and reliability readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/vectara/awesome-agent-failures/issues/42
+    next_action: wait_for_scope_feedback_before_tool_or_mitigation_pr
+    notes: CONTRIBUTING allows mitigation strategies and tools; scope-check presents rust-norion as runtime governance for premature writes, weak verification, unsafe self-evolution, and auditability, not as a failure case.
+
+  - id: gloriaameng-awesome-agent-harness
+    platform: github
+    kind: survey_resource_list
+    url: https://github.com/Gloriaameng/Awesome-Agent-Harness
+    audience: agent harness survey, system matrix, runtime context, memory, lifecycle, and evaluation-interface readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Gloriaameng/Awesome-Agent-Harness/issues/6
+    next_action: wait_for_scope_feedback_before_system_or_resource_pr
+    notes: Repository is survey-backed and may require paper-backed systems; scope-check asks whether rust-norion fits execution-loop, context/state, lifecycle gate, and evidence-interface coverage before proposing changes.
 
   - id: kyrolabs-awesome-agents
     platform: github
@@ -1359,6 +1414,76 @@ communities:
     next_action: submit_only_after_a_substantial_ai_safety_article_or_paper_exists
     notes: CONTRIBUTING asks for papers or technical articles; rust-norion should not be submitted until there is a safety-focused article or paper.
 
+  - id: zhouzi7-awesome-ai-security-big4
+    platform: github
+    kind: paper_list
+    url: https://github.com/Zhou-Zi7/Awesome-AI-Security-BIG4
+    audience: top-conference AI security paper readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_related_top_conference_paper_exists
+    notes: Repository summarizes AI security papers from top academic conferences; do not submit rust-norion as a raw project link.
+
+  - id: amanpriyanshu-awesome-ai-for-security
+    platform: github
+    kind: ai_for_security_resource_list
+    url: https://github.com/AmanPriyanshu/Awesome-AI-For-Security
+    audience: AI-for-cybersecurity model, dataset, benchmark, tool, and security-agent readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_specific_ai_for_security_tool_or_security_agent_artifact
+    notes: README focuses on applying AI to cybersecurity tasks; rust-norion is a runtime/control-layer prototype and should not be presented as a security tool.
+
+  - id: xu-xiang-awesome-security-vul-llm
+    platform: github
+    kind: vulnerability_resource_aggregation
+    url: https://github.com/xu-xiang/awesome-security-vul-llm
+    audience: vulnerability, POC, rule, and security-resource readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_rust_norion_gains_specific_vulnerability_or_poc_evidence
+    notes: Chinese README describes automated aggregation of vulnerability/POC/rule projects; rust-norion is not a vulnerability resource.
+
+  - id: qianlima-lab-awesome-lifelong-llm-agent
+    platform: github
+    kind: paper_survey_resource_list
+    url: https://github.com/qianlima-lab/awesome-lifelong-llm-agent
+    audience: lifelong learning LLM-agent paper and benchmark readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_related_paper_benchmark_or_lifelong_agent_resource_exists
+    notes: TPAMI survey companion focused on papers, surveys, resources, and benchmarks for lifelong learning LLM agents; project-only submission is premature.
+
+  - id: yxf203-awesome-efficient-agents
+    platform: github
+    kind: paper_list
+    url: https://github.com/yxf203/Awesome-Efficient-Agents
+    audience: efficient LLM-agent memory, tool-use, and planning paper readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_related_efficiency_paper_or_benchmark_artifact_exists
+    notes: README welcomes papers and categorization fixes; rust-norion should wait for a paper or benchmark-backed efficiency artifact.
+
+  - id: dontriskit-awesome-ai-software-engineering
+    platform: github
+    kind: software_engineering_resource_list
+    url: https://github.com/dontriskit/awesome-ai-software-engineering
+    audience: AI-powered software engineering, coding-agent, framework, and workflow readers
+    fit: low
+    status: defer
+    next_action: revisit_after_rust_norion_has_a_user_facing_ai_software_engineering_tool_or_clear_multiple_contributor_activity
+    notes: CONTRIBUTING asks for directly relevant AI software-engineering resources with active community signals; rust-norion is a control-layer prototype rather than a coding agent or developer tool.
+
+  - id: flatlogic-awesome-ai-software-development-agents
+    platform: github
+    kind: software_development_agent_directory
+    url: https://github.com/flatlogic/awesome-ai-software-development-agents
+    audience: autonomous AI software-development agent readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_becomes_a_specific_software_development_agent_or_demo
+    notes: Directory is for tools that autonomously handle software-development tasks; rust-norion is currently not a user-facing coding agent.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list
@@ -1374,10 +1499,10 @@ communities:
     kind: awesome_list
     url: https://gitee.com/thinkinpg/rust-boom
     audience: Chinese Rust learners and Rust resource readers
-    fit: medium
-    status: candidate_manual_review
-    next_action: inspect contribution flow after Gitee login and only submit if Rust AI projects fit the resource structure
-    notes: Chinese Rust resource collection with categories such as machine learning and community links; avoid submitting if it is not accepting external project entries.
+    fit: low
+    status: defer
+    next_action: do_not_submit_to_gitee_mirror_track_upstream_rust_boom_or_rust_weekly_instead
+    notes: Public Gitee page describes the repository as a domestic mirror; avoid duplicate submissions to mirrors.
 
   - id: gitee-awesome-llm
     platform: gitee
