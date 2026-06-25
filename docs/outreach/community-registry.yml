@@ -2458,6 +2458,121 @@ communities:
     next_action: submit_only_after_rust_norion_exposes_a_real_mcp_server_or_tool
     notes: The directory is for MCP servers; rust-norion should not be submitted as a generic control-layer project without an MCP artifact.
 
+  - id: awakehsh-awesome-agent-tools
+    platform: github
+    kind: agent_tool_and_skill_marketplace
+    url: https://github.com/Awakehsh/awesome-agent-tools
+    audience: Claude Code, Codex, Cursor, MCP, skills, agent workflow, and developer-tooling readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Awakehsh/awesome-agent-tools/pull/6
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING accepts third-party tools in AWESOME.md with active maintenance and 10+ stars; focused PR adds rust-norion under Development Tools with early-prototype wording.
+
+  - id: infinite-ai-creations-awesome-llm-projects
+    platform: github
+    kind: llm_project_directory
+    url: https://github.com/InfiniteAICreations/awesome-llm-projects
+    audience: LLM project, AI agent, multi-agent, developer assistant, inference, and productivity readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/InfiniteAICreations/awesome-llm-projects/pull/12
+    next_action: wait_for_maintainer_review
+    notes: README has AI Agent and Multi-Agent Collaboration sections and PRs are welcome; PR adds one factual AI Agent entry.
+
+  - id: pingan8787-awesome-ai-tools
+    platform: github
+    kind: broad_ai_tool_directory
+    url: https://github.com/pingan8787/awesome-ai-tools
+    audience: AI tool, developer-tool, Dev, AI agent, research, education, and productivity readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/pingan8787/awesome-ai-tools/issues/161
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Active issue and PR flow includes Dev and agent marketplace suggestions; issue asks whether a Rust control-layer prototype fits before any PR.
+
+  - id: machinelearningzuu-awesome-llm-projects
+    platform: github
+    kind: llm_project_resource_list
+    url: https://github.com/machinelearningzuu/awesome-llm-projects
+    audience: LLM project, resource, tool, RAG, and agent readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/machinelearningzuu/awesome-llm-projects/issues/3
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository welcomes LLM projects/resources/tools but has older activity; opened a scope-check issue instead of a direct PR.
+
+  - id: zero-voice-awesome-ai-tools
+    platform: github
+    kind: chinese_ai_tool_directory
+    url: https://github.com/0voice/awesome-ai-tools
+    audience: Chinese AI tool, developer-tool, AI agent, automation, open-source project, and productivity readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/0voice/awesome-ai-tools/issues/56
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Active Chinese issue and PR flow includes developer and AI-agent categories; issue was submitted in Chinese with early research-prototype disclosure.
+
+  - id: eudk-awesome-ai-tools
+    platform: github
+    kind: broad_ai_tool_directory
+    url: https://github.com/eudk/awesome-ai-tools
+    audience: broad AI tool, AI agent, LLMOps, developer API, and productivity readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_publicly_usable_tool_surface_or_release
+    notes: CONTRIBUTING requires public, functional, usable-now tools and warns against low-effort promotional submissions; defer while rust-norion is positioned as an early control-layer prototype.
+
+  - id: jmcrafter26-awesome-ai-tools
+    platform: github
+    kind: github_ai_tool_list
+    url: https://github.com/JMcrafter26/awesome-ai-tools
+    audience: GitHub AI tool, AI agent, workflow, infrastructure, and observability readers
+    fit: medium
+    status: defer
+    next_action: revisit_after_rust_norion_has_50_plus_stars_or_non_maintainer_submission
+    notes: CONTRIBUTING states that self-submitted repos under 50 stars are considered advertising; do not submit now.
+
+  - id: astreox-awesome-agent-tools
+    platform: github
+    kind: agent_tool_list
+    url: https://github.com/AstreoX/awesome-agent-tools
+    audience: AI agent framework, orchestration, memory, monitoring, evaluation, security, deployment, and infrastructure readers
+    fit: high
+    status: defer
+    next_action: revisit_after_rust_norion_has_50_plus_github_stars_or_maintainer_invitation
+    notes: CONTRIBUTING requires open-source projects to have at least 50 GitHub stars; rust-norion does not meet that bar yet.
+
+  - id: dr-saad-la-awesome-llm-tools
+    platform: github
+    kind: llm_tool_framework_list
+    url: https://github.com/dr-saad-la/awesome-llm-tools
+    audience: LLM framework, agent framework, memory, gateway, operations, evaluation, and monitoring readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_general_use_release_or_standalone_tool_surface
+    notes: CONTRIBUTING excludes alpha or placeholder projects not ready for general use; defer until rust-norion has a clearer release/tool surface.
+
+  - id: yanshengjia-artificial-intelligence
+    platform: github
+    kind: ai_project_playground
+    url: https://github.com/yanshengjia/artificial-intelligence
+    audience: AI project playground and learning readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_raw_project_link_unless_the_maintainer_adds_external_project_directory_rules
+    notes: Repository is mainly a project-based playground, not a current external project directory for AI agent tools.
+
+  - id: gurpreetkaurjethra-generative-ai-projects
+    platform: github
+    kind: llm_project_collection
+    url: https://github.com/GURPREETKAURJETHRA/END-TO-END-GENERATIVE-AI-PROJECTS
+    audience: end-to-end generative AI app project readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_self_contained_end_to_end_app_template
+    notes: Repository lists runnable app projects and tutorials; rust-norion is currently a control-layer prototype rather than an end-to-end app example.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list

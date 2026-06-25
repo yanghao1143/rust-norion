@@ -249,6 +249,17 @@ same recruitment message everywhere.
 | Aperintel AI Governance | Deferred | Excludes early-stage non-production tools; wait for stronger governance artifact |
 | Eric LLMs AI Engineering | Deferred | Playbook surface; submit only after a tutorial/article resource exists |
 | Lobstercare MCP Hub | Deferred | MCP server directory; submit only after rust-norion exposes a real MCP artifact |
+| Awakehsh Agent Tools | Submitted | Track https://github.com/Awakehsh/awesome-agent-tools/pull/6 |
+| Infinite AI Creations LLM Projects | Submitted | Track https://github.com/InfiniteAICreations/awesome-llm-projects/pull/12 |
+| Pingan AI Tools | Submitted | Track https://github.com/pingan8787/awesome-ai-tools/issues/161 |
+| MachineLearningZuu LLM Projects | Submitted | Track https://github.com/machinelearningzuu/awesome-llm-projects/issues/3 |
+| 0voice AI Tools | Submitted | Track https://github.com/0voice/awesome-ai-tools/issues/56 |
+| Eudk AI Tools | Deferred | Requires publicly usable now tools; wait for clearer release/tool surface |
+| JMcrafter AI Tools | Deferred | Self-submitted repos under 50 stars are treated as advertising |
+| AstreoX Agent Tools | Deferred | Requires 50+ GitHub stars for open-source projects |
+| Dr Saad LLM Tools | Deferred | Excludes alpha/general-use-not-ready projects |
+| Yanshengjia AI Playground | Deferred | Project playground, not an external project directory |
+| Gurpreet Generative AI Projects | Deferred | End-to-end app project collection; wait for standalone app template |
 | Gitee Awesome Rust | Manual verification | Unauthenticated HTTP 405/API 403; verify active contribution flow after login |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Manual verification | Unauthenticated HTTP 405/API 403; verify tool/deployment category fit after login |
