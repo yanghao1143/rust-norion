@@ -348,6 +348,33 @@ same recruitment message everywhere.
 | Mattbusel LLM Infra | Submitted | https://github.com/Mattbusel/awesome-llm-infra/issues/2 |
 | SandBase Agent Runtime | Submitted | https://github.com/sandbaseai/awesome-agent-runtime/issues/1 |
 
+2026-06-25 UTC agent/evaluation follow-up batch, all recorded in
+`docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| Caron77 AI Agents | Submitted | https://github.com/Caron77ai/awesome-ai-agents/issues/3 |
+| Devin Schumacher AI Agents | Submitted | https://github.com/devinschumacher/awesome-ai-agents/issues/2 |
+| Bert2048 AI Agents | Submitted | https://github.com/Bert2048/awesome-ai-agents/issues/5 |
+| Supersynergy AI Agents 2025 | Submitted | https://github.com/Supersynergy/awesome-ai-agents-2025/issues/9 |
+| Oakeighty5 AI Agents | Submitted | https://github.com/oakeighty5/awesome-ai-agents/issues/6 |
+| OpenJobsAI Agents for ML | Submitted | https://github.com/OpenJobsAI/awesome-ai-agents-for-ml/issues/1 |
+| Govinda AI Agent Learning Resources | Submitted | https://github.com/GovindaPaliwal/Awesome-AI-Agents-Learning-Resources/issues/1 |
+| 0xPabloxx AI Agents | Submitted | https://github.com/0xPabloxx/awesome-ai-agents/issues/1 |
+| Heurema AI Agents | Submitted | https://github.com/heurema/awesome-ai-agents/issues/1 |
+| Leo Tavares AI Agents | Submitted | https://github.com/leotavares26/awesome-ai-agents/issues/2 |
+| Chinmay AI Agents List | Submitted | https://github.com/ChinmayMurugkar/awesome-ai-agents-list/issues/4 |
+| Pratap AI Agents | Submitted | https://github.com/pratappadhy2005/awesome_ai_agents/issues/1 |
+| Zhang Chuanteng AI Agents | Submitted | https://github.com/zhangchuanteng/awesome-ai-agents/issues/1 |
+| Hemanth AI Engineering | Submitted | https://github.com/57hemanth/awesome-ai-engineering/issues/1 |
+| NealST AI Engineering | Submitted | https://github.com/NealST/Awesome-AI-engineering/issues/1 |
+| Meet Rais LLM Evals | Submitted | https://github.com/meetrais/awesome-llm-evals/issues/2 |
+| Priyatham LLM Evaluation | Submitted | https://github.com/priyathamkat/Awesome-LLM-Evaluation/issues/4 |
+| Jake Meany LLM Evaluation | Submitted | https://github.com/jakemeany523/awesome-llm-evaluation/issues/2 |
+| Hparreao AI Evaluation Guide | Submitted | https://github.com/hparreao/Awesome-AI-Evaluation-Guide/issues/12 |
+| Daniel Rosehill AI Evaluations Tools | Submitted | https://github.com/danielrosehill/Awesome-AI-Evaluations-Tools/issues/9 |
+| Switchy AI Memory | Submitted | https://github.com/Switchy-AI/awesome-ai-memory/issues/2 |
+
 The full registry is in `docs/outreach/community-registry.yml`.
 
 ## Monthly Update Workflow
