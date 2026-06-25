@@ -30,6 +30,21 @@ pub(crate) enum ModelServiceBusinessCycleEvent<'a> {
     Meta(String),
 }
 
+fn business_cycle_cancel_error() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::Interrupted,
+        "business_cycle cancellation requested by runtime_request_splice",
+    )
+}
+
+fn check_business_cycle_cancel(should_cancel: &mut dyn FnMut() -> bool) -> std::io::Result<()> {
+    if should_cancel() {
+        Err(business_cycle_cancel_error())
+    } else {
+        Ok(())
+    }
+}
+
 fn annotate_model_service_pool_dispatch_experience(
     engine: &mut NoironEngine,
     experience_id: u64,
@@ -146,6 +161,25 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
     request: ModelServiceBusinessCycleRequest,
     observer: &mut dyn FnMut(ModelServiceBusinessCycleEvent<'_>),
 ) -> std::io::Result<ModelServiceBusinessCycleReport> {
+    let mut never_cancel = || false;
+    run_model_service_business_cycle_observed_cancelable(
+        engine,
+        backend,
+        args,
+        request,
+        observer,
+        &mut never_cancel,
+    )
+}
+
+pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    args: &Args,
+    request: ModelServiceBusinessCycleRequest,
+    observer: &mut dyn FnMut(ModelServiceBusinessCycleEvent<'_>),
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> std::io::Result<ModelServiceBusinessCycleReport> {
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
@@ -179,6 +213,7 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
         observer(ModelServiceBusinessCycleEvent::Meta(dispatch.summary()));
     }
     observer(ModelServiceBusinessCycleEvent::Stage("generate:start"));
+    let mut stream_cancel_requested = false;
     let timed = run_timed_inference_stream_with_options(
         engine,
         backend,
@@ -187,11 +222,24 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
         max_tokens,
         args.trace_path.as_ref(),
         case_name.as_deref(),
-        &mut |token| observer(ModelServiceBusinessCycleEvent::Token(token)),
+        &mut |token| {
+            if stream_cancel_requested {
+                return;
+            }
+            if should_cancel() {
+                stream_cancel_requested = true;
+                return;
+            }
+            observer(ModelServiceBusinessCycleEvent::Token(token));
+        },
     );
     if pool_dispatch_forwarded {
         let _ = backend.configure_runtime_endpoint_override(None);
     }
+    if stream_cancel_requested {
+        return Err(business_cycle_cancel_error());
+    }
+    check_business_cycle_cancel(should_cancel)?;
     let mut timed = timed?;
     observer(ModelServiceBusinessCycleEvent::Meta(format!(
         "generate elapsed_ms={} runtime_tokens={} experience_id={}",
@@ -218,6 +266,7 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
     );
     observer(ModelServiceBusinessCycleEvent::Stage("generate:done"));
 
+    check_business_cycle_cancel(should_cancel)?;
     observer(ModelServiceBusinessCycleEvent::Stage("feedback:start"));
     let feedback_request = ModelServiceFeedbackRequest {
         action: request.feedback_action,
@@ -250,6 +299,7 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
     )));
     observer(ModelServiceBusinessCycleEvent::Stage("feedback:done"));
 
+    check_business_cycle_cancel(should_cancel)?;
     let mut rust_check_request = None;
     let mut rust_check_report = None;
     let mut rust_check_feedback_request = None;
@@ -321,6 +371,7 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
     }
 
     let replay_report = if request.self_improve {
+        check_business_cycle_cancel(should_cancel)?;
         observer(ModelServiceBusinessCycleEvent::Stage("self_improve:start"));
         let report = engine.replay_experience(request.self_improve_limit);
         observer(ModelServiceBusinessCycleEvent::Meta(format!(
@@ -335,6 +386,7 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
         ));
         None
     };
+    check_business_cycle_cancel(should_cancel)?;
     observer(ModelServiceBusinessCycleEvent::Stage("save_state:start"));
     engine.save_full_state(
         &args.memory_path,
@@ -342,6 +394,7 @@ pub(crate) fn run_model_service_business_cycle_observed<B: InferenceBackend>(
         &args.adaptive_path,
     )?;
     observer(ModelServiceBusinessCycleEvent::Stage("save_state:done"));
+    check_business_cycle_cancel(should_cancel)?;
     observer(ModelServiceBusinessCycleEvent::Stage("gates:start"));
     observer(ModelServiceBusinessCycleEvent::Stage(
         "gates:inspection:start",
