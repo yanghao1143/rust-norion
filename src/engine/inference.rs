@@ -360,6 +360,7 @@ impl NoironEngine {
             exported_runtime_kv_blocks,
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
             runtime_kv_hold,
+            runtime_kv_influence: runtime_diagnostics.kv_influence,
             used_memories: used_memories.len(),
             memory_feedback_updates: memory_feedback.total_updates(),
             runtime_adapter_observations: runtime_adapter_observations.len(),

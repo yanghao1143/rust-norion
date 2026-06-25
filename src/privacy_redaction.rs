@@ -603,6 +603,7 @@ mod tests {
                 exported_runtime_kv_blocks: 1,
                 stored_runtime_kv_memories: 1,
                 runtime_kv_hold: false,
+                runtime_kv_influence: Some(0.84),
                 used_memories: 1,
                 memory_feedback_updates: 1,
                 runtime_adapter_observations: 1,
