@@ -7,6 +7,7 @@ mod http;
 mod inference_backend;
 mod json;
 mod ledger;
+mod model_policy;
 mod model_registry;
 mod outcome_log;
 mod pool_artifacts;
