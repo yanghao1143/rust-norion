@@ -23,6 +23,7 @@ GitHub branch protection for this branch should require:
 - force pushes disabled
 - branch deletion disabled
 - repository-level squash merge only
+- repository-level auto-merge disabled
 - automatic head-branch deletion after merge
 - PR branch update enabled when the head branch is behind `main`
 
@@ -44,6 +45,7 @@ allow_merge_commit = false
 allow_rebase_merge = false
 delete_branch_on_merge = true
 allow_update_branch = true
+allow_auto_merge = false
 ```
 
 ## CODEOWNERS
@@ -112,7 +114,7 @@ settings:
 ```powershell
 gh repo view yanghao1143/rust-norion --json nameWithOwner,visibility,defaultBranchRef
 gh api repos/yanghao1143/rust-norion/branches/main/protection
-gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch}'
+gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch,allow_auto_merge}'
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md
 git ls-files .github/ISSUE_TEMPLATE

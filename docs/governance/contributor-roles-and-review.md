@@ -79,6 +79,8 @@ For protected branches:
   disabled.
 - Contributors can author PRs, but an owner or maintainer performs the merge
   after all required gates pass.
+- Repository auto-merge is disabled, so protected-branch merges require an
+  explicit maintainer action.
 
 Reviewer approval is a strong signal, not a merge substitute.
 

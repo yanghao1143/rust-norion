@@ -18,6 +18,8 @@ must remain open source under GPL-3.0-compatible terms.
   request back to `main`.
 - Protected-branch merges use the repository's configured squash merge path.
   Merge commits and rebase merges are disabled.
+- Repository auto-merge is disabled. A maintainer must explicitly merge after
+  all gates pass.
 - Keep contributions compatible with the repository license: GPL-3.0.
 - Pull requests do not bypass maintainer review, branch protection, validation
   gates, attribution requirements, or third-party license obligations.
@@ -79,7 +81,8 @@ CODEOWNER or repository-owner approval on protected branches.
 3. Open a pull request into `main`.
 4. Let CI, CODEOWNER review, latest-push approval, and conversation resolution
    finish.
-5. The owner or maintainer merges by squash merge after all gates pass.
+5. The owner or maintainer explicitly merges by squash merge after all gates
+   pass.
 
 Every pull request should include:
 

@@ -36,10 +36,10 @@ directly. The default branch is protected. The current default branch is
 - required linear history
 - no force pushes or branch deletion
 
-Protected-branch merges use squash merge only. Merge commits and rebase merges
-are disabled, and GitHub deletes the head branch after merge. Contributors
-submit pull requests; the owner or maintainer performs the merge after all gates
-pass.
+Protected-branch merges use squash merge only. Merge commits, rebase merges,
+and repository auto-merge are disabled, and GitHub deletes the head branch after
+merge. Contributors submit pull requests; the owner or maintainer explicitly
+performs the merge after all gates pass.
 
 The branch protection checklist lives at
 `docs/governance/branch-protection-checklist.md`.
