@@ -70,6 +70,75 @@ fn inference_stores_high_quality_exported_runtime_kv() {
 }
 
 #[test]
+fn current_rust_native_adapter_run_creates_sanitized_reliability_candidate() {
+    let private_prompt =
+        "Rust native current adapter prompt: tenant_id=prod-42 secret=sk-current-adapter";
+    let mut engine = NoironEngine::new();
+    let runtime =
+        crate::runtime::RustNativeModelRuntime::new(crate::runtime::MockRustNativeAdapter::new())
+            .with_cache_mode(crate::runtime::ChunkedKvCacheMode::NoCache);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+    let outcome = engine.infer(
+        InferenceRequest::new(private_prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let tool_candidate = admission
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.kind
+                == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+        })
+        .expect("current adapter reliability candidate");
+    let evidence_lines = admission
+        .review_packet_summaries()
+        .into_iter()
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert!(outcome.runtime_diagnostics.selected_adapter.is_some());
+    assert!(outcome.runtime_adapter_observations.is_empty());
+    assert_eq!(
+        tool_candidate.decision,
+        crate::memory_admission::MemoryAdmissionDecision::Ready
+    );
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| item == "runtime_adapter_current_signal=true")
+    );
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| item == "runtime_adapter_observations=0")
+    );
+    assert_eq!(
+        tool_candidate.privacy_classification,
+        crate::memory_admission::MemoryPrivacyClassification::DigestOnly
+    );
+    assert!(tool_candidate.privacy_checked);
+    assert!(!tool_candidate.durable_write_authorized);
+    assert!(!tool_candidate.applied);
+    assert!(admission.is_read_only_preview());
+
+    for line in evidence_lines {
+        assert!(!line.contains(private_prompt), "{line}");
+        for marker in ["prompt:", "tenant_id=", "secret=", "sk-current-adapter"] {
+            assert!(!line.contains(marker), "{line}");
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "{line}"
+        );
+    }
+}
+
+#[test]
 fn rust_native_adapter_self_learning_evidence_is_sanitized() {
     let private_prompt = "Rust runtime KV reuse memory prompt: tenant_id=prod-42 secret=sk-test-noiron answer: raw adapter output";
     let mut engine = NoironEngine::new();

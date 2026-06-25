@@ -362,6 +362,10 @@ impl NoironEngine {
             (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
             _ => false,
         };
+        let runtime_adapter_current_signal = runtime_diagnostics
+            .selected_adapter
+            .as_deref()
+            .is_some_and(|adapter| !adapter.trim().is_empty());
         let mut memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt: &request.prompt,
             profile: request.profile,
@@ -381,6 +385,7 @@ impl NoironEngine {
             used_memories: used_memories.len(),
             memory_feedback_updates: memory_feedback.total_updates(),
             runtime_adapter_observations: runtime_adapter_observations.len(),
+            runtime_adapter_current_signal,
             runtime_adapter_selection_mismatch,
             runtime_adapter_best_score: best_adapter_observation
                 .map(|observation| observation.score),

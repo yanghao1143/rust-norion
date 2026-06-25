@@ -610,6 +610,7 @@ mod tests {
                 used_memories: 1,
                 memory_feedback_updates: 1,
                 runtime_adapter_observations: 1,
+                runtime_adapter_current_signal: true,
                 runtime_adapter_selection_mismatch: false,
                 runtime_adapter_best_score: Some(0.84),
                 runtime_adapter_best_reward: Some(0.84),

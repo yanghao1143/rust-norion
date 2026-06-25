@@ -1422,6 +1422,7 @@ pub struct MemoryAdmissionInput<'a> {
     pub used_memories: usize,
     pub memory_feedback_updates: usize,
     pub runtime_adapter_observations: usize,
+    pub runtime_adapter_current_signal: bool,
     pub runtime_adapter_selection_mismatch: bool,
     pub runtime_adapter_best_score: Option<f32>,
     pub runtime_adapter_best_reward: Option<f32>,
@@ -1436,6 +1437,7 @@ pub struct MemoryAdmissionInput<'a> {
 impl MemoryAdmissionInput<'_> {
     fn has_tool_reliability_signal(&self) -> bool {
         self.runtime_adapter_observations > 0
+            || self.runtime_adapter_current_signal
             || self.toolsmith_blueprints > 0
             || self.toolsmith_rejected > 0
             || self.runtime_adapter_selection_mismatch
@@ -1548,6 +1550,9 @@ fn tool_reliability_decision(input: MemoryAdmissionInput<'_>) -> MemoryAdmission
         .runtime_adapter_best_score
         .filter(|score| *score >= 0.70)
         .is_some()
+        || (input.runtime_adapter_current_signal
+            && input.process_reward.total >= 0.70
+            && input.report.quality >= 0.70)
         || (input.toolsmith_ready > 0 && input.toolsmith_gate_passed)
     {
         MemoryAdmissionDecision::Ready
@@ -1596,6 +1601,10 @@ fn tool_reliability_evidence(input: MemoryAdmissionInput<'_>) -> Vec<String> {
         format!(
             "runtime_adapter_selection_mismatch={}",
             input.runtime_adapter_selection_mismatch
+        ),
+        format!(
+            "runtime_adapter_current_signal={}",
+            input.runtime_adapter_current_signal
         ),
         format!(
             "runtime_adapter_best_score={}",
@@ -1803,6 +1812,7 @@ mod tests {
             used_memories: 1,
             memory_feedback_updates: 0,
             runtime_adapter_observations: 0,
+            runtime_adapter_current_signal: false,
             runtime_adapter_selection_mismatch: false,
             runtime_adapter_best_score: None,
             runtime_adapter_best_reward: None,
@@ -2158,6 +2168,7 @@ mod tests {
             used_memories: 1,
             memory_feedback_updates: 0,
             runtime_adapter_observations: 0,
+            runtime_adapter_current_signal: false,
             runtime_adapter_selection_mismatch: false,
             runtime_adapter_best_score: None,
             runtime_adapter_best_reward: None,
@@ -2231,6 +2242,7 @@ mod tests {
             used_memories: 1,
             memory_feedback_updates: 1,
             runtime_adapter_observations: 0,
+            runtime_adapter_current_signal: false,
             runtime_adapter_selection_mismatch: false,
             runtime_adapter_best_score: None,
             runtime_adapter_best_reward: None,
@@ -2315,6 +2327,7 @@ mod tests {
             used_memories: 2,
             memory_feedback_updates: 1,
             runtime_adapter_observations: 2,
+            runtime_adapter_current_signal: true,
             runtime_adapter_selection_mismatch: false,
             runtime_adapter_best_score: Some(0.82),
             runtime_adapter_best_reward: Some(0.81),
@@ -2399,6 +2412,7 @@ mod tests {
             used_memories: 1,
             memory_feedback_updates: 0,
             runtime_adapter_observations: 1,
+            runtime_adapter_current_signal: true,
             runtime_adapter_selection_mismatch: true,
             runtime_adapter_best_score: Some(0.91),
             runtime_adapter_best_reward: Some(0.67),
@@ -2785,6 +2799,7 @@ mod tests {
             used_memories: 1,
             memory_feedback_updates: 0,
             runtime_adapter_observations: usize::from(tool_conflict),
+            runtime_adapter_current_signal: tool_conflict,
             runtime_adapter_selection_mismatch: tool_conflict,
             runtime_adapter_best_score: Some(0.91),
             runtime_adapter_best_reward: Some(reward.total),
