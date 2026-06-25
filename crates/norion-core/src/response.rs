@@ -21,6 +21,7 @@ pub struct RuntimeResponseEnvelope {
     pub exported_kv_blocks: usize,
     pub diagnostics_imported_kv_blocks: usize,
     pub diagnostics_exported_kv_blocks: usize,
+    pub diagnostics_weak_runtime_kv_imports_skipped: usize,
     pub has_runtime_execution_signal: bool,
 }
 
@@ -39,6 +40,7 @@ pub struct RuntimeResponseEnvelopeSummary {
     pub exported_kv_blocks: usize,
     pub diagnostics_imported_kv_blocks: usize,
     pub diagnostics_exported_kv_blocks: usize,
+    pub diagnostics_weak_runtime_kv_imports_skipped: usize,
     pub has_runtime_execution_signal: bool,
 }
 
@@ -299,6 +301,10 @@ impl RuntimeResponseEnvelopeSummary {
         self.imported_kv_blocks > 0 || self.exported_kv_blocks > 0
     }
 
+    pub fn has_runtime_kv_activity(self) -> bool {
+        self.has_kv_exchange() || self.diagnostics_weak_runtime_kv_imports_skipped > 0
+    }
+
     pub fn has_token_uncertainty(self) -> bool {
         self.has_uncertainty_signal
     }
@@ -339,6 +345,11 @@ impl RuntimeResponseEnvelopeSummary {
             .saturating_add(self.diagnostics_exported_kv_blocks)
     }
 
+    pub fn diagnostics_kv_activity_total(self) -> usize {
+        self.diagnostics_kv_exchange_total()
+            .saturating_add(self.diagnostics_weak_runtime_kv_imports_skipped)
+    }
+
     pub fn kv_counts_match_diagnostics(self) -> bool {
         self.imported_kv_blocks == self.diagnostics_imported_kv_blocks
             && self.exported_kv_blocks == self.diagnostics_exported_kv_blocks
@@ -347,7 +358,7 @@ impl RuntimeResponseEnvelopeSummary {
     pub fn runtime_response_envelope_commit_signal_component_count(self) -> usize {
         usize::from(self.has_answer())
             .saturating_add(usize::from(self.has_generated_tokens()))
-            .saturating_add(usize::from(self.has_kv_exchange()))
+            .saturating_add(usize::from(self.has_runtime_kv_activity()))
             .saturating_add(usize::from(self.has_token_uncertainty()))
             .saturating_add(self.token_uncertainty_coverage_signal_component_count())
             .saturating_add(usize::from(self.has_runtime_execution_signal))
@@ -373,7 +384,7 @@ impl RuntimeResponseEnvelopeSummary {
     pub fn runtime_response_envelope_commit_accounting_is_consistent(self) -> bool {
         let expected_signal_count = usize::from(self.has_answer())
             .saturating_add(usize::from(self.has_generated_tokens()))
-            .saturating_add(usize::from(self.has_kv_exchange()))
+            .saturating_add(usize::from(self.has_runtime_kv_activity()))
             .saturating_add(usize::from(self.has_token_uncertainty()))
             .saturating_add(self.token_uncertainty_coverage_signal_component_count())
             .saturating_add(usize::from(self.has_runtime_execution_signal));
@@ -1503,6 +1514,10 @@ impl RuntimeResponseEnvelope {
             exported_kv_blocks: outcome.exported_kv.len(),
             diagnostics_imported_kv_blocks: outcome.diagnostics.runtime.imported_kv_blocks,
             diagnostics_exported_kv_blocks: outcome.diagnostics.runtime.exported_kv_blocks,
+            diagnostics_weak_runtime_kv_imports_skipped: outcome
+                .diagnostics
+                .runtime
+                .weak_runtime_kv_imports_skipped,
             has_runtime_execution_signal: outcome.diagnostics.has_runtime_execution_signal(),
         }
     }
@@ -1853,6 +1868,8 @@ impl RuntimeResponseEnvelope {
             exported_kv_blocks: self.exported_kv_blocks,
             diagnostics_imported_kv_blocks: self.diagnostics_imported_kv_blocks,
             diagnostics_exported_kv_blocks: self.diagnostics_exported_kv_blocks,
+            diagnostics_weak_runtime_kv_imports_skipped: self
+                .diagnostics_weak_runtime_kv_imports_skipped,
             has_runtime_execution_signal: self.has_runtime_execution_signal,
         }
     }
@@ -1984,8 +2001,10 @@ mod tests {
         assert!(summary.token_uncertainty_accounting_is_consistent());
         assert!(summary.schema_matches_runtime_response());
         assert!(summary.has_kv_exchange());
+        assert!(summary.has_runtime_kv_activity());
         assert_eq!(summary.envelope_kv_exchange_total(), 2);
         assert_eq!(summary.diagnostics_kv_exchange_total(), 2);
+        assert_eq!(summary.diagnostics_kv_activity_total(), 2);
         assert!(summary.kv_counts_match_diagnostics());
         assert!(summary.has_runtime_execution_signal);
         assert_eq!(
@@ -2022,8 +2041,10 @@ mod tests {
         assert_eq!(summary.exported_kv_blocks, 1);
         assert_eq!(summary.diagnostics_imported_kv_blocks, 2);
         assert_eq!(summary.diagnostics_exported_kv_blocks, 0);
+        assert_eq!(summary.diagnostics_weak_runtime_kv_imports_skipped, 0);
         assert_eq!(summary.envelope_kv_exchange_total(), 2);
         assert_eq!(summary.diagnostics_kv_exchange_total(), 2);
+        assert_eq!(summary.diagnostics_kv_activity_total(), 2);
         assert!(!summary.kv_counts_match_diagnostics());
         assert!(!summary.has_token_uncertainty());
         assert_eq!(
@@ -2054,6 +2075,46 @@ mod tests {
     }
 
     #[test]
+    fn response_envelope_summary_counts_weak_skip_as_activity_not_exchange() {
+        let runtime = RuntimeDiagnostics::empty().with_weak_runtime_kv_imports_skipped(2);
+        let mut outcome = InferenceOutcome::empty().with_diagnostics(
+            InferenceDiagnostics::new(RouteBudget::default()).with_runtime(runtime),
+        );
+        outcome.answer = "ok".to_owned();
+        outcome.tokens.push(GeneratedToken::new("ok"));
+
+        let envelope = RuntimeResponseEnvelope::from_outcome(&outcome);
+        let summary = envelope.envelope_summary();
+
+        assert_eq!(envelope.imported_kv_blocks, 0);
+        assert_eq!(envelope.exported_kv_blocks, 0);
+        assert_eq!(envelope.diagnostics_imported_kv_blocks, 0);
+        assert_eq!(envelope.diagnostics_exported_kv_blocks, 0);
+        assert_eq!(envelope.diagnostics_weak_runtime_kv_imports_skipped, 2);
+        assert_eq!(summary.diagnostics_weak_runtime_kv_imports_skipped, 2);
+        assert!(!summary.has_kv_exchange());
+        assert!(summary.has_runtime_kv_activity());
+        assert_eq!(summary.envelope_kv_exchange_total(), 0);
+        assert_eq!(summary.diagnostics_kv_exchange_total(), 0);
+        assert_eq!(summary.diagnostics_kv_activity_total(), 2);
+        assert!(summary.kv_counts_match_diagnostics());
+        assert!(summary.has_runtime_execution_signal);
+        assert_eq!(
+            summary.runtime_response_envelope_commit_signal_component_count(),
+            6
+        );
+        assert_eq!(
+            summary.runtime_response_envelope_commit_blocker_component_count(),
+            0
+        );
+        assert!(summary.runtime_response_envelope_commit_accounting_is_consistent());
+        assert!(summary.runtime_response_envelope_commit_is_clean());
+        assert!(summary.response_envelope_shape_is_clean());
+        assert!(summary.can_commit_runtime_response_envelope());
+        assert!(summary.can_use_runtime_response_envelope());
+    }
+
+    #[test]
     fn response_envelope_summary_reports_uncertainty_accounting_drift() {
         let summary = RuntimeResponseEnvelopeSummary {
             schema: RUNTIME_RESPONSE_SCHEMA,
@@ -2069,6 +2130,7 @@ mod tests {
             exported_kv_blocks: 0,
             diagnostics_imported_kv_blocks: 0,
             diagnostics_exported_kv_blocks: 0,
+            diagnostics_weak_runtime_kv_imports_skipped: 0,
             has_runtime_execution_signal: true,
         };
 
@@ -3553,6 +3615,7 @@ mod tests {
             exported_kv_blocks: 1,
             diagnostics_imported_kv_blocks: 1,
             diagnostics_exported_kv_blocks: 1,
+            diagnostics_weak_runtime_kv_imports_skipped: 0,
             has_runtime_execution_signal: true,
         }
     }
