@@ -248,6 +248,37 @@ fn disk_kv_roundtrip_preserves_experience() {
 }
 
 #[test]
+fn record_and_load_drop_untrusted_runtime_selected_adapter() {
+    let path = temp_path("experience-runtime-adapter-sanitize");
+    let mut store = ExperienceStore::new();
+    store.record(ExperienceInput {
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("noiron-test-runtime".to_owned()),
+            selected_adapter: Some("unknown-adapter secret=sk-experience-leak".to_owned()),
+            forward_energy: Some(0.25),
+            kv_influence: Some(0.75),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("runtime adapter sanitize", 0.91)
+    });
+
+    assert_eq!(
+        store.records()[0].runtime_diagnostics.selected_adapter,
+        None
+    );
+
+    store.save_to_disk_kv(&path).unwrap();
+    let loaded = ExperienceStore::load_from_disk_kv(&path).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(
+        loaded.records()[0].runtime_diagnostics.selected_adapter,
+        None
+    );
+    cleanup(path);
+}
+
+#[test]
 fn legacy_live_evolution_without_online_reward_feedback_loads_defaults() {
     let loaded = deserialize_live_evolution("0.030000,0.040000,1,0,1,2,1,1,0,1").unwrap();
 
