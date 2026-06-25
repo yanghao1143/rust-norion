@@ -17,6 +17,27 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_kv_weak_import_skip_cases) = gate.min_runtime_kv_weak_import_skip_cases
+    {
+        let runtime_kv_weak_import_skip_cases = summary.runtime_kv_weak_import_skip_cases();
+        if runtime_kv_weak_import_skip_cases < min_runtime_kv_weak_import_skip_cases {
+            failures.push(format!(
+                "runtime_kv_weak_import_skip_cases {} below minimum {}",
+                runtime_kv_weak_import_skip_cases, min_runtime_kv_weak_import_skip_cases
+            ));
+        }
+    }
+
+    if let Some(min_weak_runtime_kv_imports_skipped) = gate.min_weak_runtime_kv_imports_skipped {
+        let weak_runtime_kv_imports_skipped = summary.total_weak_runtime_kv_imports_skipped();
+        if weak_runtime_kv_imports_skipped < min_weak_runtime_kv_imports_skipped {
+            failures.push(format!(
+                "weak_runtime_kv_imports_skipped {} below minimum {}",
+                weak_runtime_kv_imports_skipped, min_weak_runtime_kv_imports_skipped
+            ));
+        }
+    }
+
     if let Some(min_runtime_kv_segment_cases) = gate.min_runtime_kv_segment_cases {
         let runtime_kv_segment_cases = summary.runtime_kv_segment_cases();
         if runtime_kv_segment_cases < min_runtime_kv_segment_cases {

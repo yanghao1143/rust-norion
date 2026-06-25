@@ -282,6 +282,8 @@ fn gate_reports_runtime_kv_segment_evidence() {
     };
     let mut gate = BenchmarkGate::default();
     gate.min_runtime_kv_segment_cases = Some(2);
+    gate.min_runtime_kv_weak_import_skip_cases = Some(1);
+    gate.min_weak_runtime_kv_imports_skipped = Some(1);
     gate.min_runtime_kv_segments_included = Some(1);
     gate.max_runtime_kv_segments_rejected = Some(1);
     gate.min_runtime_kv_segment_device_profiles = Some(2);
@@ -317,6 +319,14 @@ fn gate_reports_runtime_kv_segment_evidence() {
         failure.contains("runtime_kv_segment_device_profiles 1 below minimum 2")
             && failure.contains("devices=cpu")
     }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_weak_import_skip_cases 0 below minimum 1")
+    }));
+    assert!(
+        report.failures.iter().any(|failure| {
+            failure.contains("weak_runtime_kv_imports_skipped 0 below minimum 1")
+        })
+    );
 
     let passing = BenchmarkSummary {
         runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
