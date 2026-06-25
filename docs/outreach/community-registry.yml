@@ -576,6 +576,121 @@ communities:
     next_action: wait_for_maintainer_review
     notes: README contribution section welcomes relevant fork/PR additions; focused Tools GitHub entry added with prototype wording and concrete LLMOps relevance.
 
+  - id: mfornos-awesome-agentic-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/mfornos/awesome-agentic-ai
+    audience: agentic AI infrastructure, principles, observability, and safety readers
+    fit: high
+    status: submitted
+    proof: https://github.com/mfornos/awesome-agentic-ai/pull/6
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING welcomes thoughtful, non-promotional additions; focused PR added rust-norion under Evaluation and Observability with Rust control-layer prototype wording.
+
+  - id: ai-agents-simplified-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/ai-agents-simplified/Awesome-AI-Agents
+    audience: broad AI agent builders and framework/tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ai-agents-simplified/Awesome-AI-Agents/pull/9
+    next_action: wait_for_maintainer_review
+    notes: README invites pull requests for additional agents; focused PR added one featured table row with factual early-prototype wording.
+
+  - id: lemooljiang-awesome-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/lemooljiang/Awesome-AI
+    audience: Chinese AI tool, agent, and project readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/lemooljiang/Awesome-AI/pull/4
+    next_action: wait_for_maintainer_review
+    notes: Chinese AI resource list has an Agent section and active recent updates; focused PR added one Chinese rust-norion entry without broad recruitment copy.
+
+  - id: groovy-web-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/groovy-web/awesome-ai-agents
+    audience: AI agent framework, memory, evaluation, observability, and deployment readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/groovy-web/awesome-ai-agents/issues/11
+    next_action: wait_for_niche_exception_feedback_before_pr
+    notes: CONTRIBUTING asks for 100+ stars except genuinely useful niche tools; issue asked about category and maturity fit before opening a PR because rust-norion is below the normal star threshold.
+
+  - id: evilsocket-awesomeagents
+    platform: github
+    kind: agent_directory
+    url: https://github.com/evilsocket/awesomeagents
+    audience: production-ready single-agent users
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_rust_norion_is_a_stable_specific_use_case_agent
+    notes: CONTRIBUTING requires production-ready agents that solve a specific use case, and explicitly excludes generic platforms or frameworks.
+
+  - id: shahshrey-awesome-ai-agents
+    platform: github
+    kind: app_examples
+    url: https://github.com/shahshrey/awesome-ai-agents
+    audience: runnable AI agent app and workflow example readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_rust_norion_has_a_complete_app_subfolder_with_tests
+    notes: Repository asks new contributions to add a full agent folder, README, tests, and dependency setup; rust-norion is infrastructure/control-layer work rather than a ready app example.
+
+  - id: ishandutta-awesome-ai-agents
+    platform: github
+    kind: app_templates
+    url: https://github.com/ishandutta2007/Awesome-AI-Agents
+    audience: AI agent and RAG app template users
+    fit: low
+    status: defer
+    next_action: do_not_submit_project_link_without_a_ready_template_app
+    notes: Repository is a cookbook of ready-to-run agent and RAG templates, so a generic project link would not fit.
+
+  - id: saifs-awesome-ai-agents-live
+    platform: github
+    kind: research_paper_catalogue
+    url: https://github.com/SAIFS-AIHub/Awesome-AI-Agents-Live
+    audience: AI agent paper readers
+    fit: low
+    status: defer
+    next_action: only_submit_if_rust_norion_has_a_related_paper_or_paper_metadata_entry
+    notes: Repository is a live catalog of research papers, not an open-source project directory.
+
+  - id: ucsb-mlsec-awesome-agentic-ai
+    platform: github
+    kind: research_summary
+    url: https://github.com/ucsb-mlsec/Awesome-Agentic-AI
+    audience: agentic AI security, SWE agents, inference, environment, and memory researchers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ucsb-mlsec/Awesome-Agentic-AI/issues/3
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository includes Environment, Inference, and Memory plus security/SWE agent sections and asks questions to use GitHub Issues; issue asked whether implementation references are in scope before any PR.
+
+  - id: mohammad-agentic-ai-for-st
+    platform: github
+    kind: domain_specific_research_list
+    url: https://github.com/mohammadhashemii/awesome-agentic-AI-for-ST
+    audience: spatio-temporal and geospatial agentic AI paper readers
+    fit: low
+    status: defer
+    next_action: only_submit_if_rust_norion_has_spatio_temporal_or_geospatial_evidence
+    notes: Repository is a spatio-temporal paper/resource list; rust-norion has no domain-specific geospatial evidence to justify outreach here.
+
+  - id: priyanshujiiii-awesome-agentic-ai
+    platform: github
+    kind: research_problem_list
+    url: https://github.com/priyanshujiiii/awesome_Agentic_AI
+    audience: agentic AI paper, survey, and solved/unsolved problem readers
+    fit: low
+    status: defer
+    next_action: only_submit_a_neutral_problem_or_paper_reference_not_a_project_ad
+    notes: Repository is structured as paper/problem references with placeholder academic rows; a project link would not fit without a neutral research artifact.
+
   - id: rust-unofficial-awesome-rust
     platform: github
     kind: awesome_list
@@ -612,9 +727,10 @@ communities:
     url: https://github.com/rust-boom/rust-boom
     audience: Chinese Rust learners
     fit: medium
-    status: candidate_manual_review
-    next_action: inspect_readme_structure_before_pr
-    notes: Chinese Rust resource collection; submit only if repository format clearly supports project entries.
+    status: submitted
+    proof: https://github.com/rust-boom/rust-boom/issues/10
+    next_action: wait_for_maintainer_scope_feedback_then_open_small_pr_if_invited
+    notes: Chinese Rust resource collection with machine learning and project sections; issue asked in Chinese whether rust-norion fits before opening a PR because the exact category and maturity bar are unclear.
 
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee

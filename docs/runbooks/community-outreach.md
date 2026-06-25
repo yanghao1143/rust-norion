@@ -73,6 +73,18 @@ same recruitment message everywhere.
 | TensorChord Awesome LLMOps | Submitted | Track https://github.com/tensorchord/Awesome-LLMOps/pull/603 |
 | Brandon Himpfen Awesome LLMOps | Submitted | Track https://github.com/brandonhimpfen/awesome-llmops/pull/29 |
 | Kenneth Awesome LLMOps | Submitted | Track https://github.com/KennethanCeyer/awesome-llmops/pull/21 |
+| Mfornos Awesome Agentic AI | Submitted | Track https://github.com/mfornos/awesome-agentic-ai/pull/6 |
+| AI Agents Simplified | Submitted | Track https://github.com/ai-agents-simplified/Awesome-AI-Agents/pull/9 |
+| Lemooljiang Awesome AI | Submitted | Track https://github.com/lemooljiang/Awesome-AI/pull/4 |
+| Groovy Web Awesome AI Agents | Submitted | Track https://github.com/groovy-web/awesome-ai-agents/issues/11 |
+| Rust Boom | Submitted | Track https://github.com/rust-boom/rust-boom/issues/10 |
+| Evilsocket Awesome Agents | Deferred | Requires production-ready specific-use-case agents |
+| Shahshrey Awesome AI Agents | Deferred | Requires a complete runnable app folder with tests |
+| Ishan Dutta Awesome AI Agents | Deferred | Cookbook of ready-to-run templates, not project links |
+| SAIFS AI Agents Live | Deferred | Research paper catalog, not a project directory |
+| UCSB MLSec Awesome Agentic AI | Submitted | Track https://github.com/ucsb-mlsec/Awesome-Agentic-AI/issues/3 |
+| Agentic AI for Spatio-Temporal Data | Deferred | Domain-specific paper list; needs geospatial evidence |
+| Priyanshujiiii Awesome Agentic AI | Deferred | Paper/problem list; do not post a project ad |
 | Gitee Rust Boom | Candidate | Verify contribution flow after Gitee login |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | This Week in Rust | Wait | Submit only after a notable release/article |
@@ -112,8 +124,9 @@ The full registry is in `docs/outreach/community-registry.yml`.
    ./tools/outreach/discover-community-candidates.ps1 -LimitPerQuery 20 -MinStars 50
    ```
 
-  Add `-IncludeGitee` only when Gitee API access is working; otherwise inspect
-  Gitee manually in a browser.
+  For broader outreach discovery, lower `-MinStars` to `10`. Add
+  `-IncludeGitee` when Gitee API access is working; otherwise inspect Gitee
+  manually in a browser.
 
   Treat Gitee mirrors as discovery leads, not posting targets. Prefer the
   upstream GitHub project when the Gitee page is only a mirror, and post to

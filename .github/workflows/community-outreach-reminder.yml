@@ -34,7 +34,7 @@ jobs:
         run: |
           ./tools/outreach/generate-community-update.ps1 -SinceDays 30 -MaxCommits 20 -OutFile outreach-draft.md
           ./tools/outreach/generate-community-queue.ps1 -OutFile outreach-queue.md
-          ./tools/outreach/discover-community-candidates.ps1 -LimitPerQuery 10 -MinStars 50 -OutFile outreach-candidates.md
+          ./tools/outreach/discover-community-candidates.ps1 -LimitPerQuery 20 -MinStars 10 -IncludeGitee -OutFile outreach-candidates.md
 
       - name: Create monthly outreach issue if missing
         env:
