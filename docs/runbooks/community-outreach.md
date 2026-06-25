@@ -424,6 +424,51 @@ follow-up batch, all recorded in `docs/outreach/community-registry.yml`:
 | Eksoward AI Security | Submitted | https://github.com/eksoward/awesome-ai-security/issues/2 |
 | Brandon Himpfen AI Security | Submitted | https://github.com/brandonhimpfen/awesome-ai-security/issues/10 |
 
+2026-06-25 UTC multi-agent governance, testing, safety, and Chinese AI Agent
+resource follow-up batch, all recorded in `docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| Skyming AI Agent CN | Submitted | https://github.com/skyming/awesome-ai-agent/issues/8 |
+| Chaosync AI Agent Testing | Submitted | https://github.com/chaosync-org/awesome-ai-agent-testing/issues/13 |
+| Systemprompt AI Agent Governance | Submitted | https://github.com/systempromptio/awesome-ai-agent-governance/issues/11 |
+| NatNew Multi-Agent AI Safety | Submitted | https://github.com/natnew/Awesome-Multi-Agent-AI-Safety/issues/9 |
+| Icecream Agentic AI Security | Submitted | https://github.com/icecreamyoubest/awesome-agentic-ai-security/issues/8 |
+| AgentOverlay Multi-Agent Security | Submitted | https://github.com/agentoverlay/awesome-multi-agent-security/issues/2 |
+
+2026-06-25 UTC AI testing, agent memory, context engineering, protocol, and
+multi-agent optimization follow-up batch, all recorded in
+`docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| Tugkanboz AI Testing | Submitted | https://github.com/tugkanboz/awesome-ai-testing/issues/27 |
+| Furudo AI Testing Tools | Submitted | https://github.com/furudo-erika/awesome-ai-testing-tools/issues/2 |
+| Liviulupei AI Testing Tools | Submitted | https://github.com/liviulupei/awesome-ai-testing-tools/issues/4 |
+| Xaddwell LLM Agent Memory Safety | Submitted | https://github.com/xaddwell/Awesome-LLM-Agent-Memory-Safety/issues/1 |
+| Xaddwell LLM Agent Memory | Submitted | https://github.com/xaddwell/Awesome-LLM-Agent-Memory/issues/1 |
+| AlexWang Agent Memory | Submitted | https://github.com/AlexWang959/Awesome-Agent-Memory/issues/1 |
+| Yukibei LLM Agent Protocols | Submitted | https://github.com/Yukibei/awesome-llm-agent-protocols/issues/1 |
+| AstekGroup Context Engineering | Submitted | https://github.com/AstekGroup/awesome-context-engineering/issues/9 |
+| Johnsutor Multi-Agent Optimization | Submitted | https://github.com/johnsutor/awesome-multi-agent-optimization/issues/1 |
+| Qzhou Multi-Agent | Submitted | https://github.com/qzhou711/Awesome-Multi-Agent/issues/1 |
+| Lizhe LLM Agent | Submitted | https://github.com/lizhe2004/awesome-llm-agent/issues/2 |
+| Agentcasa LLM Agent | Submitted | https://github.com/agentcasa/awesome-llm-agent/issues/1 |
+
+2026-06-25 UTC agent trajectory, benchmark, coding-agent evaluation, and
+orchestration follow-up batch, all recorded in
+`docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| IcyFeather LLM Agent Trajectory Analysis | Submitted | https://github.com/IcyFeather233/Awesome-LLM-Agent-Trajectory-Analysis/issues/3 |
+| Dataanswer Agent Benchmarks | Submitted | https://github.com/dataanswer/awesome-agent-benchmarks/issues/4 |
+| Gudo Coding Agent Eval | Submitted | https://github.com/gudo7208/awesome-coding-agent-eval/issues/3 |
+| Quome Coding Agents | Submitted | https://github.com/quome-cloud/awesome-coding-agents/issues/9 |
+| Kailiu Coding Agents | Submitted | https://github.com/kailiu42/awesome-coding-agents/issues/9 |
+| Yichao Agent Benchmarks | Submitted | https://github.com/yichao-liang/awesome-agent-benchmarks/issues/2 |
+| Erson Coding Agent Orchestration | Submitted | https://github.com/erson/awesome-coding-agent-orchestration/issues/1 |
+
 The full registry is in `docs/outreach/community-registry.yml`.
 
 ## Monthly Update Workflow

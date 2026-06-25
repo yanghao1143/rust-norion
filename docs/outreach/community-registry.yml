@@ -4195,3 +4195,278 @@ communities:
     proof: https://github.com/brandonhimpfen/awesome-ai-security/issues/10
     next_action: wait_for_scope_feedback_before_pr
     notes: Scope-check acknowledges the list is closer to adversarial/model security and asks whether secure agent runtime governance belongs.
+
+  - id: skyming-awesome-ai-agent
+    platform: github
+    kind: chinese_ai_agent_resource_list
+    url: https://github.com/skyming/awesome-ai-agent
+    audience: Chinese AI Agent readers, framework evaluators, harness/context/memory engineering practitioners, and open-source project readers
+    fit: high
+    status: submitted
+    proof: https://github.com/skyming/awesome-ai-agent/issues/8
+    next_action: wait_for_chinese_resource_category_feedback_before_pr
+    notes: Chinese scope-check asks whether rust-norion belongs under Agent framework/open-source projects, harness/context/memory engineering, self-evolving agent systems, or Rust AI applications.
+
+  - id: chaosync-awesome-ai-agent-testing
+    platform: github
+    kind: ai_agent_testing_resource_list
+    url: https://github.com/chaosync-org/awesome-ai-agent-testing
+    audience: AI agent testing, evaluation, benchmark, resilience, safety, and QA readers
+    fit: high
+    status: submitted
+    proof: https://github.com/chaosync-org/awesome-ai-agent-testing/issues/13
+    next_action: wait_for_testing_section_feedback_before_pr
+    notes: CONTRIBUTING allows new tools/frameworks and major suggestions via issue; issue maps rust-norion to evidence gates, writer gates, replay/dry-run validation, and runtime-control testing.
+
+  - id: systempromptio-awesome-ai-agent-governance
+    platform: github
+    kind: ai_agent_governance_toolkit_list
+    url: https://github.com/systempromptio/awesome-ai-agent-governance
+    audience: AI agent runtime governance, policy enforcement, audit, compliance, security, and architecture-pattern readers
+    fit: high
+    status: submitted
+    proof: https://github.com/systempromptio/awesome-ai-agent-governance/issues/11
+    next_action: wait_for_governance_section_feedback_before_pr
+    notes: Submission followed repository's issue format and disclosed project-side authorship; positioned as early Rust runtime-control prototype rather than mature production governance platform.
+
+  - id: natnew-awesome-multi-agent-ai-safety
+    platform: github
+    kind: multi_agent_ai_safety_resource_list
+    url: https://github.com/natnew/Awesome-Multi-Agent-AI-Safety
+    audience: multi-agent AI safety, evaluation, control, observability, governance, and infrastructure readers
+    fit: high
+    status: submitted
+    proof: https://github.com/natnew/Awesome-Multi-Agent-AI-Safety/issues/9
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check includes neutral candidate entry wording and asks whether an early implementation-focused runtime-control prototype meets the curated multi-agent safety bar.
+
+  - id: icecreamyoubest-awesome-agentic-ai-security
+    platform: github
+    kind: agentic_ai_security_tool_catalog
+    url: https://github.com/icecreamyoubest/awesome-agentic-ai-security
+    audience: agentic AI security, MCP security, lifecycle mapping, governance, benchmark, and control-scoring readers
+    fit: high
+    status: submitted
+    proof: https://github.com/icecreamyoubest/awesome-agentic-ai-security/issues/8
+    next_action: wait_for_catalog_fit_feedback_before_tools_json_pr
+    notes: Issue asks whether rust-norion should be modeled in data/tools.json as an inferred-mapping runtime governance/control-layer entry before preparing JSON scores.
+
+  - id: agentoverlay-awesome-multi-agent-security
+    platform: github
+    kind: multi_agent_security_resource_list
+    url: https://github.com/agentoverlay/awesome-multi-agent-security
+    audience: multi-agent security, privacy, delegation, control, identity, trust, and MAS research readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/agentoverlay/awesome-multi-agent-security/issues/2
+    next_action: wait_for_scope_feedback_and_skip_pr_if_paper_only
+    notes: Scope-check explicitly asks whether to exclude rust-norion because the list is paper-heavy; no PR should be opened unless maintainers confirm tools/prototypes are welcome.
+
+  - id: tugkanboz-awesome-ai-testing
+    platform: github
+    kind: ai_testing_tool_resource_list
+    url: https://github.com/tugkanboz/awesome-ai-testing
+    audience: AI-powered testing, QA automation, MCP-based testing, LLM-as-judge, browser-agent, and AI-system testing readers
+    fit: high
+    status: submitted
+    proof: https://github.com/tugkanboz/awesome-ai-testing/issues/27
+    next_action: wait_for_category_feedback_before_individual_pr
+    notes: CONTRIBUTING asks for one PR per suggestion; issue asks whether rust-norion belongs under LLM/AI system testing or a new agent runtime validation category before opening a PR.
+
+  - id: furudo-erika-awesome-ai-testing-tools
+    platform: github
+    kind: ai_testing_tools_list
+    url: https://github.com/furudo-erika/awesome-ai-testing-tools
+    audience: AI testing, model evaluation, reliability, fairness, robustness, security, and production-monitoring readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/furudo-erika/awesome-ai-testing-tools/issues/2
+    next_action: wait_for_agent_runtime_testing_fit_feedback
+    notes: Issue positions rust-norion as agent/system validation and AI runtime reliability rather than a general QA SaaS product.
+
+  - id: liviulupei-awesome-ai-testing-tools
+    platform: github
+    kind: agentic_testing_tools_list
+    url: https://github.com/liviulupei/awesome-ai-testing-tools
+    audience: agentic AI testing, AI browser testing, self-healing tests, AI unit/code testing, and QA automation readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/liviulupei/awesome-ai-testing-tools/issues/4
+    next_action: wait_for_agentic_runtime_testing_feedback
+    notes: Scope-check maps rust-norion to agentic runtime testing, AI unit/code testing, and open-source AI testing tools while avoiding mature test automation claims.
+
+  - id: xaddwell-awesome-llm-agent-memory-safety
+    platform: github
+    kind: llm_agent_memory_safety_resource_list
+    url: https://github.com/xaddwell/Awesome-LLM-Agent-Memory-Safety
+    audience: LLM/agent memory safety, governance, evaluation, lifecycle, and benchmark readers
+    fit: high
+    status: submitted
+    proof: https://github.com/xaddwell/Awesome-LLM-Agent-Memory-Safety/issues/1
+    next_action: wait_for_memory_safety_scope_feedback_before_pr
+    notes: Issue asks whether an engineering prototype around memory admission, governed reuse, self-evolving memory, and replay/dry-run validation fits a paper-heavy memory-safety list.
+
+  - id: xaddwell-awesome-llm-agent-memory
+    platform: github
+    kind: llm_agent_memory_resource_list
+    url: https://github.com/xaddwell/Awesome-LLM-Agent-Memory
+    audience: LLM and agent memory, agent operating systems, self-evolving agents, context optimization, and memory evaluation readers
+    fit: high
+    status: submitted
+    proof: https://github.com/xaddwell/Awesome-LLM-Agent-Memory/issues/1
+    next_action: wait_for_memory_category_feedback_before_pr
+    notes: Scope-check positions rust-norion as memory governance and self-evolving memory infrastructure rather than a plain vector memory/RAG tool.
+
+  - id: alexwang959-awesome-agent-memory
+    platform: github
+    kind: agent_memory_resource_list
+    url: https://github.com/AlexWang959/Awesome-Agent-Memory
+    audience: agent memory, context engineering, self-evolution, agent architecture, code, dataset, and paper readers
+    fit: high
+    status: submitted
+    proof: https://github.com/AlexWang959/Awesome-Agent-Memory/issues/1
+    next_action: wait_for_memory_scope_feedback_before_pr
+    notes: Chinese/English scope-check maps rust-norion to governed and rollback-oriented agent memory rather than a simple RAG/vector database.
+
+  - id: yukibei-awesome-llm-agent-protocols
+    platform: github
+    kind: llm_agent_protocol_standards_list
+    url: https://github.com/Yukibei/awesome-llm-agent-protocols
+    audience: LLM agent protocol, standards, integration-layer, framework, cross-process, and tool-layer readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Yukibei/awesome-llm-agent-protocols/issues/1
+    next_action: wait_for_protocol_scope_feedback_and_skip_if_standards_only
+    notes: Scope-check explicitly says rust-norion is not a formal protocol and asks whether implementation-side runtime-control gaps are useful for the list.
+
+  - id: astekgroup-awesome-context-engineering
+    platform: github
+    kind: francophone_context_engineering_guide
+    url: https://github.com/AstekGroup/awesome-context-engineering
+    audience: French context-engineering, AI agent workflow, memory, Claude/Cursor/Gemini pattern, and practical-template readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/AstekGroup/awesome-context-engineering/issues/9
+    next_action: wait_for_french_context_engineering_scope_feedback
+    notes: French scope-check asks whether open-source memory/context runtime patterns for AI agents are accepted before preparing any French entry.
+
+  - id: johnsutor-awesome-multi-agent-optimization
+    platform: github
+    kind: multi_agent_optimization_resource_list
+    url: https://github.com/johnsutor/awesome-multi-agent-optimization
+    audience: multi-agent optimization, automated agent generation, self-evolving workflows, MAS papers, and library readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/johnsutor/awesome-multi-agent-optimization/issues/1
+    next_action: wait_for_scope_feedback_and_skip_if_benchmark_evidence_required
+    notes: Issue asks whether an implementation prototype for runtime-control and self-evolution validation fits a papers-and-libraries optimization list.
+
+  - id: qzhou711-awesome-multi-agent
+    platform: github
+    kind: llm_multi_agent_project_resource_list
+    url: https://github.com/qzhou711/Awesome-Multi-Agent
+    audience: LLM multi-agent project, paper, demo, benchmark, cognitive architecture, and collaboration readers
+    fit: high
+    status: submitted
+    proof: https://github.com/qzhou711/Awesome-Multi-Agent/issues/1
+    next_action: wait_for_multi_agent_scope_feedback_before_pr
+    notes: Scope-check positions rust-norion as LLM multi-agent runtime-control infrastructure and asks before opening an off-scope PR.
+
+  - id: lizhe2004-awesome-llm-agent
+    platform: github
+    kind: chinese_llm_agent_resource_list
+    url: https://github.com/lizhe2004/awesome-llm-agent
+    audience: Chinese LLM Agent, framework, engineering-practice, self-evolution, context-engineering, and multi-agent readers
+    fit: high
+    status: submitted
+    proof: https://github.com/lizhe2004/awesome-llm-agent/issues/2
+    next_action: wait_for_chinese_llm_agent_scope_feedback_before_pr
+    notes: Chinese scope-check describes rust-norion as a Rust LLM Agent control-layer and self-evolution prototype, not a production LLM engine or generic model API wrapper.
+
+  - id: agentcasa-awesome-llm-agent
+    platform: github
+    kind: llm_agent_project_list
+    url: https://github.com/agentcasa/awesome-llm-agent
+    audience: LLM-powered autonomous agent project readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/agentcasa/awesome-llm-agent/issues/1
+    next_action: wait_for_maintainer_activity_or_scope_feedback
+    notes: Older list with contributions welcome; issue asks whether runtime-control and validation infrastructure is in scope before proposing an entry.
+
+  - id: icyfeather-awesome-llm-agent-trajectory-analysis
+    platform: github
+    kind: llm_agent_trajectory_analysis_resource_list
+    url: https://github.com/IcyFeather233/Awesome-LLM-Agent-Trajectory-Analysis
+    audience: LLM agent trajectory analysis, failure attribution, debugging, repair, self-evolution, optimization, and benchmark readers
+    fit: high
+    status: submitted
+    proof: https://github.com/IcyFeather233/Awesome-LLM-Agent-Trajectory-Analysis/issues/3
+    next_action: wait_for_trajectory_scope_feedback_before_pr
+    notes: Scope-check maps rust-norion to evidence-producing trajectories, replayable checks, self-evolution reports, and repair/rollback boundaries while noting it is not a paper.
+
+  - id: dataanswer-awesome-agent-benchmarks
+    platform: github
+    kind: agent_benchmark_dataset_list
+    url: https://github.com/dataanswer/awesome-agent-benchmarks
+    audience: LLM agent benchmark, dataset, tool-use, planning, code-generation, and real-world task evaluation readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/dataanswer/awesome-agent-benchmarks/issues/4
+    next_action: wait_for_benchmark_infrastructure_scope_feedback
+    notes: Issue says rust-norion is not a benchmark dataset and asks whether benchmark infrastructure or agent runtime validation resources are accepted.
+
+  - id: gudo7208-awesome-coding-agent-eval
+    platform: github
+    kind: coding_agent_eval_resource_database
+    url: https://github.com/gudo7208/awesome-coding-agent-eval
+    audience: software-engineering agent evaluation, benchmark, methodology, toolchain, leaderboard, and meta-analysis readers
+    fit: high
+    status: submitted
+    proof: https://github.com/gudo7208/awesome-coding-agent-eval/issues/3
+    next_action: wait_for_toolchain_or_methodology_fit_feedback_before_json_pr
+    notes: CONTRIBUTING excludes generic frameworks without eval method; issue asks whether rust-norion's evidence records, replay validation, and runtime manifests qualify as SE-agent eval toolchain/methodology.
+
+  - id: quome-cloud-awesome-coding-agents
+    platform: github
+    kind: autonomous_coding_agents_list
+    url: https://github.com/quome-cloud/awesome-coding-agents
+    audience: autonomous coding agent, enterprise-grade agent, multi-agent system, research project, and developer-tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/quome-cloud/awesome-coding-agents/issues/9
+    next_action: wait_for_coding_agent_infrastructure_scope_feedback
+    notes: Scope-check asks whether lower-level coding-agent runtime/control infrastructure belongs in Multi-Agent Systems or Research & Academic Projects.
+
+  - id: kailiu42-awesome-coding-agents
+    platform: github
+    kind: coding_agent_catalog
+    url: https://github.com/kailiu42/awesome-coding-agents
+    audience: coding agent, developer tool, CLI agent, IDE, orchestration, harness, and catalog readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/kailiu42/awesome-coding-agents/issues/9
+    next_action: wait_for_catalog_scope_feedback_before_readme_row
+    notes: Issue references AGENTS.md catalog conventions and asks whether rust-norion should be treated as early coding-agent control-layer infrastructure rather than a standalone coding assistant.
+
+  - id: yichao-liang-awesome-agent-benchmarks
+    platform: github
+    kind: agent_benchmark_resource_list
+    url: https://github.com/yichao-liang/awesome-agent-benchmarks
+    audience: LLM agent benchmark, dataset, evaluation-suite, harness, and validation-method readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/yichao-liang/awesome-agent-benchmarks/issues/2
+    next_action: wait_for_benchmark_scope_feedback_and_skip_if_dataset_only
+    notes: Scope-check clearly states rust-norion is not a dataset and asks whether agent validation infrastructure/harnesses are in scope.
+
+  - id: erson-awesome-coding-agent-orchestration
+    platform: github
+    kind: coding_agent_orchestration_list
+    url: https://github.com/erson/awesome-coding-agent-orchestration
+    audience: coding-agent orchestration, command center, agentic IDE, multi-agent harness, terminal multiplexer, and agent task-board readers
+    fit: high
+    status: submitted
+    proof: https://github.com/erson/awesome-coding-agent-orchestration/issues/1
+    next_action: wait_for_orchestration_fit_feedback_before_pr
+    notes: CONTRIBUTING scope is close to rust-norion's control layer; issue still avoids mature command-center claims and asks about placement.
