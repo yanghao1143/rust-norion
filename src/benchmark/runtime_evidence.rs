@@ -2,21 +2,27 @@ use crate::engine::InferenceOutcome;
 use crate::hardware::DeviceClass;
 use crate::reflection::RuntimeDiagnostics;
 
-use super::{BenchmarkCase, explicit_device_count, push_unique_device};
+use super::{BenchmarkCase, devices_csv, explicit_device_count, push_unique_device};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub cases: usize,
     pub matched_cases: usize,
     pub runtime_kv_precision_cases: usize,
+    pub runtime_kv_segment_cases: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub failures: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
     pub(super) kv_precision_devices: Vec<DeviceClass>,
+    pub(super) kv_segment_devices: Vec<DeviceClass>,
 }
 
 impl BenchmarkRuntimeDeviceExecutionEvidence {
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let diagnostics = &outcome.runtime_diagnostics;
+        self.record_runtime_kv_segment_evidence(diagnostics, outcome.hardware_plan.device);
         let has_forward_signal = diagnostics.has_forward_signal();
         let has_device_execution_signal = diagnostics.has_device_execution_signal();
         let has_runtime_reported_device_execution_signal =
@@ -115,6 +121,22 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         }
     }
 
+    fn record_runtime_kv_segment_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
+        if !diagnostics.has_runtime_kv_segment_signal() {
+            return;
+        }
+
+        self.runtime_kv_segment_cases += 1;
+        self.runtime_kv_segments_included += diagnostics.runtime_kv_segments_included;
+        self.runtime_kv_segments_skipped += diagnostics.runtime_kv_segments_skipped;
+        self.runtime_kv_segments_rejected += diagnostics.runtime_kv_segments_rejected;
+        push_unique_device(&mut self.kv_segment_devices, device);
+    }
+
     pub fn device_profiles(&self) -> usize {
         explicit_device_count(&self.matched_devices)
     }
@@ -136,15 +158,15 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
     }
 
     pub fn runtime_kv_precision_devices_csv(&self) -> String {
-        if self.kv_precision_devices.is_empty() {
-            "none".to_owned()
-        } else {
-            self.kv_precision_devices
-                .iter()
-                .map(|device| device.as_str())
-                .collect::<Vec<_>>()
-                .join("+")
-        }
+        devices_csv(self.kv_precision_devices.clone())
+    }
+
+    pub fn runtime_kv_segment_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_segment_devices)
+    }
+
+    pub fn runtime_kv_segment_devices_csv(&self) -> String {
+        devices_csv(self.kv_segment_devices.clone())
     }
 }
 

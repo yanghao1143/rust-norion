@@ -159,6 +159,36 @@ impl BenchmarkSummary {
             .count()
     }
 
+    pub fn runtime_kv_segment_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segment_cases
+    }
+
+    pub fn total_runtime_kv_segments_included(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segments_included
+    }
+
+    pub fn total_runtime_kv_segments_skipped(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segments_skipped
+    }
+
+    pub fn total_runtime_kv_segments_rejected(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segments_rejected
+    }
+
+    pub fn runtime_kv_segment_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segment_device_profiles()
+    }
+
+    pub fn runtime_kv_segment_devices_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segment_devices_csv()
+    }
+
     pub fn runtime_kv_import_device_profiles(&self) -> usize {
         explicit_device_count(&self.runtime_kv_import_devices())
     }

@@ -17,6 +17,50 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_kv_segment_cases) = gate.min_runtime_kv_segment_cases {
+        let runtime_kv_segment_cases = summary.runtime_kv_segment_cases();
+        if runtime_kv_segment_cases < min_runtime_kv_segment_cases {
+            failures.push(format!(
+                "runtime_kv_segment_cases {} below minimum {}",
+                runtime_kv_segment_cases, min_runtime_kv_segment_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_segments_included) = gate.min_runtime_kv_segments_included {
+        let runtime_kv_segments_included = summary.total_runtime_kv_segments_included();
+        if runtime_kv_segments_included < min_runtime_kv_segments_included {
+            failures.push(format!(
+                "runtime_kv_segments_included {} below minimum {}",
+                runtime_kv_segments_included, min_runtime_kv_segments_included
+            ));
+        }
+    }
+
+    if let Some(max_runtime_kv_segments_rejected) = gate.max_runtime_kv_segments_rejected {
+        let runtime_kv_segments_rejected = summary.total_runtime_kv_segments_rejected();
+        if runtime_kv_segments_rejected > max_runtime_kv_segments_rejected {
+            failures.push(format!(
+                "runtime_kv_segments_rejected {} above maximum {}",
+                runtime_kv_segments_rejected, max_runtime_kv_segments_rejected
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_segment_device_profiles) =
+        gate.min_runtime_kv_segment_device_profiles
+    {
+        let runtime_kv_segment_device_profiles = summary.runtime_kv_segment_device_profiles();
+        if runtime_kv_segment_device_profiles < min_runtime_kv_segment_device_profiles {
+            failures.push(format!(
+                "runtime_kv_segment_device_profiles {} below minimum {} devices={}",
+                runtime_kv_segment_device_profiles,
+                min_runtime_kv_segment_device_profiles,
+                summary.runtime_kv_segment_devices_csv()
+            ));
+        }
+    }
+
     if let Some(min_runtime_kv_imported) = gate.min_runtime_kv_imported {
         let runtime_kv_imported = summary.total_runtime_kv_imported();
         if runtime_kv_imported < min_runtime_kv_imported {

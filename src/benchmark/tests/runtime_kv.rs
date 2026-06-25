@@ -263,6 +263,103 @@ fn gate_reports_missing_runtime_kv_import_device_profile_coverage() {
 }
 
 #[test]
+fn gate_reports_runtime_kv_segment_evidence() {
+    let summary = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_kv_segment_cases: 1,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 3,
+            runtime_kv_segments_rejected: 2,
+            kv_segment_devices: vec![DeviceClass::CpuOnly],
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![baseline_benchmark_result(
+            "runtime_kv_segments",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )],
+        ..BenchmarkSummary::default()
+    };
+    let mut gate = BenchmarkGate::default();
+    gate.min_runtime_kv_segment_cases = Some(2);
+    gate.min_runtime_kv_segments_included = Some(1);
+    gate.max_runtime_kv_segments_rejected = Some(1);
+    gate.min_runtime_kv_segment_device_profiles = Some(2);
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.runtime_kv_segment_cases(), 1);
+    assert_eq!(summary.total_runtime_kv_segments_included(), 0);
+    assert_eq!(summary.total_runtime_kv_segments_skipped(), 3);
+    assert_eq!(summary.total_runtime_kv_segments_rejected(), 2);
+    assert_eq!(summary.runtime_kv_segment_device_profiles(), 1);
+    assert_eq!(summary.runtime_kv_segment_devices_csv(), "cpu");
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("runtime_kv_segment_cases 1 below minimum 2") })
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("runtime_kv_segments_included 0 below minimum 1") })
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("runtime_kv_segments_rejected 2 above maximum 1") })
+    );
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_segment_device_profiles 1 below minimum 2")
+            && failure.contains("devices=cpu")
+    }));
+
+    let passing = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_kv_segment_cases: 2,
+            runtime_kv_segments_included: 3,
+            runtime_kv_segments_skipped: 1,
+            runtime_kv_segments_rejected: 1,
+            kv_segment_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result(
+                "runtime_kv_segments_cpu",
+                TaskProfile::Coding,
+                DeviceClass::CpuOnly,
+            ),
+            baseline_benchmark_result(
+                "runtime_kv_segments_integrated",
+                TaskProfile::Coding,
+                DeviceClass::IntegratedGpu,
+            ),
+        ],
+        ..BenchmarkSummary::default()
+    };
+    let passing_report = passing.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+    assert_eq!(passing.runtime_kv_segment_cases(), 2);
+    assert_eq!(passing.total_runtime_kv_segments_included(), 3);
+    assert_eq!(passing.total_runtime_kv_segments_skipped(), 1);
+    assert_eq!(passing.total_runtime_kv_segments_rejected(), 1);
+    assert_eq!(passing.runtime_kv_segment_device_profiles(), 2);
+    assert_eq!(passing.runtime_kv_segment_devices_csv(), "cpu+integrated");
+    let line = passing.summary_line();
+    assert!(line.contains("runtime_kv_segment_cases=2"));
+    assert!(line.contains("runtime_kv_segments_included=3"));
+    assert!(line.contains("runtime_kv_segments_skipped=1"));
+    assert!(line.contains("runtime_kv_segments_rejected=1"));
+    assert!(line.contains("runtime_kv_segment_device_profiles=2"));
+    assert!(line.contains("runtime_kv_segment_devices=cpu+integrated"));
+}
+
+#[test]
 fn gate_reports_missing_runtime_kv_storage() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
