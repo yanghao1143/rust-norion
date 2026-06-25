@@ -873,11 +873,29 @@ fn imported_kv_segments(
                 block.token_start,
                 block.token_end,
             )
-            .with_attention_threshold(0.50)
+            .with_attention_threshold(adaptive_kv_attention_threshold(block))
             .with_genome_gate(true)
             .with_kv_blocks(vec![block.clone()])
         })
         .collect()
+}
+
+fn adaptive_kv_attention_threshold(block: &RuntimeKvBlock) -> f32 {
+    let key_energy = mean_abs(&block.key);
+    let value_energy = mean_abs(&block.value);
+    if key_energy <= f32::EPSILON {
+        return 0.90;
+    }
+
+    let influence = (value_energy / key_energy).clamp(0.0, 1.0);
+    (0.20 + (1.0 - influence) * 0.55).clamp(0.15, 0.90)
+}
+
+fn mean_abs(values: &[f32]) -> f32 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.iter().map(|value| value.abs()).sum::<f32>() / values.len() as f32
 }
 
 fn sanitize_id(value: &str, fallback: &str) -> String {
