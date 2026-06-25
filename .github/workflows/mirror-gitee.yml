@@ -1,0 +1,38 @@
+name: Sync GitHub and Gitee
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Safe bidirectional ref sync
+    runs-on: ubuntu-latest
+    if: github.repository == 'yanghao1143/rust-norion'
+    steps:
+      - name: Checkout full repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync refs without overwriting contributors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITEE_USERNAME: ${{ secrets.GITEE_USERNAME }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPOSITORY: babalibaba/rust-norion
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PROTECTED_BRANCHES: main codex-runtime-device-abi
+        shell: bash
+        run: bash tools/ci/sync-github-gitee.sh
