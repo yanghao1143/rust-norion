@@ -639,6 +639,8 @@ fn assert_production_kernel_conformance_all_devices_cli_passes(
             && device_report.report.trace_steps > 0
             && device_report.report.imported_kv_blocks > 0
             && device_report.report.exported_kv_blocks > 0
+            && device_report.report.runtime_kv_segments_included > 0
+            && device_report.report.runtime_kv_segments_rejected == 0
     }));
     assert!(report.summary_line().contains("devices=12"));
 

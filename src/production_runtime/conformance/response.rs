@@ -127,6 +127,15 @@ pub(super) fn evaluate_conformance_response(
             .failures
             .push("runtime KV export is enabled but kernel exported no KV blocks".to_owned());
     }
+    if gate.require_runtime_kv_segment_signal
+        && manifest.kv_policy.import_enabled
+        && diagnostics.imported_kv_blocks > 0
+        && !diagnostics.has_runtime_kv_segment_signal()
+    {
+        report.failures.push(
+            "runtime KV import is enabled but kernel reported no KV segment signal".to_owned(),
+        );
+    }
     if diagnostics.exported_kv_blocks != report.exported_kv_blocks {
         report.failures.push(format!(
             "diagnostics exported_kv_blocks {} does not match runtime exported KV {}",

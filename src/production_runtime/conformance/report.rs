@@ -25,6 +25,9 @@ pub struct ProductionKernelConformanceReport {
     pub trace_steps: usize,
     pub imported_kv_blocks: usize,
     pub exported_kv_blocks: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub forward_energy: Option<f32>,
     pub kv_influence: Option<f32>,
     pub global_layers: usize,
@@ -60,6 +63,9 @@ impl ProductionKernelConformanceReport {
             trace_steps: 0,
             imported_kv_blocks: 0,
             exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
             forward_energy: None,
             kv_influence: None,
             global_layers: 0,
@@ -96,6 +102,9 @@ impl ProductionKernelConformanceReport {
             trace_steps: 0,
             imported_kv_blocks: 0,
             exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
             forward_energy: None,
             kv_influence: None,
             global_layers: 0,
@@ -109,7 +118,7 @@ impl ProductionKernelConformanceReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} exported_kv={} runtime_kv_segments_included={} runtime_kv_segments_skipped={} runtime_kv_segments_rejected={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
             self.passed,
             self.model_id,
             self.selected_adapter,
@@ -130,6 +139,9 @@ impl ProductionKernelConformanceReport {
             self.trace_steps,
             self.imported_kv_blocks,
             self.exported_kv_blocks,
+            self.runtime_kv_segments_included,
+            self.runtime_kv_segments_skipped,
+            self.runtime_kv_segments_rejected,
             option_f32_display(self.forward_energy),
             option_f32_display(self.kv_influence),
             self.global_layers,
@@ -137,5 +149,11 @@ impl ProductionKernelConformanceReport {
             self.convolutional_fusion_layers,
             self.failures.len()
         )
+    }
+
+    pub fn runtime_kv_segment_count(&self) -> usize {
+        self.runtime_kv_segments_included
+            .saturating_add(self.runtime_kv_segments_skipped)
+            .saturating_add(self.runtime_kv_segments_rejected)
     }
 }

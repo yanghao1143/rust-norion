@@ -345,6 +345,10 @@ fn reference_production_kernel_passes_conformance_gate() {
     assert!(report.trace_steps > 0);
     assert!(report.imported_kv_blocks > 0);
     assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert_eq!(report.runtime_kv_segments_skipped, 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
+    assert!(report.runtime_kv_segment_count() > 0);
     assert!(report.forward_energy.unwrap() > 0.0);
     assert!(report.kv_influence.unwrap() >= 0.0);
     assert_eq!(report.manifest_hot_kv_bits, 8);
@@ -360,6 +364,16 @@ fn reference_production_kernel_passes_conformance_gate() {
     assert!(report.summary_line().contains("request_device_kv_bits=8/4"));
     assert!(report.summary_line().contains("uncertainty_tokens="));
     assert!(report.summary_line().contains("uncertainty_perplexity="));
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segments_included=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segments_rejected=0")
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -459,6 +473,8 @@ fn local_model_runtime_kernel_passes_conformance_gate() {
     assert_eq!(report.selected_adapter, "portable-rust");
     assert!(report.imported_kv_blocks > 0);
     assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
     assert!(report.forward_energy.unwrap() > 0.0);
 
     fs::remove_dir_all(asset_dir).unwrap();
@@ -560,6 +576,9 @@ fn production_kernel_conformance_matrix_reports_missing_and_failed_devices() {
         trace_steps: 1,
         imported_kv_blocks: 1,
         exported_kv_blocks: 1,
+        runtime_kv_segments_included: 1,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
         forward_energy: Some(1.0),
         kv_influence: Some(0.0),
         global_layers: 1,

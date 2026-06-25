@@ -78,6 +78,9 @@ impl ProductionTransformerRuntime {
         report.trace_steps = response.trace.len();
         report.forward_energy = response.diagnostics.forward_energy;
         report.kv_influence = response.diagnostics.kv_influence;
+        report.runtime_kv_segments_included = response.diagnostics.runtime_kv_segments_included;
+        report.runtime_kv_segments_skipped = response.diagnostics.runtime_kv_segments_skipped;
+        report.runtime_kv_segments_rejected = response.diagnostics.runtime_kv_segments_rejected;
         report.global_layers = response.diagnostics.global_layers;
         report.local_window_layers = response.diagnostics.local_window_layers;
         report.convolutional_fusion_layers = response.diagnostics.convolutional_fusion_layers;
