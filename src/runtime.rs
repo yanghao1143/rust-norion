@@ -28,7 +28,8 @@ pub use http::MistralRsHttpRuntime;
 pub use native_adapter::{
     ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,
     MockRustNativeAdapter, RustNativeAdapterComparisonReport, RustNativeAdapterModeComparison,
-    RustNativeAdapterReport, RustNativeAdapterRequest, RustNativeInferenceAdapter,
+    RustNativeAdapterReport, RustNativeAdapterRequest, RustNativeAdapterStreamEvent,
+    RustNativeInferenceAdapter,
 };
 pub use types::{
     ModelRuntime, RuntimeAdapterObservation, RuntimeEmbedding, RuntimeError, RuntimeMetadata,

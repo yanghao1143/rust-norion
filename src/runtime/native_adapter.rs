@@ -268,6 +268,71 @@ impl RustNativeAdapterReport {
             self.applied
         )
     }
+
+    pub fn openai_stream_events(&self) -> Vec<RustNativeAdapterStreamEvent> {
+        let mut events = Vec::with_capacity(self.stream_tokens.len() + 3);
+        events.push(RustNativeAdapterStreamEvent::new(
+            "response.created",
+            format!(
+                "{{\"id\":{},\"object\":\"chat.completion.chunk\",\"model\":{},\"cache_mode\":{},\"gate_summary\":{}}}",
+                json_string(&self.trace_id),
+                json_string(
+                    self.response
+                        .diagnostics
+                        .model_id
+                        .as_deref()
+                        .unwrap_or("rust-native")
+                ),
+                json_string(self.cache_mode.as_str()),
+                json_string(&self.gate_summary_digest)
+            ),
+        ));
+        for (index, token) in self.stream_tokens.iter().enumerate() {
+            events.push(RustNativeAdapterStreamEvent::new(
+                "response.output_text.delta",
+                format!(
+                    "{{\"id\":{},\"index\":{},\"delta\":{}}}",
+                    json_string(&self.trace_id),
+                    index,
+                    json_string(&token.text)
+                ),
+            ));
+        }
+        events.push(RustNativeAdapterStreamEvent::new(
+            "response.completed",
+            format!(
+                "{{\"id\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"included_segments\":{},\"skipped_segments\":{},\"rejected_segments\":{},\"gate_summary\":{}}}",
+                json_string(&self.trace_id),
+                self.imported_kv_blocks,
+                self.exported_kv_blocks,
+                self.included_segments(),
+                self.skipped_segments(),
+                self.rejected_segments(),
+                json_string(&self.gate_summary_digest)
+            ),
+        ));
+        events.push(RustNativeAdapterStreamEvent::new("done", "[DONE]"));
+        events
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RustNativeAdapterStreamEvent {
+    pub event: String,
+    pub data: String,
+}
+
+impl RustNativeAdapterStreamEvent {
+    pub fn new(event: impl Into<String>, data: impl Into<String>) -> Self {
+        Self {
+            event: event.into(),
+            data: data.into(),
+        }
+    }
+
+    pub fn sse_line(&self) -> String {
+        format!("event: {}\ndata: {}\n", self.event, self.data)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -692,6 +757,26 @@ fn stable_digest(value: &str) -> String {
     format!("fnv64:{hash:016x}")
 }
 
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if control.is_control() => {
+                out.push_str(&format!("\\u{:04x}", control as u32));
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+    out
+}
+
 fn ignore_runtime_token(_token: &RuntimeToken) -> Result<(), RuntimeError> {
     Ok(())
 }
@@ -910,5 +995,44 @@ mod tests {
                 .skipped_segments
                 > 0
         );
+    }
+
+    #[test]
+    fn stream_events_preserve_trace_and_gate_summary_without_prompt_or_cache_leak() {
+        let scope = scope();
+        let request = RustNativeAdapterRequest::new(
+            "secret prompt should not appear",
+            TaskProfile::Coding,
+            "trace-openai",
+            scope.clone(),
+        )
+        .with_segments(vec![segment(&scope, "seg-a", 0.20, true)])
+        .with_gate_summary("writer_gate=preview_only");
+        let mut adapter = MockRustNativeAdapter::new();
+
+        let report = adapter.generate(request).unwrap();
+        let events = report.openai_stream_events();
+
+        assert_eq!(events.first().unwrap().event, "response.created");
+        assert_eq!(events.last().unwrap().event, "done");
+        assert_eq!(events.last().unwrap().data, "[DONE]");
+        assert!(events.iter().any(|event| {
+            event.event == "response.output_text.delta" && event.data.contains("trace-openai")
+        }));
+        assert!(events.iter().any(|event| {
+            event.event == "response.completed"
+                && event.data.contains("\"gate_summary\":\"fnv64:")
+                && event.data.contains("\"imported_kv_blocks\":1")
+        }));
+        let joined = events
+            .iter()
+            .map(RustNativeAdapterStreamEvent::sse_line)
+            .collect::<Vec<_>>()
+            .join("");
+        assert!(joined.contains("event: response.created"));
+        assert!(joined.contains("data: [DONE]"));
+        assert!(!joined.contains("secret prompt should not appear"));
+        assert!(!joined.contains("cache:seg-a"));
+        assert!(!joined.contains("tenant-a"));
     }
 }
