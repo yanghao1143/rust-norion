@@ -396,6 +396,34 @@ same recruitment message everywhere.
 | Igosuki AI Tooling | Submitted | https://github.com/Igosuki/awesome-ai-tooling/issues/3 |
 | KeenBrain AI Resources | Closed/deferred | https://github.com/KeenBrain/awesome-ai-resources/issues/1 |
 
+2026-06-25 UTC AgentOps, governance, security, local-AI, and gateway
+follow-up batch, all recorded in `docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| NatNew AgentOps | Submitted | https://github.com/natnew/awesome-agentops/issues/5 |
+| MindfulCTO AI Governance | Submitted | https://github.com/mindfulcto-labs/awesome-ai-governance/issues/1 |
+| SCADA StrangeLove AI Security Tools | Submitted | https://github.com/scadastrangelove/awesome-ai-security-tools/issues/6 |
+| Authora Agent Security | Submitted | https://github.com/authora-dev/awesome-agent-security/issues/6 |
+| Zhangxin Agentic Security | Submitted | https://github.com/zhangxin-xd/awesome-agentic-security/issues/2 |
+| Mukunda Prompt Injection Defense | Submitted | https://github.com/MukundaKatta/awesome-prompt-injection-defense/issues/7 |
+| MSB Local AI | Submitted | https://github.com/msb-msb/awesome-local-ai/issues/13 |
+| CastelDazur Local AI | Submitted | https://github.com/CastelDazur/awesome-local-ai/issues/9 |
+| Pedram Local AI | Submitted | https://github.com/pedramnj/awesome-local-ai/issues/6 |
+| Supersynergy Local AI Agents | Submitted | https://github.com/Supersynergy/awesome-local-ai-agents/issues/1 |
+| Scientia Local AI | Submitted | https://github.com/Scientia07/awesome-local-ai/issues/2 |
+| 12Britz AI Gateways | Submitted | https://github.com/12britz/awesome-ai-gateways/issues/18 |
+| Ishan Dutta AI Gateways | Submitted | https://github.com/ishandutta2007/Awesome-AI-Gateways/issues/5 |
+| DevGreick LLM Security | Submitted | https://github.com/DevGreick/awesome-llm-security/issues/3 |
+| TrongDTH LLM Security | Submitted | https://github.com/trongdth/awesome-llm-security/issues/1 |
+| Muellerberndt AI Security | Submitted | https://github.com/muellerberndt/awesome-ai-security/issues/16 |
+| Brinhosa AI Security | Submitted | https://github.com/brinhosa/awesome-ai-security/issues/26 |
+| SojalSec AI Security | Submitted | https://github.com/0xSojalSec/Awesome-AI-Security/issues/2 |
+| Restuhaqza AI Security | Submitted | https://github.com/restuhaqza/awesome-ai-security/issues/6 |
+| Vermava AI Security | Submitted | https://github.com/vermava/awesomelist-ai-security/issues/1 |
+| Eksoward AI Security | Submitted | https://github.com/eksoward/awesome-ai-security/issues/2 |
+| Brandon Himpfen AI Security | Submitted | https://github.com/brandonhimpfen/awesome-ai-security/issues/10 |
+
 The full registry is in `docs/outreach/community-registry.yml`.
 
 ## Monthly Update Workflow

@@ -3953,3 +3953,245 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_has_a_direct_rag_pipeline_component_or_evaluator
     notes: Inclusion criteria require direct usefulness for RAG pipelines; rust-norion is currently broader agent runtime/control-plane work rather than a RAG component.
+
+  - id: natnew-awesome-agentops
+    platform: github
+    kind: agentops_resource_list
+    url: https://github.com/natnew/awesome-agentops
+    audience: AgentOps, tracing, evaluation, guardrail, deployment, security, and incident-response readers
+    fit: high
+    status: submitted
+    proof: https://github.com/natnew/awesome-agentops/issues/5
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue framed rust-norion as an early Rust agent runtime-control project for evidence gates, replay governance, rollback, and auditable self-evolution.
+
+  - id: mindfulcto-awesome-ai-governance
+    platform: github
+    kind: ai_governance_resource_list
+    url: https://github.com/mindfulcto-labs/awesome-ai-governance
+    audience: regulated AI governance, audit, policy, standards, risk, observability, and secure-runtime readers
+    fit: high
+    status: submitted
+    proof: https://github.com/mindfulcto-labs/awesome-ai-governance/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check issue emphasized runtime governance, traceability, evidence gates, and early-stage maturity without claiming production compliance.
+
+  - id: scadastrangelove-awesome-ai-security-tools
+    platform: github
+    kind: ai_security_tool_catalogue
+    url: https://github.com/scadastrangelove/awesome-ai-security-tools
+    audience: AI agent security, coding-agent security, runtime protection, enforcement, and LLM red-team/guardrail readers
+    fit: high
+    status: submitted
+    proof: https://github.com/scadastrangelove/awesome-ai-security-tools/issues/6
+    next_action: wait_for_scope_feedback_before_structured_entry_pr
+    notes: CONTRIBUTING prefers installable public projects; issue asked whether runtime-control/evidence-gate governance belongs before editing generated source data.
+
+  - id: authora-awesome-agent-security
+    platform: github
+    kind: agent_security_resource_list
+    url: https://github.com/authora-dev/awesome-agent-security
+    audience: AI agent identity, authorization, coordination, sandboxing, security monitoring, and audit readers
+    fit: high
+    status: submitted
+    proof: https://github.com/authora-dev/awesome-agent-security/issues/6
+    next_action: wait_for_section_feedback_before_pr
+    notes: Issue positioned rust-norion as authorization-adjacent runtime governance rather than a direct identity product.
+
+  - id: zhangxin-xd-awesome-agentic-security
+    platform: github
+    kind: agentic_security_resource_list
+    url: https://github.com/zhangxin-xd/awesome-agentic-security
+    audience: agentic AI attack, defense, guardrail, sandboxing, permission-control, benchmark, and tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/zhangxin-xd/awesome-agentic-security/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository includes tools/frameworks as well as papers; issue asked whether runtime-control implementation resources fit without a paper or benchmark.
+
+  - id: mukundakatta-awesome-prompt-injection-defense
+    platform: github
+    kind: prompt_injection_defense_resource_list
+    url: https://github.com/MukundaKatta/awesome-prompt-injection-defense
+    audience: prompt-injection defense, RAG guardrail, tool-output validation, adjacent reliability, and defensive-runtime readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/MukundaKatta/awesome-prompt-injection-defense/issues/7
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Scope is adjacent rather than direct; issue explicitly states rust-norion is not a prompt-injection classifier and asks about memory/tool-output control-plane relevance.
+
+  - id: msb-msb-awesome-local-ai
+    platform: github
+    kind: local_ai_resource_list
+    url: https://github.com/msb-msb/awesome-local-ai
+    audience: local AI, consumer hardware, AI agent, local runtime, privacy, and self-hosted workflow readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/msb-msb/awesome-local-ai/issues/13
+    next_action: wait_for_eligibility_feedback_before_pr
+    notes: CONTRIBUTING strongly prefers PRs but allows eligibility questions; issue states GPL license, local Rust workspace execution, and optional remote adapters.
+
+  - id: casteldazur-awesome-local-ai
+    platform: github
+    kind: local_ai_tool_framework_list
+    url: https://github.com/CastelDazur/awesome-local-ai
+    audience: local AI inference, RAG, orchestration, agent, monitoring, privacy-first, and unified-gateway readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/CastelDazur/awesome-local-ai/issues/9
+    next_action: wait_for_scope_feedback_before_readme_pr
+    notes: Scope-check asked whether a locally runnable Rust agent control layer belongs even though it is not an inference engine.
+
+  - id: pedramnj-awesome-local-ai
+    platform: github
+    kind: local_first_ai_tool_list
+    url: https://github.com/pedramnj/awesome-local-ai
+    audience: local-first AI tool, self-hosted framework, model, agent, privacy, and orchestration readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/pedramnj/awesome-local-ai/issues/6
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue described rust-norion as locally runnable control-plane tooling and asked whether it should wait for a cleaner one-command local-agent demo.
+
+  - id: supersynergy-awesome-local-ai-agents
+    platform: github
+    kind: local_ai_agent_framework_list
+    url: https://github.com/Supersynergy/awesome-local-ai-agents
+    audience: local AI agent framework, LLM tool, integration-pattern, best-practice, and self-hosted agent readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Supersynergy/awesome-local-ai-agents/issues/1
+    next_action: wait_for_framework_entry_feedback_before_pr
+    notes: CONTRIBUTING wants full framework entries with examples and limitations; issue asks whether early infrastructure frameworks are acceptable before preparing that format.
+
+  - id: scientia07-awesome-local-ai
+    platform: github
+    kind: local_first_ai_tool_table
+    url: https://github.com/Scientia07/awesome-local-ai
+    audience: local-first AI, agent framework, MCP, deployment, orchestration, privacy, and security readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Scientia07/awesome-local-ai/issues/2
+    next_action: wait_for_scope_feedback_before_table_pr
+    notes: Issue asked whether a short table entry for a local/self-hosted Rust agent control layer would be useful before editing README.
+
+  - id: britz-awesome-ai-gateways
+    platform: github
+    kind: ai_gateway_resource_list
+    url: https://github.com/12britz/awesome-ai-gateways
+    audience: LLM routing, orchestration, gateway infrastructure, observability, guardrail, and agentic-infrastructure readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/12britz/awesome-ai-gateways/issues/18
+    next_action: wait_for_gateway_scope_feedback_before_pr
+    notes: Issue states rust-norion is not a production gateway and asks whether lower-level routing/control-plane projects are in scope.
+
+  - id: ishandutta2007-awesome-ai-gateways
+    platform: github
+    kind: ai_gateway_router_list
+    url: https://github.com/ishandutta2007/Awesome-AI-Gateways
+    audience: AI gateway, LLM router, proxy, unified API, load-balancing, fallback, cost, and observability readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ishandutta2007/Awesome-AI-Gateways/issues/5
+    next_action: wait_for_gateway_scope_feedback_before_any_pr
+    notes: Scope-check asks whether agentic routing/control-layer work is close enough before any PR; avoids claiming drop-in OpenAI proxy capability.
+
+  - id: devgreick-awesome-llm-security
+    platform: github
+    kind: llm_security_tool_framework_list
+    url: https://github.com/DevGreick/awesome-llm-security
+    audience: LLM security, AI agent security, GenAI app security, guardrail, scanner, sandboxing, and MCP security readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/DevGreick/awesome-llm-security/issues/3
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Practitioner-first list expects runnable entries; issue asks whether early runtime-governance work fits without calling rust-norion a scanner.
+
+  - id: trongdth-awesome-llm-security
+    platform: github
+    kind: llm_security_resource_list
+    url: https://github.com/trongdth/awesome-llm-security
+    audience: LLM security, Agentic AI, MCP security, runtime protection, benchmark, and best-practice readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/trongdth/awesome-llm-security/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue maps rust-norion to Agentic and MCP Security plus Guardrails and Runtime Protection sections while noting it is not a red-team scanner.
+
+  - id: muellerberndt-awesome-ai-security
+    platform: github
+    kind: ai_security_roadmap
+    url: https://github.com/muellerberndt/awesome-ai-security
+    audience: AI security roadmap, prompt injection, adversarial attack, privacy, governance, and defensive-control readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/muellerberndt/awesome-ai-security/issues/16
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue frames rust-norion as an AI application/system security control-plane resource rather than a detector or red-team tool.
+
+  - id: brinhosa-awesome-ai-security
+    platform: github
+    kind: ai_llm_security_tool_resource_list
+    url: https://github.com/brinhosa/awesome-ai-security
+    audience: AI and LLM security tool, framework, guide, paper, training, and community-resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/brinhosa/awesome-ai-security/issues/26
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check describes defensive runtime-control architecture and asks whether a dedicated guardrail/security module is needed first.
+
+  - id: sojalsec-awesome-ai-security
+    platform: github
+    kind: ai_security_resource_list
+    url: https://github.com/0xSojalSec/Awesome-AI-Security
+    audience: AI security research, tool, framework, agent-security, governance, and defensive-runtime readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/0xSojalSec/Awesome-AI-Security/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Distinct from 0xSojalSec/Awesome-AI-resources; issue asks whether architecture/framework resources are accepted beyond scanners.
+
+  - id: restuhaqza-awesome-ai-security
+    platform: github
+    kind: ai_security_project_resource_list
+    url: https://github.com/restuhaqza/awesome-ai-security
+    audience: AI security resource, tool, paper, project, model-risk, agent, and lifecycle-control readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/restuhaqza/awesome-ai-security/issues/6
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue presents rust-norion as an agent lifecycle/runtime-control resource, not an exploit PoC or jailbreak collection.
+
+  - id: vermava-awesomelist-ai-security
+    platform: github
+    kind: ai_security_lifecycle_resource_list
+    url: https://github.com/vermava/awesomelist-ai-security
+    audience: AI lifecycle security, model/data/agent/tool/pipeline/deployment, governance, and case-study readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/vermava/awesomelist-ai-security/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue asks whether runtime boundaries, evidence gates, rollback, and audit artifacts fit the lifecycle-oriented AI security scope.
+
+  - id: eksoward-awesome-ai-security
+    platform: github
+    kind: ai_security_ops_risk_list
+    url: https://github.com/eksoward/awesome-ai-security
+    audience: AI security, ops, risk management, governance, incident, standard, and control-framework readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/eksoward/awesome-ai-security/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue asks whether agent runtime controls belong under the security, ops, and risk-management angle.
+
+  - id: brandonhimpfen-awesome-ai-security
+    platform: github
+    kind: ai_security_tool_framework_list
+    url: https://github.com/brandonhimpfen/awesome-ai-security
+    audience: AI security tool, framework, benchmark, adversarial robustness, secure inference, and privacy-preserving AI readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/brandonhimpfen/awesome-ai-security/issues/10
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check acknowledges the list is closer to adversarial/model security and asks whether secure agent runtime governance belongs.
