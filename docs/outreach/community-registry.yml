@@ -120,6 +120,28 @@ communities:
     next_action: wait_for_maintainer_feedback_then_open_pr_if_requested
     notes: Issue opened first because the list prefers PRs but rust-norion is an early Rust control-layer prototype; possible categories include Governance Frameworks, Agent Frameworks with Governance Features, and Observability.
 
+  - id: awesome-ai-agents-security
+    platform: github
+    kind: awesome_list
+    url: https://github.com/ProjectRecon/awesome-ai-agents-security
+    audience: AI agent security, runtime protection, sandboxing, and governance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ProjectRecon/awesome-ai-agents-security/pull/61
+    next_action: wait_for_maintainer_review
+    notes: Focused PR added rust-norion under Agent Firewalls & Gateways with research-prototype wording and runtime-boundary scope.
+
+  - id: awesome-agentic-ai-security
+    platform: github
+    kind: resource_catalogue
+    url: https://github.com/natnew/Awesome-Agentic-AI-Security
+    audience: agentic AI security, runtime control, memory, governance, and assurance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/natnew/Awesome-Agentic-AI-Security/issues/12
+    next_action: wait_for_maintainer_feedback_then_open_metadata_pr_if_requested
+    notes: Structured resource suggestion opened because the repository favours evidence-led entries over direct link-list PRs.
+
   - id: awesome-llm-agents
     platform: github
     kind: awesome_list

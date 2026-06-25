@@ -30,6 +30,8 @@ same recruitment message everywhere.
 | Awesome Rust Machine Learning | Submitted | Track https://github.com/vaaaaanquish/Awesome-Rust-MachineLearning/issues/30 |
 | Awesome Rust AI Governance | Submitted | Track https://github.com/mindfulcto-labs/awesome-rust-ai-governance/issues/1 |
 | Awesome AI Agent Governance | Submitted | Track https://github.com/agentrust-io/awesome-ai-governance/issues/28 |
+| Awesome AI Agents Security | Submitted | Track https://github.com/ProjectRecon/awesome-ai-agents-security/pull/61 |
+| Awesome Agentic AI Security | Submitted | Track https://github.com/natnew/Awesome-Agentic-AI-Security/issues/12 |
 | Awesome Rust AI Tools | Submitted | Track https://github.com/KatanoShingo/awesome-rust-ai-tools/issues/1 |
 | Awesome Rust AI | Submitted | Track https://github.com/dhilipsiva/awesome-rust-ai/issues/1 |
 | Awesome LLM Agents | Submitted | Track https://github.com/kaushikb11/awesome-llm-agents/issues/266 |
