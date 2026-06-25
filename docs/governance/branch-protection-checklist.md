@@ -106,6 +106,24 @@ merges are disabled. A PR is not merge-ready until:
 - license/provenance notes are acceptable
 - GPL-3.0 and third-party license constraints are preserved
 
+## Permission Audit
+
+As of 2026-06-25, the intended repository permission baseline is:
+
+- public contributors use fork or topic branch PRs into `main`
+- no routine contributor needs direct repository write access
+- reviewer and module-collaborator status does not imply merge authority
+- maintainer expansion requires an explicit owner decision
+- protected-branch merge remains gated by CODEOWNER review, latest-push
+  approval, required checks, conversation resolution, and explicit maintainer
+  action
+
+Audit direct collaborators before broadening community access:
+
+```powershell
+gh api repos/yanghao1143/rust-norion/collaborators?affiliation=direct --paginate
+```
+
 ## Audit Procedure
 
 Run these checks before inviting broader collaboration or after changing GitHub

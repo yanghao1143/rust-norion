@@ -41,6 +41,24 @@ and repository auto-merge are disabled, and GitHub deletes the head branch after
 merge. Contributors submit pull requests; the owner or maintainer explicitly
 performs the merge after all gates pass.
 
+## Contributor Permission Model
+
+Contribution access and merge authority are intentionally separate:
+
+- Public contributors can open issues and PRs without repository write access.
+- Trusted contributors and reviewers can gain recognition and review scope
+  without gaining protected-branch merge rights.
+- Module collaborators may receive scoped triage or branch-work permission only
+  after an explicit owner decision.
+- Maintainer permission requires an explicit owner decision and any needed
+  CODEOWNERS or branch-protection update.
+- Gitee is a mirror and domestic access surface; GitHub `main` remains the
+  authoritative merge surface unless the owner changes this policy explicitly.
+
+Direct pushes to protected branches are not part of the contribution flow.
+Routine contributions should use fork or topic branch pull requests into
+`main`.
+
 The branch protection checklist lives at
 `docs/governance/branch-protection-checklist.md`.
 

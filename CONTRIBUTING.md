@@ -44,6 +44,24 @@ Small typo or documentation fixes can go straight to a pull request, but the
 maintainer may still ask for an issue when the change affects project policy or
 architecture.
 
+## GitHub Permissions
+
+Public contributors do not need repository write access. The normal path is a
+fork or topic branch pull request into `main`.
+
+Repository permissions are separate from community roles:
+
+- Contributor / Trusted Contributor: no protected-branch merge permission.
+- Reviewer / Module Collaborator: may review or triage within a scoped lane, but
+  cannot bypass CODEOWNER review, CI, latest-push approval, or maintainer merge.
+- Maintainer: may be granted repository permission only after an explicit owner
+  decision and any required CODEOWNERS or branch-protection update.
+- Owner / CODEOWNER: remains the final protected-branch gate.
+
+Do not request direct push access for routine contributions. If elevated access
+is granted later, it is scoped, reversible, and still cannot bypass `main`
+branch protection.
+
 ## Contributor Recognition
 
 Contributors are encouraged to make their work visible. A pull request may
