@@ -231,6 +231,14 @@ same recruitment message everywhere.
 | Alvinreal Open Source AI | Submitted | Track https://github.com/alvinreal/awesome-opensource-ai/issues/539 |
 | Kenneth Law LLM Knowledge Systems | Deferred | Not an awesome list; wait for article, case study, or primitive-level evidence |
 | ChaoYue Loop Engineering | Submitted | Track https://github.com/ChaoYue0307/awesome-loop-engineering/issues/6 |
+| IBM Agentic Workflow Optimization | Deferred | Paper-only workflow optimization list; wait for paper-backed artifact |
+| Irfanfadhullah Agentic Workflow | Submitted | Track https://github.com/irfanfadhullah/Awesome-Agentic-Workflow/issues/1 |
+| Ishandutta Agent Orchestration Platforms | Submitted | Track https://github.com/ishandutta2007/Awesome-Agent-Orchestration-Platforms/issues/5 |
+| OneRose Agentic Workflows | Deferred | Requires concrete GitHub Agentic Workflow template |
+| Richicinschi Agent Workflows | Submitted | Track https://github.com/Richicinschi/awesome-agent-workflows/issues/15 |
+| Brandon AI Coding Agents | Deferred | Wait for user-facing coding agent or clear framework surface |
+| Enterprise AI Atlas Coding Agents | Deferred | Wait for direct coding-agent tool/framework fit |
+| Bloo Mind Multi-Agent Systems | Deferred | Wait for demonstrated adoption or peer-reviewed MAS artifact |
 | Gitee Awesome Rust | Manual verification | Unauthenticated HTTP 405/API 403; verify active contribution flow after login |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Manual verification | Unauthenticated HTTP 405/API 403; verify tool/deployment category fit after login |

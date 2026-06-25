@@ -2269,6 +2269,89 @@ communities:
     next_action: wait_for_scope_feedback_then_open_resource_pr_if_invited
     notes: CONTRIBUTING invites resource suggestion issues with category, type, and evidence quality; scope-check frames rust-norion as early Rust loop-control infrastructure with maturity caveat.
 
+  - id: ibm-awesome-agentic-workflow-optimization
+    platform: github
+    kind: workflow_optimization_paper_list
+    url: https://github.com/IBM/awesome-agentic-workflow-optimization
+    audience: LLM-agent workflow optimization paper readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_related_paper_or_paper_backed_artifact_exists
+    notes: README says the list focuses on papers whose main contribution is workflow optimization and explicitly excludes general framework/tooling papers; do not submit a raw project link.
+
+  - id: irfanfadhullah-awesome-agentic-workflow
+    platform: github
+    kind: agentic_workflow_repository_collection
+    url: https://github.com/irfanfadhullah/Awesome-Agentic-Workflow
+    audience: agentic workflow, autonomous agent, multi-agent, orchestration, reflection, and tool-integration readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/irfanfadhullah/Awesome-Agentic-Workflow/issues/1
+    next_action: wait_for_scope_feedback_before_pr_or_summary_addition
+    notes: README invites new project summaries across Reflection_Adaptation, Orchestrated, Multi-Agent, and Tool Integration; scope-check asks before adding an early Rust control-layer prototype.
+
+  - id: ishandutta-awesome-agent-orchestration-platforms
+    platform: github
+    kind: agent_orchestration_platform_list
+    url: https://github.com/ishandutta2007/Awesome-Agent-Orchestration-Platforms
+    audience: AI agent orchestration, multi-agent system, agentic workflow, MCP, memory, and high-control orchestration readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ishandutta2007/Awesome-Agent-Orchestration-Platforms/issues/5
+    next_action: wait_for_category_feedback_before_readme_pr
+    notes: CONTRIBUTING asks for active projects with fact-based descriptions; scope-check avoids presenting rust-norion as a mature orchestration platform.
+
+  - id: onerose328-awesome-agentic-workflows
+    platform: github
+    kind: github_agentic_workflow_template_library
+    url: https://github.com/OneRose328/awesome-agentic-workflows
+    audience: GitHub Agentic Workflows template readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_concrete_github_agentic_workflow_template_exists
+    notes: CONTRIBUTING requires current GitHub Agentic Workflow template shape and validation; rust-norion is not itself a reusable gh-aw template.
+
+  - id: richicinschi-awesome-agent-workflows
+    platform: github
+    kind: agent_workflow_resource_library
+    url: https://github.com/Richicinschi/awesome-agent-workflows
+    audience: AI coding agent workflow, verification, bounded execution, recovery, and public-release workflow readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Richicinschi/awesome-agent-workflows/issues/15
+    next_action: wait_for_scope_feedback_before_resource_pr
+    notes: CONTRIBUTING accepts high-quality resource links with operational explanation; scope-check asks whether rust-norion's bounded agent-work governance docs fit before any PR.
+
+  - id: brandonhimpfen-awesome-ai-coding-agents
+    platform: github
+    kind: ai_coding_agent_resource_list
+    url: https://github.com/brandonhimpfen/awesome-ai-coding-agents
+    audience: AI coding agent frameworks, platforms, infrastructure, evaluation, and benchmark readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_user_facing_coding_agent_or_clear_framework_surface
+    notes: CONTRIBUTING warns that early-stage projects and conceptual frameworks may be declined; rust-norion is not yet a finished coding agent.
+
+  - id: enterprise-ai-atlas-awesome-ai-coding-agents
+    platform: github
+    kind: ai_coding_agent_registry
+    url: https://github.com/Enterprise-AI-Atlas/awesome-ai-coding-agents
+    audience: AI coding agents, coding assistants, PR review, test generation, debugging, and software maintenance readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_coding_agent_tool_or_framework_fit_is_clear
+    notes: CONTRIBUTING excludes inference engines and general SDKs; wait until rust-norion has a direct coding-agent tool, framework, or install surface.
+
+  - id: bloo-mind-awesome-multi-agent-systems
+    platform: github
+    kind: multi_agent_systems_resource_list
+    url: https://github.com/bloo-mind/awesome-multi-agent-systems
+    audience: MAS research, LLM-agent teams, MCP/A2A protocols, benchmarks, and frameworks readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_demonstrated_adoption_or_peer_reviewed_multi_agent_artifact
+    notes: CONTRIBUTING says self-promotional entries without demonstrated adoption or peer review are declined; keep as future candidate after stronger evidence.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list
