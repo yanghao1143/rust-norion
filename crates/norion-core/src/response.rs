@@ -1876,12 +1876,13 @@ impl RuntimeResponseEnvelope {
 
     pub fn summary(&self) -> String {
         format!(
-            "schema={} answer_chars={} tokens={} imported_kv={} exported_kv={} runtime_signal={}",
+            "schema={} answer_chars={} tokens={} imported_kv={} exported_kv={} weak_runtime_kv_imports_skipped={} runtime_signal={}",
             self.schema,
             self.answer_chars,
             self.token_metrics.token_count,
             self.imported_kv_blocks,
             self.exported_kv_blocks,
+            self.diagnostics_weak_runtime_kv_imports_skipped,
             self.has_runtime_execution_signal
         )
     }
@@ -2091,6 +2092,11 @@ mod tests {
         assert_eq!(envelope.diagnostics_imported_kv_blocks, 0);
         assert_eq!(envelope.diagnostics_exported_kv_blocks, 0);
         assert_eq!(envelope.diagnostics_weak_runtime_kv_imports_skipped, 2);
+        assert!(
+            envelope
+                .summary()
+                .contains("weak_runtime_kv_imports_skipped=2")
+        );
         assert_eq!(summary.diagnostics_weak_runtime_kv_imports_skipped, 2);
         assert!(!summary.has_kv_exchange());
         assert!(summary.has_runtime_kv_activity());

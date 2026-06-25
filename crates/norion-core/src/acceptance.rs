@@ -3339,10 +3339,8 @@ impl RuntimeAcceptanceContext {
             response_exported_kv_blocks: response.exported_kv_blocks,
             diagnostics_imported_kv_blocks: response.diagnostics_imported_kv_blocks,
             diagnostics_exported_kv_blocks: response.diagnostics_exported_kv_blocks,
-            diagnostics_weak_runtime_kv_imports_skipped: outcome
-                .diagnostics
-                .runtime
-                .weak_runtime_kv_imports_skipped,
+            diagnostics_weak_runtime_kv_imports_skipped: response
+                .diagnostics_weak_runtime_kv_imports_skipped,
             accepted_exported_kv_blocks: exported_summary.accepted_count,
             exported_kv_violation_count: exported_summary.violation_count,
             imported_namespace_counts: KvNamespaceCounts::from_blocks(&self.imported_kv_blocks),
@@ -4786,7 +4784,7 @@ mod tests {
         );
         assert_eq!(
             context.response_envelope(&outcome).summary(),
-            "schema=rust-norion-runtime-response-v1 answer_chars=2 tokens=2 imported_kv=1 exported_kv=1 runtime_signal=true"
+            "schema=rust-norion-runtime-response-v1 answer_chars=2 tokens=2 imported_kv=1 exported_kv=1 weak_runtime_kv_imports_skipped=0 runtime_signal=true"
         );
         let envelope_summary = context.boundary_envelope_summary(&outcome);
         assert!(envelope_summary.boundary_shape_is_consistent());
@@ -6030,6 +6028,7 @@ mod tests {
             vec![0.4],
         ));
 
+        let response = context.response_envelope(&outcome);
         let summary = context.boundary_kv_summary(&outcome);
 
         assert_eq!(summary.request_imported_kv_blocks, 1);
@@ -6037,7 +6036,11 @@ mod tests {
         assert_eq!(summary.response_imported_kv_blocks, 2);
         assert_eq!(summary.diagnostics_imported_kv_blocks, 0);
         assert_eq!(summary.diagnostics_exported_kv_blocks, 0);
-        assert_eq!(summary.diagnostics_weak_runtime_kv_imports_skipped, 3);
+        assert_eq!(response.diagnostics_weak_runtime_kv_imports_skipped, 3);
+        assert_eq!(
+            summary.diagnostics_weak_runtime_kv_imports_skipped,
+            response.diagnostics_weak_runtime_kv_imports_skipped
+        );
         assert_eq!(summary.imported_namespace_counts.gist, 1);
         assert_eq!(summary.exported_namespace_counts.gist, 1);
         assert!(summary.imported_kv_violation_count > 0);
