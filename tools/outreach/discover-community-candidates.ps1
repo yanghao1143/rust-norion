@@ -132,17 +132,7 @@ function Search-GiteeRepos {
         try {
             $items = Invoke-RestMethod -Uri $uri -Method Get -TimeoutSec 20
         } catch {
-            $rows += [pscustomobject]@{
-                platform = "gitee"
-                id = "gitee-search-" + (ConvertTo-Slug $query)
-                name = "Gitee search failed: $query"
-                url = "https://gitee.com/search?utf8=%E2%9C%93&q=$([uri]::EscapeDataString($query))"
-                stars = 0
-                fit = "unknown"
-                action = "manual browser verification required; API failed with $($_.Exception.GetType().Name)"
-                description = "Automated Gitee API search failed in this environment."
-                source_query = $query
-            }
+            Write-Warning "Gitee search failed for '$query': $($_.Exception.GetType().Name)"
             continue
         }
         foreach ($repo in $items) {
@@ -187,6 +177,17 @@ $githubQueries = @(
     "awesome agentic ai",
     "awesome llmops",
     "awesome ai sdks",
+    "awesome local llm",
+    "awesome autonomous agents",
+    "awesome agent security",
+    "awesome agentic security",
+    "awesome ai infrastructure",
+    "awesome ai engineering",
+    "awesome ai developer tools",
+    "awesome ai safety tools",
+    "awesome rag tools",
+    "awesome llm observability",
+    "awesome software engineering agents",
     "rust ai weekly",
     "rust machine learning",
     "best of rust machine learning",
@@ -201,6 +202,8 @@ $giteeQueries = @(
     "Rust LLM",
     "Rust 人工智能",
     "Rust 机器学习",
+    "Rust Agent",
+    "LLMOps",
     "Rust 周刊",
     "awesome Rust"
 )

@@ -691,6 +691,164 @@ communities:
     next_action: only_submit_a_neutral_problem_or_paper_reference_not_a_project_ad
     notes: Repository is structured as paper/problem references with placeholder academic rows; a project link would not fit without a neutral research artifact.
 
+  - id: rafska-awesome-local-llm
+    platform: github
+    kind: awesome_list
+    url: https://github.com/rafska/awesome-local-llm
+    audience: local LLM, self-hosted AI, agent framework, observability, and security readers
+    fit: high
+    status: submitted
+    proof: https://github.com/rafska/awesome-local-llm/pull/121
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING asks for README pull requests; focused PR added rust-norion under Agent Frameworks with local-first control-layer prototype wording.
+
+  - id: jbesomi-awesome-autonomous-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/jbesomi/awesome-autonomous-agents
+    audience: autonomous agent framework, software, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/jbesomi/awesome-autonomous-agents/pull/19
+    next_action: wait_for_maintainer_review
+    notes: README explicitly says work in progress and PRs are welcome; focused PR added one frameworks/platforms entry with early prototype wording.
+
+  - id: guidely-awesome-ai-engineering
+    platform: github
+    kind: awesome_list
+    url: https://github.com/Guidely-org/awesome-ai-engineering
+    audience: AI engineering learners and framework/library readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Guidely-org/awesome-ai-engineering/pull/2
+    next_action: wait_for_maintainer_review
+    notes: README welcomes PRs and has Agent and workflow frameworks plus observability sections; focused PR added one framework link.
+
+  - id: brandonhimpfen-awesome-ai-infrastructure
+    platform: github
+    kind: awesome_list
+    url: https://github.com/brandonhimpfen/awesome-ai-infrastructure
+    audience: AI infrastructure, model serving, MLOps, deployment, and automation readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/brandonhimpfen/awesome-ai-infrastructure/issues/27
+    next_action: wait_for_scope_feedback_before_pr
+    notes: CONTRIBUTING warns early-stage or promotional submissions may be declined; issue asked whether a Rust runtime-control prototype fits before opening a PR.
+
+  - id: ucsb-mlsec-awesome-agent-security
+    platform: github
+    kind: research_blog_list
+    url: https://github.com/ucsb-mlsec/Awesome-Agent-Security
+    audience: AI agent security, safety, runtime defense, and system-level risk readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ucsb-mlsec/Awesome-Agent-Security/issues/9
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository is framed as papers and blogs on agent security; issue asked whether implementation-focused runtime-defense references are in scope before any PR.
+
+  - id: kagnlp-awesome-agentic-security
+    platform: github
+    kind: research_resource_list
+    url: https://github.com/kagnlp/Awesome-Agentic-Security
+    audience: agentic security application, threat, defense, guardrail, and verification readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/kagnlp/Awesome-Agentic-Security/issues/5
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository welcomes issues/PRs for missing areas, papers, or benchmarks; issue asked whether implementation resources under Runtime Protection are in scope.
+
+  - id: oneduo-awesome-ai-infrastructures
+    platform: github
+    kind: production_infrastructure_list
+    url: https://github.com/1duo/awesome-ai-infrastructures
+    audience: production ML training and inference infrastructure readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_rust_norion_has_production_infrastructure_evidence
+    notes: Repository focuses on real-world production AI infrastructures and appears inactive since 2019; rust-norion is an early prototype and should not be submitted there now.
+
+  - id: vince-lam-awesome-local-llms
+    platform: github
+    kind: metrics_catalogue
+    url: https://github.com/vince-lam/awesome-local-llms
+    audience: local LLM project metric comparison readers
+    fit: low
+    status: defer
+    next_action: inspect_data_generation_workflow_only_if_rust_norion_becomes_a_local_llm_project
+    notes: Repository compares local LLM projects by metrics and generated data; rust-norion is not itself a local model or inference project.
+
+  - id: subinium-awesome-agent-frameworks
+    platform: github
+    kind: opinionated_architecture_guide
+    url: https://github.com/subinium/awesome-agent-frameworks
+    audience: personal AI agent framework and Claw ecosystem readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_rust_norion_matches_the_personal_agent_framework_scope
+    notes: Repository is an architecture-focused guide for personal AI agent frameworks in the Claw ecosystem, not a generic project directory.
+
+  - id: colin-awesome-ai-developer-tools
+    platform: github
+    kind: curated_tool_list
+    url: https://github.com/ColinEberhardt/awesome-ai-developer-tools
+    audience: mature AI developer productivity tool readers
+    fit: low
+    status: defer
+    next_action: wait_for_maturity_and_developer_productivity_fit
+    notes: Repository describes itself as a curated list of more mature AI developer productivity tools; rust-norion is an early control-layer prototype.
+
+  - id: boxabirds-awesome-ai-engineering
+    platform: github
+    kind: learning_resource_list
+    url: https://github.com/boxabirds/awesome-ai-engineering
+    audience: AI engineering resource readers
+    fit: low
+    status: defer
+    next_action: only_submit_a_neutral_learning_resource_or_article
+    notes: Repository is mostly learning resources and practical tools; a project recruitment link would not be the right fit without a substantial article.
+
+  - id: dave-nachman-awesome-ai-engineering
+    platform: github
+    kind: curated_resource_list
+    url: https://github.com/dave-nachman/awesome-ai-engineering
+    audience: AI engineering learners and tool readers
+    fit: medium
+    status: defer
+    next_action: wait_until_project_is_less_brand_new_or_has_clear_quality_evidence
+    notes: CONTRIBUTING says tools should be high quality and not brand new; rust-norion should wait for stronger maturity evidence before a PR.
+
+  - id: waterpistol-awesome-local-llm
+    platform: github
+    kind: awesome_list
+    url: https://github.com/WaterPistolAI/Awesome-Local-LLM
+    audience: local LLM users, agent users, and self-hosted AI tool readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/WaterPistolAI/Awesome-Local-LLM/pull/6
+    next_action: wait_for_maintainer_review
+    notes: README has an Agents section and accepts simple resource links; focused PR added one rust-norion GitHub link.
+
+  - id: ai-hub-autoagent
+    platform: github
+    kind: project_and_resource_table
+    url: https://github.com/AI-Hub-Admin/AutoAgent
+    audience: autonomous agent framework, utility, and review readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/AI-Hub-Admin/AutoAgent/issues/1
+    next_action: wait_for_table_format_feedback_before_pr
+    notes: Repository includes an Awesome AI Agents Resources and Public Reviews table but may require a deepnlp.org review URL; issue asked before opening a PR.
+
+  - id: aipengineer-awesome-ai-engineering-reads
+    platform: github
+    kind: reading_list
+    url: https://github.com/aipengineer/awesome-ai-engineering-reads
+    audience: AI engineering article, tutorial, and reference readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_a_substantial_rust_norion_article_exists
+    notes: Repository is a reading list for AI engineers, not a project directory; a project link would be promotional without a substantial technical article.
+
   - id: rust-unofficial-awesome-rust
     platform: github
     kind: awesome_list

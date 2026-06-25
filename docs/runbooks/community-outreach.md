@@ -85,6 +85,21 @@ same recruitment message everywhere.
 | UCSB MLSec Awesome Agentic AI | Submitted | Track https://github.com/ucsb-mlsec/Awesome-Agentic-AI/issues/3 |
 | Agentic AI for Spatio-Temporal Data | Deferred | Domain-specific paper list; needs geospatial evidence |
 | Priyanshujiiii Awesome Agentic AI | Deferred | Paper/problem list; do not post a project ad |
+| Rafska Awesome Local LLM | Submitted | Track https://github.com/rafska/awesome-local-llm/pull/121 |
+| JBesomi Autonomous Agents | Submitted | Track https://github.com/jbesomi/awesome-autonomous-agents/pull/19 |
+| Guidely AI Engineering | Submitted | Track https://github.com/Guidely-org/awesome-ai-engineering/pull/2 |
+| Brandon AI Infrastructure | Submitted | Track https://github.com/brandonhimpfen/awesome-ai-infrastructure/issues/27 |
+| UCSB MLSec Agent Security | Submitted | Track https://github.com/ucsb-mlsec/Awesome-Agent-Security/issues/9 |
+| KAG NLP Agentic Security | Submitted | Track https://github.com/kagnlp/Awesome-Agentic-Security/issues/5 |
+| 1duo AI Infrastructures | Deferred | Production infrastructure list; early prototype not ready |
+| Vince Local LLMs | Deferred | Metrics catalog for local LLM projects, not control-layer tools |
+| Subinium Agent Frameworks | Deferred | Opinionated Claw/personal-agent architecture guide |
+| Colin AI Developer Tools | Deferred | Mature developer productivity tools only |
+| Boxabirds AI Engineering | Deferred | Submit article/resource only, not project ad |
+| Dave AI Engineering | Deferred | Wait for stronger maturity evidence |
+| WaterPistol Local LLM | Submitted | Track https://github.com/WaterPistolAI/Awesome-Local-LLM/pull/6 |
+| AI Hub AutoAgent | Submitted | Track https://github.com/AI-Hub-Admin/AutoAgent/issues/1 |
+| AIP Engineer Reads | Deferred | Reading list; submit only after a technical article exists |
 | Gitee Rust Boom | Candidate | Verify contribution flow after Gitee login |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | This Week in Rust | Wait | Submit only after a notable release/article |
