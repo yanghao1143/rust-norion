@@ -124,6 +124,14 @@ same recruitment message everywhere.
 | Jiji Harness Engineering | Submitted | Track https://github.com/jiji262/awesome-harness-engineering/issues/5 |
 | Jiaaqiliu Harness Engineering | Submitted | Track https://github.com/Jiaaqiliu/Awesome-Harness-Engineering/issues/4 |
 | WhoBot Harness Engineering 中文版 | Submitted | Track https://github.com/whobot-ai/awesome-harness-engineering-zh/issues/2 |
+| Yenanjing Harness Engineering | Submitted | Track https://github.com/yenanjing/awesome-harness-engineering/issues/1 |
+| ScienceAIX Harness Engineering | Submitted | Track https://github.com/scienceaix/awesome-harness-engineering/issues/2 |
+| SaltAdamW Harness Engineering | Submitted | Track https://github.com/SaltAdamW/Awesome-Harness-Engineering/issues/2 |
+| TBrandenburg Agent Harnesses | Submitted | Track https://github.com/tbrandenburg/awesome-agent-harnesses/issues/2 |
+| Wubin Harness Engineering | Deferred | KOL content list; wait for a rust-norion technical article |
+| Evoerax Harness Engineering | Deferred | Cross-harness coding tools; wait for user-facing coding harness/tool |
+| Open Kairox Agent Harnesses | Deferred | CLI harness list; wait for a rust-norion user-facing harness CLI |
+| PanosPeng Agent Harness | Deferred | Paper/resource list; wait for article, paper, or standalone resource |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
 | DeepSpaceHarbor AI Security | Submitted | Track https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44 |
 | Giskard AI Safety | Deferred | Paper/article list; wait for safety-focused technical article |
@@ -142,6 +150,7 @@ same recruitment message everywhere.
 | BIGAI AI Memory | Deferred | TMLR survey/paper taxonomy; wait for paper-backed memory evidence |
 | AIM AI Agents Medicine | Deferred | Healthcare-specific list; wait for healthcare artifact |
 | Salesably AI Agents for Sales | Deferred | Sales-domain list; wait for sales-specific agent or workflow evidence |
+| FOMOS AI Memory | Deferred | Scored memory index; wait for standalone memory artifact with evaluation evidence |
 | Chengjl Agent Harness Notes | Deferred | Needs a deep-dive/source-analysis note, not a raw project link |
 | Qianlima Lifelong LLM Agent | Deferred | Survey/paper/benchmark list; wait for related paper or benchmark artifact |
 | YXF Efficient Agents | Deferred | Paper list; wait for efficiency paper or benchmark-backed artifact |
@@ -182,6 +191,13 @@ same recruitment message everywhere.
 | AIP Engineer Reads | Deferred | Reading list; submit only after a technical article exists |
 | Dontriskit AI Software Engineering | Deferred | Needs direct AI software-engineering tool fit and stronger community signals |
 | Flatlogic Software Development Agents | Deferred | Directory is for coding agents, not control-layer prototypes |
+| Filipe Calegario Vibe Coding | Submitted | Track https://github.com/filipecalegario/awesome-vibe-coding/issues/234 |
+| Taskade Vibe Coding | Submitted | Track https://github.com/taskade/awesome-vibe-coding/issues/38 |
+| Mahseema AI Tools | Deferred | Broad AI tools list; wait for mature user-facing tool surface |
+| OpenBestOf Awesome AI | Deferred | Issues disabled and broad list; wait for maturity/category fit |
+| QAInsights AI Tools | Deferred | AI coding tools list; wait for user-facing coding tool/platform surface |
+| Eachlabs AI Workflows | Deferred | Ready-made workflow template list; wait for packaged workflow template |
+| Tobi Agent Orchestration | Candidate | Issues disabled; PR only if runtime/control-layer category fit is clear |
 | Shubhamsaboo LLM Apps | Deferred | Cookbook of runnable templates; wait for self-contained app template |
 | TulioPSilva Shubhamsaboo LLM Apps | Deferred | Mirror-like app-template surface; track upstream first |
 | Joypaul Shubhamsaboo LLM Apps | Deferred | Duplicate app-template surface; track upstream first |

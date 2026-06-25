@@ -1308,6 +1308,17 @@ communities:
     next_action: wait_for_scope_feedback_then_open_table_pr_if_invited
     notes: README asks for PRs with name, URL, source model, GitHub URL, category, and storage model; scope-check frames rust-norion as memory/replay governance rather than a standalone vector DB or hosted memory API.
 
+  - id: brandonhimpfen-awesome-ai-memory-systems
+    platform: github
+    kind: memory_systems_resource_list
+    url: https://github.com/brandonhimpfen/awesome-ai-memory-systems
+    audience: AI memory framework, vector database, knowledge-store, context-management, evaluation, and observability readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/brandonhimpfen/awesome-ai-memory-systems/issues/18
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README welcomes PRs following CONTRIBUTING and includes context management plus research/concepts; scope-check frames rust-norion as memory governance/control-layer, not a vector DB or RAG framework.
+
   - id: wearetyomsmnv-awesome-llmsecops
     platform: github
     kind: awesome_list
@@ -1517,6 +1528,90 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: README welcomes high-value PRs and includes open-source projects, memory/state, guardrails, execution boundaries, and feedback loops; Chinese scope-check frames rust-norion as an early Rust runtime harness/control-layer prototype.
 
+  - id: yenanjing-awesome-harness-engineering
+    platform: github
+    kind: harness_engineering_resource_list
+    url: https://github.com/yenanjing/awesome-harness-engineering
+    audience: harness engineering framework, library, tool, evaluation, CI/CD, and agent-harness readers
+    fit: high
+    status: submitted
+    proof: https://github.com/yenanjing/awesome-harness-engineering/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README describes a curated list of harness engineering frameworks, libraries, tools, and resources; scope-check asks whether an early Rust runtime control-layer prototype fits before a PR.
+
+  - id: scienceaix-awesome-harness-engineering
+    platform: github
+    kind: harness_engineering_resource_list
+    url: https://github.com/scienceaix/awesome-harness-engineering
+    audience: deterministic environment, constraint, automated feedback-loop, tool, framework, research-paper, and playbook readers
+    fit: high
+    status: submitted
+    proof: https://github.com/scienceaix/awesome-harness-engineering/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository description matches deterministic environments, strict constraints, and automated feedback loops for reliable agents; scope-check avoids claiming production readiness.
+
+  - id: saltadamw-awesome-harness-engineering
+    platform: github
+    kind: harness_engineering_resource_list
+    url: https://github.com/SaltAdamW/Awesome-Harness-Engineering
+    audience: Harness Engineering for Agents readers and agent runtime/control-layer learners
+    fit: high
+    status: submitted
+    proof: https://github.com/SaltAdamW/Awesome-Harness-Engineering/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check positions rust-norion as a Rust harness/control-layer prototype and explicitly lists maturity and non-goals.
+
+  - id: tbrandenburg-awesome-agent-harnesses
+    platform: github
+    kind: agent_harness_collection
+    url: https://github.com/tbrandenburg/awesome-agent-harnesses
+    audience: agent harness collection readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/tbrandenburg/awesome-agent-harnesses/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository collects agent harnesses; scope-check says rust-norion is not a finished agent CLI and asks whether lower-level Rust harness/control-plane work is in scope.
+
+  - id: wubin28-awesome-harness-engineering
+    platform: github
+    kind: kol_content_list
+    url: https://github.com/wubin28/awesome-harness-engineering
+    audience: KOL article, podcast, video, and thought-leadership readers around Harness Engineering
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_substantial_rust_norion_harness_engineering_article_exists
+    notes: README focuses on KOL content and articles rather than raw project links; wait for a technical article or release post before submitting.
+
+  - id: evoerax-awesome-harness-engineering
+    platform: github
+    kind: cross_harness_coding_tool_list
+    url: https://github.com/evoerax/awesome-harness-engineering
+    audience: cross-harness AI coding tool, Claude Code, Cursor, Codex, OpenClaw, and automation readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_user_facing_coding_harness_or_tool
+    notes: Description is about cross-harness AI coding tools; rust-norion is currently a lower-level runtime/control-layer prototype, not a user-facing coding harness.
+
+  - id: open-kairox-awesome-agent-harnesses
+    platform: github
+    kind: agent_harness_cli_list
+    url: https://github.com/open-kairox/awesome-agent-harnesses
+    audience: AI agent harness CLI readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_exposes_a_user_facing_agent_harness_cli
+    notes: README is a list of AI agent harness CLIs; do not submit rust-norion until it has a clear CLI harness surface comparable to the listed tools.
+
+  - id: panospeng-awesome-agent-harness
+    platform: github
+    kind: paper_resource_list
+    url: https://github.com/PanosPeng/awesome-agent-harness
+    audience: agent harness paper and resource readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_paper_article_or_standalone_resource_exists
+    notes: Description is papers and resources for agent harness engineering; wait for a rust-norion article, paper, or standalone resource entry rather than submitting the raw project.
+
   - id: kyrolabs-awesome-agents
     platform: github
     kind: awesome_list
@@ -1707,6 +1802,16 @@ communities:
     next_action: submit_only_after_rust_norion_has_sales_specific_agent_or_revenue_operations_artifact
     notes: Sales-domain catalogue; rust-norion has no sales workflow, CRM integration, or revenue-operations evidence.
 
+  - id: fomos-openai-awesome-ai-memory
+    platform: github
+    kind: scored_agent_memory_index
+    url: https://github.com/fomos-openai/awesome-ai-memory
+    audience: agent memory research, benchmark, project scoring, governance, and long-horizon memory readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_reusable_memory_artifact_with_clear_evaluation_evidence
+    notes: Repository uses a scoring standard for papers and projects; wait until rust-norion has a sharper standalone memory artifact and evaluation evidence.
+
   - id: chengjl19-awesome-agent-harness-notes
     platform: github
     kind: source_analysis_notes
@@ -1756,6 +1861,78 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_becomes_a_specific_software_development_agent_or_demo
     notes: Directory is for tools that autonomously handle software-development tasks; rust-norion is currently not a user-facing coding agent.
+
+  - id: filipecalegario-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_resource_list
+    url: https://github.com/filipecalegario/awesome-vibe-coding
+    audience: vibe coding, AI coding tool, agentic IDE, CLI coding-agent, documentation, community, and AI-assisted development readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/filipecalegario/awesome-vibe-coding/issues/234
+    next_action: wait_for_scope_feedback_before_pr
+    notes: High-traffic list includes AI coding documentation, command-line tools, task management, and communities; scope-check explicitly says rust-norion is not a user-facing coding assistant and asks about lower-level harness/control-plane fit.
+
+  - id: taskade-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_resource_list
+    url: https://github.com/taskade/awesome-vibe-coding
+    audience: vibe coding tool, framework, best-practice, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/taskade/awesome-vibe-coding/issues/38
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope-check asks whether Rust harness/control-layer resources are in scope behind reliable AI coding workflows and avoids presenting rust-norion as a finished end-user vibe-coding tool.
+
+  - id: mahseema-awesome-ai-tools
+    platform: github
+    kind: broad_ai_tool_list
+    url: https://github.com/mahseema/awesome-ai-tools
+    audience: broad AI tool readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_mature_user_facing_ai_tool_surface
+    notes: High-star but broad top-AI-tools catalogue; rust-norion is an early control-layer prototype and should not be submitted as a polished AI tool.
+
+  - id: openbestof-awesome-ai
+    platform: github
+    kind: broad_ai_tool_framework_list
+    url: https://github.com/openbestof/awesome-ai
+    audience: broad AI tool, framework, API, software, and resource readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_maturity_or_clear_project_category_fit_and_pr_flow_are_verified
+    notes: Issues are disabled and the list is broad; wait for stronger maturity and verify PR/category flow before any submission.
+
+  - id: qainsights-awesome-ai-tools
+    platform: github
+    kind: ai_coding_tool_reference
+    url: https://github.com/QAInsights/awesome-ai-tools
+    audience: AI-powered coding tool, IDE, extension, terminal-agent, autonomous-agent, and code-review platform readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_user_facing_coding_tool_or_agent_platform_surface
+    notes: Repository focuses on AI coding tools and platforms; rust-norion is currently lower-level infrastructure, not a coding tool users can adopt directly.
+
+  - id: eachlabs-awesome-ai-workflows
+    platform: github
+    kind: ai_workflow_template_list
+    url: https://github.com/eachlabs/Awesome-AI-Workflows
+    audience: ready-to-use AI workflow template readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_ready_to_use_ai_workflow_template
+    notes: README is a catalogue of ready-to-use media/content workflows; rust-norion has no packaged workflow template for that format.
+
+  - id: tobixd-awesome-agent-orchestration
+    platform: github
+    kind: agent_orchestration_resource_list
+    url: https://github.com/tobixd/awesome-agent-orchestration
+    audience: AI agent orchestration and multi-agent system tool, framework, and resource readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_pr_only_flow_and_submit_only_if_runtime_control_layer_category_fit_is_clear
+    notes: Issues are disabled; do not force a PR unless the README structure has a clear runtime/control-layer slot for early projects.
 
   - id: shubhamsaboo-awesome-llm-apps
     platform: github
