@@ -139,6 +139,76 @@ fn current_rust_native_adapter_run_creates_sanitized_reliability_candidate() {
 }
 
 #[test]
+fn unknown_current_adapter_does_not_create_reliability_candidate() {
+    struct UnknownAdapterBackend;
+
+    impl InferenceBackend for UnknownAdapterBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust runtime answer with enough stable detail for reflection.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "unknown adapter name should not be trusted for self learning",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_id: Some("unknown-adapter-test".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-should-not-learn".to_owned()),
+                forward_energy: Some(0.20),
+                kv_influence: Some(0.60),
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let private_prompt =
+        "Rust native unknown adapter prompt: tenant_id=prod-42 secret=sk-unknown-adapter";
+    let mut engine = NoironEngine::new();
+    let mut backend = UnknownAdapterBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new(private_prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let evidence_lines = admission
+        .candidate_summaries()
+        .into_iter()
+        .chain(admission.review_packet_summaries())
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-should-not-learn")
+    );
+    assert!(!admission.candidates.iter().any(|candidate| {
+        candidate.kind == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+    }));
+    assert!(admission.is_read_only_preview());
+    assert!(!evidence_lines.is_empty());
+
+    for line in evidence_lines {
+        assert!(!line.contains(private_prompt), "{line}");
+        for marker in [
+            "tenant_id=",
+            "secret=",
+            "sk-unknown-adapter",
+            "sk-should-not-learn",
+            "unknown-adapter secret",
+        ] {
+            assert!(!line.contains(marker), "{line}");
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "{line}"
+        );
+    }
+}
+
+#[test]
 fn rust_native_adapter_self_learning_evidence_is_sanitized() {
     let private_prompt = "Rust runtime KV reuse memory prompt: tenant_id=prod-42 secret=sk-test-noiron answer: raw adapter output";
     let mut engine = NoironEngine::new();

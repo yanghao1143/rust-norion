@@ -3,6 +3,7 @@ use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
 use crate::gist_memory::GistRecord;
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
 use crate::kv_cache::MemoryMatch;
 use crate::memory_admission::{
@@ -365,7 +366,8 @@ impl NoironEngine {
         let runtime_adapter_current_signal = runtime_diagnostics
             .selected_adapter
             .as_deref()
-            .is_some_and(|adapter| !adapter.trim().is_empty());
+            .and_then(RuntimeAdapterHint::parse)
+            .is_some();
         let mut memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt: &request.prompt,
             profile: request.profile,
