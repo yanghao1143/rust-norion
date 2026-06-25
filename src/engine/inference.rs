@@ -433,6 +433,7 @@ impl NoironEngine {
                 &reasoning_genome,
                 &reasoning_genome_splice,
                 process_reward.total,
+                runtime_diagnostics.runtime_kv_segment_yield(),
             );
 
         let router_threshold_after = self.router.threshold();
@@ -723,6 +724,7 @@ fn adaptive_route_plan_from_runtime_evidence(
     reasoning_genome: &GenomeExpression,
     splice: &DnaSplicePreview,
     process_reward: f32,
+    runtime_kv_segment_yield: Option<f32>,
 ) -> (AdaptiveRoutingPlan, ComputeBudgetSchedule) {
     let mut candidates = Vec::new();
 
@@ -731,15 +733,19 @@ fn adaptive_route_plan_from_runtime_evidence(
         let source = adaptive_route_source_from_gene_source(segment.source);
         let estimated_tokens = segment.token_count().max(1);
         let trust = segment_trust_score(segment);
-        let components = AdaptiveRouteScoreComponents::new(
-            segment_task_intent(profile, segment.source, classified.disposition),
-            profile_language_mode(profile),
-            profile_code_mode(profile),
-            segment.fitness,
-            segment_recency(segment.kv_residency, segment.age),
-            trust,
-            segment_compute_cost(estimated_tokens, source),
-            (process_reward + segment.fitness * 0.5).clamp(0.0, 1.0),
+        let components = route_components_with_runtime_kv_segment_yield(
+            segment.source,
+            AdaptiveRouteScoreComponents::new(
+                segment_task_intent(profile, segment.source, classified.disposition),
+                profile_language_mode(profile),
+                profile_code_mode(profile),
+                segment.fitness,
+                segment_recency(segment.kv_residency, segment.age),
+                trust,
+                segment_compute_cost(estimated_tokens, source),
+                (process_reward + segment.fitness * 0.5).clamp(0.0, 1.0),
+            ),
+            runtime_kv_segment_yield,
         );
         let anchor_required =
             segment.source == GeneSegmentSource::Prompt && segment.start_token == 0;
@@ -874,6 +880,36 @@ fn segment_compute_cost(estimated_tokens: usize, source: AdaptiveRouteSource) ->
         AdaptiveRouteSource::ToolOutput => 0.40,
     };
     (token_cost * 0.70 + source_cost * 0.30).clamp(0.0, 1.0)
+}
+
+fn route_components_with_runtime_kv_segment_yield(
+    source: GeneSegmentSource,
+    components: AdaptiveRouteScoreComponents,
+    runtime_kv_segment_yield: Option<f32>,
+) -> AdaptiveRouteScoreComponents {
+    if source != GeneSegmentSource::RuntimeKv {
+        return components;
+    }
+
+    let Some(segment_yield) = runtime_kv_segment_yield else {
+        return components;
+    };
+    let segment_yield = segment_yield.clamp(0.0, 1.0);
+    let waste = 1.0 - segment_yield;
+    let usefulness = 0.20 + segment_yield * 0.80;
+    let recency_factor = 0.35 + segment_yield * 0.65;
+    let reward_factor = 0.15 + segment_yield * 0.85;
+
+    AdaptiveRouteScoreComponents::new(
+        components.task_intent * usefulness,
+        components.language_mode,
+        components.code_mode,
+        components.memory_fitness * usefulness,
+        components.recency * recency_factor,
+        components.trust * usefulness,
+        (components.compute_cost + waste * 0.30).clamp(0.0, 1.0),
+        components.reward_history * reward_factor,
+    )
 }
 
 fn reasoning_genome_splice_preview(

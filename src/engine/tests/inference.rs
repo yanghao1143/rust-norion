@@ -113,6 +113,62 @@ impl InferenceBackend for RuntimeKvSegmentDiagnosticsBackend {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeKvRouteYieldBackend {
+    included: usize,
+    skipped: usize,
+    rejected: usize,
+}
+
+impl RuntimeKvRouteYieldBackend {
+    fn new(included: usize, skipped: usize, rejected: usize) -> Self {
+        Self {
+            included,
+            skipped,
+            rejected,
+        }
+    }
+}
+
+impl InferenceBackend for RuntimeKvRouteYieldBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        let total_segments = self
+            .included
+            .saturating_add(self.skipped)
+            .saturating_add(self.rejected);
+        let diagnostics = RuntimeDiagnostics {
+            model_id: Some("native-kv-route-yield-test".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.38),
+            kv_influence: Some(0.64),
+            imported_kv_blocks: total_segments,
+            exported_kv_blocks: 1,
+            runtime_kv_segments_included: self.included,
+            runtime_kv_segments_skipped: self.skipped,
+            runtime_kv_segments_rejected: self.rejected,
+            ..RuntimeDiagnostics::default()
+        };
+
+        InferenceDraft::new(
+            "Rust Noiron runtime KV evidence routes through adaptive routing and compute budget feedback.",
+            vec![ReasoningStep::new(
+                "runtime_kv_route_yield",
+                "runtime kv segment yield should affect the next route candidate",
+                0.90,
+            )],
+        )
+        .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+            0,
+            0,
+            0,
+            1,
+            vec![0.1, 0.2, 0.3],
+            vec![0.3, 0.2, 0.1],
+        )])
+        .with_runtime_diagnostics(diagnostics)
+    }
+}
+
+#[derive(Debug, Clone)]
 struct OrchestrationTraceBackend;
 
 impl InferenceBackend for OrchestrationTraceBackend {
@@ -206,6 +262,68 @@ fn inference_records_runtime_kv_segment_reward_notes() {
             .any(|note| note
                 == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3:yield=0.583")
     );
+}
+
+#[test]
+fn low_runtime_kv_segment_yield_downweights_adaptive_route_candidate() {
+    let mut efficient_engine = NoironEngine::new();
+    let mut efficient_backend = RuntimeKvRouteYieldBackend::new(3, 0, 0);
+    let efficient = efficient_engine.infer(
+        InferenceRequest::new("audit runtime kv routing yield", TaskProfile::Coding),
+        &mut efficient_backend,
+    );
+
+    let mut wasteful_engine = NoironEngine::new();
+    let mut wasteful_backend = RuntimeKvRouteYieldBackend::new(0, 3, 2);
+    let wasteful = wasteful_engine.infer(
+        InferenceRequest::new("audit runtime kv routing yield", TaskProfile::Coding),
+        &mut wasteful_backend,
+    );
+
+    assert_eq!(
+        efficient.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(1.0)
+    );
+    assert_eq!(
+        wasteful.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(0.0)
+    );
+
+    let efficient_decision = runtime_kv_route_decision(&efficient);
+    let wasteful_decision = runtime_kv_route_decision(&wasteful);
+
+    assert!(efficient_decision.score > wasteful_decision.score);
+    assert!(
+        efficient_decision.components.memory_fitness > wasteful_decision.components.memory_fitness
+    );
+    assert!(efficient_decision.components.trust > wasteful_decision.components.trust);
+    assert!(
+        efficient_decision.components.reward_history > wasteful_decision.components.reward_history
+    );
+    assert!(wasteful_decision.components.compute_cost > efficient_decision.components.compute_cost);
+    assert!(
+        adaptive_route_action_rank(efficient_decision.action)
+            >= adaptive_route_action_rank(wasteful_decision.action)
+    );
+    assert!(wasteful_decision.retained_tokens <= efficient_decision.retained_tokens);
+}
+
+fn runtime_kv_route_decision(outcome: &InferenceOutcome) -> &crate::router::AdaptiveRouteDecision {
+    outcome
+        .adaptive_route_plan
+        .decisions
+        .iter()
+        .find(|decision| decision.source == crate::router::AdaptiveRouteSource::RuntimeKv)
+        .expect("runtime kv adaptive route decision")
+}
+
+fn adaptive_route_action_rank(action: crate::router::AdaptiveRouteAction) -> u8 {
+    match action {
+        crate::router::AdaptiveRouteAction::Skip => 0,
+        crate::router::AdaptiveRouteAction::Defer => 1,
+        crate::router::AdaptiveRouteAction::Compress => 2,
+        crate::router::AdaptiveRouteAction::Include => 3,
+    }
 }
 
 #[test]
