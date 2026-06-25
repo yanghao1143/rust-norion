@@ -109,7 +109,7 @@ pub fn trace_json_line_with_case(
          \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"weak_runtime_kv_imports_skipped\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_count\":{},\"runtime_kv_segment_yield\":{},\"has_runtime_kv_activity_signal\":{},\"has_runtime_kv_segment_signal\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"runtime_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -282,6 +282,14 @@ pub fn trace_json_line_with_case(
         option_f32_json(outcome.runtime_diagnostics.kv_influence),
         outcome.runtime_diagnostics.imported_kv_blocks,
         outcome.runtime_diagnostics.exported_kv_blocks,
+        outcome.runtime_diagnostics.weak_runtime_kv_imports_skipped,
+        outcome.runtime_diagnostics.runtime_kv_segments_included,
+        outcome.runtime_diagnostics.runtime_kv_segments_skipped,
+        outcome.runtime_diagnostics.runtime_kv_segments_rejected,
+        outcome.runtime_diagnostics.runtime_kv_segment_count(),
+        option_f32_json(outcome.runtime_diagnostics.runtime_kv_segment_yield()),
+        outcome.runtime_diagnostics.has_runtime_kv_activity_signal(),
+        outcome.runtime_diagnostics.has_runtime_kv_segment_signal(),
         outcome
             .runtime_diagnostics
             .has_runtime_architecture_signal(),

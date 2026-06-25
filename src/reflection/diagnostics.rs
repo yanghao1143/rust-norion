@@ -49,7 +49,7 @@ impl RuntimeDiagnostics {
             || self.has_device_execution_signal()
             || self.forward_energy.is_some()
             || self.kv_influence.is_some()
-            || self.has_runtime_kv_segment_signal()
+            || self.has_runtime_kv_activity_signal()
     }
 
     pub fn has_runtime_architecture_signal(&self) -> bool {
@@ -126,6 +126,21 @@ impl RuntimeDiagnostics {
 
     pub fn has_runtime_kv_segment_signal(&self) -> bool {
         self.runtime_kv_segment_count() > 0
+    }
+
+    pub fn runtime_kv_activity_count(&self) -> usize {
+        self.imported_kv_blocks
+            .saturating_add(self.exported_kv_blocks)
+            .saturating_add(self.weak_runtime_kv_imports_skipped)
+            .saturating_add(self.runtime_kv_segment_count())
+    }
+
+    pub fn has_runtime_kv_exchange_signal(&self) -> bool {
+        self.imported_kv_blocks > 0 || self.exported_kv_blocks > 0
+    }
+
+    pub fn has_runtime_kv_activity_signal(&self) -> bool {
+        self.runtime_kv_activity_count() > 0
     }
 
     pub fn with_layer_modes(

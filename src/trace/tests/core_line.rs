@@ -63,6 +63,14 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"best_score\":"));
     assert!(line.contains("\"forward_energy\":"));
     assert!(line.contains("\"kv_influence\":"));
+    assert!(line.contains("\"weak_runtime_kv_imports_skipped\":"));
+    assert!(line.contains("\"runtime_kv_segments_included\":"));
+    assert!(line.contains("\"runtime_kv_segments_skipped\":"));
+    assert!(line.contains("\"runtime_kv_segments_rejected\":"));
+    assert!(line.contains("\"runtime_kv_segment_count\":"));
+    assert!(line.contains("\"runtime_kv_segment_yield\":"));
+    assert!(line.contains("\"has_runtime_kv_activity_signal\":"));
+    assert!(line.contains("\"has_runtime_kv_segment_signal\":"));
     assert!(line.contains("\"has_runtime_architecture_signal\":"));
     assert!(line.contains("\"has_forward_signal\":"));
     assert!(line.contains("\"hierarchy\":"));
