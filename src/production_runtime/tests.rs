@@ -672,6 +672,28 @@ fn production_kernel_conformance_gate_fails_tokens_without_uncertainty_signal() 
 }
 
 #[test]
+fn production_kernel_conformance_gate_fails_imported_kv_without_segment_signal() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-no-segment-signal");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(MockForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert!(report.imported_kv_blocks > 0);
+    assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime KV import is enabled but kernel reported no KV segment signal")
+    }));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn production_kernel_conformance_gate_fails_malformed_kernel_output() {
     let (asset_dir, weights, tokenizer, _config) =
         create_assets("production-runtime-conformance-malformed");

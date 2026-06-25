@@ -58,8 +58,8 @@ impl ProductionTransformerRuntime {
             &request,
             &mut report,
         );
-        let response = match runtime.generate(request) {
-            Ok(response) => response,
+        let generation = match runtime.generate_with_kernel_report(request) {
+            Ok(generation) => generation,
             Err(error) => {
                 report.failures.push(format!(
                     "conformance generation failed: {}",
@@ -68,6 +68,7 @@ impl ProductionTransformerRuntime {
                 return report;
             }
         };
+        let response = generation.response;
 
         report.token_count = response.tokens.len();
         let token_uncertainty = ProductionTokenUncertainty::from_tokens(&response.tokens);
@@ -87,7 +88,13 @@ impl ProductionTransformerRuntime {
         report.exported_kv_blocks = runtime.exported_kv_blocks().len();
         report.imported_kv_blocks = response.diagnostics.imported_kv_blocks;
 
-        evaluate_conformance_response(&self.manifest, gate, &response, &mut report);
+        evaluate_conformance_response(
+            &self.manifest,
+            gate,
+            generation.kernel_reported_runtime_kv_segment_signal,
+            &response,
+            &mut report,
+        );
 
         match runtime.export_kv() {
             Ok(exported) => {

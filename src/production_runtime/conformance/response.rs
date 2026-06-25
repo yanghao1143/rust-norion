@@ -7,6 +7,7 @@ use super::report::ProductionKernelConformanceReport;
 pub(super) fn evaluate_conformance_response(
     manifest: &RuntimeManifest,
     gate: ProductionKernelConformanceGate,
+    kernel_reported_runtime_kv_segment_signal: bool,
     response: &RuntimeResponse,
     report: &mut ProductionKernelConformanceReport,
 ) {
@@ -130,7 +131,7 @@ pub(super) fn evaluate_conformance_response(
     if gate.require_runtime_kv_segment_signal
         && manifest.kv_policy.import_enabled
         && diagnostics.imported_kv_blocks > 0
-        && !diagnostics.has_runtime_kv_segment_signal()
+        && !kernel_reported_runtime_kv_segment_signal
     {
         report.failures.push(
             "runtime KV import is enabled but kernel reported no KV segment signal".to_owned(),
