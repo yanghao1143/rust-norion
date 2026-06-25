@@ -1220,6 +1220,145 @@ communities:
     next_action: submit_only_after_rust_norion_exposes_an_actual_gateway_proxy_or_router
     notes: Contribution criteria require an actual gateway, proxy, or router for LLM or agent traffic; rust-norion should not be submitted until its control layer exposes that artifact clearly.
 
+  - id: wearetyomsmnv-awesome-llm-agent-security
+    platform: github
+    kind: awesome_list
+    url: https://github.com/wearetyomsmnv/Awesome-LLM-agent-Security
+    audience: LLM agent security, memory, boundary management, and cybersecurity readers
+    fit: high
+    status: submitted
+    proof: https://github.com/wearetyomsmnv/Awesome-LLM-agent-Security/issues/16
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Focused LLM-agent security list with memory, boundary-management, and security-tools sections; scope-check issue avoids claiming rust-norion is a scanner or red-team lab.
+
+  - id: wangrongsheng-awesome-llm-resources
+    platform: github
+    kind: awesome_list
+    url: https://github.com/WangRongsheng/awesome-LLM-resources
+    audience: Chinese and global LLM, agent, MCP, inference, and AI engineering readers
+    fit: high
+    status: submitted
+    proof: https://github.com/WangRongsheng/awesome-LLM-resources/issues/150
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Large Chinese/English LLM resource collection with Agent, inference, MCP, and AI engineering coverage; Chinese scope-check issue asks whether a Rust control-layer prototype fits.
+
+  - id: yzfly-awesome-agi-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/yzfly/Awesome-AGI-Agents
+    audience: Chinese AGI agent, agent development platform, and frontier project readers
+    fit: high
+    status: submitted
+    proof: https://github.com/yzfly/Awesome-AGI-Agents/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Chinese AGI agents list includes important projects, frontier projects, and development platforms; scope-check issue asks before any PR because rust-norion is early-stage.
+
+  - id: taleliyahu-awesome-ai-security
+    platform: github
+    kind: awesome_list
+    url: https://github.com/TalEliyahu/Awesome-AI-Security
+    audience: AI security resource, research, and tool readers
+    fit: high
+    status: submitted
+    proof: https://github.com/TalEliyahu/Awesome-AI-Security/issues/102
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Contribution guide accepts resource additions or clear issue reports; scope-check frames rust-norion as runtime-governance and evidence-gate adjacent, not a scanner.
+
+  - id: shiyao-huang-awesome-agent-evolution
+    platform: github
+    kind: evidence_map
+    url: https://github.com/Shiyao-Huang/awesome-agent-evolution
+    audience: self-evolving agent, agentic memory, benchmark, and production-system readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Shiyao-Huang/awesome-agent-evolution/issues/17
+    next_action: wait_for_scope_feedback_before_metadata_pr
+    notes: CONTRIBUTING explicitly welcomes new projects with mechanism evidence; scope-check answers what evolves, what feedback drives it, and how regressions are verified.
+
+  - id: evomap-awesome-agent-evolution
+    platform: github
+    kind: generated_awesome_list
+    url: https://github.com/EvoMap/awesome-agent-evolution
+    audience: agent self-evolution, memory systems, protocols, platforms, and safety readers
+    fit: high
+    status: submitted
+    proof: https://github.com/EvoMap/awesome-agent-evolution/issues/32
+    next_action: wait_for_scope_feedback_before_data_projects_pr
+    notes: Project submission path normally expects 50 stars but allows unique exceptions; scope-check asks whether rust-norion qualifies before editing generated data/projects.json.
+
+  - id: xiaomingx-awesome-ai-memory
+    platform: github
+    kind: project_list
+    url: https://github.com/XiaomingX/awesome-ai-memory
+    audience: Chinese and global AI long-term memory project readers
+    fit: high
+    status: submitted
+    proof: https://github.com/XiaomingX/awesome-ai-memory/issues/11
+    next_action: wait_for_scope_feedback_before_pr
+    notes: AI memory project list; Chinese scope-check frames rust-norion around memory governance, admission, replay, and Rust control-plane implementation.
+
+  - id: wearetyomsmnv-awesome-llmsecops
+    platform: github
+    kind: awesome_list
+    url: https://github.com/wearetyomsmnv/Awesome-LLMSecOps
+    audience: LLM security operations, agentic security, and governance readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/wearetyomsmnv/Awesome-LLMSecOps/issues/37
+    next_action: wait_for_scope_feedback_before_pr
+    notes: LLMSecOps resource list; scope-check asks whether early runtime-governance and audit-gate resources fit without claiming scanner/gateway capability.
+
+  - id: raphabot-awesome-cybersecurity-agentic-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/raphabot/awesome-cybersecurity-agentic-ai
+    audience: cybersecurity agentic AI, MCP, security tool, and framework readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/raphabot/awesome-cybersecurity-agentic-ai/issues/46
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Cybersecurity-agentic-AI list accepts projects, tools, research, and resources by PR; scope-check explicitly says rust-norion is not a cybersecurity agent or scanner.
+
+  - id: kyrolabs-awesome-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/kyrolabs/awesome-agents
+    audience: broad AI agent framework and tool readers
+    fit: high
+    status: defer
+    next_action: revisit_after_rust_norion_has_clear_traction_above_50_stars_or_maintainer_invitation
+    notes: CONTRIBUTING requires PRs, high quality, demonstrated traction, maintenance, and no brand-new low-traction repos; do not submit rust-norion at 11 stars.
+
+  - id: iaar-shanghai-awesome-ai-memory
+    platform: github
+    kind: paper_list
+    url: https://github.com/IAAR-Shanghai/Awesome-AI-Memory
+    audience: AI memory, LLM memory, agent memory, and system-design readers
+    fit: high
+    status: defer
+    next_action: submit_only_after_related_paper_or_paper_metadata_exists
+    notes: CONTRIBUTING is paper-entry oriented with README and README_cn additions; do not submit a project-only artifact yet.
+
+  - id: tsinghuac3i-awesome-memory-for-agents
+    platform: github
+    kind: paper_list
+    url: https://github.com/TsinghuaC3I/Awesome-Memory-for-Agents
+    audience: language-agent memory paper readers
+    fit: high
+    status: defer
+    next_action: submit_only_after_related_paper_or_peer_reviewed_memory_artifact_exists
+    notes: Repository describes itself as a collection of papers about memory for language agents; do not submit rust-norion as a raw project link.
+
+  - id: giskard-awesome-ai-safety
+    platform: github
+    kind: paper_article_list
+    url: https://github.com/Giskard-AI/awesome-ai-safety
+    audience: AI quality and safety paper/article readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_substantial_ai_safety_article_or_paper_exists
+    notes: CONTRIBUTING asks for papers or technical articles; rust-norion should not be submitted until there is a safety-focused article or paper.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list

@@ -30,6 +30,7 @@ same recruitment message everywhere.
 | Awesome Rust Machine Learning | Submitted | Track https://github.com/vaaaaanquish/Awesome-Rust-MachineLearning/issues/30 |
 | Awesome Rust AI Governance | Submitted | Track https://github.com/mindfulcto-labs/awesome-rust-ai-governance/issues/1 |
 | Awesome AI Agent Governance | Submitted | Track https://github.com/agentrust-io/awesome-ai-governance/issues/28 |
+| WangRongsheng LLM Resources | Submitted | Track https://github.com/WangRongsheng/awesome-LLM-resources/issues/150 |
 | Awesome AI Agents Security | Submitted | Track https://github.com/ProjectRecon/awesome-ai-agents-security/pull/61 |
 | Awesome Agentic AI Security | Submitted | Track https://github.com/natnew/Awesome-Agentic-AI-Security/issues/12 |
 | InftyAI Awesome LLMOps | Submitted | Track https://github.com/InftyAI/Awesome-LLMOps/issues/469 |
@@ -46,6 +47,8 @@ same recruitment message everywhere.
 | PathOnAI Awesome AI Agents | Submitted | Track https://github.com/PathOnAIOrg/awesome-ai-agents/pull/16 |
 | ZJWU Awesome LLM Agent | Submitted | Track https://github.com/zjwu0522/Awesome-LLM-Agent/pull/3 |
 | Daniel Rosehill AI Agents | Submitted | Track https://github.com/danielrosehill/Awesome-AI-Agents-And-Assistants/pull/10 |
+| YZFly AGI Agents | Submitted | Track https://github.com/yzfly/Awesome-AGI-Agents/issues/2 |
+| Kyrolabs Awesome Agents | Deferred | Requires demonstrated traction and PR-only path; revisit after 50+ stars or maintainer invitation |
 | Zijian Awesome AI Agents 2026 | Deferred | Avoid current self-promotional blast guard; revisit after traction |
 | E2B Awesome AI Agents | Deferred | Main list points frameworks/tools to Awesome AI SDKs; PR already filed there |
 | AgenticHealthAI Healthcare Agents | Deferred | Healthcare-specific; submit only with healthcare evidence |
@@ -88,16 +91,26 @@ same recruitment message everywhere.
 | WFNUser Agent Memory | Submitted | Track https://github.com/wfnuser/Awesome-Agent-Memory/issues/8 |
 | CXXZ Agent Memory | Submitted | Track https://github.com/cxxz/awesome-agent-memory/issues/11 |
 | ZFancy Agent Memory | Submitted | Track https://github.com/ZFancy/awesome-agent-memory/issues/2 |
+| XiaomingX AI Memory | Submitted | Track https://github.com/XiaomingX/awesome-ai-memory/issues/11 |
+| IAAR Shanghai AI Memory | Deferred | Paper-entry workflow; wait for paper metadata |
+| TsinghuaC3I Memory for Agents | Deferred | Paper list; wait for paper-backed artifact |
 | AgentMemoryWorld Agent Memory | Deferred | Paper resource; submit only after paper-backed artifact |
 | Yyyujintang Agent Memory Papers | Deferred | Papers only |
 | Richard Blythman Multi-Agent Systems | Submitted | Track https://github.com/richardblythman/awesome-multi-agent-systems/issues/11 |
 | Ottosulin Awesome AI Security | Submitted | Track https://github.com/ottosulin/awesome-ai-security/issues/296 |
 | Bureado Agent Runtime Security | Submitted | Track https://github.com/bureado/awesome-agent-runtime-security/issues/9 |
+| Wearetyomsmnv LLM Agent Security | Submitted | Track https://github.com/wearetyomsmnv/Awesome-LLM-agent-Security/issues/16 |
 | Corca Awesome LLM Security | Candidate | Submit only if focused security PR is invited |
 | Beyefendi Awesome LLM Security | Submitted | Track https://github.com/beyefendi/awesome-llm-security/issues/18 |
 | Christian Scott LLM Security | Submitted | Track https://github.com/christiancscott/awesome-LLM-security/issues/10 |
+| TalEliyahu AI Security | Submitted | Track https://github.com/TalEliyahu/Awesome-AI-Security/issues/102 |
+| Wearetyomsmnv LLMSecOps | Submitted | Track https://github.com/wearetyomsmnv/Awesome-LLMSecOps/issues/37 |
+| Raphabot Cybersecurity Agentic AI | Submitted | Track https://github.com/raphabot/awesome-cybersecurity-agentic-ai/issues/46 |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
 | DeepSpaceHarbor AI Security | Submitted | Track https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44 |
+| Giskard AI Safety | Deferred | Paper/article list; wait for safety-focused technical article |
+| Shiyao Agent Evolution | Submitted | Track https://github.com/Shiyao-Huang/awesome-agent-evolution/issues/17 |
+| EvoMap Agent Evolution | Submitted | Track https://github.com/EvoMap/awesome-agent-evolution/issues/32 |
 | Sorrycc Code Agents | Deferred | Wait for direct coding-agent product surface |
 | EuniAI Code Agents | Deferred | Paper list; wait for paper/benchmark artifact |
 | Evilsocket Awesome Agents | Deferred | Requires production-ready specific-use-case agents |
