@@ -1884,6 +1884,110 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: Scope-check asks whether Rust harness/control-layer resources are in scope behind reliable AI coding workflows and avoids presenting rust-norion as a finished end-user vibe-coding tool.
 
+  - id: ai-for-developers-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_resource_list
+    url: https://github.com/ai-for-developers/awesome-vibe-coding
+    audience: AI-assisted development tool, workflow, monitoring, task-management, documentation, CLI, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ai-for-developers/awesome-vibe-coding/issues/94
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README includes CLI tools, task management, monitoring, project documentation, and articles; scope-check asks whether lower-level harness/control-plane infrastructure belongs before a PR.
+
+  - id: 0xwelt-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_project_tool_resource_list
+    url: https://github.com/0xWelt/Awesome-Vibe-Coding
+    audience: vibe coding open-source project, tool, and learning-resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/0xWelt/Awesome-Vibe-Coding/issues/204
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository description explicitly includes projects, tools, and learning resources; scope-check says rust-norion is lower-level infrastructure, not a finished coding assistant.
+
+  - id: bluegalaxy111-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_tool_platform_resource_list
+    url: https://github.com/bluegalaxy111/awesome-vibe-coding
+    audience: vibe coding tool, platform, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/bluegalaxy111/awesome-vibe-coding/issues/20
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Description covers 300+ tools, platforms, and resources; scope-check asks whether Rust agent runtime/control-layer infrastructure is acceptable.
+
+  - id: adriannoes-awesome-vibe-coding
+    platform: github
+    kind: ai_assisted_development_learning_hub
+    url: https://github.com/adriannoes/awesome-vibe-coding
+    audience: Cursor, Claude Code, Codex, agent skills, coding rules, projects-to-watch, and AI-assisted development learners
+    fit: medium
+    status: submitted
+    proof: https://github.com/adriannoes/awesome-vibe-coding/issues/7
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README includes Projects to watch and Cursor/Claude/Codex resources; scope-check asks whether rust-norion fits as an early Rust agent workflow control-layer project.
+
+  - id: analyticalrohit-awesome-vibe-coding-guide
+    platform: github
+    kind: vibe_coding_guide
+    url: https://github.com/analyticalrohit/awesome-vibe-coding-guide
+    audience: vibe coding best-practice and guide readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_vibe_coding_guide_article_or_lesson
+    notes: Repository is a guide and best-practices document rather than a project/tool directory; wait for a rust-norion article or lesson-style resource.
+
+  - id: acvnace-awesome-vibe-coding-resources
+    platform: github
+    kind: vibe_coding_resource_list
+    url: https://github.com/acvnace/awesome-vibe-coding-resources
+    audience: vibe coding resource readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_category_structure_before_scope_check_or_pr
+    notes: Curated resource list with active issues; leave for a later focused pass after category fit is clear.
+
+  - id: yuyaoge-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_resource_list
+    url: https://github.com/YuyaoGe/Awesome-Vibe-Coding
+    audience: vibe coding resource readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_readme_structure_and_contribution_flow_before_submission
+    notes: Public description is sparse; verify category and contribution flow before any outreach.
+
+  - id: jiji262-awesome-vibe-coding-tools
+    platform: github
+    kind: vibe_coding_tool_list
+    url: https://github.com/jiji262/awesome-vibe-coding-tools
+    audience: vibe coding plugin, IDE, and development-tool readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_user_facing_vibe_coding_tool_or_plugin
+    notes: Repository focuses on plugins, IDEs, and development tools; rust-norion is not a user-facing vibe-coding tool.
+
+  - id: no-fluff-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_tool_list
+    url: https://github.com/no-fluff/awesome-vibe-coding
+    audience: vibe coding tool readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_user_facing_tool_surface
+    notes: Tool-oriented list for users getting started with vibe coding; rust-norion is currently lower-level infrastructure.
+
+  - id: techiediaries-awesome-vibe-coding
+    platform: github
+    kind: vibe_coding_assistant_tool_reference
+    url: https://github.com/techiediaries/awesome-vibe-coding
+    audience: vibe coding assistant, IDE, tool, reference, and natural-language code/design readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_user_facing_ai_coding_or_design_tool
+    notes: README focuses on assistants, IDEs, tools, and natural-language coding/design workflows; rust-norion is not a finished user-facing tool.
+
   - id: mahseema-awesome-ai-tools
     platform: github
     kind: broad_ai_tool_list
@@ -1923,6 +2027,17 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_has_a_ready_to_use_ai_workflow_template
     notes: README is a catalogue of ready-to-use media/content workflows; rust-norion has no packaged workflow template for that format.
+
+  - id: ishandutta2007-awesome-ai-automation-frameworks
+    platform: github
+    kind: ai_automation_framework_list
+    url: https://github.com/ishandutta2007/Awesome-AI-Automation-Frameworks
+    audience: AI automation framework, autonomous agent, agentic workflow, LLM orchestration, SaaS product, and open-source project readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/ishandutta2007/Awesome-AI-Automation-Frameworks/issues/5
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README includes SaaS products and open-source GitHub projects with PR welcome; scope-check asks whether an early lower-level Rust agent runtime/control-layer prototype fits before a PR.
 
   - id: tobixd-awesome-agent-orchestration
     platform: github

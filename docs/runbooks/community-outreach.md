@@ -193,10 +193,21 @@ same recruitment message everywhere.
 | Flatlogic Software Development Agents | Deferred | Directory is for coding agents, not control-layer prototypes |
 | Filipe Calegario Vibe Coding | Submitted | Track https://github.com/filipecalegario/awesome-vibe-coding/issues/234 |
 | Taskade Vibe Coding | Submitted | Track https://github.com/taskade/awesome-vibe-coding/issues/38 |
+| AI For Developers Vibe Coding | Submitted | Track https://github.com/ai-for-developers/awesome-vibe-coding/issues/94 |
+| 0xWelt Vibe Coding | Submitted | Track https://github.com/0xWelt/Awesome-Vibe-Coding/issues/204 |
+| BlueGalaxy Vibe Coding | Submitted | Track https://github.com/bluegalaxy111/awesome-vibe-coding/issues/20 |
+| Adrianno Vibe Coding | Submitted | Track https://github.com/adriannoes/awesome-vibe-coding/issues/7 |
+| AnalyticalRohit Vibe Coding Guide | Deferred | Guide/best-practice repo; wait for article or lesson-style resource |
+| Acvnace Vibe Coding Resources | Candidate | Inspect category structure before scope-check or PR |
+| YuyaoGe Vibe Coding | Candidate | Sparse description; inspect README/contribution flow first |
+| Jiji Vibe Coding Tools | Deferred | Tool/plugin list; wait for user-facing vibe-coding tool |
+| No Fluff Vibe Coding | Deferred | Tool list; wait for user-facing tool surface |
+| Techiediaries Vibe Coding | Deferred | Assistant/tool/reference list; wait for user-facing coding/design tool |
 | Mahseema AI Tools | Deferred | Broad AI tools list; wait for mature user-facing tool surface |
 | OpenBestOf Awesome AI | Deferred | Issues disabled and broad list; wait for maturity/category fit |
 | QAInsights AI Tools | Deferred | AI coding tools list; wait for user-facing coding tool/platform surface |
 | Eachlabs AI Workflows | Deferred | Ready-made workflow template list; wait for packaged workflow template |
+| Ishan AI Automation Frameworks | Submitted | Track https://github.com/ishandutta2007/Awesome-AI-Automation-Frameworks/issues/5 |
 | Tobi Agent Orchestration | Candidate | Issues disabled; PR only if runtime/control-layer category fit is clear |
 | Shubhamsaboo LLM Apps | Deferred | Cookbook of runnable templates; wait for self-contained app template |
 | TulioPSilva Shubhamsaboo LLM Apps | Deferred | Mirror-like app-template surface; track upstream first |
