@@ -164,6 +164,49 @@ fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime
 }
 
 #[test]
+fn persistent_roundtrip_report_drops_untrusted_adapter_labels() {
+    let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
+        first_stored_memory: true,
+        first_runtime_kv_stored: 1,
+        first_runtime_kv_namespace_preserved: true,
+        second_used_memories: 2,
+        second_used_runtime_kv_memory: true,
+        second_used_experiences: 1,
+        second_imported_runtime_kv_blocks: 2,
+        second_imported_runtime_kv_from_namespace: true,
+        second_runtime_adapter_observations: 1,
+        second_runtime_adapter_best_score: Some(0.80),
+        second_runtime_adapter_best_adapter: Some("unknown-best secret=sk-best".to_owned()),
+        second_runtime_selected_adapter: Some("unknown-selected secret=sk-selected".to_owned()),
+        second_quality: 0.82,
+        first_drift_severity: DriftSeverity::Stable,
+        second_drift_severity: DriftSeverity::Stable,
+    });
+    let summary_line = report.summary_line();
+
+    assert!(!report.passed);
+    assert_eq!(report.second_runtime_adapter_best_adapter, None);
+    assert_eq!(report.second_runtime_selected_adapter, None);
+    assert!(summary_line.contains("second_runtime_adapter_best_adapter=none"));
+    assert!(summary_line.contains("second_runtime_selected_adapter=none"));
+    for marker in [
+        "unknown-best",
+        "unknown-selected",
+        "secret=",
+        "sk-best",
+        "sk-selected",
+    ] {
+        assert!(!summary_line.contains(marker), "{summary_line}");
+        assert!(
+            !report
+                .failures
+                .iter()
+                .any(|failure| failure.contains(marker))
+        );
+    }
+}
+
+#[test]
 fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
     let passing_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: true,

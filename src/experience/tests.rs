@@ -3094,6 +3094,32 @@ fn retrieval_exposes_runtime_diagnostics() {
 }
 
 #[test]
+fn retrieval_drops_untrusted_runtime_selected_adapter() {
+    let mut store = ExperienceStore::new();
+    store.record(ExperienceInput {
+        prompt: "adapter selection should sanitize polluted runtime metadata".to_owned(),
+        lesson: "do not expose unknown runtime adapter names".to_owned(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("noiron-runtime-v2".to_owned()),
+            selected_adapter: Some("unknown-adapter secret=sk-retrieval-leak".to_owned()),
+            forward_energy: Some(0.33),
+            kv_influence: Some(0.44),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("runtime", 0.9)
+    });
+
+    let matches = store.retrieve_lessons("runtime adapter metadata", TaskProfile::Coding, 1);
+
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+        matches[0].runtime_model_id.as_deref(),
+        Some("noiron-runtime-v2")
+    );
+    assert_eq!(matches[0].runtime_selected_adapter, None);
+}
+
+#[test]
 fn legacy_runtime_diagnostics_deserialize_without_kv_precision() {
     let legacy = [
         "model",

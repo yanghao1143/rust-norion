@@ -47,6 +47,10 @@ impl RuntimeAdapterHint {
         }
     }
 
+    pub fn canonical_name(value: &str) -> Option<&'static str> {
+        Self::parse(value).map(Self::as_str)
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::PortableRust => "portable-rust",

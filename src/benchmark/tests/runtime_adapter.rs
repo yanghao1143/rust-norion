@@ -1,4 +1,6 @@
 use super::*;
+use crate::engine::{InferenceBackend, InferenceRequest, NoironEngine};
+use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 
 #[test]
 fn gate_reports_runtime_adapter_contract_failures() {
@@ -735,6 +737,57 @@ fn gate_counts_only_trusted_runtime_adapter_current_signals() {
     let passing_report = summary.evaluate(&gate);
 
     assert!(passing_report.passed, "{:?}", passing_report.failures);
+}
+
+#[test]
+fn benchmark_record_drops_untrusted_runtime_selected_adapter() {
+    struct PollutedAdapterBackend;
+
+    impl InferenceBackend for PollutedAdapterBackend {
+        fn generate(&mut self, _context: crate::engine::GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust runtime answer with sanitized adapter metadata.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "polluted selected adapter should not reach benchmark output",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_id: Some("polluted-adapter-test".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-benchmark-leak".to_owned()),
+                forward_energy: Some(0.21),
+                kv_influence: Some(0.61),
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = PollutedAdapterBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust benchmark adapter sanitization", TaskProfile::Coding),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+    let case = BenchmarkCase::new(
+        "polluted_adapter",
+        TaskProfile::Coding,
+        "Rust benchmark adapter sanitization",
+    );
+
+    summary.record(&case, 1, &outcome);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-benchmark-leak")
+    );
+    assert_eq!(summary.results()[0].runtime_selected_adapter, None);
+    assert!(!summary.results()[0].runtime_adapter_current_signal());
+    assert_eq!(summary.total_runtime_adapter_current_signals(), 0);
+    assert_eq!(summary.total_runtime_adapter_contract_violations(), 1);
+    assert!(!summary.summary_line().contains("unknown-adapter"));
+    assert!(!summary.summary_line().contains("sk-benchmark-leak"));
 }
 
 #[test]

@@ -8,7 +8,7 @@ impl BenchmarkCaseResult {
     pub fn runtime_adapter_current_signal(&self) -> bool {
         self.runtime_selected_adapter
             .as_deref()
-            .and_then(RuntimeAdapterHint::parse)
+            .and_then(RuntimeAdapterHint::canonical_name)
             .is_some()
     }
 }

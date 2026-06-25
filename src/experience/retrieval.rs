@@ -1,4 +1,5 @@
 use crate::gist_memory::GistRecord;
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
 use crate::reflection::{ReflectionIssue, ReflectionSeverity, RuntimeDiagnostics};
 
@@ -131,7 +132,12 @@ pub(super) fn retrieve_report(
             process_reward: record.process_reward.total,
             reward_action: record.process_reward.action,
             runtime_model_id: record.runtime_diagnostics.model_id.clone(),
-            runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
+            runtime_selected_adapter: record
+                .runtime_diagnostics
+                .selected_adapter
+                .as_deref()
+                .and_then(RuntimeAdapterHint::canonical_name)
+                .map(str::to_owned),
             runtime_device_profile: record.runtime_diagnostics.device_profile.clone(),
             runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
             runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),
