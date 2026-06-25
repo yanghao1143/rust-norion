@@ -71,6 +71,16 @@ $readyIssue = @($communities | Where-Object { $_.status -eq "candidate_issue_or_
 $readyPr = @($communities | Where-Object { $_.status -eq "candidate_pr" })
 $manualLogin = @($communities | Where-Object { $_.status -match '^draft_ready|needs_manual_verification' })
 $waiting = @($communities | Where-Object { $_.status -match '^wait_for_major_update$|^defer$' })
+$iterationUpdates = @(
+    $communities |
+        Where-Object {
+            $_.status -notmatch '^defer$' -and (
+                $_.kind -match 'weekly|forum_topic|article|project_request|weekly_project_list' -or
+                $_.status -eq 'wait_for_major_update' -or
+                $_.next_action -match 'update|release|article'
+            )
+        }
+)
 
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("# rust-norion Community Outreach Queue")
@@ -86,6 +96,7 @@ $lines.Add("- issue_or_manual_candidates=$($readyIssue.Count)")
 $lines.Add("- pr_candidates=$($readyPr.Count)")
 $lines.Add("- manual_login_or_verification=$($manualLogin.Count)")
 $lines.Add("- deferred_or_waiting=$($waiting.Count)")
+$lines.Add("- iteration_update_candidates=$($iterationUpdates.Count)")
 $lines.Add("")
 $lines.Add("Rules:")
 $lines.Add("")
@@ -98,6 +109,7 @@ $lines.Add("")
 Add-CommunityRows -Lines $lines -Heading "Already Submitted" -Items $submitted -IncludeProof
 Add-CommunityRows -Lines $lines -Heading "Ready For Issue Or Manual Review" -Items $readyIssue
 Add-CommunityRows -Lines $lines -Heading "Ready For Focused PR" -Items $readyPr
+Add-CommunityRows -Lines $lines -Heading "Ready For Iteration Updates" -Items $iterationUpdates
 Add-CommunityRows -Lines $lines -Heading "Manual Login Or Verification Required" -Items $manualLogin
 Add-CommunityRows -Lines $lines -Heading "Deferred Or Waiting" -Items $waiting
 

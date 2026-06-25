@@ -99,9 +99,18 @@ same recruitment message everywhere.
 | Dave AI Engineering | Deferred | Wait for stronger maturity evidence |
 | WaterPistol Local LLM | Submitted | Track https://github.com/WaterPistolAI/Awesome-Local-LLM/pull/6 |
 | AI Hub AutoAgent | Submitted | Track https://github.com/AI-Hub-Admin/AutoAgent/issues/1 |
+| JanHQ Awesome Local AI | Submitted | Track https://github.com/janhq/awesome-local-ai/issues/123 |
+| Steven Awesome Generative AI | Submitted | Track https://github.com/steven2358/awesome-generative-ai/issues/957 |
+| Filipe Calegario Generative AI | Submitted | Track https://github.com/filipecalegario/awesome-generative-ai/pull/584 |
+| Xlite LLM Inference | Deferred | Papers-with-code inference list; submit only after a related paper/engine artifact |
+| Romit LLM Systems | Deferred | Learning resource list; submit a substantial systems article, not a raw project |
+| Aishwarya Generative AI Guide | Deferred | Learning/interview/notebook guide; avoid project-ad submission |
 | AIP Engineer Reads | Deferred | Reading list; submit only after a technical article exists |
 | Gitee Rust Boom | Candidate | Verify contribution flow after Gitee login |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
+| Gitee Awesome MCP Servers | Candidate | Login-check contribution flow; use only if control-layer tooling fits |
+| Gitee Awesome Datascience | Candidate | Login-check agent framework section before posting |
+| Gitee DeepSeek Integration | Deferred | Submit only after concrete DeepSeek integration evidence |
 | This Week in Rust | Wait | Submit only after a notable release/article |
 
 The full registry is in `docs/outreach/community-registry.yml`.
@@ -132,6 +141,10 @@ The full registry is in `docs/outreach/community-registry.yml`.
    ```powershell
    ./tools/outreach/generate-community-queue.ps1
    ```
+
+   The generated queue includes a `Ready For Iteration Updates` section. Use
+   that section for monthly or release-note follow-ups; do not repost updates
+   to static awesome-list PRs unless maintainers explicitly ask for them.
 
 6. Discover additional candidate communities if needed:
 

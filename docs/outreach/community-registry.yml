@@ -839,6 +839,69 @@ communities:
     next_action: wait_for_table_format_feedback_before_pr
     notes: Repository includes an Awesome AI Agents Resources and Public Reviews table but may require a deepnlp.org review URL; issue asked before opening a PR.
 
+  - id: janhq-awesome-local-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/janhq/awesome-local-ai
+    audience: local-first AI tool and agent users
+    fit: high
+    status: submitted
+    proof: https://github.com/janhq/awesome-local-ai/issues/123
+    next_action: wait_for_maintainer_feedback_then_open_readme_pr_if_requested
+    notes: High-star local AI list with existing Add-project issues and Developer tools / Agents sections; issue submitted with modest prototype wording.
+
+  - id: steven2358-awesome-generative-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/steven2358/awesome-generative-ai
+    audience: generative AI tools and agent infrastructure readers
+    fit: high
+    status: submitted
+    proof: https://github.com/steven2358/awesome-generative-ai/issues/957
+    next_action: wait_for_category_feedback_then_open_pr_if_requested
+    notes: Large active generative AI project/service list with Developer tools and Autonomous agents sections; issue asked maintainers which section fits.
+
+  - id: filipecalegario-awesome-generative-ai
+    platform: github
+    kind: awesome_list
+    url: https://github.com/filipecalegario/awesome-generative-ai
+    audience: generative AI resource, LLMOps, and autonomous-agent readers
+    fit: high
+    status: submitted
+    proof: https://github.com/filipecalegario/awesome-generative-ai/pull/584
+    next_action: wait_for_maintainer_review
+    notes: Contribution guide requests PRs with link plus brief description; focused PR adds rust-norion to Autonomous LLM Agents without production overclaim.
+
+  - id: xlite-awesome-llm-inference
+    platform: github
+    kind: paper_with_code_list
+    url: https://github.com/xlite-dev/Awesome-LLM-Inference
+    audience: LLM inference paper and kernel/system readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_related_paper_or_inference_engine_artifact_exists
+    notes: Very high-star list, but it is primarily papers-with-code for inference kernels and serving systems; rust-norion should not be submitted as a generic control-layer project.
+
+  - id: romitjain-awesome-llm-systems
+    platform: github
+    kind: learning_resource_list
+    url: https://github.com/romitjain/awesome-llm-systems
+    audience: LLM systems learners
+    fit: medium
+    status: defer
+    next_action: submit_only_after_a_substantial_llm_systems_article_or_runbook_exists
+    notes: Repository curates fundamental LLM systems blogs and papers, not project listings; defer until rust-norion has a polished systems article.
+
+  - id: aishwaryanr-awesome-generative-ai-guide
+    platform: github
+    kind: learning_guide
+    url: https://github.com/aishwaryanr/awesome-generative-ai-guide
+    audience: generative AI learners
+    fit: low
+    status: defer
+    next_action: submit_only_a_neutral_learning_resource_or_article_not_project_ad
+    notes: Very high-star guide, but the scope is research updates, notebooks, interview resources, and learning material; do not submit a raw project listing.
+
   - id: aipengineer-awesome-ai-engineering-reads
     platform: github
     kind: reading_list
@@ -919,6 +982,36 @@ communities:
     status: candidate_manual_review
     next_action: inspect whether Rust AI control-plane tools fit the deployment/tools categories before issue or PR
     notes: Generic LLM resource list, not Rust-specific; use only a tailored submission if the list accepts framework/tool suggestions.
+
+  - id: gitee-boomer-awesome-mcp-servers
+    platform: gitee
+    kind: awesome_list
+    url: https://gitee.com/boomer001/awesome-mcp-servers
+    audience: Chinese MCP, coding-agent, and agent-infrastructure readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_contribution_flow_after_gitee_login_and_submit_only_if_control_layer_tools_fit
+    notes: Public search shows coding-agent and MCP server sections; verify whether the Gitee repo is maintained or mirrored before any submission.
+
+  - id: gitee-awesome-lib-awesome-datascience
+    platform: gitee
+    kind: awesome_list
+    url: https://gitee.com/awesome-lib/awesome-datascience
+    audience: Chinese data science and AI workflow readers
+    fit: medium
+    status: candidate_manual_review
+    next_action: inspect_contribution_flow_after_gitee_login_and_agent_framework_section_fit
+    notes: Public search shows an Agents section with Rust agent frameworks; submit only if the repo accepts external project entries and rust-norion fits the agent workflow scope.
+
+  - id: gitee-shenbingfeng-awesome-deepseek-integration
+    platform: gitee
+    kind: integration_list
+    url: https://gitee.com/shen-bingfeng/awesome-deepseek-integration
+    audience: DeepSeek integration and agent-framework readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_specific_deepseek_integration_or_upstream_maintainer_invitation
+    notes: DeepSeek-specific list with AI agent framework sections; rust-norion should not be submitted as a generic Rust AI control-layer project without concrete DeepSeek integration evidence.
 
   - id: gitee-awesome-rust-mirror-hixuym
     platform: gitee
