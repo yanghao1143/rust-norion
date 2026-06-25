@@ -263,6 +263,39 @@ communities:
     next_action: wait_for_maintainer_review
     notes: CONTRIBUTING welcomes scoped PRs but rejects low-quality promotion; focused Frameworks entry added with modest prototype wording.
 
+  - id: pathonai-awesome-ai-agents
+    platform: github
+    kind: awesome_list
+    url: https://github.com/PathOnAIOrg/awesome-ai-agents
+    audience: AI agent papers, open-source projects, and framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/PathOnAIOrg/awesome-ai-agents/pull/16
+    next_action: wait_for_maintainer_review
+    notes: Simple curated resource list with open-source project tables; focused rust-norion entry added under Open Source Projects.
+
+  - id: zjwu-awesome-llm-agent
+    platform: github
+    kind: awesome_list
+    url: https://github.com/zjwu0522/Awesome-LLM-Agent
+    audience: LLM-agent reasoning, memory, action, and open-source project readers
+    fit: high
+    status: submitted
+    proof: https://github.com/zjwu0522/Awesome-LLM-Agent/pull/3
+    next_action: wait_for_maintainer_review
+    notes: PRs are welcome and the repo has an Open-Source Projects section; focused LLM Platform row added with runtime-control prototype wording.
+
+  - id: danielrosehill-awesome-ai-agents-assistants
+    platform: github
+    kind: awesome_list
+    url: https://github.com/danielrosehill/Awesome-AI-Agents-And-Assistants
+    audience: AI agent platform, development framework, and infrastructure readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/danielrosehill/Awesome-AI-Agents-And-Assistants/pull/10
+    next_action: wait_for_maintainer_review
+    notes: Repository welcomes PRs and has category pages; rust-norion added under Development Frameworks / Runtime Environments plus a manual alphabetical index entry because the upstream generator failed on the current checkout.
+
   - id: zijian-awesome-ai-agents-2026
     platform: github
     kind: awesome_list
@@ -362,6 +395,36 @@ communities:
     status: candidate_manual_review
     next_action: inspect_resource_sections_and_submit_only_if_project_resource_entries_are_allowed
     notes: Discovery found a learning roadmap rather than a pure project directory; needs manual fit check before any submission.
+
+  - id: jondoescoding-awesome-ai-agents
+    platform: github
+    kind: app_examples
+    url: https://github.com/jondoescoding/awesome-ai-agents
+    audience: AI agent app and workflow example readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_until_rust_norion_has_a_complete_app_directory_example
+    notes: Repository asks contributors to add full app directories with detailed README files; rust-norion is infrastructure/control-layer work, not a complete app example.
+
+  - id: buntys-awesome-ai-agents
+    platform: github
+    kind: curated_framework_catalogue
+    url: https://github.com/buntys2010/awesome-ai-agents
+    audience: AI agent framework, research, and production deployment readers
+    fit: medium
+    status: defer
+    next_action: wait_until_project_has_500_stars_or_clear_organizational_backing
+    notes: CONTRIBUTING requires 500+ GitHub stars or backing from established organizations plus production readiness; current rust-norion does not meet that gate.
+
+  - id: oneduckyboy-crewai-hub
+    platform: github
+    kind: app_examples
+    url: https://github.com/OneDuckyBoy/Awesome-AI-Agents-HUB-for-CrewAI
+    audience: CrewAI app example readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_unless_rust_norion_has_a_crewai_based_example
+    notes: Repository is a hub of CrewAI-based app examples and project folders; rust-norion is not CrewAI-based and should not be submitted as a generic project listing.
 
   - id: junhua-awesome-llm-agents
     platform: github

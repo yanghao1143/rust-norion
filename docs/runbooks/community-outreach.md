@@ -43,6 +43,9 @@ same recruitment message everywhere.
 | Deep Insight Awesome AI Agents | Submitted | Track https://github.com/Deep-Insight-Labs/awesome-ai-agents/pull/33 |
 | Nipuna Awesome AI Agents | Submitted | Track https://github.com/NipunaRanasinghe/awesome-ai-agents/pull/132 |
 | Brandon Awesome AI Agents | Submitted | Track https://github.com/brandonhimpfen/awesome-ai-agents/pull/22 |
+| PathOnAI Awesome AI Agents | Submitted | Track https://github.com/PathOnAIOrg/awesome-ai-agents/pull/16 |
+| ZJWU Awesome LLM Agent | Submitted | Track https://github.com/zjwu0522/Awesome-LLM-Agent/pull/3 |
+| Daniel Rosehill AI Agents | Submitted | Track https://github.com/danielrosehill/Awesome-AI-Agents-And-Assistants/pull/10 |
 | Zijian Awesome AI Agents 2026 | Deferred | Avoid current self-promotional blast guard; revisit after traction |
 | E2B Awesome AI Agents | Deferred | Main list points frameworks/tools to Awesome AI SDKs; PR already filed there |
 | AgenticHealthAI Healthcare Agents | Deferred | Healthcare-specific; submit only with healthcare evidence |
@@ -53,6 +56,9 @@ same recruitment message everywhere.
 | Rust ML Book | Deferred | Book, not project directory |
 | Scientific Discovery LLM Agents | Deferred | Domain-specific scientific/biomedical list |
 | Agentic AI Learning Resource | Candidate | Review whether project resource entries are accepted |
+| Jondoe Awesome AI Agents | Deferred | Requires complete app directory example, not a project link |
+| Buntys Awesome AI Agents | Deferred | Requires 500+ stars or organizational backing |
+| OneDuckyBoy CrewAI Hub | Deferred | CrewAI app-example hub; submit only with a CrewAI example |
 | Junhua Awesome LLM Agents | Submitted | Track https://github.com/junhua/awesome-llm-agents/issues/11 |
 | Awesome Agentic Patterns | Deferred | Only submit a neutral reusable pattern, not a project ad |
 | Awesome CLAWS | Deferred | OpenClaw-inspired projects only; do not submit rust-norion as-is |
