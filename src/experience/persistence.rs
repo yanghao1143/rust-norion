@@ -20,7 +20,9 @@ impl ExperienceStore {
         {
             let key = format!("experience/{}", record.id);
             live_keys.insert(key.clone());
-            store.put(&key, serialize_record(record).as_bytes())?;
+            let mut sanitized = record.clone();
+            sanitize_record_runtime_diagnostics(&mut sanitized);
+            store.put(&key, serialize_record(&sanitized).as_bytes())?;
         }
 
         for stale_key in store.keys_with_prefix("experience/") {

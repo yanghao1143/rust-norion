@@ -1,5 +1,6 @@
 use super::*;
 use crate::adaptive_state::LiveInferenceEvolution;
+use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::HierarchyWeights;
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
@@ -270,6 +271,45 @@ fn record_and_load_drop_untrusted_runtime_selected_adapter() {
     store.save_to_disk_kv(&path).unwrap();
     let loaded = ExperienceStore::load_from_disk_kv(&path).unwrap();
 
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(
+        loaded.records()[0].runtime_diagnostics.selected_adapter,
+        None
+    );
+    cleanup(path);
+}
+
+#[test]
+fn save_to_disk_kv_drops_mutated_untrusted_runtime_selected_adapter_bytes() {
+    let path = temp_path("experience-runtime-adapter-mutated-save-sanitize");
+    let mut store = ExperienceStore::new();
+    let id = store.record(ExperienceInput {
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("noiron-test-runtime".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.25),
+            kv_influence: Some(0.75),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("runtime adapter save sanitize", 0.91)
+    });
+    store
+        .record_mut(id)
+        .unwrap()
+        .runtime_diagnostics
+        .selected_adapter = Some("unknown-adapter secret=sk-mutated-experience".to_owned());
+
+    store.save_to_disk_kv(&path).unwrap();
+    let disk = DiskKvStore::open_read_only_existing(&path)
+        .unwrap()
+        .expect("experience disk kv");
+    let encoded = String::from_utf8(disk.get(&format!("experience/{id}")).unwrap().unwrap())
+        .expect("experience record utf8");
+    let loaded = ExperienceStore::load_from_disk_kv(&path).unwrap();
+
+    assert!(!encoded.contains("unknown-adapter"));
+    assert!(!encoded.contains("secret="));
+    assert!(!encoded.contains("sk-mutated-experience"));
     assert_eq!(loaded.len(), 1);
     assert_eq!(
         loaded.records()[0].runtime_diagnostics.selected_adapter,
