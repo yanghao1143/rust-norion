@@ -375,6 +375,27 @@ same recruitment message everywhere.
 | Daniel Rosehill AI Evaluations Tools | Submitted | https://github.com/danielrosehill/Awesome-AI-Evaluations-Tools/issues/9 |
 | Switchy AI Memory | Submitted | https://github.com/Switchy-AI/awesome-ai-memory/issues/2 |
 
+2026-06-25 UTC agent/framework/tooling follow-up batch, all recorded in
+`docs/outreach/community-registry.yml`:
+
+| Channel | Status | Proof |
+| --- | --- | --- |
+| Tyson Cung AI Agents | Submitted | https://github.com/tysoncung/awesome-ai-agents/issues/4 |
+| Studiopig AI Agents CN | Submitted | https://github.com/studiopig/awesome-ai-agents-cn/issues/1 |
+| Tajamul Agentic AI | Submitted | https://github.com/Tajamul21/awesome-agentic-ai/issues/1 |
+| Asdfgh AI Agents | Submitted | https://github.com/asdfgh12345123/awesome-ai-agents/issues/2 |
+| CloudAxis AI Agents | Submitted | https://github.com/CloudAxisAi/awesome-ai-agents/issues/4 |
+| Skylarmm AI Agents | Submitted | https://github.com/skylarmm/awesome-ai-agents/issues/1 |
+| OrrisTech AI Agents | Submitted | https://github.com/OrrisTech/awesome-ai-agents/issues/4 |
+| Steven Lai AI Agents | Submitted | https://github.com/stevenlai530/awesome-ai-agents/issues/1 |
+| Febrits AI Agents | Submitted | https://github.com/febrits/awesome-ai-agents/issues/1 |
+| SojalSec AI Resources | Submitted | https://github.com/0xSojalSec/Awesome-AI-resources/issues/4 |
+| Shahed AI Tools | Submitted | https://github.com/shahedbd/awesome-ai-tools/issues/14 |
+| Harked AI Tools for Builders | Submitted | https://github.com/harked/awesome-ai-tools-for-builders/issues/15 |
+| Fabiano AI Software Development | Submitted | https://github.com/fabianogoes/awesome-ai-software-development/issues/8 |
+| Igosuki AI Tooling | Submitted | https://github.com/Igosuki/awesome-ai-tooling/issues/3 |
+| KeenBrain AI Resources | Closed/deferred | https://github.com/KeenBrain/awesome-ai-resources/issues/1 |
+
 The full registry is in `docs/outreach/community-registry.yml`.
 
 ## Monthly Update Workflow

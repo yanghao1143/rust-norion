@@ -3738,3 +3738,218 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_has_production_ready_evidence_and_the_repository_resumes_active_maintenance
     notes: Repository is an opinionated production LLMOps note set and last observed push was 2024-03-15; rust-norion remains an early prototype.
+
+  - id: tysoncung-awesome-ai-agents
+    platform: github
+    kind: ai_agent_framework_tool_resource_list
+    url: https://github.com/tysoncung/awesome-ai-agents
+    audience: AI agent framework, multi-agent, LLM integration, tool/function-calling, memory, orchestration, and developer-platform readers
+    fit: high
+    status: submitted
+    proof: https://github.com/tysoncung/awesome-ai-agents/issues/4
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: Issue mapped rust-norion to Multi-Agent Frameworks, Agent Orchestration, Memory and State Management, or Agent Development Platforms as a Rust-native control-plane resource.
+
+  - id: studiopig-awesome-ai-agents-cn
+    platform: github
+    kind: chinese_ai_agent_resource_list
+    url: https://github.com/studiopig/awesome-ai-agents-cn
+    audience: Chinese AI agent framework, multi-agent orchestration, memory/context, evaluation, open-source product, paper, tutorial, and community readers
+    fit: high
+    status: submitted
+    proof: https://github.com/studiopig/awesome-ai-agents-cn/issues/1
+    next_action: wait_for_scope_feedback_then_open_chinese_pr_if_requested
+    notes: Chinese issue suggested Agent framework, multi-agent orchestration, memory/context, evaluation, or open-source Agent categories for rust-norion.
+
+  - id: tajamul21-awesome-agentic-ai
+    platform: github
+    kind: agentic_ai_systems_map
+    url: https://github.com/Tajamul21/awesome-agentic-ai
+    audience: agentic AI papers, benchmarks, frameworks, safety, reproducibility, memory, planning, evaluation, and governance readers
+    fit: high
+    status: submitted
+    proof: https://github.com/Tajamul21/awesome-agentic-ai/issues/1
+    next_action: wait_for_scope_feedback_before_any_pr
+    notes: Scope question mapped rust-norion to frameworks/infrastructure, benchmark/evaluation adjacent resources, and safety/security/governance while acknowledging paper-backed entry preferences.
+
+  - id: asdfgh12345123-awesome-ai-agents
+    platform: github
+    kind: ai_agent_framework_tool_directory
+    url: https://github.com/asdfgh12345123/awesome-ai-agents
+    audience: AI agent framework, autonomous agent, coding agent, multi-agent, memory-system, and agent-tooling readers
+    fit: high
+    status: submitted
+    proof: https://github.com/asdfgh12345123/awesome-ai-agents/issues/2
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: Issue suggested Frameworks, Multi-Agent Systems, Memory Systems, or Agent Tooling categories for a Rust control-plane resource.
+
+  - id: cloudaxisai-awesome-ai-agents
+    platform: github
+    kind: ai_agent_framework_tool_list
+    url: https://github.com/CloudAxisAi/awesome-ai-agents
+    audience: practical AI agent, framework, autonomous tool, business, research, development, and infrastructure readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/CloudAxisAi/awesome-ai-agents/issues/4
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: Issue suggested Frameworks and builders or Platform and Infrastructure as the likely fit for rust-norion.
+
+  - id: skylarmm-awesome-ai-agents
+    platform: github
+    kind: ai_agent_productivity_framework_list
+    url: https://github.com/skylarmm/awesome-ai-agents
+    audience: autonomous AI agent, LLM plugin framework, enterprise productivity, vector database, memory, and multi-agent orchestration readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/skylarmm/awesome-ai-agents/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue suggested Autonomous Agent Frameworks, Vector Databases and Memory, or Multi-Agent Orchestration as possible categories.
+
+  - id: orristech-awesome-ai-agents
+    platform: github
+    kind: ai_agent_directory
+    url: https://github.com/OrrisTech/awesome-ai-agents
+    audience: AI agent directory readers across platform, infrastructure, development, coding, data, analytics, and research categories
+    fit: medium
+    status: submitted
+    proof: https://github.com/OrrisTech/awesome-ai-agents/issues/4
+    next_action: wait_for_category_feedback_before_pr
+    notes: Issue framed rust-norion as a Platform and Infrastructure or Development/Coding-adjacent agent runtime/control-plane project.
+
+  - id: stevenlai530-awesome-ai-agents
+    platform: github
+    kind: ai_agent_workflow_resource_list
+    url: https://github.com/stevenlai530/awesome-ai-agents
+    audience: LLM agent, workflow, app, and open-source ecosystem readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/stevenlai530/awesome-ai-agents/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope question asked whether framework/control-layer resources are acceptable beyond runnable end-user app examples.
+
+  - id: febrits-awesome-ai-agents
+    platform: github
+    kind: ai_agent_framework_tool_resource_list
+    url: https://github.com/febrits/awesome-ai-agents
+    audience: open-source AI agent framework, tool, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/febrits/awesome-ai-agents/issues/1
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue suggested rust-norion as an early Rust framework/control-plane resource if the list accepts such projects.
+
+  - id: sojalsec-awesome-ai-resources
+    platform: github
+    kind: ai_development_tool_resource_list
+    url: https://github.com/0xSojalSec/Awesome-AI-resources
+    audience: AI-driven development tool, CLI agent, multi-agent orchestration, MCP, development workflow, and framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/0xSojalSec/Awesome-AI-resources/issues/4
+    next_action: wait_for_scope_feedback_then_open_pr_if_invited
+    notes: Issue suggested Multi-Agent and Orchestration, Development Workflows and Agents, or Frameworks and Libraries categories.
+
+  - id: shahedbd-awesome-ai-tools
+    platform: github
+    kind: ai_tool_framework_resource_directory
+    url: https://github.com/shahedbd/awesome-ai-tools
+    audience: AI tool, model, framework, resource, developer, creator, business, and open-source infrastructure readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/shahedbd/awesome-ai-tools/issues/14
+    next_action: wait_for_scope_feedback_then_follow_contributing_if_invited
+    notes: Issue used the submit-a-tool framing and suggested developer tools, AI frameworks, AI agents, or open-source infrastructure categories.
+
+  - id: harked-awesome-ai-tools-for-builders
+    platform: github
+    kind: ai_builder_tool_resource_list
+    url: https://github.com/harked/awesome-ai-tools-for-builders
+    audience: AI-native indie maker, AI API, platform, agent, dev tool, SDK, and learning-resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/harked/awesome-ai-tools-for-builders/issues/15
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue suggested AI Agent, Dev Tools and SDKs, or Learning and Resources as possible categories for a Rust agent runtime/control-plane design resource.
+
+  - id: fabianogoes-awesome-ai-software-development
+    platform: github
+    kind: ai_software_development_resource_list
+    url: https://github.com/fabianogoes/awesome-ai-software-development
+    audience: AI-assisted software development tool, framework, MCP, plugin, skill, and reference readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/fabianogoes/awesome-ai-software-development/issues/8
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Scope question asked whether framework/control-plane resources are accepted beyond direct coding assistants.
+
+  - id: igosuki-awesome-ai-tooling
+    platform: github
+    kind: ai_tooling_resource_list
+    url: https://github.com/Igosuki/awesome-ai-tooling
+    audience: AI tooling, app development, AI-assisted coding, collaboration, and resource readers
+    fit: medium
+    status: submitted
+    proof: https://github.com/Igosuki/awesome-ai-tooling/issues/3
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Issue asked whether developer-facing AI agent infrastructure or framework resources fit the tooling list.
+
+  - id: keenbrain-awesome-ai-resources
+    platform: github
+    kind: ai_engineering_resource_list
+    url: https://github.com/KeenBrain/awesome-ai-resources
+    audience: AI product manager, engineer, eval, prompt template, Claude skill, and resource readers
+    fit: medium
+    status: defer
+    proof: https://github.com/KeenBrain/awesome-ai-resources/issues/1
+    next_action: do_not_resubmit_maintainer_said_not_relevant
+    notes: Issue framed rust-norion as an AI engineering/evals resource, but the maintainer closed it as not relevant on 2026-06-25 UTC; keep only as negative scope evidence.
+
+  - id: peterfei-awesome-ai-agents-cn
+    platform: github
+    kind: chinese_ai_agent_case_collection
+    url: https://github.com/peterfei/awesome-ai-agents-cn
+    audience: Chinese real-world AI agent implementation case readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_real_running_agent_case_study_with_code_and_effect
+    notes: Repository emphasizes real scenarios, real code, and real effect; rust-norion should wait for a self-contained running case study.
+
+  - id: poyenarcher-awesome-agentic-ai
+    platform: github
+    kind: chinese_agentic_ai_learning_roadmap_candidate
+    url: https://github.com/poyenarcher/awesome-agentic-ai
+    audience: Chinese AI agent learning-roadmap readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_duplicate_track_upstream_wenyuchiou_awesome_agentic_ai_zh_instead
+    notes: README appears to mirror WenyuChiou/awesome-agentic-ai-zh, where rust-norion already has a submitted scope issue.
+
+  - id: yenanjing-awesome-model-routing
+    platform: github
+    kind: model_routing_framework_gateway_list
+    url: https://github.com/yenanjing/awesome-model-routing
+    audience: LLM router, AI gateway, unified API, load-balancing, orchestration, cost, and observability readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_meets_the_1000_star_gate_or_the_maintainer_invites_early_projects
+    notes: Scope fit is real, but README criteria require 1000+ stars and active maintenance; rust-norion does not currently meet that gate.
+
+  - id: yigtwxx-awesome-rag-production
+    platform: github
+    kind: production_rag_tool_framework_list
+    url: https://github.com/Yigtwxx/awesome-rag-production
+    audience: production RAG tooling, framework, monitoring, architecture, and case-study readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_rag_specific_or_production_grade_retrieval_artifact
+    notes: Repository is for battle-tested production-grade RAG systems; rust-norion has retrieval hygiene work but is not a RAG framework or production RAG tool.
+
+  - id: enterprise-ai-atlas-awesome-rag
+    platform: github
+    kind: rag_framework_tool_registry
+    url: https://github.com/Enterprise-AI-Atlas/awesome-rag
+    audience: production-grade RAG framework, vector store, embedding, parser, evaluator, graph retrieval, deployment, and benchmark readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_direct_rag_pipeline_component_or_evaluator
+    notes: Inclusion criteria require direct usefulness for RAG pipelines; rust-norion is currently broader agent runtime/control-plane work rather than a RAG component.
