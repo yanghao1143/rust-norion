@@ -2,6 +2,7 @@
 pub struct RuntimeDiagnostics {
     pub model_id: Option<String>,
     pub selected_adapter: Option<String>,
+    pub adapter_cache_mode: Option<String>,
     pub device_profile: Option<String>,
     pub primary_lane: Option<String>,
     pub fallback_lane: Option<String>,
@@ -37,6 +38,11 @@ impl RuntimeDiagnostics {
     pub fn normalize_device_execution_source(value: impl AsRef<str>) -> Option<String> {
         let value = value.as_ref().trim();
         matches!(value, "runtime-reported" | "control-plane-filled").then(|| value.to_owned())
+    }
+
+    pub fn normalize_adapter_cache_mode(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        matches!(value, "no_cache" | "chunked_cache" | "genome_filtered").then(|| value.to_owned())
     }
 
     pub fn empty() -> Self {

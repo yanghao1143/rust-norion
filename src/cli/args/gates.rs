@@ -426,6 +426,9 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_adapter_kinds {
             gate.min_runtime_adapter_kinds = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_adapter_cache_modes {
+            gate.min_runtime_adapter_cache_modes = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_adapter_observations {
             gate.min_runtime_adapter_observations = Some(value);
         }

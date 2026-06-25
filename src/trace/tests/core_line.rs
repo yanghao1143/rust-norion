@@ -53,6 +53,7 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"average_neg_logprob\":"));
     assert!(line.contains("\"uncertainty_perplexity\":"));
     assert!(line.contains("\"runtime_diagnostics\":"));
+    assert!(line.contains("\"adapter_cache_mode\":"));
     assert!(line.contains("\"hot_kv_precision_bits\":"));
     assert!(line.contains("\"cold_kv_precision_bits\":"));
     assert!(line.contains("\"has_kv_precision_signal\":"));

@@ -399,6 +399,87 @@ fn gate_reports_runtime_adapter_kind_collapse() {
 }
 
 #[test]
+fn gate_reports_runtime_adapter_cache_mode_coverage() {
+    let summary = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_cache_mode_cases: 2,
+            adapter_cache_modes: vec!["no_cache".to_owned(), "chunked_cache".to_owned()],
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result("no_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("chunked_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+        ],
+        ..BenchmarkSummary::new()
+    };
+    let gate = BenchmarkGate {
+        min_runtime_adapter_cache_modes: Some(3),
+        ..BenchmarkGate::default()
+    };
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.runtime_adapter_cache_mode_cases(), 2);
+    assert_eq!(summary.runtime_adapter_cache_modes(), 2);
+    assert_eq!(
+        summary.runtime_adapter_cache_modes_csv(),
+        "no_cache+chunked_cache"
+    );
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_cache_modes 2 below minimum 3")
+            && failure.contains("modes=no_cache+chunked_cache")
+    }));
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_cache_mode_cases=2")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_cache_modes=2")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_cache_mode_values=no_cache+chunked_cache")
+    );
+
+    let passing = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_cache_mode_cases: 3,
+            adapter_cache_modes: vec![
+                "no_cache".to_owned(),
+                "chunked_cache".to_owned(),
+                "genome_filtered".to_owned(),
+            ],
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result("no_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("chunked_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("genome_filtered", TaskProfile::Coding, DeviceClass::CpuOnly),
+        ],
+        ..BenchmarkSummary::new()
+    };
+    let passing_report = passing.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+    assert_eq!(passing.runtime_adapter_cache_mode_cases(), 3);
+    assert_eq!(passing.runtime_adapter_cache_modes(), 3);
+    assert_eq!(
+        passing.runtime_adapter_cache_modes_csv(),
+        "no_cache+chunked_cache+genome_filtered"
+    );
+    assert!(
+        passing
+            .summary_line()
+            .contains("runtime_adapter_cache_mode_values=no_cache+chunked_cache+genome_filtered")
+    );
+}
+
+#[test]
 fn gate_reports_missing_runtime_adapter_observations() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),

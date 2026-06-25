@@ -19,6 +19,11 @@ pub(in crate::experience) fn serialize_runtime_diagnostics(
             .map(sanitize_control_part)
             .unwrap_or_default(),
         diagnostics
+            .adapter_cache_mode
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics
             .device_profile
             .as_deref()
             .map(sanitize_control_part)
@@ -75,6 +80,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
         9 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
+            adapter_cache_mode: None,
             device_profile: None,
             primary_lane: None,
             fallback_lane: None,
@@ -100,6 +106,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
         12 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
+            adapter_cache_mode: None,
             device_profile: None,
             primary_lane: None,
             fallback_lane: None,
@@ -125,6 +132,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
         16 | 18 | 19 | 22 | 23 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
+            adapter_cache_mode: None,
             device_profile: non_empty_string(fields[2]),
             primary_lane: non_empty_string(fields[3]),
             fallback_lane: non_empty_string(fields[4]),
@@ -151,6 +159,40 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
                 .and_then(|value| field_to_kv_precision_bits(value)),
             cold_kv_precision_bits: fields
                 .get(17)
+                .and_then(|value| field_to_kv_precision_bits(value)),
+        }),
+        24 => Some(RuntimeDiagnostics {
+            model_id: non_empty_string(fields[0]),
+            selected_adapter: non_empty_string(fields[1]),
+            adapter_cache_mode: fields
+                .get(2)
+                .and_then(RuntimeDiagnostics::normalize_adapter_cache_mode),
+            device_profile: non_empty_string(fields[3]),
+            primary_lane: non_empty_string(fields[4]),
+            fallback_lane: non_empty_string(fields[5]),
+            memory_mode: non_empty_string(fields[6]),
+            device_execution_source: fields
+                .get(19)
+                .and_then(RuntimeDiagnostics::normalize_device_execution_source),
+            layer_count: fields[7].parse::<usize>().ok()?,
+            global_layers: fields[8].parse::<usize>().ok()?,
+            local_window_layers: fields[9].parse::<usize>().ok()?,
+            convolutional_fusion_layers: fields[10].parse::<usize>().ok()?,
+            hidden_size: fields[11].parse::<usize>().ok()?,
+            local_window_tokens: fields[12].parse::<usize>().ok()?,
+            forward_energy: field_to_finite_f32(fields[13]),
+            kv_influence: field_to_finite_f32(fields[14]),
+            imported_kv_blocks: fields[15].parse::<usize>().ok()?,
+            exported_kv_blocks: fields[16].parse::<usize>().ok()?,
+            runtime_kv_segments_included: optional_usize_field(&fields, 20)?,
+            runtime_kv_segments_skipped: optional_usize_field(&fields, 21)?,
+            runtime_kv_segments_rejected: optional_usize_field(&fields, 22)?,
+            weak_runtime_kv_imports_skipped: optional_usize_field(&fields, 23)?,
+            hot_kv_precision_bits: fields
+                .get(17)
+                .and_then(|value| field_to_kv_precision_bits(value)),
+            cold_kv_precision_bits: fields
+                .get(18)
                 .and_then(|value| field_to_kv_precision_bits(value)),
         }),
         _ => None,

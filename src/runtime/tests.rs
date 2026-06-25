@@ -1770,6 +1770,7 @@ fn runtime_response_json_parses_tokens_and_trace() {
             "diagnostics": {
                 "model_id": "json-self-runtime",
                 "selected_adapter": "portable-rust",
+                "adapter_cache_mode": "chunked_cache",
                 "layer_count": 24,
                 "hidden_size": 256,
                 "local_window_tokens": 4096,
@@ -1801,6 +1802,10 @@ fn runtime_response_json_parses_tokens_and_trace() {
     assert_eq!(
         response.diagnostics.selected_adapter.as_deref(),
         Some("portable-rust")
+    );
+    assert_eq!(
+        response.diagnostics.adapter_cache_mode.as_deref(),
+        Some("chunked_cache")
     );
     assert_eq!(response.diagnostics.layer_count, 24);
     assert_eq!(response.diagnostics.hidden_size, 256);

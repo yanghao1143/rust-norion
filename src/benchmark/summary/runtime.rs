@@ -286,6 +286,21 @@ impl BenchmarkSummary {
         adapters.len()
     }
 
+    pub fn runtime_adapter_cache_mode_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_cache_mode_cases
+    }
+
+    pub fn runtime_adapter_cache_modes(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_cache_modes()
+    }
+
+    pub fn runtime_adapter_cache_modes_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_cache_modes_csv()
+    }
+
     pub fn total_runtime_adapter_contract_violations(&self) -> usize {
         self.results
             .iter()

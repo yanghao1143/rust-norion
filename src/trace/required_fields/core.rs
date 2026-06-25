@@ -12,6 +12,7 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("embedding_query_source", "\"query_source\":"),
     required_field("embedding_runtime_calls", "\"runtime_embedding_calls\":"),
     required_field("runtime_diagnostics", "\"runtime_diagnostics\":{"),
+    required_field("runtime_adapter_cache_mode", "\"adapter_cache_mode\":"),
     required_field("runtime_device_profile", "\"device_profile\":"),
     required_field(
         "runtime_device_execution_source",

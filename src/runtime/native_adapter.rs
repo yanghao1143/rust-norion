@@ -662,6 +662,7 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
         let diagnostics = RuntimeDiagnostics {
             model_id: Some(self.metadata.model_id.clone()),
             selected_adapter: Some("portable-rust".to_owned()),
+            adapter_cache_mode: Some(request.cache_mode.as_str().to_owned()),
             layer_count: self.architecture.layer_count,
             global_layers: 1,
             local_window_layers: 1,

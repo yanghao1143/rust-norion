@@ -3130,6 +3130,7 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
     let mut diagnostics = RuntimeDiagnostics::default()
         .with_device_execution("cpu", "cpu-vector", "cpu-portable", "tiered-disk")
         .with_kv_precision(8, 4);
+    diagnostics.adapter_cache_mode = Some("genome_filtered".to_owned());
     diagnostics.runtime_kv_segments_included = 2;
     diagnostics.runtime_kv_segments_skipped = 1;
     diagnostics.runtime_kv_segments_rejected = 1;
@@ -3143,6 +3144,10 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
         Some(RuntimeDiagnostics::runtime_reported_device_execution_source())
     );
     assert!(decoded.has_runtime_reported_device_execution_signal());
+    assert_eq!(
+        decoded.adapter_cache_mode.as_deref(),
+        Some("genome_filtered")
+    );
     assert_eq!(decoded.runtime_kv_segments_included, 2);
     assert_eq!(decoded.runtime_kv_segments_skipped, 1);
     assert_eq!(decoded.runtime_kv_segments_rejected, 1);

@@ -196,6 +196,7 @@ pub(crate) struct ParseState {
     pub(crate) benchmark_min_runtime_kv_hold_device_profiles: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_contract_cases: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_kinds: Option<usize>,
+    pub(crate) benchmark_min_runtime_adapter_cache_modes: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_observations: Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_best_score: Option<f32>,
     pub(crate) benchmark_max_runtime_adapter_contract_violations: Option<usize>,

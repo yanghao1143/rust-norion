@@ -190,6 +190,7 @@ impl ParseState {
             benchmark_min_runtime_kv_hold_device_profiles: None,
             benchmark_min_runtime_adapter_contract_cases: None,
             benchmark_min_runtime_adapter_kinds: None,
+            benchmark_min_runtime_adapter_cache_modes: None,
             benchmark_min_runtime_adapter_observations: None,
             benchmark_min_runtime_adapter_best_score: None,
             benchmark_max_runtime_adapter_contract_violations: None,

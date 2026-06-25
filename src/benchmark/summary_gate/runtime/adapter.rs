@@ -27,6 +27,18 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_adapter_cache_modes) = gate.min_runtime_adapter_cache_modes {
+        let runtime_adapter_cache_modes = summary.runtime_adapter_cache_modes();
+        if runtime_adapter_cache_modes < min_runtime_adapter_cache_modes {
+            failures.push(format!(
+                "runtime_adapter_cache_modes {} below minimum {} modes={}",
+                runtime_adapter_cache_modes,
+                min_runtime_adapter_cache_modes,
+                summary.runtime_adapter_cache_modes_csv()
+            ));
+        }
+    }
+
     if let Some(min_runtime_adapter_observations) = gate.min_runtime_adapter_observations {
         let runtime_adapter_observations = summary.total_runtime_adapter_observations();
         if runtime_adapter_observations < min_runtime_adapter_observations {

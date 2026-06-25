@@ -112,6 +112,8 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
     RuntimeDiagnostics {
         model_id: extract_json_string_field(payload, "model_id"),
         selected_adapter: extract_json_string_field(payload, "selected_adapter"),
+        adapter_cache_mode: extract_json_string_field(payload, "adapter_cache_mode")
+            .and_then(RuntimeDiagnostics::normalize_adapter_cache_mode),
         device_profile: extract_json_string_field(payload, "device_profile"),
         primary_lane: extract_json_string_field(payload, "primary_lane"),
         fallback_lane: extract_json_string_field(payload, "fallback_lane"),

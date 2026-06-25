@@ -161,6 +161,7 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_runtime_kv_hold_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_contract_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_kinds: &'a mut Option<usize>,
+    pub(crate) benchmark_min_runtime_adapter_cache_modes: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_observations: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_best_score: &'a mut Option<f32>,
     pub(crate) benchmark_max_runtime_adapter_contract_violations: &'a mut Option<usize>,
