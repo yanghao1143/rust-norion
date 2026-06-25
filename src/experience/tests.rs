@@ -3055,6 +3055,7 @@ fn retrieval_exposes_runtime_diagnostics() {
             exported_kv_blocks: 3,
             hot_kv_precision_bits: Some(8),
             cold_kv_precision_bits: Some(4),
+            ..RuntimeDiagnostics::default()
         },
         ..input("runtime", 0.9)
     });
@@ -3120,14 +3121,18 @@ fn legacy_runtime_diagnostics_deserialize_without_kv_precision() {
     assert_eq!(diagnostics.hot_kv_precision_bits, None);
     assert_eq!(diagnostics.cold_kv_precision_bits, None);
     assert_eq!(diagnostics.device_execution_source, None);
+    assert_eq!(diagnostics.runtime_kv_segment_count(), 0);
     assert!(!diagnostics.has_valid_kv_precision_signal());
 }
 
 #[test]
 fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
-    let diagnostics = RuntimeDiagnostics::default()
+    let mut diagnostics = RuntimeDiagnostics::default()
         .with_device_execution("cpu", "cpu-vector", "cpu-portable", "tiered-disk")
         .with_kv_precision(8, 4);
+    diagnostics.runtime_kv_segments_included = 2;
+    diagnostics.runtime_kv_segments_skipped = 1;
+    diagnostics.runtime_kv_segments_rejected = 1;
 
     let encoded = serialize_runtime_diagnostics(&diagnostics);
     let decoded = deserialize_runtime_diagnostics(&encoded).unwrap();
@@ -3137,6 +3142,10 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
         Some(RuntimeDiagnostics::runtime_reported_device_execution_source())
     );
     assert!(decoded.has_runtime_reported_device_execution_signal());
+    assert_eq!(decoded.runtime_kv_segments_included, 2);
+    assert_eq!(decoded.runtime_kv_segments_skipped, 1);
+    assert_eq!(decoded.runtime_kv_segments_rejected, 1);
+    assert_eq!(decoded.runtime_kv_segment_count(), 4);
 }
 
 #[test]
@@ -3270,6 +3279,7 @@ fn input(lesson: &str, quality: f32) -> ExperienceInput {
                 exported_kv_blocks: 2,
                 hot_kv_precision_bits: Some(8),
                 cold_kv_precision_bits: Some(4),
+                ..RuntimeDiagnostics::default()
             },
             process_reward: ProcessRewardReport {
                 notes: vec![

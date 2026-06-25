@@ -433,6 +433,7 @@ fn inspection_report_summarizes_memory_experience_and_adaptive_state() {
             exported_kv_blocks: 3,
             hot_kv_precision_bits: Some(8),
             cold_kv_precision_bits: Some(4),
+            ..crate::reflection::RuntimeDiagnostics::default()
         },
         runtime_token_metrics: ExperienceRuntimeTokenMetrics {
             token_count: 4,

@@ -55,6 +55,9 @@ pub(in crate::experience) fn serialize_runtime_diagnostics(
             .as_deref()
             .map(sanitize_control_part)
             .unwrap_or_default(),
+        diagnostics.runtime_kv_segments_included.to_string(),
+        diagnostics.runtime_kv_segments_skipped.to_string(),
+        diagnostics.runtime_kv_segments_rejected.to_string(),
     ]
     .join("\u{1f}")
 }
@@ -86,6 +89,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             kv_influence: field_to_finite_f32(fields[6]),
             imported_kv_blocks: fields[7].parse::<usize>().ok()?,
             exported_kv_blocks: fields[8].parse::<usize>().ok()?,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
             hot_kv_precision_bits: None,
             cold_kv_precision_bits: None,
         }),
@@ -107,10 +113,13 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             kv_influence: field_to_finite_f32(fields[9]),
             imported_kv_blocks: fields[10].parse::<usize>().ok()?,
             exported_kv_blocks: fields[11].parse::<usize>().ok()?,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
             hot_kv_precision_bits: None,
             cold_kv_precision_bits: None,
         }),
-        16 | 18 | 19 => Some(RuntimeDiagnostics {
+        16 | 18 | 19 | 22 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
             device_profile: non_empty_string(fields[2]),
@@ -130,6 +139,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             kv_influence: field_to_finite_f32(fields[13]),
             imported_kv_blocks: fields[14].parse::<usize>().ok()?,
             exported_kv_blocks: fields[15].parse::<usize>().ok()?,
+            runtime_kv_segments_included: optional_usize_field(&fields, 19)?,
+            runtime_kv_segments_skipped: optional_usize_field(&fields, 20)?,
+            runtime_kv_segments_rejected: optional_usize_field(&fields, 21)?,
             hot_kv_precision_bits: fields
                 .get(16)
                 .and_then(|value| field_to_kv_precision_bits(value)),
@@ -139,6 +151,12 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
         }),
         _ => None,
     }
+}
+
+fn optional_usize_field(fields: &[&str], index: usize) -> Option<usize> {
+    fields
+        .get(index)
+        .map_or(Some(0), |value| value.parse::<usize>().ok())
 }
 
 fn option_u8_to_field(value: Option<u8>) -> String {

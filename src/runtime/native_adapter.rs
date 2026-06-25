@@ -223,24 +223,15 @@ pub struct RustNativeAdapterReport {
 
 impl RustNativeAdapterReport {
     pub fn included_segments(&self) -> usize {
-        self.hook_records
-            .iter()
-            .filter(|record| record.decision == ChunkedKvHookDecision::Include)
-            .count()
+        chunked_kv_hook_decision_counts(&self.hook_records).0
     }
 
     pub fn skipped_segments(&self) -> usize {
-        self.hook_records
-            .iter()
-            .filter(|record| record.decision == ChunkedKvHookDecision::Skip)
-            .count()
+        chunked_kv_hook_decision_counts(&self.hook_records).1
     }
 
     pub fn rejected_segments(&self) -> usize {
-        self.hook_records
-            .iter()
-            .filter(|record| record.decision == ChunkedKvHookDecision::Reject)
-            .count()
+        chunked_kv_hook_decision_counts(&self.hook_records).2
     }
 
     pub fn is_preview_only(&self) -> bool {
@@ -643,6 +634,8 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
         on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
     ) -> Result<RustNativeAdapterReport, RuntimeError> {
         let hook_records = evaluate_chunked_kv_hooks(&request, &self.metadata, self.architecture);
+        let (included_segments, skipped_segments, rejected_segments) =
+            chunked_kv_hook_decision_counts(&hook_records);
         let imported_kv_blocks = hook_records
             .iter()
             .filter(|record| record.decision == ChunkedKvHookDecision::Include)
@@ -680,6 +673,9 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
                 .then(|| (imported_kv_blocks as f32 / 8.0).clamp(0.0, 1.0)),
             imported_kv_blocks,
             exported_kv_blocks,
+            runtime_kv_segments_included: included_segments,
+            runtime_kv_segments_skipped: skipped_segments,
+            runtime_kv_segments_rejected: rejected_segments,
             hot_kv_precision_bits: Some(self.metadata.hot_kv_precision_bits),
             cold_kv_precision_bits: Some(self.metadata.cold_kv_precision_bits),
             ..RuntimeDiagnostics::default()
@@ -716,18 +712,7 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
                 "rust_native_chunked_kv",
                 format!(
                     "included={} skipped={} rejected={}",
-                    hook_records
-                        .iter()
-                        .filter(|record| record.decision == ChunkedKvHookDecision::Include)
-                        .count(),
-                    hook_records
-                        .iter()
-                        .filter(|record| record.decision == ChunkedKvHookDecision::Skip)
-                        .count(),
-                    hook_records
-                        .iter()
-                        .filter(|record| record.decision == ChunkedKvHookDecision::Reject)
-                        .count()
+                    included_segments, skipped_segments, rejected_segments
                 ),
                 0.82,
             ),
@@ -747,6 +732,20 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
             applied: false,
         })
     }
+}
+
+fn chunked_kv_hook_decision_counts(records: &[ChunkedKvHookRecord]) -> (usize, usize, usize) {
+    let mut included = 0;
+    let mut skipped = 0;
+    let mut rejected = 0;
+    for record in records {
+        match record.decision {
+            ChunkedKvHookDecision::Include => included += 1,
+            ChunkedKvHookDecision::Skip => skipped += 1,
+            ChunkedKvHookDecision::Reject => rejected += 1,
+        }
+    }
+    (included, skipped, rejected)
 }
 
 fn evaluate_chunked_kv_hooks(

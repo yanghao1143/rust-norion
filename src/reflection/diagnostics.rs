@@ -17,6 +17,9 @@ pub struct RuntimeDiagnostics {
     pub kv_influence: Option<f32>,
     pub imported_kv_blocks: usize,
     pub exported_kv_blocks: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub hot_kv_precision_bits: Option<u8>,
     pub cold_kv_precision_bits: Option<u8>,
 }
@@ -45,6 +48,7 @@ impl RuntimeDiagnostics {
             || self.has_device_execution_signal()
             || self.forward_energy.is_some()
             || self.kv_influence.is_some()
+            || self.has_runtime_kv_segment_signal()
     }
 
     pub fn has_runtime_architecture_signal(&self) -> bool {
@@ -98,6 +102,16 @@ impl RuntimeDiagnostics {
             (Some(hot), Some(cold)) => matches!(hot, 4 | 8) && matches!(cold, 4 | 8) && cold <= hot,
             _ => false,
         }
+    }
+
+    pub fn runtime_kv_segment_count(&self) -> usize {
+        self.runtime_kv_segments_included
+            .saturating_add(self.runtime_kv_segments_skipped)
+            .saturating_add(self.runtime_kv_segments_rejected)
+    }
+
+    pub fn has_runtime_kv_segment_signal(&self) -> bool {
+        self.runtime_kv_segment_count() > 0
     }
 
     pub fn with_layer_modes(

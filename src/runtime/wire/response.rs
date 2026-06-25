@@ -132,6 +132,21 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         kv_influence: extract_json_finite_number_field(payload, "kv_influence"),
         imported_kv_blocks: extract_json_usize_field(payload, "imported_kv_blocks").unwrap_or(0),
         exported_kv_blocks: extract_json_usize_field(payload, "exported_kv_blocks").unwrap_or(0),
+        runtime_kv_segments_included: extract_json_usize_field(
+            payload,
+            "runtime_kv_segments_included",
+        )
+        .unwrap_or(0),
+        runtime_kv_segments_skipped: extract_json_usize_field(
+            payload,
+            "runtime_kv_segments_skipped",
+        )
+        .unwrap_or(0),
+        runtime_kv_segments_rejected: extract_json_usize_field(
+            payload,
+            "runtime_kv_segments_rejected",
+        )
+        .unwrap_or(0),
         hot_kv_precision_bits: extract_json_kv_precision_bits(payload, "hot_kv_precision_bits"),
         cold_kv_precision_bits: extract_json_kv_precision_bits(payload, "cold_kv_precision_bits"),
     }

@@ -325,6 +325,7 @@ fn record(id: u64, reward: f32, action: RewardAction) -> ExperienceRecord {
                 exported_kv_blocks: 2,
                 hot_kv_precision_bits: Some(8),
                 cold_kv_precision_bits: Some(4),
+                ..RuntimeDiagnostics::default()
             },
             runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {

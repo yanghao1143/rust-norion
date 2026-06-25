@@ -52,6 +52,7 @@ fn record_cpu_runtime_adapter_experience(
             exported_kv_blocks: 1,
             hot_kv_precision_bits: Some(8),
             cold_kv_precision_bits: Some(4),
+            ..crate::reflection::RuntimeDiagnostics::default()
         },
         runtime_token_metrics: Default::default(),
         process_reward: ProcessRewardReport {
@@ -359,6 +360,7 @@ fn inspection_gate_rejects_runtime_kv_precision_execution_mismatch() {
             exported_kv_blocks: 1,
             hot_kv_precision_bits: Some(8),
             cold_kv_precision_bits: Some(4),
+            ..crate::reflection::RuntimeDiagnostics::default()
         },
         runtime_token_metrics: Default::default(),
         process_reward: ProcessRewardReport::default(),

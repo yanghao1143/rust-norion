@@ -869,6 +869,10 @@ fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() 
     assert_eq!(report.imported_kv_blocks, 1);
     assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
     assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(draft.runtime_diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(draft.exported_kv_blocks.len(), 1);
     assert_eq!(draft.exported_kv_blocks[0].key.len(), 8);
     assert!(draft.trace.iter().any(|step| {
@@ -927,6 +931,10 @@ fn runtime_native_bridge_uses_adaptive_kv_attention_thresholds() {
     assert_eq!(report.included_segments(), 1);
     assert_eq!(report.skipped_segments(), 1);
     assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_rejected, 0);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segment_count(), 2);
     assert_eq!(draft.exported_kv_blocks.len(), 1);
     assert!(summaries.iter().any(|summary| {
         summary.contains("segment=runtime-import-0")
@@ -1682,6 +1690,9 @@ fn runtime_response_json_parses_tokens_and_trace() {
                 "kv_influence": 0.18,
                 "imported_kv_blocks": 2,
                 "exported_kv_blocks": 3,
+                "runtime_kv_segments_included": 2,
+                "runtime_kv_segments_skipped": 1,
+                "runtime_kv_segments_rejected": 0,
                 "hot_kv_precision_bits": 8,
                 "cold_kv_precision_bits": 4
             }
@@ -1710,6 +1721,10 @@ fn runtime_response_json_parses_tokens_and_trace() {
     assert_eq!(response.diagnostics.kv_influence, Some(0.18));
     assert_eq!(response.diagnostics.imported_kv_blocks, 2);
     assert_eq!(response.diagnostics.exported_kv_blocks, 3);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 2);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
     assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
     assert!(response.diagnostics.has_valid_kv_precision_signal());
