@@ -953,6 +953,58 @@ communities:
     next_action: wait_for_maintainer_scope_feedback_then_open_small_pr_if_invited
     notes: Chinese Rust resource collection with machine learning and project sections; issue asked in Chinese whether rust-norion fits before opening a PR because the exact category and maturity bar are unclear.
 
+  - id: xmudeeplit-awesome-self-evolving-agents
+    platform: github
+    kind: survey_resource_list
+    url: https://github.com/XMUDeepLIT/Awesome-Self-Evolving-Agents
+    audience: self-evolving agent researchers and open-source framework readers
+    fit: high
+    status: submitted
+    proof: https://github.com/XMUDeepLIT/Awesome-Self-Evolving-Agents/issues/8
+    next_action: wait_for_scope_feedback_before_pr
+    notes: Repository explicitly welcomes issues or PRs for missing research works and open-source projects; submitted a scope-check issue instead of a direct README PR because rust-norion is early and not paper-backed.
+
+  - id: evoagentx-awesome-self-evolving-agents
+    platform: github
+    kind: survey_resource_list
+    url: https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents
+    audience: self-evolving agent researchers and framework builders
+    fit: high
+    status: submitted
+    proof: https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents/issues/66
+    next_action: wait_for_scope_feedback_before_pr
+    notes: High-star self-evolving agents survey list with contribution-welcome badge; submitted a scope-check issue because the list is mainly paper-backed and rust-norion currently has no paper.
+
+  - id: sihyeong-awesome-llm-inference-engine
+    platform: github
+    kind: inference_engine_list
+    url: https://github.com/sihyeong/Awesome-LLM-Inference-Engine
+    audience: LLM inference engine and serving-system researchers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_gateway_or_inference_engine_artifact
+    notes: List welcomes inference engines, serving gateways, papers, examples, and tutorials; rust-norion is currently an inference-control prototype, not a production serving gateway or inference engine.
+
+  - id: dongxiangjue-awesome-llm-self-improvement
+    platform: github
+    kind: paper_list
+    url: https://github.com/dongxiangjue/Awesome-LLM-Self-Improvement
+    audience: inference-time self-improvement paper readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_related_paper_or_paper_backed_artifact_exists
+    notes: The repository asks for PRs adding papers; do not submit rust-norion as a project-only link until there is a related paper or accepted technical artifact.
+
+  - id: cuihuan-awesome-ai-gateway
+    platform: github
+    kind: gateway_catalogue
+    url: https://github.com/cuihuan/awesome-ai-gateway
+    audience: AI gateway, LLM proxy, MCP gateway, and routing infrastructure readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_exposes_an_actual_gateway_proxy_or_router
+    notes: Contribution criteria require an actual gateway, proxy, or router for LLM or agent traffic; rust-norion should not be submitted until its control layer exposes that artifact clearly.
+
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
     kind: awesome_list

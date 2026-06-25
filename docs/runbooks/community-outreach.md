@@ -78,6 +78,8 @@ same recruitment message everywhere.
 | Lemooljiang Awesome AI | Submitted | Track https://github.com/lemooljiang/Awesome-AI/pull/4 |
 | Groovy Web Awesome AI Agents | Submitted | Track https://github.com/groovy-web/awesome-ai-agents/issues/11 |
 | Rust Boom | Submitted | Track https://github.com/rust-boom/rust-boom/issues/10 |
+| XMUDeepLIT Self-Evolving Agents | Submitted | Track https://github.com/XMUDeepLIT/Awesome-Self-Evolving-Agents/issues/8 |
+| EvoAgentX Self-Evolving Agents | Submitted | Track https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents/issues/66 |
 | Evilsocket Awesome Agents | Deferred | Requires production-ready specific-use-case agents |
 | Shahshrey Awesome AI Agents | Deferred | Requires a complete runnable app folder with tests |
 | Ishan Dutta Awesome AI Agents | Deferred | Cookbook of ready-to-run templates, not project links |
@@ -103,6 +105,9 @@ same recruitment message everywhere.
 | Steven Awesome Generative AI | Submitted | Track https://github.com/steven2358/awesome-generative-ai/issues/957 |
 | Filipe Calegario Generative AI | Submitted | Track https://github.com/filipecalegario/awesome-generative-ai/pull/584 |
 | Xlite LLM Inference | Deferred | Papers-with-code inference list; submit only after a related paper/engine artifact |
+| Sihyeong LLM Inference Engine | Deferred | Submit only after a real gateway or inference-engine artifact |
+| Dongxiangjue LLM Self Improvement | Deferred | Paper list; submit only after a related paper or paper-backed artifact |
+| Cuihuan AI Gateway | Deferred | Requires an actual gateway/proxy/router artifact |
 | Romit LLM Systems | Deferred | Learning resource list; submit a substantial systems article, not a raw project |
 | Aishwarya Generative AI Guide | Deferred | Learning/interview/notebook guide; avoid project-ad submission |
 | AIP Engineer Reads | Deferred | Reading list; submit only after a technical article exists |
