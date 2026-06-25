@@ -195,19 +195,16 @@ fn inference_records_runtime_kv_segment_reward_notes() {
         &mut backend,
     );
 
-    assert!(
-        outcome
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| { note == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3" })
-    );
+    assert!(outcome.process_reward.notes.iter().any(|note| {
+        note == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3:yield=0.583"
+    }));
     assert!(
         engine.experience.records()[0]
             .process_reward
             .notes
             .iter()
-            .any(|note| note == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3")
+            .any(|note| note
+                == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3:yield=0.583")
     );
 }
 

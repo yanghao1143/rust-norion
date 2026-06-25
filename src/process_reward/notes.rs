@@ -60,11 +60,12 @@ pub(super) fn reward_notes(
     }
     if input.runtime_kv_segment_count() > 0 {
         notes.push(format!(
-            "runtime_kv_segments:included={}:skipped={}:rejected={}:total={}",
+            "runtime_kv_segments:included={}:skipped={}:rejected={}:total={}:yield={:.3}",
             input.runtime_kv_segments_included,
             input.runtime_kv_segments_skipped,
             input.runtime_kv_segments_rejected,
-            input.runtime_kv_segment_count()
+            input.runtime_kv_segment_count(),
+            input.runtime_kv_segment_yield().unwrap_or(0.0)
         ));
     }
     notes.extend(input.toolsmith_plan.reward_notes());

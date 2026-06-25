@@ -129,4 +129,17 @@ impl ProcessRewardInput {
             .saturating_add(self.runtime_kv_segments_skipped)
             .saturating_add(self.runtime_kv_segments_rejected)
     }
+
+    pub fn runtime_kv_segment_yield(&self) -> Option<f32> {
+        let total = self.runtime_kv_segment_count();
+        if total == 0 {
+            return None;
+        }
+
+        let total = total as f32;
+        let included = self.runtime_kv_segments_included as f32 / total;
+        let skipped = self.runtime_kv_segments_skipped as f32 / total;
+        let rejected = self.runtime_kv_segments_rejected as f32 / total;
+        Some((included - skipped * 0.25 - rejected * 0.75).clamp(0.0, 1.0))
+    }
 }

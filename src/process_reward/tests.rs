@@ -66,12 +66,33 @@ fn runtime_kv_segments_add_audit_note() {
 
     let report = ProcessRewarder::new().score(input);
 
-    assert!(
-        report
-            .notes
-            .iter()
-            .any(|note| { note == "runtime_kv_segments:included=2:skipped=1:rejected=1:total=4" })
-    );
+    assert!(report.notes.iter().any(|note| {
+        note == "runtime_kv_segments:included=2:skipped=1:rejected=1:total=4:yield=0.250"
+    }));
+}
+
+#[test]
+fn low_runtime_kv_segment_yield_reduces_reward_components() {
+    let mut efficient = input(0.82, 0, 0.20, false);
+    efficient.stored_runtime_kv_memories = 1;
+    efficient.runtime_kv_segments_included = 3;
+    efficient.runtime_kv_segments_skipped = 0;
+    efficient.runtime_kv_segments_rejected = 0;
+    let mut wasteful = efficient.clone();
+    wasteful.runtime_kv_segments_included = 0;
+    wasteful.runtime_kv_segments_skipped = 3;
+    wasteful.runtime_kv_segments_rejected = 2;
+
+    let efficient_report = ProcessRewarder::new().score(efficient);
+    let wasteful_report = ProcessRewarder::new().score(wasteful);
+
+    assert!(wasteful_report.components.memory < efficient_report.components.memory);
+    assert!(wasteful_report.components.latency < efficient_report.components.latency);
+    assert!(wasteful_report.components.admission < efficient_report.components.admission);
+    assert!(wasteful_report.total < efficient_report.total);
+    assert!(wasteful_report.notes.iter().any(|note| {
+        note == "runtime_kv_segments:included=0:skipped=3:rejected=2:total=5:yield=0.000"
+    }));
 }
 
 #[test]
