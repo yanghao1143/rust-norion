@@ -106,6 +106,7 @@ same recruitment message everywhere.
 | Christian Scott LLM Security | Submitted | Track https://github.com/christiancscott/awesome-LLM-security/issues/10 |
 | TalEliyahu AI Security | Submitted | Track https://github.com/TalEliyahu/Awesome-AI-Security/issues/102 |
 | Wearetyomsmnv LLMSecOps | Submitted | Track https://github.com/wearetyomsmnv/Awesome-LLMSecOps/issues/37 |
+| Dyron AgentOps Landscape | Submitted | Track https://github.com/dyronrh/awesome-agentops-landscape/issues/12 |
 | Raphabot Cybersecurity Agentic AI | Submitted | Track https://github.com/raphabot/awesome-cybersecurity-agentic-ai/issues/46 |
 | WalkingLabs Harness Engineering | Submitted | Track https://github.com/walkinglabs/awesome-harness-engineering/issues/46 |
 | AI Boost Harness Engineering | Submitted | Track https://github.com/ai-boost/awesome-harness-engineering/issues/86 |
@@ -122,18 +123,25 @@ same recruitment message everywhere.
 | HKUST KnowComp Agent Harness | Submitted | Track https://github.com/HKUST-KnowComp/Awesome-Agent-Harness/issues/4 |
 | Jiji Harness Engineering | Submitted | Track https://github.com/jiji262/awesome-harness-engineering/issues/5 |
 | Jiaaqiliu Harness Engineering | Submitted | Track https://github.com/Jiaaqiliu/Awesome-Harness-Engineering/issues/4 |
+| WhoBot Harness Engineering 中文版 | Submitted | Track https://github.com/whobot-ai/awesome-harness-engineering-zh/issues/2 |
 | CryptoAILab LM-SSP | Deferred | Paper metadata list |
 | DeepSpaceHarbor AI Security | Submitted | Track https://github.com/DeepSpaceHarbor/Awesome-AI-Security/issues/44 |
 | Giskard AI Safety | Deferred | Paper/article list; wait for safety-focused technical article |
+| EnGuard AI Guardrails | Deferred | Guardrail model catalogue; wait for reusable guardrail model/tool |
 | Zhou-Zi7 AI Security BIG4 | Deferred | Top-conference paper list; wait for related paper |
 | TJUNLP LLM Evaluation Papers | Deferred | Survey paper list; wait for related evaluation paper/dataset/platform |
 | AmanPriyanshu AI For Security | Deferred | AI-for-security list; wait for concrete security tool or agent artifact |
+| Joe-B Prompt Injection | Deferred | Needs documented prompt-injection security research/tooling |
 | Xu-Xiang Security Vul LLM | Deferred | Vulnerability/POC aggregation; rust-norion is not a vulnerability resource |
 | WG Wang LLM Benchmarks | Deferred | Benchmark list; wait for reusable benchmark artifact |
+| YHPeter RAG Evaluation | Deferred | RAG evaluation survey; wait for reusable RAG-eval artifact |
+| WLL LLM Planning Capability | Deferred | ACL planning survey/resource list; wait for paper or benchmark-backed artifact |
+| SihyeongPark LLM Benchmark | Deferred | Benchmark catalogue; wait for reusable benchmark artifact |
 | Karminski LLM Benchmark Prompts | Deferred | Prompt benchmark list; submit only if rust-norion contributes a reusable prompt |
 | Quester LLM Planning | Deferred | Survey/paper/benchmark list; wait for paper or benchmark-backed artifact |
 | BIGAI AI Memory | Deferred | TMLR survey/paper taxonomy; wait for paper-backed memory evidence |
 | AIM AI Agents Medicine | Deferred | Healthcare-specific list; wait for healthcare artifact |
+| Salesably AI Agents for Sales | Deferred | Sales-domain list; wait for sales-specific agent or workflow evidence |
 | Chengjl Agent Harness Notes | Deferred | Needs a deep-dive/source-analysis note, not a raw project link |
 | Qianlima Lifelong LLM Agent | Deferred | Survey/paper/benchmark list; wait for related paper or benchmark artifact |
 | YXF Efficient Agents | Deferred | Paper list; wait for efficiency paper or benchmark-backed artifact |
@@ -175,7 +183,10 @@ same recruitment message everywhere.
 | Dontriskit AI Software Engineering | Deferred | Needs direct AI software-engineering tool fit and stronger community signals |
 | Flatlogic Software Development Agents | Deferred | Directory is for coding agents, not control-layer prototypes |
 | Shubhamsaboo LLM Apps | Deferred | Cookbook of runnable templates; wait for self-contained app template |
+| TulioPSilva Shubhamsaboo LLM Apps | Deferred | Mirror-like app-template surface; track upstream first |
 | Joypaul Shubhamsaboo LLM Apps | Deferred | Duplicate app-template surface; track upstream first |
+| 0xSweet LLM Security Alignment | Deferred | Wait for focused security/alignment article, tool, or paper |
+| Liuyaojia LLM Security Paper | Deferred | Paper list; wait for security paper metadata |
 | Gitee Rust Boom | Deferred | Public Gitee page marks it as a domestic mirror; track upstream instead |
 | Gitee Awesome LLM | Candidate | Verify tool/deployment category fit before posting |
 | Gitee Awesome MCP Servers | Candidate | Login-check contribution flow; use only if control-layer tooling fits |

@@ -1319,6 +1319,17 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: LLMSecOps resource list; scope-check asks whether early runtime-governance and audit-gate resources fit without claiming scanner/gateway capability.
 
+  - id: dyronrh-awesome-agentops-landscape
+    platform: github
+    kind: agentops_landscape
+    url: https://github.com/dyronrh/awesome-agentops-landscape
+    audience: AgentOps, observability, tracing, evaluation, cost monitoring, and guardrail readers for LLM agents
+    fit: medium
+    status: submitted
+    proof: https://github.com/dyronrh/awesome-agentops-landscape/issues/12
+    next_action: wait_for_scope_feedback_before_landscape_pr
+    notes: README frames AgentOps around tracing, monitoring, evaluation, prompt management, and guardrails; scope-check presents rust-norion as audit-gate/runtime governance, not a hosted observability product.
+
   - id: raphabot-awesome-cybersecurity-agentic-ai
     platform: github
     kind: awesome_list
@@ -1495,6 +1506,17 @@ communities:
     next_action: wait_for_scope_feedback_before_pr
     notes: CONTRIBUTING welcomes tools and projects that address harness primitives; scope-check suggests runtime infrastructure, memory/state, evaluation gates, or reference implementations.
 
+  - id: whobot-ai-awesome-harness-engineering-zh
+    platform: github
+    kind: chinese_harness_engineering_resource_list
+    url: https://github.com/whobot-ai/awesome-harness-engineering-zh
+    audience: Chinese Harness Engineering, context management, memory/state, guardrail, feedback-loop, and agent-runtime readers
+    fit: high
+    status: submitted
+    proof: https://github.com/whobot-ai/awesome-harness-engineering-zh/issues/2
+    next_action: wait_for_scope_feedback_before_pr
+    notes: README welcomes high-value PRs and includes open-source projects, memory/state, guardrails, execution boundaries, and feedback loops; Chinese scope-check frames rust-norion as an early Rust runtime harness/control-layer prototype.
+
   - id: kyrolabs-awesome-agents
     platform: github
     kind: awesome_list
@@ -1535,6 +1557,16 @@ communities:
     next_action: submit_only_after_a_substantial_ai_safety_article_or_paper_exists
     notes: CONTRIBUTING asks for papers or technical articles; rust-norion should not be submitted until there is a safety-focused article or paper.
 
+  - id: enguard-ai-awesome-ai-guardrails
+    platform: github
+    kind: guardrail_model_list
+    url: https://github.com/enguard-ai/awesome-ai-guardrails
+    audience: AI guardrail model, classifier, content-validation, security, and privacy readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_exposes_a_reusable_guardrail_model_or_guardrail_tool
+    notes: README is primarily a catalogue of HuggingFace guardrail models by task; rust-norion is a runtime/control-layer prototype, not a guardrail model catalogue entry.
+
   - id: zhouzi7-awesome-ai-security-big4
     platform: github
     kind: paper_list
@@ -1565,6 +1597,16 @@ communities:
     next_action: submit_only_after_rust_norion_has_a_specific_ai_for_security_tool_or_security_agent_artifact
     notes: README focuses on applying AI to cybersecurity tasks; rust-norion is a runtime/control-layer prototype and should not be presented as a security tool.
 
+  - id: joe-b-security-awesome-prompt-injection
+    platform: github
+    kind: prompt_injection_security_resource_list
+    url: https://github.com/Joe-B-Security/awesome-prompt-injection
+    audience: prompt-injection security research, mitigation, tool, and resource readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_documented_prompt_injection_security_research_or_tooling
+    notes: CONTRIBUTING requires substantive security research/engineering and functional documentation; rust-norion has runtime governance concepts but is not yet a prompt-injection defense tool.
+
   - id: xu-xiang-awesome-security-vul-llm
     platform: github
     kind: vulnerability_resource_aggregation
@@ -1584,6 +1626,36 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_has_a_public_llm_or_agent_benchmark_artifact
     notes: README asks for benchmark leads/materials in Issues; rust-norion's current gates are project validation artifacts, not a reusable benchmark dataset or tool.
+
+  - id: yhpeter-awesome-rag-evaluation
+    platform: github
+    kind: rag_evaluation_paper_resource_list
+    url: https://github.com/YHPeter/Awesome-RAG-Evaluation
+    audience: RAG evaluation survey, framework, benchmark, dataset, and metric readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_reusable_rag_evaluation_artifact
+    notes: Repository is the official survey companion for RAG evaluation and reference frameworks; rust-norion is not currently a RAG evaluation framework or benchmark.
+
+  - id: wll199566-awesome-llm-planning-capability
+    platform: github
+    kind: planning_survey_resource_list
+    url: https://github.com/wll199566/Awesome-LLM-Planning-Capability
+    audience: LLM planning capability survey, paper, benchmark, and resource readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_related_planning_paper_or_benchmark_artifact_exists
+    notes: Repository is tied to an ACL 2025 planning-capability survey and paper/resource taxonomy; rust-norion should wait for a paper-backed or benchmark-backed planning artifact.
+
+  - id: sihyeongpark-awesome-llm-benchmark
+    platform: github
+    kind: benchmark_list
+    url: https://github.com/SihyeongPark/Awesome-LLM-Benchmark
+    audience: LLM benchmark, evaluation dataset, and leaderboard readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_public_llm_or_agent_benchmark_artifact
+    notes: Benchmark catalogue rather than a project list; rust-norion's current validation traces are project evidence, not reusable benchmark assets.
 
   - id: karminski-awesome-llm-benchmark-prompts
     platform: github
@@ -1624,6 +1696,16 @@ communities:
     status: defer
     next_action: submit_only_after_rust_norion_has_healthcare_specific_evidence_or_adapter
     notes: Healthcare/medicine-specific agent list; rust-norion has no healthcare-specific artifact or validation path.
+
+  - id: salesably-awesome-ai-agents-for-sales
+    platform: github
+    kind: domain_specific_sales_agent_list
+    url: https://github.com/Salesably/awesome-ai-agents-for-sales
+    audience: B2B sales, revenue operations, outbound automation, and sales-agent readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_rust_norion_has_sales_specific_agent_or_revenue_operations_artifact
+    notes: Sales-domain catalogue; rust-norion has no sales workflow, CRM integration, or revenue-operations evidence.
 
   - id: chengjl19-awesome-agent-harness-notes
     platform: github
@@ -1685,6 +1767,16 @@ communities:
     next_action: submit_only_after_rust_norion_has_a_self_contained_runnable_app_template
     notes: Repository is a cookbook of ready-to-run app templates; rust-norion is not currently packaged as a standalone app template for that format.
 
+  - id: tuliopsilva-shubhamsaboo-awesome-llm-apps
+    platform: github
+    kind: runnable_app_template_cookbook
+    url: https://github.com/TulioPSilva/https-github.com-Shubhamsaboo-awesome-llm-apps
+    audience: runnable AI agent, RAG app, MCP agent, and LLM app template readers
+    fit: low
+    status: defer
+    next_action: do_not_submit_duplicate_track_upstream_shubhamsaboo_awesome_llm_apps_instead
+    notes: Mirror-like duplicate of the Shubhamsaboo app-template surface; do not submit separately unless it proves an independent active contribution path and rust-norion has a runnable app template.
+
   - id: joypaul162-shubhamsaboo-awesome-llm-apps
     platform: github
     kind: runnable_app_template_cookbook
@@ -1694,6 +1786,26 @@ communities:
     status: defer
     next_action: do_not_submit_duplicate_track_upstream_shubhamsaboo_awesome_llm_apps_instead
     notes: Repository mirrors the same ready-to-run app-template cookbook surface; avoid duplicate submissions until rust-norion has a standalone app template and use the upstream/high-traffic list first.
+
+  - id: 0xsweet-awesome-llm-security-alignment
+    platform: github
+    kind: security_alignment_resource_list
+    url: https://github.com/0xSweet/awesome-llm-security-alignment
+    audience: LLM security, alignment, safety, attack, defense, and paper/resource readers
+    fit: medium
+    status: defer
+    next_action: submit_only_after_rust_norion_has_a_specific_security_alignment_article_tool_or_paper
+    notes: Security/alignment resource surface; rust-norion should not be presented as a security or alignment artifact until a focused article, tool, or paper exists.
+
+  - id: liuyaojialiuyaojia-awesome-llm-security-paper
+    platform: github
+    kind: security_paper_list
+    url: https://github.com/liuyaojialiuyaojia/Awesome-LLM-Security-Paper
+    audience: LLM security, privacy, robustness, red-team, and defense paper readers
+    fit: low
+    status: defer
+    next_action: submit_only_after_related_llm_security_paper_or_paper_metadata_exists
+    notes: Paper library rather than a project directory; wait for a rust-norion security paper, peer-reviewed artifact, or accepted technical report.
 
   - id: gitee-awesome-lib-awesome-rust
     platform: gitee
