@@ -826,6 +826,63 @@ fn runtime_backend_exposes_model_side_embeddings() {
 }
 
 #[test]
+fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() {
+    let memories = vec![MemoryMatch {
+        id: 38,
+        key: "runtime bridge kv".to_owned(),
+        similarity: 0.91,
+        strength: 0.85,
+        vector: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    }];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "drive rust native adapter through runtime backend",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let runtime = RustNativeModelRuntime::new(MockRustNativeAdapter::new())
+        .with_cache_mode(ChunkedKvCacheMode::ChunkedCache);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+    let mut streamed = Vec::new();
+
+    let draft = backend.generate_stream(context, &mut |token| {
+        streamed.push(token.text.clone());
+    });
+    let report = backend.runtime().last_report().expect("adapter report");
+
+    assert!(draft.answer.contains("rust-native:runtime-"));
+    assert_eq!(streamed.len(), 4);
+    assert_eq!(streamed[0], "rust-native");
+    assert!(streamed[1].starts_with("runtime-"));
+    assert_eq!(streamed[2], "chunked_cache");
+    assert_eq!(streamed[3], "1");
+    assert_eq!(report.included_segments(), 1);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].key.len(), 8);
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "rust_native_chunked_kv" && step.content.contains("included=1")
+    }));
+    assert!(
+        report
+            .hook_summaries()
+            .iter()
+            .all(|summary| summary.contains("cache_ref=fnv64:"))
+    );
+}
+
+#[test]
 fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
     let memories = vec![MemoryMatch {
         id: 7,

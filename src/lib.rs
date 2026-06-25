@@ -255,8 +255,8 @@ pub use runtime::{
     RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
     RuntimeResponse, RuntimeToken, RuntimeTokenId, RustNativeAdapterComparisonReport,
     RustNativeAdapterModeComparison, RustNativeAdapterReport, RustNativeAdapterRequest,
-    RustNativeAdapterStreamEvent, RustNativeInferenceAdapter, parse_runtime_response_json,
-    runtime_request_json,
+    RustNativeAdapterStreamEvent, RustNativeInferenceAdapter, RustNativeModelRuntime,
+    parse_runtime_response_json, runtime_request_json,
 };
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,

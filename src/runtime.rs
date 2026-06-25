@@ -29,7 +29,7 @@ pub use native_adapter::{
     ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,
     MockRustNativeAdapter, RustNativeAdapterComparisonReport, RustNativeAdapterModeComparison,
     RustNativeAdapterReport, RustNativeAdapterRequest, RustNativeAdapterStreamEvent,
-    RustNativeInferenceAdapter,
+    RustNativeInferenceAdapter, RustNativeModelRuntime,
 };
 pub use types::{
     ModelRuntime, RuntimeAdapterObservation, RuntimeEmbedding, RuntimeError, RuntimeMetadata,

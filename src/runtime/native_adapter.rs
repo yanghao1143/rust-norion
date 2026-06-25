@@ -2,10 +2,13 @@ use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::{RuntimeKvBlock, RuntimeKvBlockValidationError};
 use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
 use crate::runtime_manifest::TransformerRuntimeArchitecture;
-use crate::tenant_scope::{TenantAccessKind, TenantIsolationGate, TenantScope, TenantScopedKey};
+use crate::tenant_scope::{
+    TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
+};
 
 use super::types::{
-    RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken,
+    ModelRuntime, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeResponse,
+    RuntimeToken, RuntimeTokenId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -494,6 +497,126 @@ impl MockRustNativeAdapter {
     }
 }
 
+pub struct RustNativeModelRuntime<A> {
+    adapter: A,
+    tenant_scope: TenantScope,
+    cache_mode: ChunkedKvCacheMode,
+    pending_imported_kv_blocks: Vec<RuntimeKvBlock>,
+    last_exported_kv_blocks: Vec<RuntimeKvBlock>,
+    last_report: Option<RustNativeAdapterReport>,
+}
+
+impl<A: RustNativeInferenceAdapter> RustNativeModelRuntime<A> {
+    pub fn new(adapter: A) -> Self {
+        Self {
+            adapter,
+            tenant_scope: TenantScope::local_single_user(),
+            cache_mode: ChunkedKvCacheMode::ChunkedCache,
+            pending_imported_kv_blocks: Vec::new(),
+            last_exported_kv_blocks: Vec::new(),
+            last_report: None,
+        }
+    }
+
+    pub fn with_tenant_scope(mut self, tenant_scope: TenantScope) -> Self {
+        self.tenant_scope = tenant_scope;
+        self
+    }
+
+    pub fn with_cache_mode(mut self, cache_mode: ChunkedKvCacheMode) -> Self {
+        self.cache_mode = cache_mode;
+        self
+    }
+
+    pub fn adapter(&self) -> &A {
+        &self.adapter
+    }
+
+    pub fn adapter_mut(&mut self) -> &mut A {
+        &mut self.adapter
+    }
+
+    pub fn last_report(&self) -> Option<&RustNativeAdapterReport> {
+        self.last_report.as_ref()
+    }
+
+    pub fn into_inner(self) -> A {
+        self.adapter
+    }
+}
+
+impl<A: RustNativeInferenceAdapter> ModelRuntime for RustNativeModelRuntime<A> {
+    fn metadata(&self) -> RuntimeMetadata {
+        self.adapter.metadata()
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        self.adapter.architecture()
+    }
+
+    fn embed(&self, tokens: &[RuntimeTokenId]) -> Result<RuntimeEmbedding, RuntimeError> {
+        let text = tokens
+            .iter()
+            .map(|token| token.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.adapter.embed_text(&text)
+    }
+
+    fn embed_text(&self, text: &str) -> Result<RuntimeEmbedding, RuntimeError> {
+        self.adapter.embed_text(text)
+    }
+
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        self.pending_imported_kv_blocks = blocks.to_vec();
+        Ok(blocks.len())
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        Ok(self.last_exported_kv_blocks.clone())
+    }
+
+    fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        let mut ignore_token: fn(&RuntimeToken) -> Result<(), RuntimeError> = ignore_runtime_token;
+        self.generate_stream(request, &mut ignore_token)
+    }
+
+    fn generate_stream(
+        &mut self,
+        request: RuntimeRequest,
+        on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
+    ) -> Result<RuntimeResponse, RuntimeError> {
+        let trace_id = runtime_request_trace_id(&request);
+        let route_threshold = clamp_unit(request.route_budget.threshold);
+        let imported_kv_blocks = if request.imported_kv_blocks.is_empty() {
+            self.pending_imported_kv_blocks.clone()
+        } else {
+            request.imported_kv_blocks.clone()
+        };
+        let segments = imported_kv_segments(&self.tenant_scope, &imported_kv_blocks);
+        let request = RustNativeAdapterRequest::from_runtime_request(
+            request,
+            trace_id,
+            self.tenant_scope.clone(),
+            self.cache_mode,
+        )
+        .with_segments(segments)
+        .with_max_attention_threshold(route_threshold)
+        .with_gate_summary(format!(
+            "runtime_bridge_imports={}",
+            imported_kv_blocks.len()
+        ))
+        .with_gate_summary("writer_gate=preview_only");
+
+        let report = self.adapter.generate_stream(request, on_token)?;
+        let response = report.response.clone();
+        self.last_exported_kv_blocks = response.exported_kv_blocks.clone();
+        self.pending_imported_kv_blocks.clear();
+        self.last_report = Some(report);
+        Ok(response)
+    }
+}
+
 impl RustNativeInferenceAdapter for MockRustNativeAdapter {
     fn metadata(&self) -> RuntimeMetadata {
         self.metadata.clone()
@@ -563,13 +686,15 @@ impl RustNativeInferenceAdapter for MockRustNativeAdapter {
         };
         let exported_blocks = (0..exported_kv_blocks)
             .map(|index| {
+                let key = vec![0.10 + index as f32; self.metadata.embedding_dimensions.max(1)];
+                let value = vec![0.20 + index as f32; self.metadata.embedding_dimensions.max(1)];
                 RuntimeKvBlock::new(
                     index % self.architecture.layer_count.max(1),
                     index % self.architecture.kv_heads.max(1),
                     index,
                     index + 1,
-                    vec![0.10 + index as f32],
-                    vec![0.20 + index as f32],
+                    key,
+                    value,
                 )
             })
             .collect::<Vec<_>>();
@@ -709,6 +834,50 @@ fn kv_error_reason(error: &RuntimeKvBlockValidationError) -> &'static str {
 
 fn gate_summary_digest(summaries: &[String]) -> String {
     stable_digest(&summaries.join("|"))
+}
+
+fn runtime_request_trace_id(request: &RuntimeRequest) -> String {
+    format!(
+        "runtime-{}",
+        stable_digest(&format!(
+            "{}:{}:{}:{}",
+            task_profile_label(request.profile),
+            request.max_tokens,
+            request.imported_kv_blocks.len(),
+            request.prompt
+        ))
+        .trim_start_matches("fnv64:")
+    )
+}
+
+fn task_profile_label(profile: TaskProfile) -> &'static str {
+    match profile {
+        TaskProfile::General => "general",
+        TaskProfile::Coding => "coding",
+        TaskProfile::Writing => "writing",
+        TaskProfile::LongDocument => "long",
+    }
+}
+
+fn imported_kv_segments(
+    tenant_scope: &TenantScope,
+    imported_kv_blocks: &[RuntimeKvBlock],
+) -> Vec<ChunkedKvSegment> {
+    imported_kv_blocks
+        .iter()
+        .enumerate()
+        .map(|(index, block)| {
+            ChunkedKvSegment::new(
+                format!("runtime-import-{index}"),
+                tenant_scope.scoped_key(TenantResourceLane::RuntimeKv, format!("import:{index}")),
+                block.token_start,
+                block.token_end,
+            )
+            .with_attention_threshold(0.50)
+            .with_genome_gate(true)
+            .with_kv_blocks(vec![block.clone()])
+        })
+        .collect()
 }
 
 fn sanitize_id(value: &str, fallback: &str) -> String {
